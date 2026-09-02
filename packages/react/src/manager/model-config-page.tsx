@@ -21,9 +21,6 @@ import { usePluginContext } from "../plugin-context";
 import { useUiStore } from "../../../../src/web/stores/ui-store";
 import type { KernelModelsApi, KernelModelsCapabilities, KernelModelConfig, ModelProbeResult, NeutralDefaultModel, NeutralModel, NeutralProvider } from "@my-harness-desktop/shared";
 
-/** 探测支持的 api 类型(与 server provider-probe 的 PROBEABLE_APIS 一致;UI 预闸门,server 仍兜底降级)。 */
-const PROBEABLE_APIS = new Set(["openai-completions", "openai-responses", "anthropic-messages"]);
-
 /** 耗时格式化:不足 1s 显示毫秒,以上显示秒。 */
 function fmtLatency(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`;
@@ -210,7 +207,6 @@ function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, defaul
   const [editId, setEditId] = useState(provider.id);
   // 发现区块默认收起(不占版面);baseUrl 行内的「发现模型」按钮点开才展开。切换 provider 时收回。
   const [discoverOpen, setDiscoverOpen] = useState(false);
-  const discoverProbeable = !provider.api || PROBEABLE_APIS.has(provider.api);
   const discoverHasBaseUrl = !!(provider.baseUrl && provider.baseUrl.trim());
 
   useEffect(() => { setEditId(provider.id); setDiscoverOpen(false); }, [provider.id]);
@@ -276,8 +272,8 @@ function ProviderDetail({ provider, api, i18nPrefix, capabilities, dirty, defaul
             <Button
               variant="secondary"
               onClick={() => setDiscoverOpen((o) => !o)}
-              disabled={!discoverProbeable || !discoverHasBaseUrl}
-              title={!discoverProbeable ? k("discoverUnsupported") : !discoverHasBaseUrl ? k("discoverNoBaseUrl") : undefined}
+              disabled={!discoverHasBaseUrl}
+              title={!discoverHasBaseUrl ? k("discoverNoBaseUrl") : undefined}
               style={{ padding: "var(--spacing-xs) var(--spacing-sm)", flexShrink: 0 }}
             >
               {discoverOpen ? k("discoverCollapse") : k("discoverToggle")}
@@ -345,7 +341,6 @@ function DiscoverySection({ provider, i18nPrefix, onAddModel, open }: {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const k = (suffix: string, vars?: Record<string, unknown>): string => t(`${i18nPrefix}.${suffix}`, vars);
-  const probeable = !provider.api || PROBEABLE_APIS.has(provider.api);
   const hasBaseUrl = !!(provider.baseUrl && provider.baseUrl.trim());
   const [discovered, setDiscovered] = useState<string[] | null>(null);
   const [scanVia, setScanVia] = useState<string | null>(null);
@@ -408,13 +403,11 @@ function DiscoverySection({ provider, i18nPrefix, onAddModel, open }: {
           {scanning ? k("discoverScanning") : discovered ? `${k("discoverSummary", { found: discovered.length, configured: configuredCount })}${scanVia ? ` · via ${scanVia}` : ""}` : ""}
         </span>
         <span style={{ marginLeft: "auto", display: "flex", gap: "var(--spacing-xs)" }}>
-          <Button variant="secondary" onClick={() => void scan()} disabled={scanning || !probeable || !hasBaseUrl}>{k("discoverScan")}</Button>
+          <Button variant="secondary" onClick={() => void scan()} disabled={scanning || !hasBaseUrl}>{k("discoverScan")}</Button>
           <Button variant="secondary" onClick={() => void pingAll()} disabled={!discovered || discovered.length === 0 || scanning}>{k("discoverPingAll")}</Button>
         </span>
       </div>
-      {!probeable ? (
-        <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{k("discoverUnsupported")}</div>
-      ) : !hasBaseUrl ? (
+      {!hasBaseUrl ? (
         <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{k("discoverNoBaseUrl")}</div>
       ) : scanError ? (
         <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>

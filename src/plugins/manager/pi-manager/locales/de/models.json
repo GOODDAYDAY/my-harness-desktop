@@ -58,7 +58,6 @@
   "models.discoverConfigured": "Konfiguriert",
   "models.discoverNotConfigured": "Nicht konfiguriert",
   "models.discoverAdd": "+ Hinzufügen",
-  "models.discoverUnsupported": "Erkennung für diesen API-Typ nicht unterstützt (nur OpenAI-kompatible Endpunkte)",
   "models.discoverNoBaseUrl": "Zuerst Base-URL ausfüllen",
   "models.discoverToggle": "Entdecken",
   "models.discoverCollapse": "Einklappen",

@@ -133,7 +133,7 @@ try {
   check("IPC discover: 返回排序后的模型清单", ipc.d.ok && JSON.stringify(ipc.d.models) === JSON.stringify(["mock-chat", "mock-embed", "mock-reasoner"]), JSON.stringify(ipc.d));
   check("IPC ping 成功: ok + latencyMs", ipc.p1.ok === true && typeof ipc.p1.latencyMs === "number", JSON.stringify(ipc.p1));
   check("IPC ping 404: ok:false + 状态码", ipc.p2.ok === false && String(ipc.p2.error).includes("404"), JSON.stringify(ipc.p2));
-  check("IPC ping 非兼容 api: 显式降级", ipc.p3.ok === false && String(ipc.p3.error).includes("unsupported api"), JSON.stringify(ipc.p3));
+  check("IPC ping google-genai 饱和覆盖(openai 形状命中)", ipc.p3.ok === true && ipc.p3.via === "openai-chat", JSON.stringify(ipc.p3));
 
   // ---------- 3. UI:进设置 → Pi → 模型 TAB ----------
   await page.waitForSelector("[data-sidebar-style]", { timeout: 15000 });

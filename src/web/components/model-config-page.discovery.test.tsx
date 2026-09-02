@@ -161,11 +161,9 @@ describe("从 Base URL 发现区块", () => {
     expect(await screen.findByText("HTTP 401: bad key")).toBeInTheDocument();
   });
 
-  it("api 不在探测支持集（google-genai）→ 开关禁用 + tooltip 降级说明；anthropic-messages 已支持", () => {
+  it("饱和覆盖：google-genai 也不禁用开关（全协议形状都会试）", () => {
     renderPage(makeProvider({ api: "google-genai" }));
-    const toggle = screen.getByText("models.discoverToggle");
-    expect(toggle).toBeDisabled();
-    expect(toggle).toHaveAttribute("title", "models.discoverUnsupported");
+    expect(screen.getByText("models.discoverToggle")).not.toBeDisabled();
   });
 
   it("端点无列表 API（扫描报错）→ 「改用已配置模型」降级路径，可正常 Ping", async () => {

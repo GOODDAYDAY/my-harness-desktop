@@ -17,13 +17,11 @@
 // 3. 很多自建网关根本没有列表端点（GET /models 400/404/503）——discover 如实报错，
 //    UI 层负责「改用已配置模型」的降级路径。
 //
-// 显式降级：api 非探测支持集（google-genai 等）→ ok:false + "unsupported api: <api>"，不发请求。
+// 饱和覆盖：不按声明的 api 类型设闸门——发现/ping 都把所有协议形状全量试一遍
+// （api 只影响尝试顺序，不过滤），第一个 2xx 胜出；全灭带回第一个错误（诚实，不伪造）。
 // fetch 可注入（测试 mock / loopback server），缺省 globalThis.fetch。
 import { execSync } from "node:child_process";
 import type { ModelDiscoverResult, ModelProbeInput, ModelProbeResult } from "@my-harness-desktop/shared";
-
-/** 支持探测的 api 类型（OpenAI 兼容 + Anthropic messages）。 */
-const PROBEABLE_APIS = new Set(["openai-completions", "openai-responses", "anthropic-messages"]);
 
 type FetchImpl = typeof fetch;
 
@@ -68,12 +66,6 @@ function resolveApiKey(raw?: string): { key?: string; error?: string } {
   return missing ? { error: `apiKey resolution failed (env $${missing} not set)` } : { key };
 }
 
-/** api 类型门：不支持即显式降级（不发起任何请求）。 */
-function unsupportedApiError(api?: string): string | null {
-  if (!api) return null; // 缺省按 openai-completions 处理
-  return PROBEABLE_APIS.has(api) ? null : `unsupported api: ${api}`;
-}
-
 /** fetch 异常 → 可读错误原文（超时单独命名，网络错误带 message）。 */
 function fetchErrorMessage(err: unknown, timeoutMs: number): string {
   if (err instanceof Error) {
@@ -97,45 +89,6 @@ async function httpErrorMessage(res: Response): Promise<string> {
 
 /** 路径候选：baseUrl 带不带 /v1 的两种约定都试，按 api 类型排优先级（去重）。
  *  OpenAI 系先按 baseUrl 原样（pi 约定含 /v1）；Anthropic 系先插 /v1（官方约定不含）。 */
-function candidateUrls(base: string, path: string, api?: string): string[] {
-  const direct = `${base}${path}`;
-  const withV1 = `${base}/v1${path}`;
-  const urls = api === "anthropic-messages" ? [withV1, direct] : [direct, withV1];
-  return [...new Set(urls)];
-}
-
-/** 按候选顺序逐个试，第一个 2xx 胜出（带回该次耗时）；全败带回第一个错误。 */
-async function tryCandidates(
-  urls: string[],
-  init: () => RequestInit,
-  fetchImpl: FetchImpl,
-  timeoutMs: number,
-): Promise<{ ok: true; latencyMs: number; res: Response } | { ok: false; latencyMs: number; error: string }> {
-  let firstError: { latencyMs: number; error: string } | null = null;
-  for (const url of urls) {
-    const t0 = Date.now();
-    try {
-      const res = await fetchImpl(url, { ...init(), signal: AbortSignal.timeout(timeoutMs) });
-      const latencyMs = Date.now() - t0;
-      if (res.ok) return { ok: true, latencyMs, res };
-      const error = await httpErrorMessage(res);
-      firstError ??= { latencyMs, error };
-    } catch (err) {
-      const latencyMs = Date.now() - t0;
-      firstError ??= { latencyMs, error: fetchErrorMessage(err, timeoutMs) };
-    }
-  }
-  const f = firstError ?? { latencyMs: 0, error: "no endpoint" };
-  return { ok: false, latencyMs: f.latencyMs, error: f.error };
-}
-
-function authHeaders(apiKey: string | undefined, api?: string): Record<string, string> {
-  if (!apiKey) return {};
-  return api === "anthropic-messages"
-    ? { "x-api-key": apiKey, "anthropic-version": ANTHROPIC_VERSION }
-    : { Authorization: `Bearer ${apiKey}` };
-}
-
 /** 发现策略：一种「列出端点模型」的办法，自含 路径候选 + 鉴权头 + 响应解析。
  *  高内聚低耦合：加新办法 = 往 DISCOVER_STRATEGIES 加一条对象，discoverModels 不动。 */
 interface DiscoverStrategy {
@@ -174,8 +127,6 @@ function orderStrategies(api?: string): DiscoverStrategy[] {
 /** GET 模型清单：策略链逐个试，第一个 2xx 且解析成功的胜出（via 记录命中策略）；
  *  全链未命中带回第一个错误（诚实，不伪造）。 */
 export async function discoverModels(input: ModelProbeInput, opts?: ProbeOptions): Promise<ModelDiscoverResult> {
-  const gate = unsupportedApiError(input.api);
-  if (gate) return { ok: false, error: gate };
   const base = normalizeBaseUrl(input.baseUrl ?? "");
   if (!base) return { ok: false, error: "missing baseUrl" };
   const { key, error: keyError } = resolveApiKey(input.apiKey);
@@ -199,23 +150,67 @@ export async function discoverModels(input: ModelProbeInput, opts?: ProbeOptions
   return { ok: false, error: firstError ?? "no endpoint" };
 }
 
-/** POST 最小 ping（OpenAI chat/completions / Anthropic messages，max_tokens:1），2xx 即通。 */
+/** Ping 策略：一种「最小请求测往返」的协议形状，自含 路径候选 + 鉴权头 + 请求体。
+ *  与发现策略同范式——加新协议形状 = 往 PING_STRATEGIES 加一条对象。 */
+interface PingStrategy {
+  id: string;
+  /** 有序路径候选（带不带 /v1 的两种约定都在这里枚举）。 */
+  paths: string[];
+  headers(key?: string): Record<string, string>;
+  body(model: string): unknown;
+}
+
+/** ping 策略注册表（顺序 = 缺省优先级；调用时按 api 亲和再排）。 */
+const PING_STRATEGIES: PingStrategy[] = [
+  {
+    id: "openai-chat",
+    paths: ["/chat/completions", "/v1/chat/completions"],
+    headers: (key): Record<string, string> => (key ? { Authorization: `Bearer ${key}` } : {}),
+    body: (model) => ({ model, messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false }),
+  },
+  {
+    id: "anthropic-messages",
+    paths: ["/v1/messages", "/messages"],
+    headers: (key): Record<string, string> => (key ? { "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION } : {}),
+    body: (model) => ({ model, max_tokens: 1, messages: [{ role: "user", content: "ping" }] }),
+  },
+];
+
+/** api 亲和排序：声明 anthropic 的先试 anthropic 形状，其余先试 openai；只是排序不过滤（饱和覆盖）。 */
+function orderPingStrategies(api?: string): PingStrategy[] {
+  if (api !== "anthropic-messages") return PING_STRATEGIES;
+  return [...PING_STRATEGIES].sort((a, b) => (a.id === "anthropic-messages" ? -1 : b.id === "anthropic-messages" ? 1 : 0));
+}
+
+/** POST 最小 ping（max_tokens:1）：饱和覆盖——所有协议形状全量试，第一个 2xx 胜出，
+ *  via 记录命中形状；全灭带回第一个错误。 */
 export async function pingModel(input: ModelProbeInput & { model: string }, opts?: ProbeOptions): Promise<ModelProbeResult> {
-  const gate = unsupportedApiError(input.api);
-  if (gate) return { ok: false, error: gate };
   const base = normalizeBaseUrl(input.baseUrl ?? "");
   if (!base) return { ok: false, error: "missing baseUrl" };
   const { key, error: keyError } = resolveApiKey(input.apiKey);
   if (keyError) return { ok: false, error: keyError };
   const timeoutMs = opts?.timeoutMs ?? PING_TIMEOUT_MS;
   const fetchImpl = opts?.fetchImpl ?? globalThis.fetch;
-  const anthropic = input.api === "anthropic-messages";
-  const path = anthropic ? "/messages" : "/chat/completions";
-  const body = anthropic
-    ? { model: input.model, max_tokens: 1, messages: [{ role: "user", content: "ping" }] }
-    : { model: input.model, messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false };
-  const headers = { ...authHeaders(key, input.api), "Content-Type": "application/json" };
-  const r = await tryCandidates(candidateUrls(base, path, input.api), () => ({ method: "POST", headers, body: JSON.stringify(body) }), fetchImpl, timeoutMs);
-  if (!r.ok) return { ok: false, latencyMs: r.latencyMs, error: r.error };
-  return { ok: true, latencyMs: r.latencyMs };
+  let firstError: { latencyMs: number; error: string } | null = null;
+  for (const strategy of orderPingStrategies(input.api)) {
+    for (const path of strategy.paths) {
+      const t0 = Date.now();
+      try {
+        const res = await fetchImpl(`${base}${path}`, {
+          method: "POST",
+          headers: { ...strategy.headers(key), "Content-Type": "application/json" },
+          body: JSON.stringify(strategy.body(input.model)),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        const latencyMs = Date.now() - t0;
+        if (res.ok) return { ok: true, latencyMs, via: strategy.id };
+        firstError ??= { latencyMs, error: await httpErrorMessage(res) };
+      } catch (err) {
+        const latencyMs = Date.now() - t0;
+        firstError ??= { latencyMs, error: fetchErrorMessage(err, timeoutMs) };
+      }
+    }
+  }
+  const f = firstError ?? { latencyMs: 0, error: "no endpoint" };
+  return { ok: false, latencyMs: f.latencyMs, error: f.error };
 }

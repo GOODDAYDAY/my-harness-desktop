@@ -35,11 +35,15 @@ describe("discoverModels", () => {
     expect(r.error).toContain("bad key");
   });
 
-  it("api 非探测支持集 → 显式降级，不发请求", async () => {
-    const { calls, fetchImpl } = mockFetch(() => ({}));
+  it("饱和覆盖：google-genai 也不设闸门——两条策略 × 两条路径全试，全灭带回第一个错误", async () => {
+    const { calls, fetchImpl } = mockFetch(() => ({ status: 404, body: "nf" }));
     const r = await discoverModels({ baseUrl: "https://x.test", api: "google-genai" }, { fetchImpl });
-    expect(r).toEqual({ ok: false, error: "unsupported api: google-genai" });
-    expect(calls).toHaveLength(0);
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("HTTP 404");
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://x.test/models", "https://x.test/v1/models",   // openai 策略
+      "https://x.test/v1/models", "https://x.test/models",   // anthropic 策略
+    ]);
   });
 
   it("缺 baseUrl → 显式报错，不发请求", async () => {
@@ -188,13 +192,33 @@ describe("pingModel", () => {
     expect(r.latencyMs).toBeTypeOf("number");
   });
 
-  it("api 缺省按 OpenAI 兼容处理；google-genai 显式降级", async () => {
+  it("api 缺省先试 openai 形状（一次命中不浪费）", async () => {
     const { calls, fetchImpl } = mockFetch(() => ({ body: {} }));
-    await pingModel({ baseUrl: "https://x.test", model: "m" }, { fetchImpl });
+    const r = await pingModel({ baseUrl: "https://x.test", model: "m" }, { fetchImpl });
+    expect(r).toMatchObject({ ok: true, via: "openai-chat" });
     expect(calls).toHaveLength(1);
+  });
+
+  it("饱和覆盖：声明 anthropic 但端点只吃 openai 形状 → 次形状胜出,via=openai-chat", async () => {
+    const { calls, fetchImpl } = mockFetch((url, init) => {
+      const h = (init?.headers ?? {}) as Record<string, string>;
+      if (h.Authorization && url.endsWith("/chat/completions")) return { body: { choices: [] } };
+      return { status: 404, body: "nf" };
+    });
+    const r = await pingModel({ baseUrl: "https://x.test", api: "anthropic-messages", apiKey: "k", model: "m" }, { fetchImpl });
+    expect(r).toMatchObject({ ok: true, via: "openai-chat" });
+    // anthropic 形状两条路径先试（404），openai 第一条命中
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://x.test/v1/messages", "https://x.test/messages", "https://x.test/chat/completions",
+    ]);
+  });
+
+  it("饱和覆盖：google-genai 两种形状都试，全灭如实报错", async () => {
+    const { calls, fetchImpl } = mockFetch(() => ({ status: 404, body: "nf" }));
     const r = await pingModel({ baseUrl: "https://x.test", api: "google-genai", model: "m" }, { fetchImpl });
-    expect(r).toMatchObject({ ok: false, error: "unsupported api: google-genai" });
-    expect(calls).toHaveLength(1); // 降级不发新请求
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("HTTP 404");
+    expect(calls).toHaveLength(4); // 2 形状 × 2 路径
   });
 });
 

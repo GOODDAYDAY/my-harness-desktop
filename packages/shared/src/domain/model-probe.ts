@@ -16,10 +16,11 @@ export interface ModelProbeInput {
   api?: string;
 }
 
-/** 单次 ping 结果：ok 即通，latencyMs 为请求往返耗时；不通带错误原因。 */
+/** 单次 ping 结果：ok 即通，latencyMs 为请求往返耗时；via = 命中的协议形状 id；不通带错误原因。 */
 export interface ModelProbeResult {
   ok: boolean;
   latencyMs?: number;
+  via?: string;
   error?: string;
 }
 
