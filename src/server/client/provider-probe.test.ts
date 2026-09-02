@@ -22,7 +22,7 @@ describe("discoverModels", () => {
   it("GET {baseUrl}/models，带 Bearer，id 排序返回；baseUrl 尾斜杠归一", async () => {
     const { calls, fetchImpl } = mockFetch(() => ({ body: { data: [{ id: "b-model" }, { id: "a-model" }, { no: "id" }] } }));
     const r = await discoverModels({ baseUrl: "https://x.test/v1/", apiKey: "sk-1", api: "openai-completions" }, { fetchImpl });
-    expect(r).toEqual({ ok: true, models: ["a-model", "b-model"] });
+    expect(r).toEqual({ ok: true, models: ["a-model", "b-model"], via: "openai-models" });
     expect(calls[0].url).toBe("https://x.test/v1/models");
     expect((calls[0].init?.headers as Record<string, string>).Authorization).toBe("Bearer sk-1");
   });
@@ -106,17 +106,38 @@ describe("路径候选（baseUrl 带不带 /v1 两种约定）", () => {
     const { calls, fetchImpl } = mockFetch((url) =>
       url.endsWith("/v1/models") ? { body: { data: [{ id: "m1" }] } } : { status: 404, body: "nf" });
     const r = await discoverModels({ baseUrl: "https://x.test" }, { fetchImpl });
-    expect(r).toEqual({ ok: true, models: ["m1"] });
+    expect(r).toEqual({ ok: true, models: ["m1"], via: "openai-models" });
     expect(calls.map((c) => c.url)).toEqual(["https://x.test/models", "https://x.test/v1/models"]);
   });
 
   it("anthropic：/v1 优先（官方约定 baseUrl 不含 /v1），直连成功不回落", async () => {
     const { calls, fetchImpl } = mockFetch(() => ({ body: { data: [{ id: "claude-x" }] } }));
     const r = await discoverModels({ baseUrl: "https://api.anthropic.test", apiKey: "k", api: "anthropic-messages" }, { fetchImpl });
-    expect(r).toEqual({ ok: true, models: ["claude-x"] });
+    expect(r).toEqual({ ok: true, models: ["claude-x"], via: "anthropic-models" });
     expect(calls.map((c) => c.url)).toEqual(["https://api.anthropic.test/v1/models"]);
     expect((calls[0].init?.headers as Record<string, string>)["x-api-key"]).toBe("k");
     expect((calls[0].init?.headers as Record<string, string>)["anthropic-version"]).toBeTruthy();
+  });
+
+  it("策略链：api 只影响排序不过滤——主策略 400，次策略（anthropic x-api-key）命中，via 记录来源", async () => {
+    const { calls, fetchImpl } = mockFetch((url, init) => {
+      const h = (init?.headers ?? {}) as Record<string, string>;
+      if (h["x-api-key"] && url.endsWith("/v1/models")) return { body: { data: [{ id: "claude-x" }] } };
+      return { status: 400, body: "model_not_found" };
+    });
+    const r = await discoverModels({ baseUrl: "https://x.test", apiKey: "k", api: "openai-completions" }, { fetchImpl });
+    expect(r).toEqual({ ok: true, models: ["claude-x"], via: "anthropic-models" });
+    // openai 策略两条路径先试（400），anthropic 策略第一条路径命中
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://x.test/models", "https://x.test/v1/models", "https://x.test/v1/models",
+    ]);
+  });
+
+  it("2xx 但形状不识 → 继续下一条策略，不拿废数据充数", async () => {
+    const { fetchImpl } = mockFetch((url) =>
+      url.endsWith("/v1/models") ? { body: { data: [{ id: "m1" }] } } : { body: { weird: true } });
+    const r = await discoverModels({ baseUrl: "https://x.test" }, { fetchImpl });
+    expect(r).toEqual({ ok: true, models: ["m1"], via: "openai-models" });
   });
 
   it("候选全败 → 带回第一个错误（不吞不伪造）", async () => {
@@ -207,7 +228,7 @@ describe("loopback 集成（真实 http server，不 mock fetch）", () => {
       res.end("not found");
     }, async (base) => {
       const d = await discoverModels({ baseUrl: base, apiKey: "k" });
-      expect(d).toEqual({ ok: true, models: ["fast-model", "slow-model"] });
+      expect(d).toEqual({ ok: true, models: ["fast-model", "slow-model"], via: "openai-models" });
       const p = await pingModel({ baseUrl: base, model: "slow-model" });
       expect(p.ok).toBe(true);
       expect(p.latencyMs).toBeGreaterThanOrEqual(70); // 人工延迟 80ms，留 10ms 抖动余量

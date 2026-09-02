@@ -1,7 +1,9 @@
 // provider-probe —— 对 OpenAI / Anthropic 兼容端点的纯 HTTP 探测（外层网络件，与 fs/git/npm 同层）。
 //
 // 两个能力（domain ModelProbeApi 的实现）：
-//   discoverModels：GET 模型清单（OpenAI: /models；Anthropic: /v1/models，两边响应都是 {data:[{id}]}）；
+//   discoverModels：策略链逐个试（DISCOVER_STRATEGIES，一条策略 = 一种发现办法，
+//     自含路径候选 + 鉴权头 + 响应解析；api 类型只影响排序，不过滤——「所有办法都试一遍」，
+//     第一个 2xx 且解析成功的策略胜出，结果带 via 诊断）；加新办法 = 加一条策略对象。
 //   pingModel：POST 一条最小请求记往返（OpenAI: /chat/completions；Anthropic: /v1/messages，max_tokens:1）。
 // 内核无关：不起内核进程、不读内核配置，连接事实（baseUrl/apiKey/api）全部由调用方显式传入。
 //
@@ -134,7 +136,43 @@ function authHeaders(apiKey: string | undefined, api?: string): Record<string, s
     : { Authorization: `Bearer ${apiKey}` };
 }
 
-/** GET 模型清单 → id 数组（OpenAI 与 Anthropic 响应同为 {data:[{id}]}，按 id 排序）。 */
+/** 发现策略：一种「列出端点模型」的办法，自含 路径候选 + 鉴权头 + 响应解析。
+ *  高内聚低耦合：加新办法 = 往 DISCOVER_STRATEGIES 加一条对象，discoverModels 不动。 */
+interface DiscoverStrategy {
+  /** 策略名（进结果的 via 字段，诊断用）。 */
+  id: string;
+  /** 有序路径候选（相对 baseUrl；带不带 /v1 的两种约定都在这里枚举）。 */
+  paths: string[];
+  /** 鉴权头（key 已解析；空 key 返回空——无鉴权端点也允许试）。 */
+  headers(key?: string): Record<string, string>;
+  /** 2xx 响应体 → 模型 id 清单；形状不识返回 null（视为未命中，继续下一条）。 */
+  parse(body: unknown): string[] | null;
+}
+
+/** OpenAI 形状解析：{data:[{id}]}（Anthropic /v1/models 同形）。 */
+function parseDataIds(body: unknown): string[] | null {
+  const data = (body as { data?: unknown } | null)?.data;
+  if (!Array.isArray(data)) return null;
+  return data
+    .map((m) => (m && typeof m === "object" ? (m as { id?: unknown }).id : undefined))
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
+/** 发现策略注册表（顺序 = 缺省优先级；调用时按 api 亲和再排）。
+ *  当前两条：OpenAI 兼容的 /models（Bearer）、Anthropic 的 /v1/models（x-api-key）。 */
+const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
+  { id: "openai-models", paths: ["/models", "/v1/models"], headers: (key): Record<string, string> => (key ? { Authorization: `Bearer ${key}` } : {}), parse: parseDataIds },
+  { id: "anthropic-models", paths: ["/v1/models", "/models"], headers: (key): Record<string, string> => (key ? { "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION } : {}), parse: parseDataIds },
+];
+
+/** api 亲和排序：声明 anthropic 的端点先试 anthropic 策略，其余先试 openai；只是排序不过滤。 */
+function orderStrategies(api?: string): DiscoverStrategy[] {
+  if (api !== "anthropic-messages") return DISCOVER_STRATEGIES;
+  return [...DISCOVER_STRATEGIES].sort((a, b) => (a.id === "anthropic-models" ? -1 : b.id === "anthropic-models" ? 1 : 0));
+}
+
+/** GET 模型清单：策略链逐个试，第一个 2xx 且解析成功的胜出（via 记录命中策略）；
+ *  全链未命中带回第一个错误（诚实，不伪造）。 */
 export async function discoverModels(input: ModelProbeInput, opts?: ProbeOptions): Promise<ModelDiscoverResult> {
   const gate = unsupportedApiError(input.api);
   if (gate) return { ok: false, error: gate };
@@ -144,17 +182,21 @@ export async function discoverModels(input: ModelProbeInput, opts?: ProbeOptions
   if (keyError) return { ok: false, error: keyError };
   const timeoutMs = opts?.timeoutMs ?? DISCOVER_TIMEOUT_MS;
   const fetchImpl = opts?.fetchImpl ?? globalThis.fetch;
-  const headers = authHeaders(key, input.api);
-  const r = await tryCandidates(candidateUrls(base, "/models", input.api), () => ({ method: "GET", headers }), fetchImpl, timeoutMs);
-  if (!r.ok) return { ok: false, error: r.error };
-  const body: unknown = await r.res.json().catch(() => null);
-  const data = (body as { data?: unknown } | null)?.data;
-  if (!Array.isArray(data)) return { ok: false, error: "unexpected /models response" };
-  const models = data
-    .map((m) => (m && typeof m === "object" ? (m as { id?: unknown }).id : undefined))
-    .filter((id): id is string => typeof id === "string" && id.length > 0)
-    .sort();
-  return { ok: true, models };
+  let firstError: string | null = null;
+  for (const strategy of orderStrategies(input.api)) {
+    for (const path of strategy.paths) {
+      try {
+        const res = await fetchImpl(`${base}${path}`, { method: "GET", headers: strategy.headers(key), signal: AbortSignal.timeout(timeoutMs) });
+        if (!res.ok) { firstError ??= await httpErrorMessage(res); continue; }
+        const models = strategy.parse(await res.json().catch(() => null));
+        if (models) return { ok: true, models: models.sort(), via: strategy.id };
+        firstError ??= "unexpected /models response";
+      } catch (err) {
+        firstError ??= fetchErrorMessage(err, timeoutMs);
+      }
+    }
+  }
+  return { ok: false, error: firstError ?? "no endpoint" };
 }
 
 /** POST 最小 ping（OpenAI chat/completions / Anthropic messages，max_tokens:1），2xx 即通。 */

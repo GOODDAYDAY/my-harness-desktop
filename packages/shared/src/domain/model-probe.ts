@@ -23,10 +23,11 @@ export interface ModelProbeResult {
   error?: string;
 }
 
-/** 发现结果：models 为模型 id 清单（已按 id 排序）。 */
+/** 发现结果：models 为模型 id 清单（已按 id 排序）。via = 命中的发现策略 id（诊断用）。 */
 export interface ModelDiscoverResult {
   ok: boolean;
   models?: string[];
+  via?: string;
   error?: string;
 }
 

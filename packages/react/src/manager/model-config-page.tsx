@@ -348,6 +348,7 @@ function DiscoverySection({ provider, i18nPrefix, onAddModel, open }: {
   const probeable = !provider.api || PROBEABLE_APIS.has(provider.api);
   const hasBaseUrl = !!(provider.baseUrl && provider.baseUrl.trim());
   const [discovered, setDiscovered] = useState<string[] | null>(null);
+  const [scanVia, setScanVia] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [pings, setPings] = useState<Record<string, PingState>>({});
@@ -366,7 +367,7 @@ function DiscoverySection({ provider, i18nPrefix, onAddModel, open }: {
     setScanning(true); setScanError(null);
     try {
       const r = await ctx.modelsProbe.discover(probeInput());
-      if (r.ok) setDiscovered(r.models ?? []);
+      if (r.ok) { setDiscovered(r.models ?? []); setScanVia(r.via ?? null); }
       else setScanError(r.error ?? "unknown error");
     } catch (err) {
       setScanError(err instanceof Error ? err.message : String(err));
@@ -404,7 +405,7 @@ function DiscoverySection({ provider, i18nPrefix, onAddModel, open }: {
       <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-sm)", padding: "var(--spacing-sm) var(--spacing-md)", borderBottom: "1px solid var(--color-border)", background: "var(--color-surface)" }}>
         <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>{k("discoverTitle")}</span>
         <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>
-          {scanning ? k("discoverScanning") : discovered ? k("discoverSummary", { found: discovered.length, configured: configuredCount }) : ""}
+          {scanning ? k("discoverScanning") : discovered ? `${k("discoverSummary", { found: discovered.length, configured: configuredCount })}${scanVia ? ` · via ${scanVia}` : ""}` : ""}
         </span>
         <span style={{ marginLeft: "auto", display: "flex", gap: "var(--spacing-xs)" }}>
           <Button variant="secondary" onClick={() => void scan()} disabled={scanning || !probeable || !hasBaseUrl}>{k("discoverScan")}</Button>
@@ -420,7 +421,7 @@ function DiscoverySection({ provider, i18nPrefix, onAddModel, open }: {
           <span style={{ color: "var(--color-accent-error)", wordBreak: "break-all" }}>{scanError}</span>
           {provider.models.length > 0 && (
             <span>
-              <Button variant="secondary" onClick={() => { setScanError(null); setDiscovered(provider.models.map((m) => m.id)); }}>
+              <Button variant="secondary" onClick={() => { setScanError(null); setScanVia(null); setDiscovered(provider.models.map((m) => m.id)); }}>
                 {k("discoverUseConfigured", { count: provider.models.length })}
               </Button>
             </span>
