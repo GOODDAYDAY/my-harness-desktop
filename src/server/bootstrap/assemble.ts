@@ -164,6 +164,9 @@ dshConfigSource.ensureDefaultCordis();
 // 内核形状:中立化 agent-core 自带的 skill-filesystem(改名 + 清空发现根),让统一适配插件的
 // fork provider 独占 "filesystem" 名——duplicate provider 会让 dsh 启动即崩。
 dshConfigSource.ensureAgentCoreSkillForkBase();
+// 凭证服务:llm-pi-ai 的 resolveApiKey 经 ctx.credentials 读 ~/.dsh/.credentials.yaml——
+// 缺了 credentials-local 插件,桌面端写进凭证库的 key 永远读不到(实测 MISSING_CREDENTIAL)。
+dshConfigSource.ensureCredentialsPlugin();
 // 清理悬空默认:agent-default-model 可能指向已删路由(如废弃的 deepseek-official 官方路由)
 // → 清掉指针,回落首个 provider/模型。fire-and-forget,不阻断启动(与 dshDefaultProviderModel 的
 // 运行时校验双保险:即便这里没清掉,spawn 兜底也不会再落到死路由)。

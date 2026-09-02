@@ -23,6 +23,7 @@ const PLUGIN_ID_MAP: Record<string, string> = {
   "@deepseek-ai/dsh-agent-spine-demo": "agent-spine",
   "@deepseek-ai/dsh-bash-local": "bash",
   "@deepseek-ai/dsh-compaction-basic": "compaction-basic",
+  "@deepseek-ai/dsh-credentials-local": "credentials-local",
   "@deepseek-ai/dsh-fs-local": "fs-local",
   "@deepseek-ai/dsh-fs-observation-policy": "fs-observation-policy",
   "@deepseek-ai/dsh-llm-pi-ai": "llm-pi-ai",
@@ -63,6 +64,11 @@ const DEFAULT_CORDIS_YAML = [
   "        includeDefaultRoots: false",
   "- id: settings-file",
   "  name: '@deepseek-ai/dsh-settings-file'",
+  // 凭证服务(dsh-credentials-local):llm-pi-ai 的 resolveApiKey 经 ctx.credentials 读
+  //  ~/.dsh/.credentials.yaml 的 refs——缺了它,凭证库有值也读不到,回落进程环境变量,
+  //  自定义 provider(如 us-new)报 MISSING_CREDENTIAL(实测)。挂在 llm-pi-ai 之前。
+  "- id: credentials-local",
+  "  name: '@deepseek-ai/dsh-credentials-local'",
   "- id: llm-pi-ai",
   "  name: '@deepseek-ai/dsh-llm-pi-ai'",
   "- id: sessions",
@@ -216,6 +222,18 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     ];
     lines.splice(block.end, 0, ...injection);
     writeFileSync(file, lines.join("\n") + "\n", "utf-8");
+  }
+
+  /** 确保凭证服务(dsh-credentials-local)挂在 cordis 插件树:llm-pi-ai 的 resolveApiKey 经
+   *  ctx.credentials 读 ~/.dsh/.credentials.yaml——缺了这个插件,桌面端写进凭证库的 key 永远
+   *  读不到,自定义 provider 的每次发起都报 MISSING_CREDENTIAL(实测)。幂等:块已在则不动。
+   *  缺的不是桌面侧某个调用点没传,而是内核侧插件树少挂了一个服务(内聚缺口的真实根因)。 */
+  ensureCredentialsPlugin(): void {
+    try {
+      this.addPluginBlock("credentials-local", "@deepseek-ai/dsh-credentials-local");
+    } catch {
+      // cordis.yml 缺失/不可写等 → 不炸启动;spawn 时 llm-pi-ai 的 MISSING_CREDENTIAL 会显形。
+    }
   }
 
   // ===== settings.yaml(用户覆盖层,纯字面量 YAML) =====

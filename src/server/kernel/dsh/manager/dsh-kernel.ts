@@ -20,6 +20,7 @@ export const DSH_SPEC: KernelSpec = {
     "@deepseek-ai/dsh-agent-spine-demo",
     "@deepseek-ai/dsh-settings-file",
     "@deepseek-ai/dsh-llm-pi-ai",
+    "@deepseek-ai/dsh-credentials-local",
     "@deepseek-ai/dsh-session-persistence-jsonl",
     "@deepseek-ai/dsh-session-checkpoint-policy",
     "@deepseek-ai/dsh-subprocess-local",
