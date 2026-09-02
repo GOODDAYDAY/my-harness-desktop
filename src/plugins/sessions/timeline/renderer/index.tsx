@@ -937,8 +937,25 @@ export function TimelineView(): React.ReactNode {
    *  与「点击发送按钮」完全同一条路径。返回 false = 未即时发出(入队/拦截/失败)。
    *  清输入框只在「发送的是输入框内容」时发生——表情包直接发送不打扰正在草拟的内容。 */
   const sendText = async (text: string, image?: { src: string; title?: string }): Promise<boolean> => {
-    const trimmed = text.trim();
+    let trimmed = text.trim();
     const fromComposer = trimmed === inputRef.current.trim();
+    // 壳插件斜杠命令拦截(/goal 等,机制见 packages/react/composer-commands):
+    // 命中且被处理 → 吞掉本次发送,文本不进内核。放在入队/streaming 判定之前——
+    // 命令是即时状态动作,不入消息队列、不依赖内核可用性。
+    // 返回 { send } = 改写发送(所见即所得):吞掉原文、改发改写文本——/goal <目标>
+    // 把目标正文作为真实用户消息发出去(命令前缀是机制不进会话),goal 条与续跑由插件管。
+    // 改写在 filesSection/fullText 拼装之前——发送文本以改写后为准,不留旧文本残影。
+    if (trimmed.startsWith("/")) {
+      const handled = await runComposerCommandIfMatch(trimmed);
+      if (handled === true) {
+        if (fromComposer) setInput("");
+        return false;
+      }
+      if (typeof handled === "object" && handled !== null && typeof handled.send === "string") {
+        trimmed = handled.send.trim();
+        if (!trimmed) { if (fromComposer) setInput(""); return false; }
+      }
+    }
     const files = pendingFilesRef.current;
     // 参考文件段折进正文(绝对路径引用,AI 用工具读):文件不入队,成为正文一部分。
     const filesSection = files.length > 0
@@ -947,16 +964,6 @@ export function TimelineView(): React.ReactNode {
     const fullText = [trimmed, filesSection].filter(Boolean).join("\n\n");
     // 图(外部传入或 composer 挂图)也算「有内容」:纯图发送是完整意图。
     const hasImage = !!(image ?? composerImageRef.current);
-    // 壳插件斜杠命令拦截(/goal 等,机制见 packages/react/composer-commands):
-    // 命中且被处理 → 吞掉本次发送,文本不进内核。放在入队/streaming 判定之前——
-    // 命令是即时状态动作,不入消息队列、不依赖内核可用性。
-    if (trimmed.startsWith("/")) {
-      const handled = await runComposerCommandIfMatch(trimmed);
-      if (handled) {
-        if (fromComposer) setInput("");
-        return false;
-      }
-    }
     if ((!trimmed && !hasAttachments && files.length === 0 && !hasImage) || sendingRef.current) return false;
     if (!currentCwd) { showToast(t("shell.openFolderFirst")); return false; }
     if (kernelAvailable === false) {

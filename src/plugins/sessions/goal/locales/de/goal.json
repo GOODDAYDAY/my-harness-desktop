@@ -1,0 +1,10 @@
+{
+  "goal.bar.pause": "Pause",
+  "goal.bar.resume": "Fortsetzen",
+  "goal.bar.edit": "Ziel bearbeiten",
+  "goal.bar.clear": "Ziel entfernen",
+  "goal.bar.save": "Speichern",
+  "goal.roundCard.title": "Ziel-Runde",
+  "goal.roundCard.roundOf": "Runde {{round}}/{{max}}",
+  "goal.roundCard.toggle": "Fortsetzungstext ein-/ausblenden"
+}

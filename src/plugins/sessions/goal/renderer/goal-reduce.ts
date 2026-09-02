@@ -4,7 +4,7 @@
 
 import type { SessionEvent } from "@my-harness-desktop/shared";
 import type { GoalState } from "../core/goal-state";
-import { achieveGoal, createGoal, parseSetGoalArgs, shouldContinue } from "../core/goal-state";
+import { achieveGoal, createGoal, editGoal, parseSetGoalArgs, shouldContinue } from "../core/goal-state";
 
 export const SET_GOAL_TOOL = "set_goal";
 export const ACHIEVE_GOAL_TOOL = "achieve_goal";
@@ -48,7 +48,17 @@ export function applyGoalEvent(state: GoalState | null, event: SessionEvent): Go
     if (name === SET_GOAL_TOOL) {
       const request = parseSetGoalArgs(argsOf(event));
       if (request === null) return { goal: state }; // 畸形入参:静默忽略
-      try { return { goal: createGoal(request) }; } catch { return { goal: state }; }
+      try {
+        // 已有未完结目标:模型的 set_goal 收敛为「改」(保轮次/阶段,换 objective、
+        // 采纳显式 max_rounds),不再 createGoal 重置——否则 round 归零、上限被任意
+        // 改写(「设了 256 轮的目标被模型一句 set_goal 换成 3 轮」类静默覆盖的根因)。
+        // 无目标或已达成:正常新建。
+        if (state && state.phase !== "achieved") {
+          const edited = editGoal(state, request.objective);
+          return { goal: request.maxRounds !== undefined ? { ...edited, maxRounds: request.maxRounds } : edited };
+        }
+        return { goal: createGoal(request) };
+      } catch { return { goal: state }; }
     }
     if (name === ACHIEVE_GOAL_TOOL) {
       return { goal: state ? achieveGoal(state) : state };

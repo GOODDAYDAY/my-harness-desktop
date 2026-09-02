@@ -7,14 +7,21 @@
 //
 // 注册表与执行胶水在 packages/react/src/composer-commands.ts(发布面机制),本文件只留契约与纯解析。
 
-/** 插件注册的输入框斜杠命令。handle 返回 true = 已处理(吞掉发送);false = 放行(按普通消息发送)。 */
+/** 命令处理结果:
+ *  - `true` = 已处理,吞掉本次发送(纯命令,如 /goal stop);
+ *  - `false` = 放行,原文按普通消息发送;
+ *  - `{ send }` = 改写发送:吞掉原文,改发 send 文本(所见即所得——/goal <目标> 把目标
+ *    正文作为真实用户消息发出去,命令前缀是机制不进会话;goal 插件是首个消费方)。 */
+export type ComposerCommandResult = boolean | { send: string };
+
+/** 插件注册的输入框斜杠命令。handle 返回规则见 ComposerCommandResult。 */
 export interface ComposerCommand {
   /** 命令名(不带前导 /),如 "goal"。输入 "/goal ..." 命中;名字比较大小写不敏感。 */
   name: string;
   /** 一句话说明(进斜杠弹窗)。 */
   description?: string;
   /** 处理以 /name 开头的原始输入全文。抛错按未处理(放行)兜底。 */
-  handle: (input: string) => boolean | Promise<boolean>;
+  handle: (input: string) => ComposerCommandResult | Promise<ComposerCommandResult>;
 }
 
 /** 解析输入首行的命令头:"/goal xxx" → { name: "goal", rest: "xxx" }。

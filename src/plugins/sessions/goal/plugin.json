@@ -17,6 +17,13 @@
         "block": "toolCall",
         "names": ["set_goal", "achieve_goal"],
         "component": "GoalCard"
+      },
+      {
+        "id": "goal-round",
+        "block": "auxBlock",
+        "names": ["goal_round"],
+        "component": "GoalRoundCard",
+        "order": 90
       }
     ],
     "composerTop": [
@@ -25,6 +32,12 @@
         "component": "GoalBar",
         "order": 40
       }
+    ],
+    "languages": [
+      { "id": "goal.zh-CN", "locale": "zh-CN", "resources": "./locales/zh-CN/goal.json" },
+      { "id": "goal.en", "locale": "en", "resources": "./locales/en/goal.json" },
+      { "id": "goal.zh-TW", "locale": "zh-TW", "resources": "./locales/zh-TW/goal.json" },
+      { "id": "goal.de", "locale": "de", "resources": "./locales/de/goal.json" }
     ]
   }
 }

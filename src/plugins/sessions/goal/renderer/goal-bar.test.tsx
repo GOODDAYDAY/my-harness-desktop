@@ -1,11 +1,33 @@
 // @vitest-environment jsdom
 // GoalBar DOM e2e —— 真实渲染 + 真实 DOM 交互,覆盖用户视角的完整闭环:
 // 人敲 /goal 设置(经 composerCommands 机制入口 runGoalCommand)→ 目标条出现 →
-// 点按钮停止/恢复/编辑/关闭(删改停)→ 状态与续跑副作用逐条对账。
+// 点按钮停止/恢复/编辑/关闭(删改停全可见——编辑是显式铅笔按钮,不再伪装成轮次数字)→
+// 状态与续跑副作用逐条对账。
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import type { SessionEvent } from "@my-harness-desktop/shared";
+
+// i18n:测试用真实 zh-CN 字典(DOM 断言跑真文案,不断言 key)。
+// 与生产同形状:第一个 dot 前是 ns(goal),剩余是嵌套 key;{{var}} 插值。
+vi.mock("react-i18next", () => {
+  const dict: Record<string, string> = {
+    "bar.pause": "停止",
+    "bar.resume": "恢复",
+    "bar.edit": "编辑目标",
+    "bar.clear": "关闭目标",
+    "bar.save": "保存",
+    "roundCard.title": "目标续跑",
+    "roundCard.roundOf": "第 {{round}}/{{max}} 轮",
+    "roundCard.toggle": "展开/收起续跑提示原文",
+  };
+  const t = (k: string, vars?: Record<string, unknown>): string => {
+    const bare = k.startsWith("goal.") ? k.slice(5) : k;
+    const tpl = dict[bare] ?? k;
+    return tpl.replace(/\{\{(\w+)\}\}/g, (_, name) => String(vars?.[name] ?? ""));
+  };
+  return { useTranslation: () => ({ t, i18n: { language: "zh-CN" } }) };
+});
 
 const mocks = vi.hoisted(() => ({
   continue: vi.fn(),
@@ -43,7 +65,7 @@ vi.mock("@my-harness-desktop/react", () => {
 });
 
 import { GoalBar } from "./goal-bar";
-import { runGoalCommand } from "./goal-controller";
+import { runGoalCommand, __resetGoalStoreForTests } from "./goal-controller";
 
 function emit(e: SessionEvent): void {
   act(() => { mocks.onEventCb?.(e); });
@@ -62,33 +84,40 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     mocks.eventsEmit.mockReset();
     mocks.onEventCb = null;
     mocks.pendingQueue = {};
+    __resetGoalStoreForTests(); // 模块级目标态测试间隔离
   });
 
-  it("无目标不渲染;人敲 /goal → 目标条出现且首轮续跑已发出", async () => {
+  it("无目标不渲染;人敲 /goal → 目标落状态 + 返回 {send:目标正文} 交 timeline 真发(所见即所得)", async () => {
     const { container } = render(<GoalBar />);
     expect(container.firstChild).toBeNull();
 
     // composerCommands 机制入口:与 timeline 发送拦截调用的是同一个函数
     await act(async () => {
       const handled = await runGoalCommand("/goal 把 e2e 测试补齐");
-      expect(handled).toBe(true);
+      // 所见即所得:不再吞掉发送,返回改写结果——目标正文由 timeline 作为真实用户消息发出
+      expect(handled).toEqual({ send: "把 e2e 测试补齐" });
     });
 
     expect(screen.getByText("把 e2e 测试补齐")).toBeInTheDocument();
-    expect(screen.getByText("1/256")).toBeInTheDocument(); // 空闲设置即装弹:首轮已发
-    expect(mocks.continue).toHaveBeenCalledTimes(1);
+    // set 不装弹:kickoff 消息(目标正文)本身就是第 0 轮,它的收敛自然接第 1 轮
+    expect(screen.getByText("0/256")).toBeInTheDocument();
+    expect(mocks.continue).toHaveBeenCalledTimes(0);
     // active 态视觉:成功色左边框 + 停止按钮在位(内联样式含 var() 原样断言,不依赖 jsdom 解析变量)
     expect(container.firstElementChild?.getAttribute("style")).toContain("var(--color-accent-success)");
     expect(screen.getByTitle("停止")).toBeInTheDocument();
     // 横幅身份锚点(e2e 定位用)+ 相位数据属性
     expect(container.querySelector("[data-goal-bar]")).not.toBeNull();
     expect(container.querySelector('[data-goal-phase="active"]')).not.toBeNull();
+
+    // kickoff 回合收敛 → 第 1 轮续跑
+    emit({ type: "agentSettled" });
+    expect(mocks.continue).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("1/256")).toBeInTheDocument();
   });
 
   it("停止(删改停之「停」):点按钮 → paused 态,回合收敛不再续跑", async () => {
     const { container } = render(<GoalBar />);
     await act(async () => { await runGoalCommand("/goal 停下来的目标"); });
-    const promptCalls = mocks.continue.mock.calls.length; // 设置时的首轮
 
     // DOM 点击停止
     fireEvent.click(screen.getByTitle("停止"));
@@ -98,7 +127,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     expect(container.firstElementChild?.getAttribute("style")).toContain("var(--color-accent-warning)");
     expect(container.querySelector('[data-goal-phase="paused"]')).not.toBeNull();
     emit({ type: "agentSettled" });
-    expect(mocks.continue).toHaveBeenCalledTimes(promptCalls); // 暂停不续跑
+    expect(mocks.continue).toHaveBeenCalledTimes(0); // 暂停不续跑
   });
 
   it("恢复:点按钮 → 立即补发一轮续跑(DOM 上见新轮次)", async () => {
@@ -110,15 +139,15 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
 
     // DOM 点击恢复:空闲即装弹,不用等下一次回合收敛
     await act(async () => { fireEvent.click(screen.getByTitle("恢复")); });
-    expect(mocks.continue).toHaveBeenCalledTimes(2); // 首轮 + 恢复轮
-    expect(screen.getByText("2/256")).toBeInTheDocument();
+    expect(mocks.continue).toHaveBeenCalledTimes(1); // 恢复轮
+    expect(screen.getByText("1/256")).toBeInTheDocument();
   });
 
-  it("编辑(删改停之「改」):点轮次 → 出现输入框 → 键入新目标回车 → 下次续跑用新目标", async () => {
+  it("编辑(删改停之「改」):点铅笔按钮 → 出现输入框 → 键入新目标回车 → 下次续跑用新目标", async () => {
     render(<GoalBar />);
     await act(async () => { await runGoalCommand("/goal 旧目标"); });
 
-    // DOM 点击轮次按钮(编辑入口)→ 输入框出现,placeholder 为当前目标
+    // DOM 点击铅笔(显式编辑入口;此前伪装成轮次数字按钮,不可发现——用户要求 #6)
     fireEvent.click(screen.getByTitle("编辑目标"));
     const input = screen.getByPlaceholderText("旧目标");
     expect(input).toBeInTheDocument();
@@ -160,7 +189,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     expect(mocks.updateHeader).toHaveBeenLastCalledWith("/p/s.jsonl", { custom: { goal: null } });
 
     emit({ type: "agentSettled" });
-    expect(mocks.continue).toHaveBeenCalledTimes(1); // 关闭后只剩设置时的首轮,不再续跑
+    expect(mocks.continue).toHaveBeenCalledTimes(0); // 关闭后不再续跑
   });
 
   it("模型 set_goal 与用户 /goal 同状态机:工具设置的目标一样能删改停", async () => {

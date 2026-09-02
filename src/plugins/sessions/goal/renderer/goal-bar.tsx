@@ -1,10 +1,12 @@
 // GoalBar —— 输入框上方(composerTop 槽)的目标状态横幅:显示当前目标 + 用户控制。
-// 停止(pause)= desktop 不再发送续跑;恢复(resume);编辑(edit,下次生效);关闭(clear)。
+// 删改停全可见(用户要求 #6):停(pause)/恢复(resume)/改(edit,铅笔按钮进内联编辑)/
+// 删(clear,垃圾桶)——编辑入口此前伪装成「轮次数字按钮」,不可发现,现为显式图标按钮。
 // 数据源 = 本插件内的 useGoalController(续跑引擎同源,不跨 IPC)。
 // 生效着色:边框/底纹/图标随 phase 变色——目标一开始就"看得出来"(用户要求 #4);
 // 输入框本体的绿晕由 timeline 订阅 goal:state 事件挂 .pi-composer-goal,与此条同色呼应。
 import { useState } from "react";
-import { Target, Play, Pause, Trash2, Check } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Target, Play, Pause, Trash2, Check, Pencil } from "lucide-react";
 import { useGoalController } from "./goal-controller";
 
 function phaseColor(phase: string): string {
@@ -17,6 +19,7 @@ function phaseColor(phase: string): string {
 }
 
 export function GoalBar(): React.ReactNode {
+  const { t } = useTranslation();
   const { goal, pause, resume, edit, clear } = useGoalController();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -60,29 +63,34 @@ export function GoalBar(): React.ReactNode {
         <span className="flex-1 min-w-0 truncate text-[var(--color-fg)]">{goal.objective}</span>
       )}
       {editing ? (
-        <button type="button" title="保存" onClick={commitEdit} className="text-[var(--color-accent-success)] hover:opacity-70">
+        <button type="button" title={t("goal.bar.save")} aria-label={t("goal.bar.save")} onClick={commitEdit} className="text-[var(--color-accent-success)] hover:opacity-70">
           <Check className="size-3.5" />
         </button>
       ) : (
-        <button
-          type="button"
-          title="编辑目标"
-          onClick={() => { setDraft(goal.objective); setEditing(true); }}
-          className="text-[var(--color-muted)] hover:opacity-70 shrink-0"
-        >
-          <span className="tabular-nums">{goal.round}/{goal.maxRounds}</span>
-        </button>
+        <>
+          {/* 轮次是纯展示(不再兼职编辑入口);编辑走显式铅笔按钮。 */}
+          <span className="tabular-nums text-[var(--color-muted)] shrink-0">{goal.round}/{goal.maxRounds}</span>
+          <button
+            type="button"
+            title={t("goal.bar.edit")}
+            aria-label={t("goal.bar.edit")}
+            onClick={() => { setDraft(goal.objective); setEditing(true); }}
+            className="text-[var(--color-muted)] hover:opacity-70 shrink-0"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+        </>
       )}
       {goal.phase === "active" ? (
-        <button type="button" title="停止" onClick={pause} className="text-[var(--color-accent-warning)] hover:opacity-70 shrink-0">
+        <button type="button" title={t("goal.bar.pause")} aria-label={t("goal.bar.pause")} onClick={pause} className="text-[var(--color-accent-warning)] hover:opacity-70 shrink-0">
           <Pause className="size-3.5" />
         </button>
       ) : (
-        <button type="button" title="恢复" onClick={resume} className="text-[var(--color-accent-success)] hover:opacity-70 shrink-0">
+        <button type="button" title={t("goal.bar.resume")} aria-label={t("goal.bar.resume")} onClick={resume} className="text-[var(--color-accent-success)] hover:opacity-70 shrink-0">
           <Play className="size-3.5" />
         </button>
       )}
-      <button type="button" title="关闭目标" onClick={clear} className="text-[var(--color-muted)] hover:opacity-70 shrink-0">
+      <button type="button" title={t("goal.bar.clear")} aria-label={t("goal.bar.clear")} onClick={clear} className="text-[var(--color-muted)] hover:opacity-70 shrink-0">
         <Trash2 className="size-3.5" />
       </button>
     </div>

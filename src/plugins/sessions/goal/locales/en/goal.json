@@ -1,0 +1,10 @@
+{
+  "goal.bar.pause": "Pause",
+  "goal.bar.resume": "Resume",
+  "goal.bar.edit": "Edit objective",
+  "goal.bar.clear": "Clear goal",
+  "goal.bar.save": "Save",
+  "goal.roundCard.title": "Goal round",
+  "goal.roundCard.roundOf": "Round {{round}}/{{max}}",
+  "goal.roundCard.toggle": "Toggle continuation prompt text"
+}

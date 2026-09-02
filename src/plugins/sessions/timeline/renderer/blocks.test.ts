@@ -122,7 +122,35 @@ describe("decomposeMessage", () => {
       { type: "auxBlock", aux: { type: "review", data: { inner: "<item seq=\"①\">意见</item>" }, start: 0, end: text.length } },
     ]);
   });
+
+  it("全部块 standalone(goal 续跑提示)→ 不落 userIntent 占位,只有卡片块(所见即所得)", () => {
+    const text = "<goal_round>\nObjective: \"x\"\nRound: 1/256\n</goal_round>";
+    const blocks = decomposeMessage(msg({ role: "user", content: text }), [standaloneParser]);
+    expect(blocks).toEqual([
+      { type: "auxBlock", aux: { type: "goal_round", data: { n: 1 }, start: 0, end: text.length, standalone: true } },
+    ]);
+  });
+
+  it("standalone 块 + 非 standalone 块混合 → 占位仍在(混合内容不当纯机器消息)", () => {
+    const text = "<goal_round>\nObjective: \"x\"\n</goal_round>\n\n<pi-review>\n<item seq=\"①\">意见</item>\n</pi-review>";
+    const blocks = decomposeMessage(msg({ role: "user", content: text }), [standaloneParser, reviewParser]);
+    expect(blocks?.[0]).toEqual({ type: "userIntent" });
+    expect(blocks?.filter((b) => b.type === "auxBlock")).toHaveLength(2);
+  });
 });
+
+/** standalone 测试桩:整段 <goal_round> 包装剥成自足块。 */
+const standaloneParser = {
+  id: "goal-round-stub",
+  parse(text: string) {
+    const re = /<goal_round>[\s\S]*?<\/goal_round>/g;
+    const blocks = [];
+    for (const m of text.matchAll(re)) {
+      blocks.push({ type: "goal_round", data: { n: 1 }, start: m.index, end: m.index + m[0].length, standalone: true });
+    }
+    return blocks.length > 0 ? { blocks } : null;
+  },
+};
 
 const skillParser = {
   id: "skill",

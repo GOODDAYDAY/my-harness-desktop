@@ -44,10 +44,12 @@ export function decomposeMessage(message: NeutralMessage, auxParsers: AuxBlockPa
     // 结构化块(skill 展开块 / review 评论块)识别:正文照常,块渲染引用条。
     const { main, blocks } = parseUserBlocks(text, auxParsers);
     const out: TimelineBlock[] = [];
-    if (main) out.push({ type: "userText", text: main });
     // 纯评论消息(正文留空):给一个真实用户气泡占位(userIntent,渲染层/贡献方填轻量内容),
     // 引用条在其下方——消息行不悬空,用户确认"发出去了"(设计 §8 关联)。
-    else if (blocks.length > 0) out.push({ type: "userIntent" });
+    // 例外:全部块都声明自足(standalone,如 goal 续跑提示——整段是机器包装,卡片自身即
+    // 完整呈现)时不落占位,不再多一个空气泡(「加了包装就换种方式展示」的落点)。
+    if (main) out.push({ type: "userText", text: main });
+    else if (blocks.length > 0 && !blocks.every((b) => b.standalone === true)) out.push({ type: "userIntent" });
     for (const b of blocks) out.push({ type: "auxBlock", aux: b });
     return out;
   }

@@ -14,7 +14,12 @@ export interface AuxBlock {
   data: unknown;
   /** 块在原文中的起止位置(start inclusive, end exclusive)——由 parser 精确给出。 */
   start: number;
+  /** 块在原文中的结束位置(end exclusive)。 */
   end: number;
+  /** 自足块(可选):true = 块自己就是完整呈现,剥掉正文后不再需要「用户消息占位」。
+   *  分解器(decomposeMessage)在正文为空且全部块都 standalone 时不落 userIntent 占位气泡——
+   *  goal 续跑提示这类「整段都是机器包装」的消息因此只渲染自己的卡片,不多一个空气泡。 */
+  standalone?: boolean;
 }
 
 /** 块解析器契约:基于原文扫描,提取所有本类型完整块;无匹配返回 null。

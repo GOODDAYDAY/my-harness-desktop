@@ -1,0 +1,10 @@
+{
+  "goal.bar.pause": "停止",
+  "goal.bar.resume": "恢复",
+  "goal.bar.edit": "编辑目标",
+  "goal.bar.clear": "关闭目标",
+  "goal.bar.save": "保存",
+  "goal.roundCard.title": "目标续跑",
+  "goal.roundCard.roundOf": "第 {{round}}/{{max}} 轮",
+  "goal.roundCard.toggle": "展开/收起续跑提示原文"
+}

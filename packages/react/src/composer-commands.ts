@@ -5,7 +5,7 @@
 //  ① timeline 发送前经 runComposerCommandIfMatch 拦截——命中且 handle 返回 true 即吞掉发送;
 //  ② timeline 把注册表映射成 CommandItem(source="plugin")并入斜杠弹窗清单。
 // 命令是纯运行时对象(含闭包),卸载插件后摘除,与 auxParsers 同生命周期。
-import type { ComposerCommand } from "@my-harness-desktop/shared";
+import type { ComposerCommand, ComposerCommandResult } from "@my-harness-desktop/shared";
 import { matchComposerCommand } from "@my-harness-desktop/shared";
 
 const commands: ComposerCommand[] = [];
@@ -30,13 +30,16 @@ export function getComposerCommands(): ComposerCommand[] {
 }
 
 /** 发送前拦截:文本命中注册命令则执行 handle。
- *  返回 true = 已处理(调用方吞掉本次发送);false = 未命中/未处理(照常发送)。
+ *  返回 ComposerCommandResult 原样转交调用方:
+ *  - true = 已处理(吞掉本次发送);
+ *  - false = 未命中/未处理(照常发送);
+ *  - { send } = 改写发送(吞掉原文,改发 send 文本;所见即所得,见 domain 契约注释)。
  *  handle 抛错按未处理兜底(一个插件的命令故障不得阻塞用户发送)。 */
-export async function runComposerCommandIfMatch(text: string): Promise<boolean> {
+export async function runComposerCommandIfMatch(text: string): Promise<ComposerCommandResult> {
   const cmd = matchComposerCommand(text, commands);
   if (!cmd) return false;
   try {
-    return (await cmd.handle(text)) === true;
+    return await cmd.handle(text);
   } catch (err) {
     console.warn(`[composer-commands] 命令 /${cmd.name} 执行异常,按普通消息放行:`, err);
     return false;

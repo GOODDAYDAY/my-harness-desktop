@@ -61,4 +61,9 @@ describe("runComposerCommandIfMatch(发送前拦截)", () => {
     await expect(runComposerCommandIfMatch("/boom")).resolves.toBe(false);
     warn.mockRestore();
   });
+
+  it("handle 返回 { send } → 原样透传(改写发送,所见即所得;/goal <目标> 是首个消费方)", async () => {
+    registerComposerCommands([{ name: "goal", handle: () => ({ send: "把测试全跑绿" }) }]);
+    await expect(runComposerCommandIfMatch("/goal 把测试全跑绿")).resolves.toEqual({ send: "把测试全跑绿" });
+  });
 });
