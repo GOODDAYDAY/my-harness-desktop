@@ -106,5 +106,6 @@
   "dshModels.discoverUnsupported": "該 API 類型暫不支援發現（僅 OpenAI 相容端點）",
   "dshModels.discoverNoBaseUrl": "先填寫 Base URL 再掃描",
   "dshModels.discoverToggle": "發現模型",
-  "dshModels.discoverCollapse": "收起"
+  "dshModels.discoverCollapse": "收起",
+  "dshModels.discoverUseConfigured": "端點不支援列表發現 · 改用已配置的 {{count}} 個模型"
 }

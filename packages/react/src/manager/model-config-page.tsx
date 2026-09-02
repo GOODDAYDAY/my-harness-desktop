@@ -22,7 +22,7 @@ import { useUiStore } from "../../../../src/web/stores/ui-store";
 import type { KernelModelsApi, KernelModelsCapabilities, KernelModelConfig, ModelProbeResult, NeutralDefaultModel, NeutralModel, NeutralProvider } from "@my-harness-desktop/shared";
 
 /** 探测支持的 api 类型(与 server provider-probe 的 PROBEABLE_APIS 一致;UI 预闸门,server 仍兜底降级)。 */
-const PROBEABLE_APIS = new Set(["openai-completions", "openai-responses"]);
+const PROBEABLE_APIS = new Set(["openai-completions", "openai-responses", "anthropic-messages"]);
 
 /** 耗时格式化:不足 1s 显示毫秒,以上显示秒。 */
 function fmtLatency(ms: number): string {
@@ -416,7 +416,16 @@ function DiscoverySection({ provider, i18nPrefix, onAddModel, open }: {
       ) : !hasBaseUrl ? (
         <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{k("discoverNoBaseUrl")}</div>
       ) : scanError ? (
-        <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-accent-error)", wordBreak: "break-all" }}>{scanError}</div>
+        <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
+          <span style={{ color: "var(--color-accent-error)", wordBreak: "break-all" }}>{scanError}</span>
+          {provider.models.length > 0 && (
+            <span>
+              <Button variant="secondary" onClick={() => { setScanError(null); setDiscovered(provider.models.map((m) => m.id)); }}>
+                {k("discoverUseConfigured", { count: provider.models.length })}
+              </Button>
+            </span>
+          )}
+        </div>
       ) : discovered === null ? (
         <div style={{ padding: "var(--spacing-md)", fontSize: "var(--font-size-sm)", color: "var(--color-muted)" }}>{k("discoverEmpty")}</div>
       ) : discovered.length === 0 ? (

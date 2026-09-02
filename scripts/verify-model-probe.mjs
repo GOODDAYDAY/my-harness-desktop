@@ -57,7 +57,7 @@ const gateway = createServer((req, res) => {
   res.statusCode = 404; res.end("nf");
 });
 await new Promise((r) => gateway.listen(0, "127.0.0.1", r));
-const GW = `http://127.0.0.1:${gateway.address().port}/v1`;
+const GW = `http://127.0.0.1:${gateway.address().port}`; // 不带 /v1：探测的路径候选要自己回落到 /v1/*
 log(`mock 网关: ${GW}`);
 
 // ---------- 1. 预检 + 起 electron ----------
@@ -127,7 +127,7 @@ try {
     const d = await window.kernel.modelsProbe.discover({ baseUrl: gw, apiKey: "mock", api: "openai-completions" });
     const p1 = await window.kernel.modelsProbe.ping({ baseUrl: gw, apiKey: "mock", model: "mock-chat" });
     const p2 = await window.kernel.modelsProbe.ping({ baseUrl: gw, apiKey: "mock", model: "mock-embed" });
-    const p3 = await window.kernel.modelsProbe.ping({ baseUrl: gw, api: "anthropic-messages", model: "x" });
+    const p3 = await window.kernel.modelsProbe.ping({ baseUrl: gw, api: "google-genai", model: "x" });
     return { d, p1, p2, p3 };
   }, GW);
   check("IPC discover: 返回排序后的模型清单", ipc.d.ok && JSON.stringify(ipc.d.models) === JSON.stringify(["mock-chat", "mock-embed", "mock-reasoner"]), JSON.stringify(ipc.d));

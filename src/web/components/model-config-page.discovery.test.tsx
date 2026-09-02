@@ -161,11 +161,29 @@ describe("从 Base URL 发现区块", () => {
     expect(await screen.findByText("HTTP 401: bad key")).toBeInTheDocument();
   });
 
-  it("api 非 OpenAI 兼容 → 开关禁用 + tooltip 降级说明", () => {
-    renderPage(makeProvider({ api: "anthropic-messages" }));
+  it("api 不在探测支持集（google-genai）→ 开关禁用 + tooltip 降级说明；anthropic-messages 已支持", () => {
+    renderPage(makeProvider({ api: "google-genai" }));
     const toggle = screen.getByText("models.discoverToggle");
     expect(toggle).toBeDisabled();
     expect(toggle).toHaveAttribute("title", "models.discoverUnsupported");
+  });
+
+  it("端点无列表 API（扫描报错）→ 「改用已配置模型」降级路径，可正常 Ping", async () => {
+    discoverMock.mockResolvedValue({ ok: false, error: "HTTP 400: Model not found in request" });
+    pingMock.mockResolvedValue({ ok: true, latencyMs: 1448 });
+    renderPage();
+    openDiscovery();
+    fireEvent.click(screen.getByText("models.discoverScan"));
+    // 错误原文展示 + 降级按钮出现（该 provider 有 1 个已配置模型 m-a）
+    expect(await screen.findByText("HTTP 400: Model not found in request")).toBeInTheDocument();
+    const fallback = await screen.findByText(/models\.discoverUseConfigured/);
+    expect(fallback).toHaveTextContent('"count":1');
+    fireEvent.click(fallback);
+    // 已配置模型进列表，可直接 Ping 出耗时
+    await screen.findByText("m-a");
+    await act(async () => { fireEvent.click(screen.getByText("models.discoverPing")); });
+    expect(await screen.findByText("✓ 1.45s")).toBeInTheDocument(); // ≥1s 格式化成秒
+    expect(pingMock).toHaveBeenCalledWith(expect.objectContaining({ model: "m-a" }));
   });
 
   it("未填 baseUrl → 开关禁用 + tooltip 提示", () => {

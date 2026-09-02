@@ -1,5 +1,5 @@
 // provider-probe 单元测试 + loopback 集成测试。
-// 单元层用注入的 fetch mock 覆盖分支（解析/错误/降级/超时）；
+// 单元层用注入的 fetch mock 覆盖分支（解析/错误/降级/超时/key 解析/路径候选）；
 // 集成层起真实 node http server 验证「发现 + ping 计时」端到端（不经 mock fetch）。
 import { describe, it, expect } from "vitest";
 import { createServer, type Server } from "node:http";
@@ -35,10 +35,10 @@ describe("discoverModels", () => {
     expect(r.error).toContain("bad key");
   });
 
-  it("api 非 OpenAI 兼容 → 显式降级，不发请求", async () => {
+  it("api 非探测支持集 → 显式降级，不发请求", async () => {
     const { calls, fetchImpl } = mockFetch(() => ({}));
-    const r = await discoverModels({ baseUrl: "https://x.test", api: "anthropic-messages" }, { fetchImpl });
-    expect(r).toEqual({ ok: false, error: "unsupported api: anthropic-messages" });
+    const r = await discoverModels({ baseUrl: "https://x.test", api: "google-genai" }, { fetchImpl });
+    expect(r).toEqual({ ok: false, error: "unsupported api: google-genai" });
     expect(calls).toHaveLength(0);
   });
 
@@ -74,6 +74,59 @@ describe("discoverModels", () => {
   });
 });
 
+describe("apiKey 解析（pi resolve-config-value 语义子集）", () => {
+  it("`!cmd` 执行 shell 取 stdout 作为 Bearer", async () => {
+    const { calls, fetchImpl } = mockFetch(() => ({ body: { data: [] } }));
+    await discoverModels({ baseUrl: "https://x.test", apiKey: "!echo sk-from-cmd" }, { fetchImpl });
+    expect((calls[0].init?.headers as Record<string, string>).Authorization).toBe("Bearer sk-from-cmd");
+  });
+
+  it("`$VAR` / `${VAR}` 环境变量插值", async () => {
+    process.env.PROBE_TEST_KEY = "sk-env-1";
+    const { calls, fetchImpl } = mockFetch(() => ({ body: { data: [] } }));
+    await discoverModels({ baseUrl: "https://x.test", apiKey: "${PROBE_TEST_KEY}" }, { fetchImpl });
+    expect((calls[0].init?.headers as Record<string, string>).Authorization).toBe("Bearer sk-env-1");
+    delete process.env.PROBE_TEST_KEY;
+  });
+
+  it("命令失败 / env 缺失 → 显式报错，不发请求", async () => {
+    const { calls, fetchImpl } = mockFetch(() => ({ body: { data: [] } }));
+    const r1 = await discoverModels({ baseUrl: "https://x.test", apiKey: "!exit 1" }, { fetchImpl });
+    expect(r1.ok).toBe(false);
+    expect(r1.error).toContain("apiKey resolution failed");
+    const r2 = await discoverModels({ baseUrl: "https://x.test", apiKey: "$PROBE_MISSING_VAR" }, { fetchImpl });
+    expect(r2.ok).toBe(false);
+    expect(r2.error).toContain("PROBE_MISSING_VAR");
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("路径候选（baseUrl 带不带 /v1 两种约定）", () => {
+  it("openai：原样优先，404 后回落 /v1", async () => {
+    const { calls, fetchImpl } = mockFetch((url) =>
+      url.endsWith("/v1/models") ? { body: { data: [{ id: "m1" }] } } : { status: 404, body: "nf" });
+    const r = await discoverModels({ baseUrl: "https://x.test" }, { fetchImpl });
+    expect(r).toEqual({ ok: true, models: ["m1"] });
+    expect(calls.map((c) => c.url)).toEqual(["https://x.test/models", "https://x.test/v1/models"]);
+  });
+
+  it("anthropic：/v1 优先（官方约定 baseUrl 不含 /v1），直连成功不回落", async () => {
+    const { calls, fetchImpl } = mockFetch(() => ({ body: { data: [{ id: "claude-x" }] } }));
+    const r = await discoverModels({ baseUrl: "https://api.anthropic.test", apiKey: "k", api: "anthropic-messages" }, { fetchImpl });
+    expect(r).toEqual({ ok: true, models: ["claude-x"] });
+    expect(calls.map((c) => c.url)).toEqual(["https://api.anthropic.test/v1/models"]);
+    expect((calls[0].init?.headers as Record<string, string>)["x-api-key"]).toBe("k");
+    expect((calls[0].init?.headers as Record<string, string>)["anthropic-version"]).toBeTruthy();
+  });
+
+  it("候选全败 → 带回第一个错误（不吞不伪造）", async () => {
+    const { fetchImpl } = mockFetch((url) => (url.includes("/v1/") ? { status: 503, body: "name resolution failed" } : { status: 400, body: "model_not_found" }));
+    const r = await discoverModels({ baseUrl: "https://x.test" }, { fetchImpl });
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("HTTP 400");
+  });
+});
+
 describe("pingModel", () => {
   it("POST chat/completions：body 最小 ping（model/messages/max_tokens=1），2xx 记 latencyMs", async () => {
     const { calls, fetchImpl } = mockFetch(() => ({ body: { choices: [{ message: { content: "pong" } }] } }));
@@ -84,6 +137,26 @@ describe("pingModel", () => {
     const body = JSON.parse(String(calls[0].init?.body));
     expect(body).toMatchObject({ model: "m-1", max_tokens: 1, stream: false });
     expect(body.messages[0].content).toBe("ping");
+  });
+
+  it("anthropic：POST /v1/messages，x-api-key + anthropic-version 头", async () => {
+    const { calls, fetchImpl } = mockFetch(() => ({ body: { id: "msg_1", type: "message", role: "assistant" } }));
+    const r = await pingModel({ baseUrl: "https://gw.test", apiKey: "k2", api: "anthropic-messages", model: "claude-x" }, { fetchImpl });
+    expect(r.ok).toBe(true);
+    expect(calls[0].url).toBe("https://gw.test/v1/messages");
+    const headers = calls[0].init?.headers as Record<string, string>;
+    expect(headers["x-api-key"]).toBe("k2");
+    expect(headers["anthropic-version"]).toBeTruthy();
+    const body = JSON.parse(String(calls[0].init?.body));
+    expect(body).toMatchObject({ model: "claude-x", max_tokens: 1 });
+  });
+
+  it("ping 路径回落：无 /v1 405 → /v1 200（实测自建网关形态）", async () => {
+    const { calls, fetchImpl } = mockFetch((url) =>
+      url.endsWith("/v1/messages") ? { body: { id: "m" } } : { status: 405, body: "Method Not Allowed" });
+    const r = await pingModel({ baseUrl: "https://gw.test", api: "anthropic-messages", model: "m" }, { fetchImpl });
+    expect(r.ok).toBe(true);
+    expect(calls.map((c) => c.url)).toEqual(["https://gw.test/v1/messages"]); // /v1 优先，一次命中不回落
   });
 
   it("非 2xx → ok:false + latencyMs 仍带回（失败也耗时）", async () => {

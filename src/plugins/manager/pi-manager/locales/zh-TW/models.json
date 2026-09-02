@@ -61,5 +61,6 @@
   "models.discoverUnsupported": "該 API 類型暫不支援發現（僅 OpenAI 相容端點）",
   "models.discoverNoBaseUrl": "先填寫 Base URL 再掃描",
   "models.discoverToggle": "發現模型",
-  "models.discoverCollapse": "收起"
+  "models.discoverCollapse": "收起",
+  "models.discoverUseConfigured": "端點不支援列表發現 · 改用已配置的 {{count}} 個模型"
 }
