@@ -9,7 +9,7 @@
 // 渲染纯函数：不出现 pi/dsh 内核身份分支——两侧差异由适配器在事件层抹平。
 import { useEffect, useState, type ReactNode } from "react";
 import { usePluginContext } from "@my-harness-desktop/react";
-import { MessageCircleQuestion, Check, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Edit3 } from "lucide-react";
+import { MessageCircleQuestion, Check, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
 import type { ToolCallBlock } from "@my-harness-desktop/react";
 import type { Question, QuestionAnswer, QuestionRequestEvent } from "@my-harness-desktop/shared";
 
@@ -199,9 +199,10 @@ function RunningQuestion(): ReactNode {
 
       {!minimized && (
         <>
-          {/* 选项 chips + 自定义输入 */}
+          {/* 选项:每个选项独占一整行(用户要求:选项整行 + 支持多行文本),单选=radio 语义、
+              多选=checkbox 语义;description 作为第二行弱化展示。 */}
           <div className="px-3 pb-2 flex flex-col gap-1.5">
-            <div className="flex flex-wrap gap-1.5" role={question.multi_select === true ? "group" : "radiogroup"}>
+            <div className="flex flex-col gap-1.5" role={question.multi_select === true ? "group" : "radiogroup"}>
               {(question.options ?? []).map((option, optionIndex) => {
                 const selected = draft.selected.includes(option.label);
                 const display = parseRecommendedLabel(option.label);
@@ -212,10 +213,9 @@ function RunningQuestion(): ReactNode {
                     role={question.multi_select === true ? "checkbox" : "radio"}
                     aria-checked={selected}
                     aria-label={display.label}
-                    title={option.description}
                     disabled={busy !== null}
                     onClick={() => choose(option.label)}
-                    className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[length:var(--font-size-sm)] transition-colors"
+                    className="flex w-full items-start gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-left transition-colors"
                     style={{
                       borderColor: selected ? "var(--color-primary)" : "var(--color-border)",
                       background: selected ? "color-mix(in srgb, var(--color-primary) 12%, transparent)" : "var(--color-bg)",
@@ -223,55 +223,60 @@ function RunningQuestion(): ReactNode {
                       cursor: busy !== null ? "default" : "pointer",
                     }}
                   >
-                    {selected && <Check className="size-3 text-[var(--color-primary)]" />}
-                    <span>{display.label}</span>
-                    {display.recommended && (
-                      <span className="rounded-full px-1.5 py-0.5 text-[length:var(--font-size-xs)] text-[var(--color-primary)]"
-                        style={{ background: "color-mix(in srgb, var(--color-primary) 16%, transparent)" }}>
-                        推荐
-                      </span>
-                    )}
+                    {/* 选择指示:单选圆点 / 多选方块,选中着色 */}
+                    <span
+                      aria-hidden
+                      className="mt-1 flex-none inline-block size-3 rounded-full border"
+                      style={{
+                        borderColor: selected ? "var(--color-primary)" : "var(--color-border)",
+                        background: selected ? "var(--color-primary)" : "transparent",
+                        borderRadius: question.multi_select === true ? "var(--radius-sm)" : "9999px",
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[length:var(--font-size-sm)] leading-snug">
+                      <span>{display.label}</span>
+                      {display.recommended && (
+                        <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[length:var(--font-size-xs)] text-[var(--color-primary)] whitespace-nowrap"
+                          style={{ background: "color-mix(in srgb, var(--color-primary) 16%, transparent)" }}>
+                          推荐
+                        </span>
+                      )}
+                      {option.description && (
+                        <span className="block mt-0.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] whitespace-pre-wrap break-words">
+                          {option.description}
+                        </span>
+                      )}
+                    </span>
+                    {selected && <Check className="size-3.5 mt-0.5 shrink-0 text-[var(--color-primary)]" />}
                   </button>
                 );
               })}
             </div>
 
-            {/* 自定义输入：有选项时是内联补充行，无选项时是整块输入 */}
-            {hasOptions ? (
-              <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 py-1.5"
-                style={{ background: draft.custom !== "" ? "color-mix(in srgb, var(--color-primary) 6%, transparent)" : "var(--color-bg)" }}>
-                <Edit3 className="size-3.5 shrink-0 text-[var(--color-muted)]" />
-                <input
-                  type="text"
-                  value={draft.custom}
-                  disabled={busy !== null}
-                  placeholder="输入你的答案"
-                  onChange={(e) => updateDraft((cur) => ({
-                    ...cur,
-                    selected: question.multi_select === true ? cur.selected : [],
-                    custom: e.target.value,
-                    skipped: false,
-                  }))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !isComposing(e)) { e.preventDefault(); continueFlow(); }
-                  }}
-                  className="flex-1 min-w-0 bg-transparent outline-none text-[length:var(--font-size-sm)] text-[var(--color-fg)]"
-                />
-              </div>
-            ) : (
-              <textarea
-                autoFocus
-                value={draft.custom}
-                disabled={busy !== null}
-                placeholder="输入你的答案"
-                rows={2}
-                onChange={(e) => updateDraft((cur) => ({ ...cur, custom: e.target.value, skipped: false }))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !isComposing(e)) { e.preventDefault(); continueFlow(); }
-                }}
-                className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none"
-              />
-            )}
+            {/* 自定义输入:两种情况(单选/多选)都支持(用户要求)——整行 textarea 支持多行;
+                单选下键入即取代选项选择,多选下与已选共存(一并提交)。Enter 提交,Shift+Enter 换行。 */}
+            <textarea
+              value={draft.custom}
+              disabled={busy !== null}
+              autoFocus={!hasOptions}
+              placeholder={hasOptions
+                ? (question.multi_select === true ? "自定义答案(可与已选共存)" : "自定义答案(键入即取代选项)")
+                : "输入你的答案"}
+              rows={2}
+              onChange={(e) => updateDraft((cur) => ({
+                ...cur,
+                selected: question.multi_select === true ? cur.selected : [],
+                custom: e.target.value,
+                skipped: false,
+              }))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !isComposing(e)) { e.preventDefault(); continueFlow(); }
+              }}
+              className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none whitespace-pre-wrap"
+              style={{
+                background: draft.custom !== "" ? "color-mix(in srgb, var(--color-primary) 6%, transparent)" : "var(--color-bg)",
+              }}
+            />
           </div>
 
           {/* 底部：分页 + 错误 + 跳过/提交 */}
