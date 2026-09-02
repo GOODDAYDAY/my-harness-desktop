@@ -88,6 +88,17 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     expect(t.requests.some((r) => r.method === "session/continue")).toBe(true);
   });
 
+  it("continue 带文本 → 真发 session/prompt(桌面 goal 续跑不在 dsh 空转)", async () => {
+    const { t, b } = makeBackend();
+    t.results.set("session/prompt", {});
+    await b.continue('<goal_round>Objective: "x"</goal_round>');
+    const prompts = t.requests.filter((r) => r.method === "session/prompt");
+    expect(prompts).toHaveLength(1);
+    expect(JSON.stringify(prompts[0].params)).toContain("goal_round");
+    // 不走 session/continue(那是 dsh 原生 goal 的重挂面,桌面 goal 是壳层状态机)
+    expect(t.requests.some((r) => r.method === "session/continue")).toBe(false);
+  });
+
   it("continue 未知方法(旧 dsh 内核):记缺面 + 抛清晰错误", async () => {
     const { t, b } = makeBackend();
     t.errors.set("session/continue", unknownMethod("session/continue"));
