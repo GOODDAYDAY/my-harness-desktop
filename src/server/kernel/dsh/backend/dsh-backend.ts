@@ -86,12 +86,19 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     dsh: { missing: this.missingMethods, onMissing: null },
   };
 
+  /** 带流式状态的翻译器(每会话进程一个):assistant/chunk 增量组装成 messageStart/Update。
+   *  初值带 spawn 握手的 provider/model:request/header 派生分隔线只在「实际生效配置 ≠
+   *  握手配置」时触发——重开/重spawn 同模型不刷假分隔线(防刷屏)。构造体赋值(ctx 是
+   *  基类参数属性,字段初始化器里读序不可靠,勿回退为字段初始化)。 */
+  private readonly translateEvent: (event: unknown) => SessionEvent[];
+
   constructor(
     private readonly transport: JsonRpcTransport,
     config: DshBackendConfig,
   ) {
     super(config);
     this.currentSessionId = config.sessionId ?? cwdToBucketName(config.cwd);
+    this.translateEvent = createDshEventTranslator({ provider: config.provider, model: config.model });
   }
 
   /** 当前内核侧会话标识(缺省=桶名,seed 后重绑为服务端返回的 childSessionId)。 */
@@ -144,9 +151,6 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
       try { rmSync(this.ctx.tempDir, { recursive: true, force: true }); } catch { /* 临时目录清理失败不致命 */ }
     }
   }
-
-  /** 带流式状态的翻译器(每会话进程一个):assistant/chunk 增量组装成 messageStart/Update。 */
-  private readonly translateEvent = createDshEventTranslator();
 
   /** 订阅中性事件流:session.event 通知 → 翻译成中性(§4.3)。一个 dsh 事件可能产多个中性事件。 */
   onEvent(cb: (event: SessionEvent) => void): () => void {
@@ -206,8 +210,19 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
 
   /** 继续执行（第八意图）：dsh 走 session/continue RPC，服务端按 turn/end reason 语义分发
    *  （重挂 goal 或注入续跑提示）。懒探测缺面：旧 dsh 内核无此方法 → 记缺面 + 抛清晰错误。
-   *  text 由服务端 session/continue 语义决定（重挂 goal），桌面不直传文案——保留入参签名对齐中立契约。 */
-  async continue(_text?: string): Promise<void> {
+   *
+   *  带 text 时(根因修复,勿回退):改用 session/prompt 真发文本。dsh 的 session/continue
+   *  「重挂 goal」只对 dsh **原生** goal 有效——桌面的 goal 是壳层状态机(dsh 服务端无此
+   *  goal),continue 重挂落空:turn/end reason=completed 时服务端什么都不起,续跑提示
+   *  又被静默丢弃,桌面 goal 在 dsh 下首轮即空转(「只发两轮就停」的 dsh 侧根因)。
+   *  真发文本后:内核落 user/message,时间线由 goal 插件的 auxParser 把 <goal_round>
+   *  包装渲成目标续跑卡(另一种展示,不冒充用户气泡);无文本(异常停机原地续跑)仍走
+   *  session/continue 原语义。 */
+  async continue(text?: string): Promise<void> {
+    if (text !== undefined && text !== "") {
+      await this.sendMessage(text);
+      return;
+    }
     await this.requestSession(DSH_METHODS.sessionContinue, { sessionId: this.sessionId });
   }
 

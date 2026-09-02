@@ -4,7 +4,7 @@
 // 任意两条 divider 互判重复,后到的 model/thinking 分隔线被吞。
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  applyEvent, applySnapshot, useSessionStore, initSessionStore,
+  applyEvent, applySnapshot, useSessionStore, initSessionStore, hydrateSessionStart,
 } from "./session-store";
 import { useUiStore } from "./ui-store";
 import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent, type SessionModelPrefs } from "@my-harness-desktop/shared";
@@ -28,6 +28,60 @@ const modelEntry = (id: string) => ({
 const thinkingEntry = (id: string, parentId: string | null, level = "low") => ({
   type: "thinking_level_change", id, parentId,
   timestamp: "2026-08-03T15:12:42.516Z", thinkingLevel: level,
+});
+
+describe("hydrateSessionStart → 中立主键水合(fork/bookmark 入口的命脉)", () => {
+  beforeEach(() => {
+    useUiStore.setState({ currentSessionPath: null, currentNeutralSessionId: null });
+    useSessionStore.setState({ sessionInfos: null });
+  });
+
+  it("事件携带 neutralSessionId:直接用,不查 sessionInfos(新会话列表未含时不再落空)", () => {
+    hydrateSessionStart({
+      type: "sessionStart",
+      sessionFile: "/tmp/agent/sessions/bucket/ns-new.jsonl",
+      neutralSessionId: "ns-new",
+    } as unknown as SessionEvent);
+    expect(useUiStore.getState().currentSessionPath).toBe("/tmp/agent/sessions/bucket/ns-new.jsonl");
+    expect(useUiStore.getState().currentNeutralSessionId).toBe("ns-new");
+  });
+
+  it("事件缺 neutralSessionId(旧 main):回落 sessionInfos 反查", () => {
+    useSessionStore.setState({
+      sessionInfos: { "/tmp/agent/sessions/bucket/ns-old.jsonl": { neutralSessionId: "ns-old" } as never },
+    });
+    hydrateSessionStart({ type: "sessionStart", sessionFile: "/tmp/agent/sessions/bucket/ns-old.jsonl" } as unknown as SessionEvent);
+    expect(useUiStore.getState().currentNeutralSessionId).toBe("ns-old");
+  });
+
+  it("既无事件值又查不到:置 null(诚实),不留旧会话残留", () => {
+    useUiStore.setState({ currentNeutralSessionId: "ns-prev" });
+    hydrateSessionStart({ type: "sessionStart", sessionFile: "/tmp/x.jsonl" } as unknown as SessionEvent);
+    expect(useUiStore.getState().currentNeutralSessionId).toBeNull();
+  });
+
+  it("无 sessionFile:不动现有状态", () => {
+    useUiStore.setState({ currentSessionPath: "/tmp/keep.jsonl", currentNeutralSessionId: "ns-keep" });
+    hydrateSessionStart({ type: "sessionStart" } as unknown as SessionEvent);
+    expect(useUiStore.getState().currentSessionPath).toBe("/tmp/keep.jsonl");
+    expect(useUiStore.getState().currentNeutralSessionId).toBe("ns-keep");
+  });
+});
+
+describe("startNewChat → 清空中立主键(防止新会话锚到旧会话树)", () => {
+  it("currentNeutralSessionId 随新会话清空", async () => {
+    vi.stubGlobal("window", {
+      kernel: {
+        sessions: {
+          setContext: async () => {},
+          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+        },
+      },
+    });
+    useUiStore.setState({ currentNeutralSessionId: "ns-prev", currentSessionPath: "/tmp/prev.jsonl" });
+    await useSessionStore.getState().startNewChat("/tmp/proj");
+    expect(useUiStore.getState().currentNeutralSessionId).toBeNull();
+  });
 });
 
 describe("applyEvent → entryAppended: divider 身份判重(根因修复回归)", () => {
@@ -697,5 +751,56 @@ describe("applyEvent → thinking 内容块流式(思考过程实时推)", () =>
     const c = msgs[0].content as Array<{ type: string; thinking?: string }>;
     expect(c).toHaveLength(2);
     expect(c[0].type).toBe("thinking");
+  });
+});
+
+describe("applyEvent → pending 占位搁浅防线(「思考中」不自旋的根因修复)", () => {
+  it("messageStart:末条被用户消息占住时,倒查替换最近的 pending assistant 占位", () => {
+    let msgs: NeutralMessage[] = [
+      { id: "u-opt", role: "user", content: "ping", __optimistic: true } as unknown as NeutralMessage,
+      { id: "a-pend", role: "assistant", content: "", pending: true } as unknown as NeutralMessage,
+    ];
+    // 内核回放的用户消息插在占位之后(文本失配场景:回显成新消息)
+    msgs = applyEvent(msgs, { type: "messageEnd", message: { id: "u-real", role: "user", content: "PING" } } as unknown as SessionEvent);
+    expect(msgs).toHaveLength(3);
+    // 流式开始:应就地替换 pending 占位,而不是追加第四条
+    msgs = applyEvent(msgs, { type: "messageStart", message: { id: "s-1", role: "assistant", content: "想" } } as unknown as SessionEvent);
+    const pend = msgs.filter((m) => m.pending === true);
+    expect(pend).toHaveLength(1);
+    expect(pend[0].id).toBe("s-1");
+    expect(msgs).toHaveLength(3);
+  });
+
+  it("messageEnd:末条被占住时,倒查给最近的 pending assistant 收尾(pending 清零)", () => {
+    let msgs: NeutralMessage[] = [
+      { id: "u1", role: "user", content: "ping" } as unknown as NeutralMessage,
+      { id: "a-pend", role: "assistant", content: "", pending: true } as unknown as NeutralMessage,
+      { id: "u2", role: "user", content: "插入的用户消息" } as unknown as NeutralMessage,
+    ];
+    msgs = applyEvent(msgs, { type: "messageEnd", message: { role: "assistant", content: "答", id: "a-real" } } as unknown as SessionEvent);
+    expect(msgs.filter((m) => m.pending === true)).toHaveLength(0);
+    const a = msgs.find((m) => m.role === "assistant");
+    expect(a?.content).toBe("答");
+  });
+
+  it("messageEnd 无 pending 可清时追加(常态新消息),不误伤历史", () => {
+    let msgs: NeutralMessage[] = [
+      { id: "a-done", role: "assistant", content: "已完成" } as unknown as NeutralMessage,
+    ];
+    msgs = applyEvent(msgs, { type: "messageEnd", message: { role: "assistant", content: "新答", id: "a2" } } as unknown as SessionEvent);
+    expect(msgs).toHaveLength(2);
+    expect(msgs[1].content).toBe("新答");
+  });
+
+  it("messageEnd 经 id 精确命中时保留 stopped=true(dsh abort 合成终态不被抹)", () => {
+    let msgs: NeutralMessage[] = [
+      { id: "s-1", role: "assistant", content: [{ type: "thinking", thinking: "想" }], pending: true } as unknown as NeutralMessage,
+    ];
+    msgs = applyEvent(msgs, {
+      type: "messageEnd",
+      message: { id: "s-1", role: "assistant", content: [{ type: "thinking", thinking: "想" }], stopped: true },
+    } as unknown as SessionEvent);
+    expect(msgs[0].pending).toBe(false);
+    expect((msgs[0] as { stopped?: boolean }).stopped).toBe(true);
   });
 });

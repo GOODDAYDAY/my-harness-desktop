@@ -715,8 +715,12 @@ export class SessionStore implements
 
   /** 分隔线条目即时进视图流(根因:pi 的 entry_appended 补丁只覆盖 message 持久化路径,
    *  model_change/thinking_level_change/session_info 条目都不发射——这些分隔线此前只在
-   *  刷新后补现,违反「刷新前后一致」。合成 entry 只直投视图流(listeners),不经 dispatch——
-   *  dispatch 会触发 syncNeutralEntry 把合成条目写进中立层,与内核真身在下一次 resync 撞成双份。 */
+   *  刷新后补现,违反「刷新前后一致」)。
+   *  双落点(根因修复,勿回退):
+   *   ① 视图流(listeners 直投)——即时可见;
+   *   ② 中立层(syncNeutralEntry)——持久化,刷新/冷开不丢。此前只投视图流,dsh 无内核
+   *    会话文件兜底,刷新后分隔线全灭(「dsh 会话内容比 pi 少」的根因之一);pi 侧真身
+   *    在内核 JSONL,中立层重建(snapshotNeutralSession 全量 put)会覆盖合成条目,不撞双份。 */
   private dispatchViewDivider(entry: Record<string, unknown>): void {
     if (!this.activeProcKey) return;
     const event: SessionEvent = {
@@ -726,6 +730,8 @@ export class SessionStore implements
     for (const cb of this.listeners) {
       try { cb(event); } catch (err) { console.error("[session-store] 分隔线投递失败:", err); }
     }
+    const proc = this.activeProc();
+    if (proc) this.syncNeutralEntry(proc, event);
   }
 
   /** 重命名分隔线即时进视图流(调用点语义化包装)。 */
@@ -873,10 +879,15 @@ export class SessionStore implements
   }
 
   /** 中立层是否已有历史(任一 lineage 有 entry):用于判「重开历史会话续聊」vs「新会话」。
-   *  重开时 dsh 新进程无法经 session/prompt 加载磁盘日志,需先 continue 恢复(见 prompt)。 */
+   *  重开时 dsh 新进程无法经 session/prompt 加载磁盘日志,需先 continue 恢复(见 prompt)。
+   *  只数对话内容条目(user/assistant/toolResult):divider 等元条目(模型/思考强度分隔线)
+   *  不算历史——合成分隔线双落点(视图流+中立层)后,新会话首发的 model_change 分隔线
+   *  曾把「还没说过话的新会话」误判成有历史 → 首发就先 continue(dsh 补面误触发,回归)。 */
   private neutralHasHistory(proc: SessionProc): boolean {
     const session = this.readNeutral(proc);
-    return session ? session.lineages.some((l) => l.entries.length > 0) : false;
+    if (!session) return false;
+    return session.lineages.some((l) =>
+      l.entries.some((e) => e.message.role === "user" || e.message.role === "assistant" || e.message.role === "toolResult"));
   }
 
   /** 中立层的写:读 → 纯函数 → 写,不 mutate 持久化对象。
@@ -1626,12 +1637,21 @@ export class SessionStore implements
     if (!proc || !proc.backend.alive) throw new Error("内核未启动");
     // fork = 壳切中立树(§kernel-forkless §14):分叉是壳的纯操作,内核不 fork、不物化。
     // 惰性物化:分支只在下次 send 时经 materializeActiveLineage seed 投影。
-    const newLineageId = randomUUID();
+    //
+    // 父 lineage 用调用方指定的 parentLineageId(根因修复,勿回退):此前硬取
+    // proc.activeLineageId,会话树面板里点「非活跃分支」的节点分叉会静默挂到活跃分支上
+    // ——分叉关系整个错掉。传入值须存在于中立树,否则显式报错(不静默换父)。
     const cur = this.readNeutral(proc);
+    let parent = parentLineageId || proc.activeLineageId;
+    if (cur && parentLineageId && !cur.lineages.some((l) => l.lineageId === parentLineageId)) {
+      console.warn(`[session-store] fork:父 lineage ${parentLineageId} 不在中立树,回落活跃 lineage ${proc.activeLineageId}`);
+      parent = proc.activeLineageId;
+    }
+    const newLineageId = randomUUID();
     if (cur && this.neutralStore) {
       this.neutralStore.put(upsertNeutralLineage(cur, {
         lineageId: newLineageId,
-        fork: { parentLineageId: proc.activeLineageId, boundaryEntryId: boundary ?? "" },
+        fork: { parentLineageId: parent, boundaryEntryId: boundary ?? "" },
         entries: [],
       }));
     }
@@ -1819,6 +1839,15 @@ export class SessionStore implements
         proc.boundSessionPath = sf;
         // activeSessionPath 只属于激活会话——背景会话的 sessionStart(如重启重载)不得改写
         if (key === this.activeProcKey) this.activeSessionPath = sf;
+      }
+      // 中立主键随事件携带(根因修复,勿回退):renderer 此前靠 sessionInfos 列表反查
+      // neutralSessionId——新会话首次发送时列表未含该会话,查找恒落空,currentNeutralSessionId
+      // 留 null 到重开,收藏/分叉按钮(要求 currentNeutralSessionId 非空)全灭。
+      // proc 在则取 proc.neutralSessionId;无 proc(setContext 冷激活)按路径 basename 反查
+      // (pi 派生路径文件名即 ns;dsh 投影地址裸 lineageId——两内核同一条反查)。
+      if (typeof sf === "string" && sf) {
+        (event as { neutralSessionId?: string }).neutralSessionId =
+          proc?.neutralSessionId ?? this.neutralSessionIdFromPath(sf);
       }
     }
     if (event.type === "entryAppended" && proc) {

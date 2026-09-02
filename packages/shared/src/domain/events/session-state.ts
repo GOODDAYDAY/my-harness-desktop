@@ -451,6 +451,10 @@ export interface SessionStartEvent {
   type: "sessionStart";
   reason?: string;
   sessionFile?: string;
+  /** 会话的中立主键(main 侧合成 sessionStart 时随事件携带):renderer 直接水合
+   *  currentNeutralSessionId,不再赌 sessionInfos 列表时序(新会话首次发送后
+   *  收藏/分叉按钮依赖它,列表未含新会话时查找必落空——fork/bookmark 入口全灭的根因)。 */
+  neutralSessionId?: string;
 }
 export interface ModelSelectEvent {
   type: "modelSelect";

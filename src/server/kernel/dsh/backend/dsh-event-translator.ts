@@ -236,9 +236,21 @@ function buildStreamContent(buf: DshStreamBuffer): unknown[] {
  * 建一个带流式状态的 dsh 事件翻译器:一个 dsh 事件可能产出 0~N 个中性事件。
  * DshBackend 每会话进程持一个实例;纯函数 translateDshEvent 负责「无状态」映射,
  * 本翻译器在其上叠加「assistant/chunk 流式组装」+「assistant/message 收尾清缓冲」。
+ *
+ * initialHeader:spawn 握手时的 provider/model(进程起即已知)——request/header 是每步
+ * 模型请求前落的「真实生效配置」事件(dsh 日志实证),翻译器据此在**实际生效配置与握手
+ * 不同**时派生 model_change/thinking_level_change 分隔线(模型被服务端 fallback 接管、
+ * 别的客户端改了会话模型等壳侧看不到的变更也能显形)。首请求与握手一致 → 不派生,
+ * 重开/重spawn 不刷假分隔线(防刷屏的关键,勿回退)。
  */
-export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
+export function createDshEventTranslator(initialHeader?: { provider?: string; model?: string; effort?: string }): (event: unknown) => SessionEvent[] {
   const streams = new Map<string, DshStreamBuffer>();
+  // 最近一次 request/header 报告的生效配置(provider/model/effort);初值 = spawn 握手值。
+  let lastHeader: { provider?: string; model?: string; effort?: string } = {
+    provider: initialHeader?.provider,
+    model: initialHeader?.model,
+    effort: initialHeader?.effort,
+  };
 
   /** 取缓冲(无则建);把增量累进去,首增量发 messageStart、后续 messageUpdate。
    *  时间戳只锚在 messageStart(首个增量的事件时间 = 回合开始):renderer 的 withStreamTiming
@@ -372,17 +384,81 @@ export function createDshEventTranslator(): (event: unknown) => SessionEvent[] {
       return withNeutralEntry(e, stateless);
     }
 
-    // turn/end reason=error:agentSettled 之外补带 error 的 messageEnd,把真实失败原因
-    // (如「会话已有 pending 回合」/内核运行时错误)显形到时间线,不静默(§7.6 显式降级)。
+    // turn/end:回合收敛(→ agentSettled)。三个收尾职责,全是「pending 不残留」的根因修复:
+    //  ① reason=error:agentSettled 之外补带 error 的 messageEnd(原有),有流式缓冲时把
+    //    部分内容并进错误终态(部分内容不丢,与 pi 的 message_end error 同语义)。
+    //  ② reason=aborted:dsh abort 只发 turn/end、不发 assistant/message(对照 pi:abort 也有
+    //    message_end stopped)——此前此处零产出,渲染层的 pending 占位/流式消息永不清,
+    //    「思考中」一直转到刷新才消失(实测复现)。现补 stopped=true 的 messageEnd:
+    //    有缓冲按缓冲内容收尾(部分内容保留),无缓冲发空内容 stopped(清渲染层乐观占位)。
+    //  ③ 其余 reason(completed 等)但仍有未收尾的流式缓冲(assistant/message 缺席的异常
+    //    形态):按缓冲内容补一条正常 messageEnd——不给「完成但永 pending」留任何路径。
+    //  无论哪条,本回合的流式缓冲在 turn/end 全部清理(防跨回合泄漏)。
     if (e.type === "turn/end") {
       const reason = (d.reason ?? {}) as Record<string, unknown>;
       const stateless = translateDshEvent(event);
-      if (stateless && reason.kind === "error") {
+      const out: SessionEvent[] = stateless ? [stateless] : [];
+      // 本回合的遗留流式缓冲(正常路径已被 assistant/message 清掉,剩下来的都是异常形态)
+      const leftovers: { key: string; buf: DshStreamBuffer }[] = [];
+      for (const [k, buf] of streams) {
+        if (k.startsWith(`${String(d.turn ?? "")}:`)) leftovers.push({ key: k, buf });
+      }
+      for (const { key } of leftovers) streams.delete(key);
+      if (reason.kind === "error") {
         const err = (reason.error ?? {}) as Record<string, unknown>;
         const message = typeof err.message === "string" && err.message ? err.message : "turn ended with error";
-        return [stateless, { type: "messageEnd", message: { role: "assistant", error: true, errorMessage: message, content: [] } }];
+        const buf = leftovers[0]?.buf;
+        // 有缓冲:错误终态带上部分内容(按 id 精确替换流式消息);无缓冲:裸错误消息(按位替换占位)。
+        out.push({
+          type: "messageEnd",
+          message: buf
+            ? { role: "assistant", id: buf.id, content: buildStreamContent(buf), error: true, errorMessage: message }
+            : { role: "assistant", error: true, errorMessage: message, content: [] },
+        });
+        return out;
       }
-      return stateless ? [stateless] : [];
+      if (reason.kind === "aborted") {
+        if (leftovers.length > 0) {
+          for (const { buf } of leftovers) {
+            out.push({ type: "messageEnd", message: { role: "assistant", id: buf.id, content: buildStreamContent(buf), stopped: true } });
+          }
+        } else {
+          // 无任何流式增量就被打断:渲染层的乐观占位(pending 空消息)需要一条终态来清——
+          // 这是「abort 后思考中永转」的直连根因,空内容 + stopped 让时间线落「已停止」。
+          out.push({ type: "messageEnd", message: { role: "assistant", content: [], stopped: true } });
+        }
+        return out;
+      }
+      // completed/其他:缓冲遗留 = assistant/message 缺席的异常形态,按缓冲内容补终态。
+      for (const { buf } of leftovers) {
+        out.push({ type: "messageEnd", message: { role: "assistant", id: buf.id, content: buildStreamContent(buf) } });
+      }
+      return out;
+    }
+
+    // request/header:dsh 每步模型请求前落的「真实生效配置」(data.header.config 带
+    //  provider/model,实证;reasoningEffort 配了才有)。配置与上次报告不同 → 派生
+    //  model_change / thinking_level_change 分隔线条目(与 pi 落进 JSONL 的条目同形状,
+    //  经 entryAppended 一路进视图流 + 中立层持久化)——dsh 会话流自此与 pi 一样看得见
+    //  「切换了模型/思考强度」,且刷新不丢。派生走事件层(适配器翻译,§7.6),壳零分支。
+    if (e.type === "request/header") {
+      const header = (d.header ?? {}) as Record<string, unknown>;
+      const config = (header.config ?? {}) as Record<string, unknown>;
+      const provider = typeof config.provider === "string" ? config.provider : undefined;
+      const model = typeof config.model === "string" ? config.model : undefined;
+      const effort = typeof config.reasoningEffort === "string" ? config.reasoningEffort : undefined;
+      const out: SessionEvent[] = [];
+      const ts = e.time ?? e.time0;
+      const seq = typeof e.seq === "number" ? e.seq : typeof ts === "number" ? ts : Date.now();
+      if (provider && model && (provider !== lastHeader.provider || model !== lastHeader.model)) {
+        lastHeader = { ...lastHeader, provider, model };
+        out.push({ type: "entryAppended", entry: { type: "model_change", id: `dsh-hdr-${seq}`, timestamp: ts, provider, modelId: model } });
+      }
+      if (effort && effort !== lastHeader.effort) {
+        lastHeader = { ...lastHeader, effort };
+        out.push({ type: "entryAppended", entry: { type: "thinking_level_change", id: `dsh-hdr-eff-${seq}`, timestamp: ts, thinkingLevel: effort } });
+      }
+      return out;
     }
 
     const stateless = translateDshEvent(event);

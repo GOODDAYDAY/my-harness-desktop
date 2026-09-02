@@ -270,12 +270,25 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
     if (last?.role === "assistant" && (last.pending || last.content === "" || last.content === undefined)) {
       return [...messages.slice(0, -1), { ...msg, pending: true }];
     }
+    // 占位搁浅防线(根因修复,勿回退):末条不是可替换的 assistant(如有用户消息在占位之后
+    // 插入)时,倒查最近的 pending assistant 占位就地替换——否则占位永远卡在数组中段,
+    // 「思考中」转到刷新才消失(dsh 回放/乱序事件序列实测触发)。无 pending 占位才追加。
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "assistant" && m.pending === true) {
+        return messages.map((x, idx) => (idx === i ? { ...msg, pending: true } : x));
+      }
+      if (m.role === "assistant") break; // 越过最近一条已完成 assistant 就不再往前找(防误替换历史)
+    }
     return [...messages, { ...msg, pending: true }];
   }
   if (event.type === "messageEnd" && msg) {
     if (msg.id) {
       const idx = messages.findIndex(m => m.id === msg.id);
-      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...msg, startedAt: msg.startedAt ?? m.startedAt, timestamp: msg.timestamp ?? m.timestamp, pending: false, stopped: false } : m);
+      // stopped 不能写死 false(根因修复):abort 终态(dsh turn/end aborted 合成的
+      // messageEnd stopped=true)经 id 精确命中时被抹成 false,「已停止」标记丢失。
+      // 终态语义 = 以 msg 为准:msg 带 stopped 就保留,不带才是正常完成(false)。
+      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...msg, startedAt: msg.startedAt ?? m.startedAt, timestamp: msg.timestamp ?? m.timestamp, pending: false } : m);
     }
     const last = messages[messages.length - 1];
     // 只替换「流式占位」(pending / 空内容),不替换已完成消息——dsh 一轮内每个 step 各推
@@ -283,6 +296,16 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
     // 盖掉 step1 的思考链+工具卡,只剩末条文本,会话流丢失整个处理过程(根因)。
     if (last && last.role === msg.role && (last.pending === true || last.content === "" || last.content === undefined)) {
       return [...messages.slice(0, -1), { ...msg, pending: false }];
+    }
+    // 占位搁浅防线(与 messageStart 同理):终态到达时末条已被别的消息(如内核回放的用户
+    // 消息)占住,倒查最近的 pending 同 role 消息就地收尾——pending 永挂 = 「思考中」
+    // 转到刷新才消失的根因之一(dsh abort/乱序实测)。
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === msg.role && m.pending === true) {
+        return messages.map((x, idx) => (idx === i ? { ...msg, pending: false } : x));
+      }
+      if (m.role === msg.role) break; // 越过最近一条已完成同 role 就不再往前找
     }
     if (msg.role === "user") {
       const text = textOf(msg.content);
@@ -556,6 +579,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     sessionGen++;
     await window.kernel.sessions.setContext(cwd, null);
     refreshCapabilities();
+    // 中立主键随会话上下文一并清(根因修复):不清则新会话残留上一会话的 ns,
+    // 收藏/分叉会把新会话的消息锚到旧会话树上(静默错会话,比按钮不亮更糟)。
+    useUiStore.getState().setCurrentNeutralSessionId(null);
     set({ messages: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
   },
   appendOptimisticUser: (text, sendText) => {
@@ -708,6 +734,23 @@ export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Par
   };
 }
 
+/** sessionStart 水合(导出纯化以便单测):写 currentSessionPath + currentNeutralSessionId。
+ *  中立主键优先用事件携带值(main 侧 dispatch 随 sessionStart 下发);
+ *  缺省(旧 main/外部注入)才回落 sessionInfos 反查——新会话尚未进列表时反查恒落空,
+ *  currentNeutralSessionId 留 null 会让收藏/分叉入口整批不渲染(根因修复,勿回退)。 */
+export function hydrateSessionStart(event: SessionEvent): void {
+  if (event.type !== "sessionStart") return;
+  const sf = event.sessionFile;
+  if (typeof sf !== "string" || !sf) return;
+  useUiStore.getState().setCurrentSessionPath(sf);
+  const fromEvent = (event as { neutralSessionId?: unknown }).neutralSessionId;
+  useUiStore.getState().setCurrentNeutralSessionId(
+    typeof fromEvent === "string" && fromEvent
+      ? fromEvent
+      : (useSessionStore.getState().sessionInfos?.[sf]?.neutralSessionId ?? null),
+  );
+}
+
 /** 初始化 main→renderer 通道(幂等;应用启动时调一次)。 */
 export function initSessionStore(): void {
   if (inited) return;
@@ -767,11 +810,7 @@ export function initSessionStore(): void {
   window.kernel.sessions.onEvent((eventRaw) => {
     const event = eventRaw as SessionEvent;
     if (event.type === "sessionStart") {
-      const sf = event.sessionFile;
-      if (typeof sf === "string" && sf) {
-        useUiStore.getState().setCurrentSessionPath(sf);
-        useUiStore.getState().setCurrentNeutralSessionId(useSessionStore.getState().sessionInfos?.[sf]?.neutralSessionId ?? null);
-      }
+      hydrateSessionStart(event);
     }
     if (event.type === "compactionEnd") {
       void window.kernel.sessions.sync();

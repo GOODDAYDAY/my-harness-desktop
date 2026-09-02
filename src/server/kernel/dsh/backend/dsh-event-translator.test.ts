@@ -429,3 +429,119 @@ describe("createDshEventTranslator → 工具调用流式(此前漏接,工具卡
     ]);
   });
 });
+
+describe("createDshEventTranslator: turn/end 收尾(pending 不残留,「思考中」不自旋)", () => {
+  it("abort 于流式中段:遗留缓冲按 stopped=true 收尾(部分内容保留)", () => {
+    const t = createDshEventTranslator();
+    t({ type: "reasoning-chunks", seq0: 1, time0: 1, data: { turn: 1, step: 1, index: 0, dt: [1], texts: ["想了一半"] } });
+    const out = t({ type: "turn/end", seq: 2, time: 2, data: { turn: 1, reason: { kind: "aborted" } } });
+    const end = out.find((e) => e.type === "messageEnd") as { message: { id?: string; stopped?: boolean; content: unknown[] } } | undefined;
+    expect(end).toBeDefined();
+    expect(end!.message.stopped).toBe(true);
+    expect(end!.message.id).toBe("dsh-stream-1-1");
+    expect(end!.message.content).toEqual([{ type: "thinking", thinking: "想了一半" }]);
+    expect(out.some((e) => e.type === "agentSettled")).toBe(true);
+  });
+
+  it("abort 于任何增量之前:补空内容 stopped 终态(渲染层乐观占位据此清除)", () => {
+    const t = createDshEventTranslator();
+    const out = t({ type: "turn/end", seq: 1, time: 1, data: { turn: 1, reason: { kind: "aborted" } } });
+    const end = out.find((e) => e.type === "messageEnd") as { message: { stopped?: boolean; content: unknown[] } } | undefined;
+    expect(end).toBeDefined();
+    expect(end!.message.stopped).toBe(true);
+    expect(end!.message.content).toEqual([]);
+  });
+
+  it("completed 但 assistant/message 缺席(异常形态):按遗留缓冲补正常终态", () => {
+    const t = createDshEventTranslator();
+    t({ type: "text-chunks", seq0: 1, time0: 1, data: { turn: 1, step: 1, index: 0, dt: [1], texts: ["半截回答"] } });
+    const out = t({ type: "turn/end", seq: 2, time: 2, data: { turn: 1, reason: { kind: "completed" } } });
+    const end = out.find((e) => e.type === "messageEnd") as { message: { id?: string; content: unknown[] } } | undefined;
+    expect(end).toBeDefined();
+    expect(end!.message.id).toBe("dsh-stream-1-1");
+    expect(end!.message.content).toEqual([{ type: "text", text: "半截回答" }]);
+  });
+
+  it("completed 且 assistant/message 正常到达(常态):不重复补终态", () => {
+    const t = createDshEventTranslator();
+    t({ type: "text-chunks", seq0: 1, time0: 1, data: { turn: 1, step: 1, index: 0, dt: [1], texts: ["答"] } });
+    t({ type: "assistant/message", seq: 2, time: 2, data: { turn: 1, step: 1, message: { id: "a1", role: "assistant", content: [{ type: "text", text: "答" }] } } });
+    const out = t({ type: "turn/end", seq: 3, time: 3, data: { turn: 1, reason: { kind: "completed" } } });
+    expect(out.filter((e) => e.type === "messageEnd")).toHaveLength(0);
+    expect(out.some((e) => e.type === "agentSettled")).toBe(true);
+  });
+
+  it("turn/end error 且有遗留缓冲:错误终态带部分内容(部分内容不丢)", () => {
+    const t = createDshEventTranslator();
+    t({ type: "text-chunks", seq0: 1, time0: 1, data: { turn: 2, step: 1, index: 0, dt: [1], texts: ["写了一半"] } });
+    const out = t({ type: "turn/end", seq: 2, time: 2, data: { turn: 2, reason: { kind: "error", error: { message: "boom" } } } });
+    const end = out.find((e) => e.type === "messageEnd") as { message: { id?: string; error?: boolean; errorMessage?: string; content: unknown[] } } | undefined;
+    expect(end).toBeDefined();
+    expect(end!.message.error).toBe(true);
+    expect(end!.message.errorMessage).toBe("boom");
+    expect(end!.message.id).toBe("dsh-stream-2-1");
+    expect(end!.message.content).toEqual([{ type: "text", text: "写了一半" }]);
+  });
+
+  it("跨回合不泄漏:turn1 的缓冲不影响 turn2 的 turn/end", () => {
+    const t = createDshEventTranslator();
+    t({ type: "text-chunks", seq0: 1, time0: 1, data: { turn: 1, step: 1, index: 0, dt: [1], texts: ["旧"] } });
+    t({ type: "turn/end", seq: 2, time: 2, data: { turn: 1, reason: { kind: "aborted" } } }); // 清 turn1
+    const out = t({ type: "turn/end", seq: 3, time: 3, data: { turn: 2, reason: { kind: "completed" } } });
+    expect(out.filter((e) => e.type === "messageEnd")).toHaveLength(0);
+  });
+});
+
+describe("createDshEventTranslator: request/header 派生模型/思考分隔线(dsh 会话流与 pi 同信息密度)", () => {
+  const header = (config: Record<string, unknown>, seq = 10, time = 1000) => ({
+    type: "request/header", seq, time, data: { header: { config } },
+  });
+
+  it("生效模型 ≠ 握手模型:派生 model_change 分隔线(entryAppended,与 pi 条目同形状)", () => {
+    const t = createDshEventTranslator({ provider: "p", model: "a" });
+    const out = t(header({ provider: "p", model: "b", maxTokens: 1000 }));
+    expect(out).toHaveLength(1);
+    const ev = out[0] as { type: string; entry: Record<string, unknown> };
+    expect(ev.type).toBe("entryAppended");
+    expect(ev.entry.type).toBe("model_change");
+    expect(ev.entry.provider).toBe("p");
+    expect(ev.entry.modelId).toBe("b");
+    expect(typeof ev.entry.id).toBe("string");
+  });
+
+  it("生效模型 = 握手模型:不派生(重开/重spawn 不刷假分隔线)", () => {
+    const t = createDshEventTranslator({ provider: "p", model: "a" });
+    expect(t(header({ provider: "p", model: "a", maxTokens: 1000 }))).toHaveLength(0);
+  });
+
+  it("同配置重复请求:只在首次派生一次(每步都有 request/header,不刷屏)", () => {
+    const t = createDshEventTranslator({ provider: "p", model: "a" });
+    expect(t(header({ provider: "p", model: "b" }))).toHaveLength(1);
+    expect(t(header({ provider: "p", model: "b" }, 11))).toHaveLength(0);
+  });
+
+  it("config 带 reasoningEffort:派生 thinking_level_change 分隔线;未带不派生", () => {
+    const t = createDshEventTranslator({ provider: "p", model: "a" });
+    const out = t(header({ provider: "p", model: "a", reasoningEffort: "high" }));
+    expect(out).toHaveLength(1);
+    const ev = out[0] as { entry: Record<string, unknown> };
+    expect(ev.entry.type).toBe("thinking_level_change");
+    expect(ev.entry.thinkingLevel).toBe("high");
+    // 再次同值不重复
+    expect(t(header({ provider: "p", model: "a", reasoningEffort: "high" }, 11))).toHaveLength(0);
+  });
+
+  it("模型与思考强度同帧变化:两条分隔线按序派生", () => {
+    const t = createDshEventTranslator({ provider: "p", model: "a" });
+    const out = t(header({ provider: "p", model: "b", reasoningEffort: "low" }));
+    expect(out).toHaveLength(2);
+    expect((out[0] as { entry: { type: string } }).entry.type).toBe("model_change");
+    expect((out[1] as { entry: { type: string } }).entry.type).toBe("thinking_level_change");
+  });
+
+  it("无 config/缺字段:静默不派生(防御)", () => {
+    const t = createDshEventTranslator({ provider: "p", model: "a" });
+    expect(t({ type: "request/header", seq: 1, time: 1, data: {} })).toHaveLength(0);
+    expect(t(header({ maxTokens: 1000 }))).toHaveLength(0);
+  });
+});

@@ -509,8 +509,9 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     expect(sessions.length).toBe(2);
     for (const sess of sessions) {
       expect(sess.header.kernel).toBe("dsh");
-      const entries = sess.lineages.flatMap((l) => l.entries);
-      expect(entries).toHaveLength(1);
+      // 每个会话恰好一条用户消息(分隔线等元条目随双落点入中立层是预期,不按总条目数断言)
+      const userEntries = sess.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "user");
+      expect(userEntries).toHaveLength(1);
     }
     expect(created).toEqual(["dsh", "dsh"]);
   });
@@ -661,5 +662,75 @@ describe("rawFilePaths(打开原始文件:不拿投影地址硬猜)", () => {
   it("会话不存在:两项皆 null", async () => {
     const { s } = newStore();
     expect(await s.rawFilePaths("ns-no-such")).toEqual({ desktop: null, kernel: null });
+  });
+});
+
+describe("fork:父 lineage 尊重调用方指定(根因修复回归——此前硬取活跃分支)", () => {
+  function newForkStore(): { s: SessionStore; neutralStore: NeutralSessionStore; ns: string } {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "fork-neutral-")));
+    const ns = "ns-fork";
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-08-27T00:00:00.000Z" }),
+      lineages: [
+        { lineageId: ns, fork: null, entries: [] },
+        { lineageId: "branch-B", fork: { parentLineageId: ns, boundaryEntryId: "" }, entries: [] },
+      ],
+    });
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    return { s, neutralStore, ns };
+  }
+
+  it("fork(parentLineageId=B):新 lineage 挂到 B,不是活跃分支", async () => {
+    const { s, neutralStore, ns } = newForkStore();
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    const newId = await s.fork("branch-B", "boundary-entry-1");
+    const tree = neutralStore.get(ns);
+    const branch = tree?.lineages.find((l) => l.lineageId === newId);
+    expect(branch?.fork?.parentLineageId).toBe("branch-B");
+    expect(branch?.fork?.boundaryEntryId).toBe("boundary-entry-1");
+  });
+
+  it("fork(不存在的父):回落活跃 lineage 并 warn(不静默换父≠抛错打断)", async () => {
+    const { s, neutralStore, ns } = newForkStore();
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    const newId = await s.fork("no-such-lineage");
+    const branch = neutralStore.get(ns)?.lineages.find((l) => l.lineageId === newId);
+    // 活跃 lineage = 根(ns,proc 初始化即根)
+    expect(branch?.fork?.parentLineageId).toBe(ns);
+  });
+});
+
+describe("sessionStart 携带 neutralSessionId(fork/bookmark 入口水合的命脉)", () => {
+  it("setContext 合成 sessionStart:事件带 proc.neutralSessionId", async () => {
+    const events: { type: string; neutralSessionId?: string }[] = [];
+    const off = store.onEvent((e) => events.push(e as { type: string; neutralSessionId?: string }));
+    store.setContext(CWD, sessionPath); // 激活即推 synthetic sessionStart(进程已在 beforeEach 起过)
+    off();
+    const ev = events.find((e) => e.type === "sessionStart");
+    expect(ev).toBeDefined();
+    // ns = 派生路径 basename("s1")
+    expect(ev?.neutralSessionId).toBe("s1");
+  });
+});
+
+describe("合成分隔线双落点:视图流 + 中立层持久化(刷新/冷开不丢,pi/dsh 一致)", () => {
+  it("setModel 换模型:中立层追加 model_change divider(刷新后可读回)", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "divider-neutral-")));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    // 换一个模型(快照现值 p/a → p/b):触发 set_model + 合成分隔线
+    await s.setModel("p", "b", "pi");
+    const ns = "s1"; // 派生路径 basename
+    const session = neutralStore.get(ns);
+    expect(session).toBeDefined();
+    const dividers = session!.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "divider");
+    expect(dividers.some((e) => e.message.kind === "model" && (e.message.i18nArgs as { modelId?: string })?.modelId === "b")).toBe(true);
   });
 });
