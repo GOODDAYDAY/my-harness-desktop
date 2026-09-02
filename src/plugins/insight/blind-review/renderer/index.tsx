@@ -478,17 +478,20 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
           variant="secondary"
           onClick={() => { void run(input, "single"); setInput(""); }}
           disabled={!canSend}
-          style={{ flex: 1 }}
+          // 窄面板不溢出:minWidth:0 允许收缩 + 文本 truncate(曾溢出面板右缘被图标栏遮挡,实测不可点)。
+          style={{ flex: 1, minWidth: 0, overflow: "hidden" }}
+          title={t("review.singleReview")}
         >
-          <Send className="size-3.5" /> {t("review.singleReview")}
+          <Send className="size-3.5 shrink-0" /> <span className="truncate">{t("review.singleReview")}</span>
         </Button>
         <Button
           variant="secondary"
           onClick={() => void handleReviewLastReply()}
           disabled={running || streaming}
-          style={{ flex: 1 }}
+          style={{ flex: 1, minWidth: 0, overflow: "hidden" }}
+          title={t("review.reviewLastReply")}
         >
-          <MessageSquare className="size-3.5" /> {t("review.reviewLastReply")}
+          <MessageSquare className="size-3.5 shrink-0" /> <span className="truncate">{t("review.reviewLastReply")}</span>
         </Button>
       </div>
 

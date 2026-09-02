@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, forwardRef, type CSSProperties, type ReactNode } from "react";
 import { Reorder, useDragControls } from "framer-motion";
 import { useUiStore } from "../../../../src/web/stores/ui-store";
 
@@ -86,7 +86,7 @@ export function SortableList<T extends string | number>({ values, onReorder, onE
   );
 }
 
-function SortableListItem<T extends string | number>({ value, disabled: itemDisabled, title, style, children }: SortableListItemProps<T>): ReactNode {
+function SortableListItemInner<T extends string | number>({ value, disabled: itemDisabled, title, style, children }: SortableListItemProps<T>, ref: React.Ref<HTMLDivElement>): ReactNode {
   const ctx = useContext(SortableListContext);
   const controls = useDragControls();
   const disabled = itemDisabled ?? ctx?.disabled ?? false;
@@ -94,6 +94,7 @@ function SortableListItem<T extends string | number>({ value, disabled: itemDisa
   return (
     <Reorder.Item
       as="div"
+      ref={ref}
       value={value}
       dragListener={false}
       dragControls={controls}
@@ -133,4 +134,9 @@ function SortableListItem<T extends string | number>({ value, disabled: itemDisa
   );
 }
 
+// forwardRef:AnimatePresence 的 PopChild 会给子组件挂 ref(退出动画要量 DOM),
+// 函数组件不接 ref 会触发 React 警告且动画失效(曾现于 sessions-list 的 SortableRow/GroupBlock)。
+const SortableListItem = forwardRef(SortableListItemInner) as <T extends string | number>(
+  props: SortableListItemProps<T> & { ref?: React.Ref<HTMLDivElement> },
+) => ReactNode;
 SortableList.Item = SortableListItem;

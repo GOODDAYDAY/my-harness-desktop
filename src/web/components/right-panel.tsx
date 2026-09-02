@@ -181,6 +181,8 @@ function SortableIcon({ item, isActive, onClick }: {
         {...listeners}
         onClick={onClick}
         title={item.label}
+        aria-label={item.label}
+        aria-pressed={isActive}
         style={{
           position: "relative",
           display: "flex",

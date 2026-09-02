@@ -40,6 +40,9 @@ export interface WsServerHandle {
 export function attachWsServer(server: Server, gateway: Gateway, host: Host, verifyToken: TokenVerifier, opts: WsServerOptions = {}): WsServerHandle {
   const trustLoopback = opts.trustLoopback ?? true;
   const wss = new WebSocketServer({ server, path: "/rpc" });
+  // WS 服务器透传 http server 的监听错误(如 EADDRINUSE)——不接 error 会变成未捕获异常杀掉进程
+  // (实测:`node out/main/server.js` 撞端口时裸栈 crash)。记日志即可,监听失败的真错误由 http server 的 error 管。
+  wss.on("error", (err) => console.error("[ws] WebSocketServer error(监听类错误的透传回声):", err.message));
   // 连接注册表:id → 摘要 + socket。摘要即设备列表行,鉴权变化原地更新。
   const conns = new Map<string, { info: ConnectionInfo; ws: WebSocket }>();
   const notifyChanged = (): void =>

@@ -33,6 +33,16 @@ export function ListItem({ active, onClick, children, style }: ListItemProps): R
   return (
     <div
       onClick={onClick}
+      // 可访问性(实测缺失):可点列表项此前是无 role/无 tabIndex 的裸 div——键盘与读屏不可达。
+      role="button"
+      tabIndex={0}
+      aria-current={active ? "true" : undefined}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{

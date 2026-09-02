@@ -7,7 +7,7 @@
 //       > 已归档(默认折叠,带 Archive)。pinned/archived 写 JSONL 头行,updateHeader 一处写。
 // 状态标识:执行中(onKernelEvent 按 sessionKey 维护 busyMap,messageStart→agentSettled,
 // 含后台会话)> 未读(readState 存插件 config,活跃会话自动跟随已读,非活跃有新 entry 亮圆点)。
-import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback, forwardRef } from "react";
 import * as React from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -560,10 +560,11 @@ export function SessionsSection(): React.ReactNode {
   );
 }
 
-function SortableRow({ path, dragEnabled, children }: { path: string; dragEnabled: boolean; children: React.ReactElement }): React.ReactNode {
+const SortableRow = forwardRef<HTMLDivElement, { path: string; dragEnabled: boolean; children: React.ReactElement }>(function SortableRow({ path, dragEnabled, children }, ref): React.ReactNode {
   const { t } = useTranslation();
   return (
     <SortableList.Item
+      ref={ref}
       value={path}
       disabled={!dragEnabled}
       title={dragEnabled ? String(t("sessions.dragToReorder")) : undefined}
@@ -572,7 +573,7 @@ function SortableRow({ path, dragEnabled, children }: { path: string; dragEnable
       {children}
     </SortableList.Item>
   );
-}
+});
 
 /** 分组:pinned 在最上 → 时间四档 → archive 在最下(归档不进时间分组)。
  *  label 存 i18n key(GroupBlock 渲染时 t(label)),buildGroups 是纯数据不依赖 t。
@@ -620,7 +621,7 @@ function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[
 /** 分组容器:有 label 才画折叠头(搜索平铺时 kind=time 但 label 为空 → 不画头)。
  *  复用 index.css 的 .pi-collapsible 动画(与 Section 同一套)。
  *  time 分组折叠头右侧带"批量归档"(hover 显示),把整组会话标 archived。 */
-function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchiveAll, onDeleteAll }: {
+const GroupBlock = forwardRef<HTMLDivElement, {
   group: Group;
   orderedItems: SessionInfo[];
   onReorder: (paths: string[]) => void;
@@ -628,7 +629,7 @@ function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchive
   children: React.ReactNode;
   onArchiveAll?: () => void;
   onDeleteAll?: () => void;
-}): React.ReactNode {
+}>(function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchiveAll, onDeleteAll }, ref): React.ReactNode {
   const { t } = useTranslation();
   const [open, setOpen] = useState(group.defaultOpen ?? true);
   const [hovered, setHovered] = useState(false);
@@ -639,9 +640,9 @@ function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchive
       <AnimatePresence mode="popLayout">{children}</AnimatePresence>
     </SortableList>
   );
-  if (!group.label) return <motion.div layout className="flex flex-col">{list}</motion.div>;
+  if (!group.label) return <motion.div ref={ref} layout className="flex flex-col">{list}</motion.div>;
   return (
-    <motion.div layout className="flex flex-col">
+    <motion.div ref={ref} layout className="flex flex-col">
       <div
         className="flex items-center pr-2.5"
         onMouseEnter={() => setHovered(true)}
@@ -688,7 +689,7 @@ function GroupBlock({ group, orderedItems, onReorder, onEnd, children, onArchive
       </div>
     </motion.div>
   );
-}
+});
 
 function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, onClick, onRawPaths, onOpenRawFile, onDelete, onUpdate, children: childSessions, onSelectChild, onDeleteChild, activeChildPath, phaseByPath }: {
   session: SessionInfo;
