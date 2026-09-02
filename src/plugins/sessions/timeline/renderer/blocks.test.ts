@@ -31,6 +31,24 @@ describe("decomposeMessage", () => {
     expect(decomposeMessage(msg({ role: "assistant", content: "" }))).toEqual([]);
   });
 
+  // 守卫(回归):toolCall.state 在内核消息里从不写入,生产恒 undefined——ask 卡片等消费者
+  // 按 pending/running/done 分支恒走 done,交互式工具卡永远不出现。分解器按「在飞集合+result」推导。
+  it("toolCall state 推导:在飞 → running;有 result / 历史 → done;内核显式 state 优先", () => {
+    const tc = { type: "toolCall", id: "t1", name: "ask_user_question", args: {} };
+    // 在飞(toolCallStart 已记、toolCallEnd 未回)→ running
+    const running = decomposeMessage(msg({ role: "assistant", content: [tc] }), [], new Set(["t1"]));
+    expect(running?.find((b) => b.type === "toolCall")).toMatchObject({ toolCall: { state: "running" } });
+    // 有 result → done(即使在飞集合里也不该出现,防御)
+    const withResult = decomposeMessage(msg({ role: "assistant", content: [{ ...tc, result: "ok" }] }), [], new Set(["t1"]));
+    expect(withResult?.find((b) => b.type === "toolCall")).toMatchObject({ toolCall: { state: "done" } });
+    // 历史消息(不在飞、无 result)→ done
+    const history = decomposeMessage(msg({ role: "assistant", content: [tc] }), [], new Set());
+    expect(history?.find((b) => b.type === "toolCall")).toMatchObject({ toolCall: { state: "done" } });
+    // 内核显式 state 不被覆盖
+    const explicit = decomposeMessage(msg({ role: "assistant", content: [{ ...tc, state: "pending" }] }), [], new Set(["t1"]));
+    expect(explicit?.find((b) => b.type === "toolCall")).toMatchObject({ toolCall: { state: "pending" } });
+  });
+
   it("divider → 块字段直取,缺省 i18nKey/kind 有兜底", () => {
     const blocks = decomposeMessage(msg({ role: "divider" }));
     expect(blocks).toEqual([{ type: "divider", kind: "info", i18nKey: "timeline.divider", i18nArgs: undefined, detail: undefined, tone: undefined }]);

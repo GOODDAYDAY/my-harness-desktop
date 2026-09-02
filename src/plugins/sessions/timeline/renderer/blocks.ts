@@ -10,6 +10,8 @@ import {
 } from "@my-harness-desktop/shared";
 import { stripToolLimitNote } from "@my-harness-desktop/react";
 
+const EMPTY_SET: ReadonlySet<string> = new Set();
+
 /** 块:一条消息分解后的最小渲染单元。五种内置词汇 + auxBlock(结构化块,与 blockRenderers 槽的 block 字段同词)。 */
 export type TimelineBlock =
   | { type: "thinking"; content: ThinkingContent }
@@ -20,11 +22,22 @@ export type TimelineBlock =
   | { type: "divider"; kind: string; i18nKey: string; i18nArgs?: Record<string, unknown>; detail?: string; tone?: string }
   | { type: "auxBlock"; aux: AuxBlock };
 
+/** 工具块状态推导(根因修复):toolCall.state 在内核消息里从不写入(生产恒 undefined),
+ *  而「工具在飞、结果未回」只能由事件序推导——ask 等交互式工具卡按 state==="running" 挂交互 UI。
+ *  规则:内核显式给的权威 > 有 result → done > 在飞集合(事件序真相)→ running > 其余 → done。
+ *  inflight 由调用方注入(web session-store 的 toolCallStart/End 记账),本函数保持纯。 */
+function deriveToolCallState(tc: ToolCallBlock, inflight: ReadonlySet<string>): ToolCallBlock {
+  if (typeof tc.state === "string" && tc.state) return tc;
+  if (tc.result !== undefined) return { ...tc, state: "done" };
+  if (tc.id && inflight.has(tc.id)) return { ...tc, state: "running" };
+  return { ...tc, state: "done" };
+}
+
 /** 消息 → 块序列。返回 null = 不渲染(未知 role 且 display===false 的显式隐藏语义)。
  *  bashExecution 与未知 role 不是特殊分支,是归一:合成 toolCall 块,
  *  渲染侧完全不感知它们和普通工具调用的差别(设计 §2.1)。
  *  auxParsers 由调用方注入(注册表在模块加载期填充,保持本函数纯)。 */
-export function decomposeMessage(message: NeutralMessage, auxParsers: AuxBlockParser[] = []): TimelineBlock[] | null {
+export function decomposeMessage(message: NeutralMessage, auxParsers: AuxBlockParser[] = [], inflightToolCalls: ReadonlySet<string> = EMPTY_SET): TimelineBlock[] | null {
   if (message.role === "user") {
     // send() 注入的工具限制前缀是给模型的指令,剥掉不给用户看(现状行为保持)。
     const text = stripToolLimitNote(messageContentText(message.content));
@@ -42,7 +55,7 @@ export function decomposeMessage(message: NeutralMessage, auxParsers: AuxBlockPa
   if (message.role === "assistant") {
     const blocks: TimelineBlock[] = [];
     for (const content of thinkingBlocksOf(message.content)) blocks.push({ type: "thinking", content });
-    for (const toolCall of toolCallsOf(message.content)) blocks.push({ type: "toolCall", toolCall });
+    for (const toolCall of toolCallsOf(message.content)) blocks.push({ type: "toolCall", toolCall: deriveToolCallState(toolCall, inflightToolCalls) });
     const text = messageContentText(message.content);
     if (text) blocks.push({ type: "text", text });
     return blocks;

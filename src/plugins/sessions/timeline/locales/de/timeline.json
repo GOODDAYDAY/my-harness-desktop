@@ -20,6 +20,7 @@
   "timeline.queue.enqueued": "Eingereiht ({{count}} gesamt)",
   "timeline.queue.mergedSent": "{{count}} Nachrichten als eine gesendet",
   "timeline.queue.sendFailed": "Senden fehlgeschlagen",
+  "timeline.unconfirmed": "Nicht zugestellt (vom Kernel nicht bestätigt)",
   "timeline.queue.commentsOnly": "{{count}} Kommentare",
   "timeline.queue.filesOnly": "{{count}} Datei(en)",
   "timeline.attachedFilesLabel": "Referenzdateien:",

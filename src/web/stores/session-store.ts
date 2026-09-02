@@ -166,6 +166,37 @@ function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionS
   }
 }
 
+/** 三级模型偏好解析(发送/续跑共用):pending(点选内存) > 会话头(已持久化) > 兜底首项。
+ *  pending 键必须与 timeline 的写入键一致(§kernel-forkless §32 主键迁移后 timeline 用
+ *  currentNeutralSessionId 写 sessionModelPending):用 path 键读会永远 miss,导致
+ *  「选了 dsh 模型却回落 header/兜底 → 调度到 pi」。活会话=neutralSessionId,新会话壳=`new:${cwd}`。
+ *  兜底失败抛错,由调用方决定如何显形。 */
+async function resolveSessionModelPrefs(cwd: string): Promise<SessionModelPrefs | undefined> {
+  const ui = useUiStore.getState();
+  const pendingKey = ui.currentNeutralSessionId ?? (cwd ? `new:${cwd}` : null);
+  const pending = pendingKey ? ui.sessionModelPending[pendingKey] : undefined;
+  if (pending) return pending;
+  if (ui.currentSessionPath) return (await readHeaderPrefs(cwd, ui.currentSessionPath)) ?? undefined;
+  // 新会话且无 pending:显式对齐默认/首项模型(根因同旧注释,勿回退)。
+  const model = await window.kernel.models.getFallbackModel();
+  if (model) return { provider: model.provider, modelId: model.model, thinkingLevel: "", kernel: model.kernel };
+  return undefined;
+}
+
+/** 续跑(第八意图)的 renderer 入口:三级偏好解析 + 透传服务端 continue。
+ *  goal 续跑在全新会话上首轮也需要模型归属——此前 continue 不带偏好,服务端读空头行
+ *  只能抛「会话未启动」,goal 首轮永卡(已实测)。偏好随 text 一次性透传,服务端 setModel 对齐。 */
+export async function continueSession(text?: string): Promise<void> {
+  const cwd = useUiStore.getState().currentCwd;
+  let prefs: SessionModelPrefs | undefined;
+  try {
+    prefs = cwd ? await resolveSessionModelPrefs(cwd) : undefined;
+  } catch {
+    prefs = undefined; // 偏好解析失败不阻断续跑——服务端还有头行/已起进程两条路
+  }
+  await window.kernel.sessions.continue(text, prefs);
+}
+
 /** 流式 message 事件(Start/Update/End)的计时归一。
  *  内核事件 message.timestamp = LLM 调用开始时间(实测实证:assistant 的 msgTs ≈ 用户发送时刻,
  *  entry 级 timestamp 才是落盘/完成时间——两者差即一轮调用真实耗时)。
@@ -179,6 +210,16 @@ function withStreamTiming(msg: NeutralMessage): NeutralMessage {
     if (k !== "timestamp") rest[k] = v;
   }
   return { ...rest, startedAt, timestamp: undefined } as unknown as NeutralMessage;
+}
+
+/** 在飞工具调用集合(toolCallStart 标记,toolCallEnd 清除)。
+ *  根因:toolCall 块的 state 字段在内核消息里从不写入(生产恒 undefined),而「工具正在执行、
+ *  结果未回」这个量只能由事件序推导——ask 等交互式工具卡按 state==="running" 挂交互 UI。
+ *  集合是视图层单例(每窗口一份),块分解器经参数注入读取(blocks.ts 保持纯函数)。 */
+const inflightToolCalls = new Set<string>();
+/** 读在飞工具集合(timeline 分解消息时传入)。 */
+export function getInflightToolCalls(): ReadonlySet<string> {
+  return inflightToolCalls;
 }
 
 /** 事件增量应用(纯函数,便于测试)。
@@ -258,9 +299,33 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
     }
     return [...messages, msg];
   }
+  if (event.type === "toolCallStart") {
+    const toolCallId = String((event as { toolCallId?: unknown }).toolCallId ?? "");
+    if (!toolCallId) return messages;
+    inflightToolCalls.add(toolCallId);
+    // 内容块可能已到(messageEnd 先于 toolCallStart,pi 实测事件序)→ 就地补 state:"running";
+    // 未到的由块分解器读 inflight 集合兜底(blocks.ts deriveToolCallState)。
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (!Array.isArray(m.content)) continue;
+      let patched = false;
+      const content = m.content.map((block) => {
+        if (typeof block !== "object" || block === null) return block;
+        const b = block as Record<string, unknown>;
+        if (b.type === "toolCall" && b.id === toolCallId && b.result === undefined) {
+          patched = true;
+          return { ...b, state: "running" };
+        }
+        return block;
+      });
+      if (patched) return messages.map((x, idx) => (idx === i ? { ...x, content } : x));
+    }
+    return messages;
+  }
   if (event.type === "toolCallEnd") {
     const toolCallId = String((event as { toolCallId?: unknown }).toolCallId ?? "");
     if (!toolCallId) return messages;
+    inflightToolCalls.delete(toolCallId);
     const result = (event as { result?: unknown }).result;
     const isError = (event as { isError?: boolean }).isError === true;
     // dsh 的工具结果经独立 tool/result 事件到达(pi 经 messageUpdate 把 result 流进内容块),
@@ -275,13 +340,36 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
         const b = block as Record<string, unknown>;
         if (b.type === "toolCall" && b.id === toolCallId) {
           patched = true;
-          return { ...b, result, isError };
+          return { ...b, result, isError, state: "done" };
         }
         return block;
       });
       if (patched) return messages.map((x, idx) => (idx === i ? { ...x, content } : x));
     }
     return messages;
+  }
+  if (event.type === "agentStart") {
+    // 回合起:排队中的消息仍有机会被内核消费确认——暂清未确认标记(确认回转由 entryAppended 水合完成)。
+    let changed = false;
+    const next = messages.map((m) => {
+      if (m.__unconfirmed === true) { changed = true; return { ...m, __unconfirmed: false }; }
+      return m;
+    });
+    return changed ? next : messages;
+  }
+  if (event.type === "agentSettled" || event.type === "agentEnd") {
+    // 回合收敛仍处乐观态的用户消息 = 内核从未把它落盘确认(bus 竞态注入吃掉、inbox 覆盖等)。
+    // 诚实显形:标 __unconfirmed 让气泡挂「未送达」记号,而不是静默丢(刷新后被内核基线冲掉)。
+    // 自愈:后续回合 agentStart 暂清、entryAppended 水合永清。
+    let changed = false;
+    const next = messages.map((m) => {
+      if (m.role === "user" && m.__optimistic === true && m.__unconfirmed !== true) {
+        changed = true;
+        return { ...m, __unconfirmed: true };
+      }
+      return m;
+    });
+    return changed ? next : messages;
   }
   if (event.type === "entryAppended") {
     const entry = (event as { entry?: unknown }).entry;
@@ -307,6 +395,7 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
         ...x,
         id: neutral.id,
         __optimistic: false,
+        __unconfirmed: false,
         startedAt: neutral.startedAt ?? x.startedAt,
         timestamp: neutral.timestamp,
         ...(neutral.model ? { model: neutral.model } : {}),
@@ -481,31 +570,18 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true, startedAt: Date.now() }] }));
   },
   sendMessage: async (cwd, text, opts) => {
-    const ui = useUiStore.getState();
-    // pending 键必须与 timeline 的写入键一致(§kernel-forkless §32 主键迁移后 timeline 用
-    // currentNeutralSessionId 写 sessionModelPending):这里用 path 键读会永远 miss,导致
-    // 「选了 dsh 模型却回落 header/兜底 → 调度到 pi」。活会话=neutralSessionId,新会话壳=`new:${cwd}`。
-    const pendingKey = ui.currentNeutralSessionId ?? (cwd ? `new:${cwd}` : null);
-    const pending = pendingKey ? ui.sessionModelPending[pendingKey] : undefined;
-
     // §atomic-send:三级来源(pending > 头 > fallback)拼一个 SessionModelPrefs,一次传给 main。
     // 差异执行 + 双写 + 发消息收进 SessionStore.prompt 编排,renderer 不再逐条 RPC。
     let prefs: SessionModelPrefs | undefined;
-    if (pending) {
-      prefs = pending;
-    } else if (ui.currentSessionPath) {
-      prefs = (await readHeaderPrefs(cwd, ui.currentSessionPath)) ?? undefined;
-    } else {
-      // 新会话且无 pending:显式对齐默认/首项模型(根因同旧注释,勿回退)。
-      try {
-        const model = await window.kernel.models.getFallbackModel();
-        if (model) {
-          prefs = { provider: model.provider, modelId: model.model, thinkingLevel: "", kernel: model.kernel };
-        }
-      } catch (err) {
-        return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
-      }
+    try {
+      prefs = await resolveSessionModelPrefs(cwd);
+    } catch (err) {
+      return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
     }
+    const ui = useUiStore.getState();
+    // pendingKey 仍按 §32 主键口径单独留档:发送成功后清 pending 用(resolveSessionModelPrefs 已消费其值)。
+    const pendingKey = ui.currentNeutralSessionId ?? (cwd ? `new:${cwd}` : null);
+    const pending = pendingKey ? ui.sessionModelPending[pendingKey] : undefined;
 
     let finalText = text;
     let toolFilterFlushed: { custom: boolean; count: number } | undefined;

@@ -250,8 +250,10 @@ export interface MessagingApi extends RpcOps {
   abort(): Promise<void>;
   /** 继续执行（第八意图）：异常停机后原地续跑，不 fork、不重发旧消息。
    *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核抛错。
-   *  text 可选：要注入的续跑提示（goal 续跑用）；缺省用内核自带的通用「继续」。 */
-  continue(text?: string): Promise<void>;
+   *  text 可选：要注入的续跑提示（goal 续跑用）；缺省用内核自带的通用「继续」。
+   *  prefs 可选：renderer 三级解析(pending>头>兜底)的模型偏好——全新会话的首轮续跑
+   *  也需要模型归属,空偏好且从未发送的会话服务端无从起进程。 */
+  continue(text?: string, prefs?: SessionModelPrefs): Promise<void>;
 }
 
 /** 模型连通性测试结果:ok 即通,不通带错误原因。 */

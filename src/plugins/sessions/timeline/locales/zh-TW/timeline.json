@@ -20,6 +20,7 @@
   "timeline.queue.enqueued": "已加入排隊 (第 {{count}} 條)",
   "timeline.queue.mergedSent": "已合併發送 {{count}} 條",
   "timeline.queue.sendFailed": "發送失敗",
+  "timeline.unconfirmed": "未送達(內核未確認)",
   "timeline.queue.commentsOnly": "評論 {{count}} 條",
   "timeline.queue.filesOnly": "檔案 {{count}} 個",
   "timeline.attachedFilesLabel": "參考檔案：",

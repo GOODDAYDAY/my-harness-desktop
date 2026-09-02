@@ -706,10 +706,31 @@ export class SessionStore implements
     if (name && sessionPath === this.activeSessionPath && this.alive) {
       const proc = this.activeProc()!;
       await proc.backend.setSessionName(name);
+      this.dispatchRenameDivider(name);
     } else {
       await this.projectHeaderToKernel(sessionPath, { name });
     }
     await this.writeNeutralHeader(sessionPath, { name });
+  }
+
+  /** 分隔线条目即时进视图流(根因:pi 的 entry_appended 补丁只覆盖 message 持久化路径,
+   *  model_change/thinking_level_change/session_info 条目都不发射——这些分隔线此前只在
+   *  刷新后补现,违反「刷新前后一致」。合成 entry 只直投视图流(listeners),不经 dispatch——
+   *  dispatch 会触发 syncNeutralEntry 把合成条目写进中立层,与内核真身在下一次 resync 撞成双份。 */
+  private dispatchViewDivider(entry: Record<string, unknown>): void {
+    if (!this.activeProcKey) return;
+    const event: SessionEvent = {
+      type: "entryAppended",
+      entry: { id: `div-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: new Date().toISOString(), ...entry },
+    };
+    for (const cb of this.listeners) {
+      try { cb(event); } catch (err) { console.error("[session-store] 分隔线投递失败:", err); }
+    }
+  }
+
+  /** 重命名分隔线即时进视图流(调用点语义化包装)。 */
+  private dispatchRenameDivider(name: string): void {
+    this.dispatchViewDivider({ type: "session_info", name });
   }
   async updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void> {
     if (patch.name && sessionPath === this.activeSessionPath && this.alive) {
@@ -1225,6 +1246,7 @@ export class SessionStore implements
           await proc.backend.setSessionName(autoName);
           if (this.latestSnapshot) this.latestSnapshot.state.sessionName = autoName;
           await this.writeNeutralHeader(this.activeSessionPath, { name: autoName });
+          this.dispatchRenameDivider(autoName);
         } catch (e) {
           console.error("[session-store] 自动命名失败:", { path: this.activeSessionPath, name: autoName, error: e });
         }
@@ -1325,6 +1347,9 @@ export class SessionStore implements
     await this.ensureForSend(targetKernel, provider, modelId);
     const proc = this.activeProc();
     if (!proc) throw new Error("内核未启动");
+    // 新会话壳:spawn 时内核已在会话文件落 model_change 条目,但基线 sync 的「全元数据不冲掉
+    // 乐观消息」守卫让它永不进 live 视图流(只在刷新后补现)——补一条合成分隔线直投视图流。
+    const freshSpawn = !proc.touched;
     // 记中立模型引用(§9.3/§11):跨切换模型中立化的持久载体,setModel 成功即更新。
     // 不依赖 latestSnapshot(dsh 无快照面恒 null),经受得住完整 pi→dsh→pi 往返。
     proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target.reasoning }) };
@@ -1353,6 +1378,10 @@ export class SessionStore implements
     if (!alreadyEffective) {
       await proc.backend.setModel(provider, modelId);
     }
+    // 模型分隔线直投视图流:值变化(!alreadyEffective)或新会话壳(spawn 已落但基线守卫挡住 live)。
+    if (!alreadyEffective || freshSpawn) {
+      this.dispatchViewDivider({ type: "model_change", provider, modelId });
+    }
     // 模型域落会话头(设计 §4.1)。RPC 拒绝抛错则 patch 不发生——头不会记下从未生效的值。
     // thinkingLevel 用快照现值补齐,守 model 域三字段原子替换(§3.2)。两层落点:
     //  ① 中立层(全内核,真相源):header.kernel + custom.model——内核归属随模型域持久,
@@ -1370,7 +1399,10 @@ export class SessionStore implements
     // model_select 同 sessionStart 一类(纯扩展事件,RPC stdout 收不到,见 prompt 处
     // 根因注释):不等内核事件,发完 set_model 立即 sync 一次取真实 state.model
     // (事件驱动于 RPC 完成,非 sleep/轮询;fire-and-forget 不阻塞调用方)。
-    if (!alreadyEffective) void this.sync().catch(() => {});
+    // 新会话壳进程刚起(模型在 spawn 参数里定死,alreadyEffective 恒真不走 set_model RPC,
+    // 内核仍会在 spawn 时落 model_change/thinking_level_change 条目)——基线 sync 把它们
+    // 带进视图流,否则这两条分隔线只在刷新后补现(违反「刷新前后一致」实测)。
+    if (!alreadyEffective || !proc.touched) void this.sync().catch(() => {});
   }
 
   /** 模型连通性测试(ModelApi.test):起独立临时进程发一条 ping。
@@ -1484,8 +1516,13 @@ export class SessionStore implements
     // thinking_level_change 分隔线),跳过;快照缺失(实况未知)回落为必发。
     if (this.latestSnapshot?.state.thinkingLevel !== level) {
       await proc.backend.setThinkingLevel(level);
+      // 对称 setModel:thinking_level_change 条目同样被基线守卫挡住 live——直投视图流。
+      this.dispatchViewDivider({ type: "thinking_level_change", thinkingLevel: level });
       // 对称 setModel:thinking_level_select 是纯扩展事件,RPC stdout 收不到,主动 sync 取真值。
       void this.sync().catch(() => {});
+    } else if (!proc.touched) {
+      // 新会话壳:spawn 已落 thinking_level_change,补视图流(同 model_change 根因)。
+      this.dispatchViewDivider({ type: "thinking_level_change", thinkingLevel: level });
     }
     // 双写(设计 §4.1):provider/modelId 用快照现值补齐,守 model 域三字段原子替换(§3.2)。
     const model = this.latestSnapshot?.state.model;
@@ -1537,9 +1574,31 @@ export class SessionStore implements
 
   /** 继续执行（第八意图）：异常停机后原地续跑，不 fork、不重发旧消息。
    *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核显式抛错。
-   *  text 可选：要注入的续跑提示（goal 续跑用），不落 user 消息（followUp/session/continue 语义）。 */
-  async continue(text?: string): Promise<void> {
-    const proc = this.activeProc();
+   *  text 可选：要注入的续跑提示（goal 续跑用），不落 user 消息（followUp/session/continue 语义）。
+   *  prefs 可选:renderer 三级解析的模型偏好(全新会话首轮续跑也有归属)。
+   *  进程未起兜底(根因修复):模型走「点选=pending、发送=落盘」时,从未发送的会话没有活进程,
+   *  continue 曾直接抛错被 goal 引擎吞掉(首轮永卡 1/256)。此处 prefs 优先、中立头行兜底,
+   *  ensureForSend 懒起进程(与 prompt 的未启动路径同源),查无实据才显式报错。 */
+  async continue(text?: string, prefs?: SessionModelPrefs): Promise<void> {
+    let proc = this.activeProc();
+    if (!proc || !proc.backend.alive) {
+      // 进程未起:renderer 三级解析的 prefs 优先(全新会话首轮续跑也有模型归属),
+      // 否则读中立头行(重开历史会话续聊)——两路都没有才显式报错。
+      const fromPrefs = prefs?.provider && prefs?.modelId && prefs.kernel
+        ? { provider: prefs.provider, modelId: prefs.modelId, kernel: prefs.kernel }
+        : null;
+      const resolved = fromPrefs ?? (() => {
+        const ns = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
+        const headerPrefs = ns ? parseSessionModelPrefs(this.neutralStore?.get(ns)?.header.custom ?? undefined) : null;
+        return headerPrefs?.provider && headerPrefs?.modelId && headerPrefs.kernel
+          ? { provider: headerPrefs.provider, modelId: headerPrefs.modelId, kernel: headerPrefs.kernel }
+          : null;
+      })();
+      if (resolved) {
+        await this.setModel(resolved.provider, resolved.modelId, resolved.kernel); // 内部 ensureForSend 起进程
+        proc = this.activeProc();
+      }
+    }
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     if (!proc.backend.continue) throw new Error("当前内核不支持继续执行");
     await proc.backend.continue(text);

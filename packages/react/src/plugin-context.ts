@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
 import { eventBus, type PluginEventsApi } from "./event-bus";
 import { useLayoutStore } from "../../../src/web/stores/layout-store";
+import { continueSession } from "../../../src/web/stores/session-store";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();
@@ -92,7 +93,9 @@ export function usePluginContext(): PluginContext {
   const messaging: MessagingApi = useMemo(() => ({
     prompt: (text, images?: ImageInput[], display?, prefs?) => window.kernel.sessions.prompt(text, images, display, prefs),
     abort: () => window.kernel.sessions.abort(),
-    continue: (text?: string) => window.kernel.sessions.continue(text),
+    // 续跑走 continueSession(renderer 侧三级偏好解析:pending>头>兜底,随 text 透传服务端)——
+    // 全新会话的首轮续跑也需要模型归属,空偏好服务端只能抛「会话未启动」(goal 首轮曾因此卡死)。
+    continue: (text?: string) => continueSession(text),
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 

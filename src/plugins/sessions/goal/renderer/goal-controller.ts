@@ -28,6 +28,26 @@ export const GOAL_USAGE =
  *  GoalBar(composerStats 槽)与 composer 同时挂载,命令到来时控制器必在;无控制器(插件被禁)→ 放行。 */
 let activeCommandHandler: ((input: string) => Promise<boolean>) | null = null;
 
+/** 模块级当前目标(可见会话单例):GoalBar 在会话物化瞬间会重挂载,组件内 useState 被清,
+ *  实测「设 goal 后 1s 内目标条消失、续跑停摆」。目标态上移到模块级,重挂载后读回;
+ *  窗口刷新仍走会话头行持久化(下读 effect)。goalBirthPath 记目标诞生时的 sessionPath,
+ *  用于区分「物化(同会话 new:→真身)」与「真切换(换了会话)」:前者保留内存态+补写真身,
+ *  后者按新会话头行换档。 */
+let currentGoal: GoalState | null = null;
+let goalBirthPath: string | null = null;
+const goalListeners = new Set<() => void>();
+function setCurrentGoal(next: GoalState | null, birthPath?: string | null): void {
+  currentGoal = next;
+  if (birthPath !== undefined) goalBirthPath = birthPath;
+  for (const l of goalListeners) l();
+}
+/** 测试专用:清空模块级目标态(测试间隔离)。 */
+export function __resetGoalStoreForTests(): void {
+  currentGoal = null;
+  goalBirthPath = null;
+  for (const l of goalListeners) l();
+}
+
 /** 是否有排队中的用户发送(timeline 流式期入队的待发消息)。只读框架 store(§8.2 允许)。
  *  goal 续跑对用户输入让路=「用户插队」:有待发用户消息时,续跑不抢发,等用户消息
  *  的回合收敛后再续(用户要求 #5)。失败重挂篮的条目同样压住续跑——用户需先处置。 */
@@ -46,32 +66,36 @@ export function runGoalCommand(input: string): Promise<boolean> {
 export function useGoalController() {
   const { sessions, messaging, notify, events } = usePluginContext();
   const sessionPath = useUiStore((s) => s.currentSessionPath);
-  const [goal, setGoalState] = useState<GoalState | null>(null);
-  const goalRef = useRef<GoalState | null>(null);
+  // 初始化读模块级单例(重挂载存活),而不是固定 null。
+  const [goal, setGoalState] = useState<GoalState | null>(currentGoal);
+  const goalRef = useRef<GoalState | null>(currentGoal);
   const inflightRef = useRef(false);
   /** 回合在飞:agentStart 置真 / agentSettled 置假。决定设置/恢复/恢复持久化时是否立即发首轮续跑。 */
   const busyRef = useRef(false);
 
-  /** 单一状态写入口:更新内存态 + 广播 goal:state(消费方着色用)+ 持久化到会话头行
-   *  custom.goal(clear 时 goal=null 删键)。广播在写入口收口,任何路径变更不漏发。 */
+  /** 单一状态写入口:更新模块级单例(抗重挂载)+ 广播 goal:state(消费方着色用)+ 持久化到会话头行
+   *  custom.goal(clear 时 goal=null 删键)。广播在写入口收口,任何路径变更不漏发。
+   *  持久化对「new:」前缀的未物化路径静默失败属预期——物化瞬间由恢复 effect 补写(见下)。 */
   const setGoal = useCallback((next: GoalState | null) => {
     goalRef.current = next;
     setGoalState(next);
+    setCurrentGoal(next, sessionPath);
     events.emit("goal:state", { active: next !== null && next.phase === "active" });
-    if (sessionPath) {
+    if (sessionPath && !sessionPath.startsWith("new:")) {
       void sessions.updateHeader(sessionPath, { custom: { goal: next } }).catch(() => {
         // 持久化失败不阻断续跑(内存态照常),下次变更再写。
       });
     }
   }, [events, sessions, sessionPath]);
 
-  /** 发一轮续跑提示:经 continue(text) 注入续跑文案(pi=followUp、dsh=session/continue),
+  /** 发一轮续跑提示:经 continue(text) 注入续跑文案(pi=空闲起回合/忙时 followUp、dsh=session/continue),
    *  不落 user 消息、不在会话框展示——goal 是 desktop 自驱动,不伪造用户输入(用户要求 #4/#5)。
-   *  失败不风暴重试——目标保持 active,下次 agentSettled 自然再续。 */
+   *  失败不风暴重试——目标保持 active,下次 agentSettled 自然再续;但失败须显形(不静默),
+   *  此前 catch 全吞导致「首轮进程未起」类失败完全不可见(实测卡死 1/256 无任何线索)。 */
   const sendRound = useCallback((g: GoalState, round: number) => {
     inflightRef.current = true;
     void messaging.continue(renderContinuationPrompt(g.objective, round, g.maxRounds))
-      .catch(() => { /* 发送失败:目标保持 active,下次 agentSettled 自然再续 */ })
+      .catch((err) => { console.warn(`[goal] 续跑第 ${round} 轮发送失败(目标保持 active,下次收敛再续):`, err); })
       .finally(() => { inflightRef.current = false; });
   }, [messaging]);
 
@@ -85,18 +109,42 @@ export function useGoalController() {
     return next;
   }, [sendRound]);
 
+  // 模块级单例同步:别处的 setGoal(其它实例/命令桥)变化时本实例跟上(重挂载后读回单例)。
+  useEffect(() => {
+    const l = (): void => {
+      goalRef.current = currentGoal;
+      setGoalState(currentGoal);
+    };
+    goalListeners.add(l);
+    return () => { goalListeners.delete(l); };
+  }, []);
+
   // 读:挂载/切会话时从会话头行 custom.goal 恢复目标(窗口刷新不再丢)。
   // 恢复出的 active 目标立即装弹——「active=续跑中」不因窗口刷新停摆。
+  // 物化补写:目标诞生于「new:」壳(物化前 updateHeader 够不到文件),路径变真身时补写。
   useEffect(() => {
     let alive = true;
     if (!sessionPath) return;
+    const materialized = goalBirthPath !== null && goalBirthPath.startsWith("new:") && !sessionPath.startsWith("new:");
+    if (materialized && currentGoal) {
+      // 物化而非切换:保留内存态,补写到真身头行(下轮窗口刷新即可恢复)。
+      void sessions.updateHeader(sessionPath, { custom: { goal: currentGoal } }).catch(() => {});
+      goalBirthPath = sessionPath;
+      return;
+    }
+    // 真切换/冷启动:读头行换档——头行有目标恢复;没有且目标本就属于别的会话(诞生路径不同)→ 清掉;
+    // 没有且目标诞生于本会话(含未物化的 new: 壳)→ 保留内存态。
     void sessions.openSession(sessionPath)
       .then((detail) => {
         if (!alive) return;
         const custom = (detail as { info?: { custom?: Record<string, unknown> } } | null)?.info?.custom;
         const restored = parseGoal(custom?.goal);
-        if (!restored) return;
-        setGoal(restored.phase === "active" ? armIfIdle(restored) : restored);
+        if (restored) {
+          setGoal(restored.phase === "active" ? armIfIdle(restored) : restored);
+          return;
+        }
+        const foreign = goalBirthPath !== null && goalBirthPath !== sessionPath && !goalBirthPath.startsWith("new:");
+        if (foreign) setGoal(null); // 目标是别的会话的,切走即清
       })
       .catch(() => { /* 会话未就绪/读失败:保持无目标,下次切换再读 */ });
     return () => { alive = false; };

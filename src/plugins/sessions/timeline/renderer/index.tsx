@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, useMessageActions, resolveMessageActionComponent, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon } from "@my-harness-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, useMessageActions, resolveMessageActionComponent, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon, getInflightToolCalls } from "@my-harness-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, classifyReferenceFile, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
@@ -189,14 +189,18 @@ export function TimelineView(): React.ReactNode {
   const showToast = useCallback((text: string): void => setToast({ key: Date.now(), text }), []);
 
   // "+" 入口:系统对话框选文件/图片(绝对路径引用,不读 base64)→ 全部入 pendingFiles。
+  // 宿主无对话框能力(server/浏览器宿主)时显式降级:toast 说明 + 引导拖拽,不静默无反应。
   const handleAttach = useCallback(async (): Promise<void> => {
-    const picked = await ctx.dialog.openFiles().catch(() => null);
+    const picked = await ctx.dialog.openFiles().catch(() => {
+      showToast(t("shell.attachmentUnsupported"));
+      return null;
+    });
     if (!picked || picked.length === 0) return;
     setPendingFilesSync([
       ...pendingFilesRef.current,
       ...picked.map((p) => ({ path: p.path, name: p.name })),
     ]);
-  }, [ctx, setPendingFilesSync]);
+  }, [ctx, setPendingFilesSync, showToast, t]);
 
   // 拖拽/粘贴入口:File[] → 分类 → 可参考(文本/代码 + 图片)入 pendingFiles(绝对路径引用);
   // 图片不读 base64(图片输入是协议/模型能力,壳只传路径);二进制拒绝 + toast。
@@ -1341,7 +1345,7 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
     );
   }
 
-  const blocks = decomposeMessage(message, getAuxParsers());
+  const blocks = decomposeMessage(message, getAuxParsers(), getInflightToolCalls());
   if (!blocks) return null;
   const renderBlocks = (): React.ReactNode =>
     blocks.map((b, i) => (
@@ -1369,6 +1373,13 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
       <div className="group" data-message-id={message.id ?? undefined}>
         {img && <ImageBlock src={img.src} />}
         {renderBlocks()}
+        {/* 未确认显形(不静默):回合收敛后内核仍未确认的用户消息(bus 竞态/inbox 覆盖丢失),
+            标「未送达」警示——否则刷新后被内核基线冲掉,用户无从察觉。agentStart/水合自愈。 */}
+        {message.__unconfirmed === true && (
+          <div className="flex justify-end mt-0.5">
+            <span className="text-[length:var(--font-size-xs)] text-[var(--color-accent-warning)]">{t("timeline.unconfirmed")}</span>
+          </div>
+        )}
         <div className="flex items-center gap-1.5 mt-1 justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           {/* 时间紧贴按钮左侧(用户消息靠右,整行右对齐):hover 淡入,与复制/回退按钮相邻。 */}
           <MessageMeta message={message} />

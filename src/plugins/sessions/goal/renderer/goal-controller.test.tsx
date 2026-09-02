@@ -43,7 +43,7 @@ vi.mock("@my-harness-desktop/react", () => {
   };
 });
 
-import { useGoalController, runGoalCommand } from "./goal-controller";
+import { useGoalController, runGoalCommand, __resetGoalStoreForTests } from "./goal-controller";
 
 function emit(e: SessionEvent): void {
   act(() => { mocks.onEventCb?.(e); });
@@ -62,6 +62,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.eventsEmit.mockReset();
     mocks.onEventCb = null;
     mocks.pendingQueue = {};
+    __resetGoalStoreForTests(); // 模块级目标态(抗重挂载单例)测试间隔离
   });
 
   it("set_goal → 续跑 → achieve_goal → 停止(完整闭环)", () => {

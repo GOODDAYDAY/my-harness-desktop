@@ -21,6 +21,11 @@ export function BlockRenderer({ block, message, collapseDefault, bubbleMaxLines 
   const name = block.type === "toolCall" ? block.toolCall.name : block.type === "divider" ? block.kind : block.type === "auxBlock" ? block.aux.type : undefined;
   const item = resolveBlockRenderer(items, block.type, name);
   const Comp = item ? resolveBlockRendererComponent(item) : undefined;
+  // 显式降级(§7.6/不静默):解析出贡献项但组件缺席(模块未注册/导出名漂移)——warn 显形 + 裸兜底,
+  // 此前静默兜底让「槽清单有、组件没有」这类断链完全不可见(ask 卡片不挂载的实测根因面)。
+  if (item && !Comp) {
+    console.warn(`[blockRenderers] 贡献项 ${item.pluginId}/${item.id}(${item.component}) 的组件未注册,落裸文本兜底`);
+  }
   if (!Comp) return <PlainBlockFallback block={block} />;
   // 流式语义按消息自持(message.pending),不读全局 streaming——现行行为保持。
   const pending = message.pending === true;
