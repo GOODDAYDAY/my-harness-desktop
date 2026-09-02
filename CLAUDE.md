@@ -253,6 +253,29 @@
 - **文档同批同步**：目录树、路径引用、CLAUDE.md 与 docs/ 随代码改动同一批落地，不留"代码已搬、文档照旧"的漂移窗口。
 - **历史守卫回归**：合并前主动跑一遍历史上已修同类 bug 的守卫（§3.7）——重构是已修 bug 回潮的高发场景，守卫清单就是为此准备的；守卫没覆盖到的历史修复点，趁这次重构补上。
 
+### 5.6 干到结束为止 + 三级测试（unittest / DOM 交互 test / e2etest）
+
+**做一下就停 = 没做完。** 一个任务的完成定义不是"代码写完了"，是"**行为验证过**"：每个修复/功能都必须带着它的验证证据一起交付，不准把"应该没问题"当结论。任务结束的唯一判据：三级测试里该覆盖的层都覆盖且全绿 + 真实运行证据（能起 app 的功能改动必须起 app 验过）。
+
+**三级测试的分工与写法**（工具链都已就位，不许再说"没法测"）：
+
+1. **unittest（纯函数/纯逻辑单测）**——`npx vitest run <file>`，node 环境（`vitest.config.ts` 默认）。
+   - 测什么：圆心纯函数（`packages/shared/src/domain/`）、归约器（如 `goal-reduce.ts`）、翻译器（如 `dsh-event-translator.ts`）、状态机、解析器。特征：不需要 mock 外部环境（§4.5 判据）。
+   - 怎么写：输入 → 输出断言，一个行为一个 `it`，标题写清业务语义（"轮数上限：round 达到 maxRounds 后不再续跑"这种，不写 "works correctly"）。
+   - 范例：`src/server/kernel/dsh/backend/dsh-event-translator.test.ts`、`src/plugins/sessions/goal/core/goal-state.test.ts`。
+
+2. **DOM 交互 test（组件/用户交互）**——vitest + jsdom + `@testing-library/react`，文件首行 `// @vitest-environment jsdom`。
+   - 测什么：插件 UI 组件的真实 DOM 交互——渲染出的元素、点击/键入/提交、状态翻转、DOM 锚点（`data-*`）。
+   - 怎么写：`render(<Comp/>)` → `screen.getByRole/getByTitle/getByText` 查元素（**按角色/文案查，不按 class 查**）→ `fireEvent.click/change/keyDown` 真实交互 → 断言 DOM 结果。`usePluginContext` 用 `vi.mock("@my-harness-desktop/react")` 给机制面（onEvent/continue/updateHeader），`useTranslation` 用 `vi.mock("react-i18next")` 给真字典（断言跑真文案，不断言 key）。i18n 文案改动时测试跟文案一起改，不许为过测试而软化断言。
+   - 范例：`src/plugins/sessions/goal/renderer/goal-bar.test.tsx`（删改停全链路 DOM 对账）、`src/plugins/sessions/ask/renderer/ask-question-card.test.tsx`（提问点选/多选/自定义输入）。
+
+3. **e2etest（真实 app 端到端）**——`scripts/demo/*.e2e.mjs` / `scripts/verify-e2e.mjs`，puppeteer-core + CDP 驱动**真实构建产物**（`out/`）+ 隔离 HOME。
+   - 测什么：跨进程全链路——真实输入框敲字、真实内核起停、真实事件流、真实 DOM 呈现。jsdom 测不了的（虚拟列表、CDP 时序、真实内核事件）都在这里验。
+   - 怎么写：参考 `scripts/demo/goal-command.e2e.mjs`——`launchApp` 拉起 → `page.keyboard.type` 真实键入 → `page.waitForFunction` 轮询断言（**不赌固定 sleep**，事件驱动等 DOM 落位）→ 每步截图留证 → 失败留诊断现场。需要"不花真 token"时覆写 models.json 为空清单（快速失败路径也是真实路径）。
+   - 什么时候必须写：涉及内核进程/真实发送/多窗口的改动。跑法：`npm run build && node scripts/demo/<name>.e2e.mjs`。
+
+**纪律收口**：修复一个 bug = 定位根因 + 修复 + **补一条能复现该 bug 的守卫测试**（§3.7）。三级里没有"这层没法测"——纯逻辑补 unittest，UI 行为补 DOM 交互，全链路补 e2e。提交信息里写清跑了哪几级（§5.4 第四要素）。
+
 ---
 
 ## 6 洋葱分区：多内核的分层执行

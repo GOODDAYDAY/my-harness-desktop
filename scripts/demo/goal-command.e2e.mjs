@@ -7,19 +7,22 @@
 //
 // 覆盖(与 jsdom e2e 同语义的实机版;每次交互都是真实鼠标/键盘事件):
 //   ① 敲 / → 斜杠弹窗列出 /goal + cmd 徽标(插件命令进弹窗的证明帧)
-//   ② /goal <目标> 回车 → 目标条出现 + 轮次 1/256 + 输入框清空 + 文本未进会话(被拦截)
+//   ② /goal <目标> 回车 → 目标条出现 + 轮次 0/256 + 目标正文交 timeline 真发(所见即所得,
+//     沙箱无模型 → 发送快速失败、输入框原文保留不丢)——不再是旧语义的「吞掉文本」
 //   ③ 点「停止」→ paused(恢复按钮 + 警告色边框)
-//   ④ 点轮次按钮 → 编辑输入框 → 键入新目标回车 → 目标条更新(删改停之「改」)
-//   ⑤ /goal resume 回车 → 恢复 + 即时装弹(轮次 2/256)
+//   ④ 点铅笔按钮 → 编辑输入框 → 键入新目标回车 → 目标条更新(删改停之「改」;编辑入口
+//     是显式铅笔,不再伪装成轮次数字)
+//   ⑤ /goal resume 回车 → 恢复 + 即时装弹(轮次 1/256)
 //   ⑥ /goal stop 回车 → 再暂停
 //   ⑦ 点垃圾桶 → 目标条从 DOM 消失(删改停之「删」)
 //   ⑧ 裸 /goal 回车 → 发送被吞(输入框清空、无目标条;系统通知是 OS 级不进 DOM)
 //
-// 确定性:不种会话 → currentSessionPath=null → armIfIdle 的续跑 prompt 在
-// 服务端以「会话未启动」显式拒绝、控制器静默吞掉——零真实回合、零 token、无竞态。
-// 模型清单保留(真实 models.json)只为 composer 中段(composerStats/GoalBar)渲染。
+// 确定性:本场景把 models.json 覆写为空清单——目标正文经 {send} 真发时
+// resolveSessionModelPrefs 拿不到任何模型 → 主侧「会话未启动」快速拒绝,零真实回合、
+// 零 token、无竞态;goal 条/续跑状态机照常运转(目标在 kickoff 失败时保持 active,
+// 这是诚实可见的设计内行为)。
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +42,8 @@ const { values: args } = parseArgs({
   },
 });
 const PORT = Number(args.port);
+// 应用服务端独立端口(与可能正在跑的 dev 实例 8420 错开;assemble.ts 读 MHD_PORT)
+const APP_PORT = 18420;
 const OBJECTIVE = "真实DOM冒烟目标";
 const EDITED = "改过的新目标";
 
@@ -119,6 +124,16 @@ async function clickSel(page, sel) {
 
 async function typeIntoComposer(page, text) {
   await clickSel(page, "[data-timeline-composer]");
+  // 先清空:发送失败时输入框保留原文(用户文本不丢的设计),不先清会拼出串味命令
+  // (实测:「/goal 目标」+「/goal resume」拼成一条非法输入)。
+  // React 受控 textarea 用原生 setter + input 事件清(键盘全选在部分平台不生效,实测)。
+  await page.evaluate(() => {
+    const ta = document.querySelector("[data-timeline-composer]");
+    if (!(ta instanceof HTMLTextAreaElement)) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(ta, "");
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   await page.keyboard.type(text, { delay: 12 });
 }
 
@@ -146,9 +161,11 @@ const scenarioDir = join(HERE, "scenarios", "goal-command");
 const bundle = await loadScenario(scenarioDir, "zh-CN");
 const ctx = setupBaseline({ home, realHome: homedir(), locale: "zh-CN" });
 applySeed(ctx, scenarioDir, bundle.spec, bundle.dict);
+// 空模型清单覆写(确定性,见文件头注释):目标正文真发时拿不到模型 → 快速失败,零真实回合。
+writeFileSync(join(home, ".pi", "agent", "models.json"), JSON.stringify({ providers: {} }));
 
 // 首启隔离 HOME 冷启动偏慢(内核探测等;实测 CDP 就绪可到 25s)→ 放宽到 90s。
-const app = await launchApp({ appDir: ROOT, port: PORT, env: { HOME: home }, timeoutMs: 90000 });
+const app = await launchApp({ appDir: ROOT, port: PORT, env: { HOME: home, MHD_PORT: String(APP_PORT) }, timeoutMs: 90000 });
 const page = app.page;
 let shotN = 0;
 async function shot(name) {
@@ -172,7 +189,7 @@ try {
   );
   await shot("slash-popup");
 
-  // ② 补全命令并回车 → 目标条出现 + 1/256 + 输入框清空 + 弹窗关闭
+  // ② 补全命令并回车 → 目标条出现 + 0/256(不装弹,kickoff=目标正文真发) + 弹窗关闭
   await page.keyboard.type(`goal ${OBJECTIVE}`, { delay: 12 });
   await page.keyboard.press("Enter");
   await waitFor(
@@ -184,11 +201,12 @@ try {
   );
   await waitFor(
     page,
-    () => document.body.innerText.includes("1/256"),
-    "② 轮次显示 1/256(空闲即装首轮)",
+    () => document.body.innerText.includes("0/256"),
+    "② 轮次显示 0/256(set 不装弹:kickoff 是目标正文消息本身,它的收敛才接第 1 轮)",
   );
-  ok((await inputValue(page, "[data-timeline-composer]")) === "", "② 输入框已被拦截清空(文本未进会话)");
-  ok(!(await visibleText(page, "/goal")), "② 弹窗已关闭");
+  // 所见即所得 + 失败诚实:沙箱无模型,kickoff 发送快速失败 → 输入框原文保留(用户文本不丢)
+  ok((await inputValue(page, "[data-timeline-composer]")) === `/goal ${OBJECTIVE}`, "② 发送失败时输入框原文保留(用户文本不丢)");
+  ok(!(await visibleText(page, "/goal")), "② 弹窗已关闭(命令前缀不进会话流)");
   ok((await selCount(page, '[title="停止"]')) >= 1, "② active 态:停止按钮在位");
   ok((await selCount(page, "[data-goal-bar]")) === 1, "② 目标横幅在位(composerTop 槽)");
   ok(await goalBarAboveComposer(page), "② 目标横幅位于输入框上方");
@@ -224,8 +242,8 @@ try {
   await waitFor(page, () => !!document.querySelector('[title="停止"]'), "⑤ /goal resume → 停止按钮回归(active)");
   await waitFor(
     page,
-    () => document.body.innerText.includes("2/256"),
-    "⑤ 恢复即装弹:轮次 2/256",
+    () => document.body.innerText.includes("1/256"),
+    "⑤ 恢复即装弹:轮次 1/256(0 → 1;续跑发送在沙箱快速失败,轮次推进可见)",
   );
   ok(await composerGoalAccent(page), "⑤ 恢复生效:输入框绿晕回归");
   await shot("goal-resumed");

@@ -102,7 +102,10 @@ const HOME_DIR = homedir();
 const MY_HARNESS_DESKTOP_DIR = resolveMyHarnessDesktopDir(opts.isPackaged);
 const CONFIG_DIR = join(MY_HARNESS_DESKTOP_DIR, "config");
 // 远程鉴权(§8):本地 token + HMAC token(密码登录签发)复合校验;serverSecret 每次启动随机。
-const PORT = 8420;
+// 服务端口:默认 8420;MHD_PORT 环境变量可覆盖——e2e/演示场景与开发实例并存时各占各的
+// 端口(此前写死 8420,dev 实例在跑时 e2e 实例绑定失败/连错服务端,启动即「Connection
+// lost」的根因)。端口是部署参数不是业务内容,环境变量是合法配置面。
+const PORT = Number(process.env["MHD_PORT"]) > 0 ? Number(process.env["MHD_PORT"]) : 8420;
 const remoteConfig = new RemoteConfigStore(join(CONFIG_DIR, "remote.json"));
 const auth = new RemoteAuth(remoteConfig);
 const gateway = createGateway(auth.createTokenVerifier());

@@ -56,7 +56,7 @@
   - `argsOf(event)`：`event.args ?? event.input ?? event.arguments`——pi 与 dsh 的参数键名差异在归约层抹平（虽然中性事件约定是 `args`，这里再兜一层）。
 - 归约结果 `GoalReduce = { goal: GoalState | null; prompt?: string }`：`prompt` 非空表示本轮要发续跑提示，由调用方执行；本函数零副作用。
 - `applyGoalEvent(state, event)` 两条主路径：
-  - `toolCallStart` + `set_goal` → `parseSetGoalArgs` 解析入参，成功则 `createGoal` 建立 active 目标（round=0），畸形/抛错则 `{ goal: state }` 静默忽略。
+  - `toolCallStart` + `set_goal` → `parseSetGoalArgs` 解析入参；**已有未完结目标时收敛为「改」**（`editGoal` 保轮次/阶段、换 objective、采纳显式 `max_rounds`），无目标或已达成才 `createGoal` 新建——模型的重复 set_goal 不再把 round 归零、把上限改写（静默覆盖的根因修复）。畸形/抛错则 `{ goal: state }` 静默忽略。
   - `toolCallStart` + `achieve_goal` → `achieveGoal(state)` 标记 achieved（state 为 null 时原样返回 null，不凭空造目标）。
   - `agentSettled` → `shouldContinue(state)` 为真才 `round + 1` 并产出 `prompt: renderContinuationPrompt(...)`；否则原样返回。
   - 其余事件一律 `{ goal: state }` 透传。
@@ -66,45 +66,51 @@
 
 - `goal-controller.ts` 是续跑引擎本体，一个 React hook `useGoalController()`，顶部注释把它的架构依据写得很直白："续跑是功能（内容），不是壳机制；壳只提供 `onEvent`/`prompt`/`updateHeader`/`openSession`/`notify` 这些机制面，续跑逻辑就用这些机制拼，活在这个插件里。"
 - 它从 `usePluginContext()` 解构四样机制：`sessions`（`onEvent`/`openSession`/`updateHeader`）、`messaging`（`prompt`）、`notify`（`show`）、`events`（`emit`）；从 `useUiStore` 读 `currentSessionPath`。全部是默认注入能力 + 框架 store 只读，无一句 IPC、无一句内核专属调用。
-- 四个 ref 构成引擎的瞬时状态（避免闭包旧值）：
+- 五个 ref 构成引擎的瞬时状态（避免闭包旧值）：
   - `goalRef`：当前 `GoalState | null` 的 ref 镜像，供事件回调（稳定引用）读最新值。
-  - `inflightRef`：是否有一份续跑 prompt 已在发送中（`sendRound` 置 true、`.finally` 复位），防同帧重入。
-  - `busyRef`：回合在飞标志——`agentStart` 置 true、`agentSettled` 置 false，决定设置/恢复时是否"即时装弹"。
+  - `inflightRef`：是否有一份续跑 prompt 已在发送中（`firePrompt` 置 true、`.finally` 复位），防同帧重入。
+  - `deferredRef`：欠账标记——回合收敛撞上在飞续跑时置位，**轮次不丢也不空推进**；inflight 落定那一刻按当时最新状态重算补发（根因修复：旧实现推进 round 却丢 prompt，「让跑三轮只发两轮」即此）。
+  - `busyRef`：回合在飞标志——`agentStart` 置 true、`agentSettled` 置 false，决定恢复/恢复持久化时是否"即时装弹"。
+  - `setGoalRef`：最新 `setGoal` 的 ref（`firePrompt` 的异步收口按当时最新状态补发，不经闭包旧值）。
 - 单一状态写入口 `setGoal(next)`：更新 `goalRef` + `setGoalState`（React state）+ `events.emit("goal:state", { active: next !== null && next.phase === "active" })` + `sessions.updateHeader(sessionPath, { custom: { goal: next } })`。注释强调"广播在写入口收口，任何路径变更不漏发"——命令、工具、恢复三条路径都经这里，所以 `goal:state` 广播与持久化永不遗漏。
   - 持久化失败被 `.catch(() => {})` 吞掉：内存态照常、续跑不阻断，下次变更再写。
-- 发一轮续跑 `sendRound(g, round)`：`inflightRef.current = true` → `messaging.prompt(renderContinuationPrompt(...))` → `.finally` 复位。`messaging.prompt` 与时间线发送按钮同源（都落在 `window.kernel.sessions.prompt`，见 `plugin-context.ts` 的 `MessagingApi.prompt`），所以续跑提示是一条真正的用户侧消息、会起进程、走完整会话流。发送失败不风暴重试——目标保持 active，下次 `agentSettled` 自然再续。
+- 发一轮续跑 `firePrompt(prompt)`：`inflightRef.current = true` → `messaging.continue(renderContinuationPrompt(...))` → `.finally` 复位并**补发欠账**（deferredRef 置位时按最新 goal 状态重算 round、再发一轮——轮次推进与发送永远成对）。`messaging.continue` 走中立第八意图（pi=空闲 prompt/忙时 followUp；dsh=带文本时 `session/prompt` 真发、无文本时 `session/continue`）——dsh 侧此前 `continue(_text)` 丢弃文案只走 session/continue，服务端没有桌面 goal 可重挂，回合不起、续跑空转（dsh 下 goal「首轮即停」的根因，已修）。发送失败不风暴重试——目标保持 active，下次 `agentSettled` 自然再续。
 - **即时装弹 `armIfIdle(g)`**（解决"active 目标静默停摆"的关键）：
-  - 判据：`busyRef.current || inflightRef.current || userSendPending() || !shouldContinue(g)` 任一为真则原样返回 g；否则 `round + 1` 并 `sendRound` 发首轮。
-  - 为什么需要它：若用户设置目标时没有回合在飞，就没有任何 `agentSettled` 会触发续跑，active 目标会永久停摆；`armIfIdle` 在 set/resume/restore 三条路径上主动补这一枪。
+  - 判据：`busyRef.current || inflightRef.current || userSendPending() || !shouldContinue(g)` 任一为真则原样返回 g；否则 `round + 1` 并 `sendRound` 发一轮。
+  - 为什么需要它：resume/restore 时若没有回合在飞，就没有任何 `agentSettled` 会触发续跑，active 目标会永久停摆；`armIfIdle` 在 resume/restore 两条路径上主动补这一枪。
+  - **`/goal <目标>` 设置路径不装弹**（所见即所得，用户要求 #5）：命令返回 `{ send: 目标正文 }`，目标正文作为真实用户消息经 timeline 正常发送——输入框敲什么，会话里就是什么；这条 kickoff 消息的回合收敛自然接第 1 轮续跑。续跑轮次的 `<goal_round>` 包装不再是裸用户气泡：本插件的 auxParser（`goal-round-parser.ts`，`standalone: true`）把它剥成自足块，渲染成「目标续跑卡」（`goal-round-card.tsx`，点击可展开包装原文）——加了包装就换种方式展示。
   - 忙时（回合在飞）不装弹，交给在飞回合收敛后的 `agentSettled` 接续。
 - 挂载/切会话恢复（`useEffect` 依赖 `sessionPath`）：`sessions.openSession(sessionPath)` 纯文件读，从 `detail.info.custom.goal` 用 `parseGoal` 读回；恢复出的 active 目标立即 `armIfIdle`（窗口刷新不再丢目标、也不因刷新停摆），paused/achieved 原样恢复不装弹。
 - 事件订阅（`useEffect` 依赖 `sessions/messaging/setGoal`）：
   - `agentStart` → `busyRef.current = true`；`agentSettled` → `busyRef.current = false`。
   - `agentSettled` 且 `userSendPending()` 为真 → **提前 return，本次收敛不续跑也不进轮次**（用户输入插队让路，见 §7）。
-  - 其余事件走 `applyGoalEvent(goalRef.current, event)`；`next !== goalRef.current` 才 `setGoal`；`prompt !== undefined && !inflightRef.current` 才 `messaging.prompt`。
+  - 其余事件走 `applyGoalEvent(goalRef.current, event)`；归约给出 `prompt` 时：**在飞则挂欠账（deferredRef，不推进不丢），空闲才 `setGoal(next)` + `firePrompt(prompt)`**——轮次推进与发送成对发生；无 prompt 仅状态变化才走 `next !== goalRef.current` 的 `setGoal`。
 - 用户控制四个回调：`pause`（`pauseGoal`）、`resume`（`armIfIdle(resumeGoal(g))`，恢复即"继续干活"、空闲立即装弹）、`edit`（`editGoal`，try/catch 吞空目标）、`clear`（`setGoal(null)`，落盘 `goal=null` 删键）。
-- 命令唯一实现 `handleCommand(input)`：`parseGoalCommand` → switch 六种 `kind` → 套状态机 + `notify.show` 反馈，返回 `true` 表示"已处理、吞掉发送"；无目标时的 `stop/resume/edit` 走 `notifyNoGoal` 提示（仍吞发送），裸 `/goal` 回显 `[phase] round/maxRounds · objective`。
+- 命令唯一实现 `handleCommand(input)`：`parseGoalCommand` → switch 六种 `kind` → 套状态机 + `notify.show` 反馈。返回值是 `ComposerCommandResult`（契约见 `packages/shared/src/domain/composer-commands.ts`）：**set 返回 `{ send: 目标正文 }`（改写发送——吞掉 `/goal xxx` 原文，改发目标正文为真实用户消息；所见即所得）**，stop/resume/edit/clear/status 返回 `true`（纯命令，吞掉发送）；无目标时的 `stop/resume/edit` 走 `notifyNoGoal` 提示（仍吞发送），裸 `/goal` 回显 `[phase] round/maxRounds · objective`。
 - **模块级桥 `runGoalCommand` + `activeCommandHandler`**：`composerCommands.handle` 是插件加载时被 `plugins-host` 收集的静态函数（见 `index.tsx`），而控制器活在 React hook 里；桥变量 `activeCommandHandler` 在 hook 挂载时指向 `handleCommand`、卸载时只清自己（`if (activeCommandHandler === fn)`），让静态入口能调到"当前挂载的控制器"。无控制器（插件被禁）时 `runGoalCommand` 返回 `Promise.resolve(false)` 放行。
 - 导出 `GOAL_USAGE`：`/goal <目标>` 用法文案（setting/stop/resume/edit/clear/查看状态五行），用于设置失败或裸 `/goal` 无目标时的提示正文。
 
-## 5. 两个槽位组件：`goal-bar.tsx` 与 `goal-card.tsx`
+## 5. 三个槽位组件：`goal-bar.tsx`、`goal-card.tsx` 与 `goal-round-card.tsx`
 
 - `GoalBar`（`composerTop` 槽）：输入框上方的目标横幅，数据源就是本插件内的 `useGoalController`（与续跑引擎同源，不跨 IPC）。
   - 无目标时 `return null`（横幅消失）；`data-goal-bar` 与 `data-goal-phase={goal.phase}` 是真实 DOM e2e 的定位锚点。
   - `phaseColor(phase)`：active → `var(--color-accent-success)`（绿）、paused → `var(--color-accent-warning)`（黄）、achieved → `var(--color-primary)`（主色）、默认 muted——左边框 3px + `color-mix` 底纹随相位变色，"目标一开始就看得出来"。
-  - 控制区：active 显示"停止"（Pause 图标，title="停止"）、非 active 显示"恢复"（Play 图标）；轮次 `goal.round/goal.maxRounds` 用 `tabular-nums` 渲染且点击进入编辑态（title="编辑目标"）；"关闭目标"（Trash2 图标）删目标。
+  - 控制区：active 显示"停止"（Pause 图标）、非 active 显示"恢复"（Play 图标）；轮次 `goal.round/goal.maxRounds` 用 `tabular-nums` 纯展示；**编辑是显式铅笔按钮**（Pencil 图标，title/aria="编辑目标"——此前编辑入口伪装成轮次数字按钮，不可发现，用户要求 #6）；"关闭目标"（Trash2 图标）删目标。全部文案走 `goal` 命名空间 i18n（`locales/<locale>/goal.json`，四语言）。
   - 编辑态：内联 `<input>`，`placeholder` 为当前目标，Enter 提交（空则取消）、Escape 取消（目标不变）。
 - `GoalCard`（`blockRenderers` 槽）：`set_goal`/`achieve_goal` 两个工具调用块的时间线卡片，**非交互**、只渲染 args/result。
   - props 契约 `{ toolCall: ToolCallBlock; collapseDefault?: boolean }`；`toolCall.name === "achieve_goal"` 时摘要固定"目标达成"，否则取 `args.objective`（非空 string）或回退 `toolCall.name`。
   - `isStreaming = toolCall.state === "pending" || "running"`；边框色 error → `--color-accent-error`、streaming → `--color-accent-success`、常态 → `--color-primary`。
   - 展开态对 `set_goal` 渲染 `args.objective` 全文 + `args.max_rounds`（若有），`achieve_goal` 不渲染 args 详情。
+- `GoalRoundCard`（`blockRenderers` 槽，`block: "auxBlock"` + `names: ["goal_round"]`）：goal 续跑提示（`<goal_round>` 包装的用户消息）的呈现卡——🎯 + 「目标续跑」+ 第 N/M 轮 + 目标摘要，点击展开看包装原文。它配 `goal-round-parser.ts`（auxParser，`standalone: true`——整段是机器包装，剥掉正文后不再落「用户消息占位」气泡；占位跳过逻辑在 timeline 的 `blocks.ts`）。"所见即所得"的另一半：用户原文（`/goal` 的目标正文）是真实用户消息，机器包装（续跑提示）换种方式展示。
+  - props 契约 `{ aux: AuxBlock }`；`data` 是 `GoalRoundData { objective, round, maxRounds, raw }`（`parseGoalRoundData` 宽松解析，畸形不炸）。
+  - 居中紧凑卡（非用户气泡形态），成功色左边框 + surface 底；展开态 `<pre>` 展示包装原文（用户有权看到模型实际收到了什么，但默认不占视觉）。
 
 ## 6. 内核无关设计：`set_goal`/`achieve_goal` 双内核实现与中性事件捕获
 
 - 内核无关的根：续跑引擎的**全部输入**都来自中性契约，没有一条内核专属通道：
   - 检测"模型调了 set_goal/achieve_goal"靠中性事件 `toolCallStart`（`type` + `toolName` + `args`），不 import pi/dsh。
   - 判定"回合结束了该续跑"靠中性事件 `agentSettled`（`type: "agentSettled"`，见 `packages/shared/src/domain/events/session-state.ts` 的 `AgentSettledEvent`）。
-  - 发续跑靠中性 API `messaging.prompt`（`MessagingApi.prompt`，`packages/shared/src/domain/sessions.ts:248`），与内核无关、与发送按钮同源。
+  - 发续跑靠中性 API `messaging.continue`（第八意图，`MessagingApi.continue`；pi=空闲 prompt/忙时 followUp，dsh=带文本时 session/prompt 真发），与内核无关。
   - 持久化靠中性 API `sessions.updateHeader` 写会话头行 `custom.goal`（`SessionsApi.updateHeader` + `HeaderPatch.custom`），落 `custom-my-harness-desktop` 命名空间、内核不感知。
 - 两个内核侧各留一个**薄工具**，因为"模型工具"只能由内核注册、壳注入不了——这是 goal 唯一留在内核侧的部分：
   - **pi 侧** `pi-extension/index.ts`：默认导出 `function goal(pi: GoalApi)`，调 `pi.registerTool(...)` 注册 `set_goal` 与 `achieve_goal`。`set_goal` 的 `execute` 只校验 objective 非空后返回 `ack({ goal: { objective, ...max_rounds } })`，`achieve_goal` 返回 `ack({ goal: { achieved: true } })`。`ack(value)` 就是 `{ content: [{ type: "text", text: JSON.stringify(value) }] }`——**只回确认文本，不落盘、不维护状态**。
@@ -118,7 +124,7 @@
 
 ## 7. 用户输入插队：续跑对"排队中的用户消息"让路
 
-- 需求来源（设计文档修订四）：续跑提示和用户输入共用同一条发送通道（都走 `messaging.prompt`），若回合收敛时用户恰好刚敲了一条消息等待发送，续跑引擎若抢发会插队到用户消息之前，违背"用户优先"。
+- 需求来源（设计文档修订四）：续跑提示和用户输入共用同一条发送通道（都走 `messaging.continue`/发送链），若回合收敛时用户恰好刚敲了一条消息等待发送，续跑引擎若抢发会插队到用户消息之前，违背"用户优先"。
 - 判据函数 `userSendPending()`（`goal-controller.ts:34-37`）：`useUiStore.getState().pendingQueue` 是 `Record<string, QueuedMessage[]>`（key = 活会话 `sessionPath` 或新会话 `new:${cwd}`），只要 `Object.values(queues).some(list => list.length > 0)` 就认为"有排队中的用户待发消息"。
   - 这读的是框架 `ui-store` 的 `pendingQueue`（`src/web/stores/ui-store.ts`，`enqueueMessage`/`removeFromQueue`/`clearQueue`/`markQueueFailed` 管理，流式期按发送入队、发送成功后清空）。
   - 注释点明这是"只读框架 store（§8.2 允许）"，不跨插件引通道、不开新机制。
@@ -146,7 +152,7 @@
 - **composerCommands 命令拦截 → timeline**：
   - 机制链：圆心契约 `ComposerCommand { name, description?, handle }`（`packages/shared/src/domain/composer-commands.ts:11`）+ 纯匹配 `parseComposerCommandText`/`matchComposerCommand`；renderer 注册表在 `packages/react/src/composer-commands.ts`（`registerComposerCommands`/`unregisterComposerCommands`/`getComposerCommands`/`runComposerCommandIfMatch`）。
   - goal 在 `renderer/index.tsx:16-22` 导出 `composerCommands: ComposerCommand[]`，`name: "goal"`、`handle: (input) => runGoalCommand(input)`；`plugins-host` 加载 module 时与 `channels`/`auxParsers` 同款收集进注册表。
-  - timeline 在发送前拦截（`timeline/renderer/index.tsx:947-953`）：`trimmed.startsWith("/")` → `runComposerCommandIfMatch(trimmed)`，命中且 handle 返回 true → 清空输入框、`return false`（吞掉发送、文本不进内核）；拦截放在"入队/streaming 判定之前"，因为命令是即时状态动作，不入消息队列、不依赖内核可用性。
+  - timeline 在发送前拦截（`timeline/renderer/index.tsx` sendText）：`trimmed.startsWith("/")` → `runComposerCommandIfMatch(trimmed)`；返回 `true` → 清空输入框、吞掉发送；返回 `{ send }` → **改写发送**（吞掉原文，改发改写文本，随后走正常发送全路径——排队/回灌/乐观回显；所见即所得）；false → 放行。拦截放在"入队/streaming 判定之前"，改写发生在 filesSection/fullText 拼装之前（发送文本以改写后为准，不留旧文本残影）。
   - timeline 同时把注册表映射成 `CommandItem { source: "plugin" }` 并入斜杠弹窗清单（`index.tsx:801-809`），插件命令与内核命令（`snapshot.commands`）并列展示。
 - **与 sessions-list 的关系（澄清一个常见误解）**：goal **不**与 sessions-list 交互——它不贡献 `sessionGroupings` 槽、不在会话列表行上做任何标记、也不 emit/invoke sessions-list 的通道。目标状态只持久化在会话头行 `custom.goal`（`custom-my-harness-desktop` 命名空间的 `goal` 域），sessions-list 目前不消费该键；goal 与 sessions-list 唯一的间接联系是"同一个会话、同一份头行文件"，谈不上通道或槽位交互。
 
@@ -177,7 +183,7 @@
 
 - 完整闭环（`goal-controller.test.tsx` 首条用例"set_goal → 续跑 → achieve_goal → 停止"）：
   - 模型调 `set_goal(objective)` → 内核工具返回确认 → 适配器投中性 `toolCallStart` → `applyGoalEvent` 建立 `{ objective, phase: "active", round: 0, maxRounds: 256 }` → `setGoal` 广播 `goal:state {active:true}` + 落盘 `custom.goal`。
-  - 该回合 `agentSettled` → `shouldContinue` 真 → `round: 1` + `messaging.prompt("<goal_round>…")` 发起新一轮。
+  - 该回合 `agentSettled` → `shouldContinue` 真 → `round: 1` + `messaging.continue("<goal_round>…")` 发起新一轮。
   - 如此往复，每轮 `round + 1`，直到 `round` 达 `maxRounds`（防失控安全阀）或模型调 `achieve_goal`。
   - 模型调 `achieve_goal` → `toolCallStart` → `achieveGoal` 标记 achieved → 广播 `goal:state {active:false}` + 落盘 → 后续 `agentSettled` 因 `shouldContinue` 假而不再续跑。
 - 人类命令闭环（与模型工具同状态机同持久化）：人敲 `/goal <目标>` → timeline `sendText` 拦截 → `runComposerCommandIfMatch` → `runGoalCommand` → `handleCommand` 解析并 `armIfIdle` 即时发首轮（空闲时 round 直接 1）→ 返回 true 吞掉发送；`/goal stop·resume·edit·clear` 走同一 `setGoal` 写入口，删改停与工具路径完全同源。
@@ -188,10 +194,11 @@
 
 - `core/goal-state.test.ts`（圆心单测）：create 规范化/默认 maxRounds/非法拒绝、achieve 幂等、shouldContinue 边界（active+达上限/achieved/paused）、pause/resume 幂等、edit 只换 objective 且空拒绝、parseSetGoalArgs 畸形返回 null、parseGoal 读回校验逐字段畸形返回 null。
 - `core/goal-command.test.ts`（命令解析单测）：命令名注册、`/goal <目标>` set（含多行、两端空白规范化）、大小写不敏感、`/goalx`/`/goal-set` 不误匹配、裸 `/goal` → status、stop/pause/resume/start/continue/clear/rm/delete 词表、`edit <新目标>`/裸 edit 降级、长短语按目标处理、非 `/goal` 放行。
-- `renderer/goal-reduce.test.ts`（纯归约单测）：set_goal 建 active、achieve_goal 标 achieved、agentSettled 注入续跑+round+1、achieved/paused 不续、畸形 set_goal 静默忽略、轮数上限不续、`renderContinuationPrompt` 带 objective+轮次。
-- `renderer/goal-controller.test.tsx`（引擎 e2e，mock `usePluginContext`/`useUiStore` 只给机制面、续跑逻辑全真跑）：完整闭环、pause 停/resume 续、edit 下次生效/clear 停、挂载从 `custom.goal` 恢复 + 变更写回、clear 落 `goal=null` 删键、`/goal` 全子命令同状态机、裸 `/goal` 状态回显、非 `/goal` 放行、`goal:state` 广播（工具路径与命令路径同收口、全程只翻 active 位）、用户输入插队两条路径（收敛让路 + 恢复让路）。
-- `renderer/goal-bar.test.tsx`（GoalBar DOM e2e）：无目标不渲染、`/goal` 后横幅出现且首轮已发、停止/恢复/编辑/关闭的 DOM 交互逐条对账、`data-goal-bar`/`data-goal-phase` 锚点、模型 set_goal 与用户 `/goal` 同状态机删改停。
-- 真实 DOM e2e `scripts/demo/goal-command.e2e.mjs`（设计文档修订三）：CDP 驱动实机构建产物，24 项断言覆盖弹窗 `/goal`+cmd 徽标、横幅位置在输入框上方、轮次 1/256、输入框拦截清空、绿晕随 set/pause/resume/stop 翻转、编辑、删除、裸 `/goal` 吞发送；隔离 HOME 不种会话 → 零真实回合零 token。commit `3d1696d8` 补上方位置断言 + 生效绿晕断言。
+- `renderer/goal-reduce.test.ts`（纯归约单测）：set_goal 建 active、achieve_goal 标 achieved、agentSettled 注入续跑+round+1、achieved/paused 不续、畸形 set_goal 静默忽略、轮数上限不续、`renderContinuationPrompt` 带 objective+轮次、**set_goal 幂等编辑语义四条**（已有 active→改保轮次、显式 max_rounds 采纳、paused 不掀回、achieved 后新建）。
+- `renderer/goal-controller.test.tsx`（引擎 e2e，mock `usePluginContext`/`useUiStore` 只给机制面、续跑逻辑全真跑）：完整闭环、pause 停/resume 续、edit 下次生效/clear 停、挂载从 `custom.goal` 恢复 + 变更写回、clear 落 `goal=null` 删键、`/goal` 全子命令同状态机、**`/goal <目标>` 返回 `{send}` 改写发送且 set 不装弹**（round=0，kickoff 收敛接第 1 轮）、裸 `/goal` 状态回显、非 `/goal` 放行、`goal:state` 广播（工具路径与命令路径同收口、全程只翻 active 位）、用户输入插队两条路径（收敛让路 + 恢复让路）、**在飞欠账两条**（慢 RPC 收敛撞在飞→挂起不丢不空转、落定按最新状态补发；挂起期暂停→落定不补发）。
+- `renderer/goal-bar.test.tsx`（GoalBar DOM e2e）：无目标不渲染、`/goal` 后横幅出现（0/256 + kickoff 收敛才接第 1 轮）、停止/恢复/编辑（显式铅笔按钮）/关闭的 DOM 交互逐条对账、`data-goal-bar`/`data-goal-phase` 锚点、模型 set_goal 与用户 `/goal` 同状态机删改停。
+- `renderer/goal-round-card.test.tsx`（续跑卡 DOM e2e）：`<goal_round>` 剥块（standalone + 三字段齐 + JSON 转义回原文）、普通文本不误剥、畸形包装不炸、卡片紧凑呈现 + 点击展开原文。
+- 真实 DOM e2e `scripts/demo/goal-command.e2e.mjs`（设计文档修订三）：CDP 驱动实机构建产物，覆盖弹窗 `/goal`+cmd 徽标、横幅位置在输入框上方、**改写发送语义（set → 目标正文真发 + 0/256 + 发送失败时输入框原文保留）**、绿晕随 set/pause/resume/stop 翻转、铅笔编辑、删除、裸 `/goal` 吞发送；隔离 HOME + 空 models.json → 零真实回合零 token。
 
 ## 12. 设计文档与演进（从 core/application 迁回纯插件）
 

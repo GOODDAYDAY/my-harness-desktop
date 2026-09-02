@@ -1,6 +1,8 @@
 # ask 插件技术文档
 
-> **修订（提问进 timeline）**：提问交互已从「sidebar 常驻模态对话框（AskHost）→ composerTop 常驻卡片（AskComposer）」收敛为**时间线内联渲染（AskQuestionCard：问题气泡 + 选项 chips + 自定义输入）**。`plugin.json` 现只贡献 `blockRenderers` 一个槽，`AskHost`/`AskComposer` 已移除，`ask-host.tsx` 仅留档。下面的历史段落里对「AskHost 挂在 sidebar」「AskComposer」的描述已过时，以本节修订为准。
+> **修订（提问进 timeline）**：提问交互已从「sidebar 常驻模态对话框（AskHost）→ composerTop 常驻卡片（AskComposer）」收敛为**时间线内联渲染（AskQuestionCard：问题气泡 + 选项 + 自定义输入）**。
+>
+> **修订（选项整行 + 多选 + 双模式自定义输入）**：选项从横向 chips 改为**每选项独占一整行**（纵向堆叠、整行宽、左对齐、`whitespace-pre-wrap` 支持多行 label；`description` 作第二行弱化展示，不再是 title 悬停）。`multi_select: true` 走 checkbox 语义（可勾多项）、否则 radio 语义（单选）；**两种情况都带自定义输入**（整行 textarea 支持多行，Enter 提交 / Shift+Enter 换行）——单选下键入即取代选项选择，多选下与已选共存一并提交。`plugin.json` 现只贡献 `blockRenderers` 一个槽，`AskHost`/`AskComposer` 已移除，`ask-host.tsx` 仅留档。下面的历史段落里对「AskHost 挂在 sidebar」「AskComposer」的描述已过时，以本节修订为准。
 
 ask 是五个会话域插件里唯一一个"双向"插件：其余四个都是把用户意图往下游推（续跑、重试、标钉、录音转字），ask 则是把**内核的意图往上推**——内核在生成中途挂起、向用户要一个确认/一个选择/一段补充信息，ask 把这个请求渲染成**会话流里的一条问题气泡（含选项 chips + 自定义输入）**，再把用户答案回填给内核，让生成继续。它横跨三条边界：壳插件 `renderer/`（`AskQuestionCard` 一个组件）、pi 内核插件 `pi-extension/`（给 pi 内核补 `ask_user_question` 工具）、以及圆心中立契约（`Question` / `QuestionAnswer` / `QuestionRequestEvent` 三种中性类型 + `BaseBackend.answerQuestion?` 一条可缺面意图）。pi 内核走 `extension_ui_request` / `extension_ui_response` 帧，dsh 内核走文件侧车桥，两边在适配器层都被投成同一条中性提问事件，ask 的渲染代码不出现任何内核身份分支——这是 §7.5"壳只认中性事件"在插件层的一次完整落地。
 
