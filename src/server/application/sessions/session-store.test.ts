@@ -431,6 +431,22 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     expect(s.getRunningSessionKeys()).toHaveLength(1);
   });
 
+  it("dsh 会话:自动命名只在首发跑一次,第二发不再重命名(「每次输入都更新会话名」回归)", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
+    const created: string[] = [];
+    const backends: { sessionId?: string }[] = [];
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    s.setContext(CWD, null);
+    await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    const backend = backends[0] as unknown as { calls: string[] };
+    // 首发:自动命名一次(写中立头 + 一次内核 rename + 一条改名分隔线)
+    expect(backend.calls.filter((c) => c === "setSessionName")).toHaveLength(1);
+    // 第二发:中立层已记名 → 不再重命名(旧判据读 latestSnapshot——dsh 恒 null → 每发必改名)
+    await s.prompt("第二发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    expect(backend.calls.filter((c) => c === "setSessionName")).toHaveLength(1);
+  });
+
   it("重开历史 dsh 会话续发:中立层有历史 → 发送前先 continue 恢复持久化会话(id collision 补面)", async () => {
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
     const created: string[] = [];
@@ -732,5 +748,39 @@ describe("合成分隔线双落点:视图流 + 中立层持久化(刷新/冷开�
     expect(session).toBeDefined();
     const dividers = session!.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "divider");
     expect(dividers.some((e) => e.message.kind === "model" && (e.message.i18nArgs as { modelId?: string })?.modelId === "b")).toBe(true);
+  });
+});
+
+describe("提问投递/作答(ask)的诚实性", () => {
+  it("无可答进程时 injectQuestion 丢弃(陈旧/外来问句不再呈现成可答卡片)", () => {
+    // 全新 store(不起进程):activeProc 不存在
+    const s = new SessionStore(
+      { create: () => { throw new Error("不应起进程"); } },
+      catalogFactory, dir,
+    );
+    const got: unknown[] = [];
+    s.onQuestion((q) => got.push(q));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    s.injectQuestion({ kind: "question", requestId: "stale-1", sessionKey: "", questions: [{ id: "q1", question: "?" }] } as never);
+    expect(got).toHaveLength(0);
+    expect(warn).toHaveBeenCalled(); // 丢弃要可诊断,不静默
+    warn.mockRestore();
+  });
+
+  it("answerQuestion 无进程:诚实文案(提问已失效),不再是误导性的「内核未启动」", async () => {
+    const s = new SessionStore(
+      { create: () => { throw new Error("不应起进程"); } },
+      catalogFactory, dir,
+    );
+    await expect(s.answerQuestion("r1", [])).rejects.toThrow("提问已失效");
+  });
+
+  it("有活进程:投递照常(回归——别把正常 ask 掐死)", async () => {
+    // 外层 beforeEach 的 store 已起 pi 会话进程
+    const got: unknown[] = [];
+    const off = store.onQuestion((q) => got.push(q));
+    store.injectQuestion({ kind: "question", requestId: "live-1", sessionKey: "", questions: [{ id: "q1", question: "?" }] } as never);
+    off();
+    expect(got).toHaveLength(1);
   });
 });

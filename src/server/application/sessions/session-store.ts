@@ -1156,7 +1156,9 @@ export class SessionStore implements
 
   async answerQuestion(requestId: string, answers: QuestionAnswer[]): Promise<void> {
     const proc = this.activeProc();
-    if (!proc) throw new Error("内核未启动");
+    // 诚实文案(勿回退为「内核未启动」):能走到这的提问都已投递成功(投递点拦了死问句),
+    // 此处 proc 缺席 = 提问后进程没了(应用重启/内核崩)——问题本身已死,照实说。
+    if (!proc) throw new Error("提问已失效：会话进程已不在（应用可能重启过），请让模型重新发起提问");
     if (!proc.backend.answerQuestion) throw new Error("当前内核不支持交互式提问");
     await proc.backend.answerQuestion(requestId, answers);
   }
@@ -1174,7 +1176,15 @@ export class SessionStore implements
    *  比对,不匹配(后台会话提问)不投给渲染层——提问不跨 session。空串(旧桥/归属未知)不拦,保持向后兼容。 */
   injectQuestion(req: QuestionRequestEvent): void {
     const active = this.activeProc();
-    if (active && req.sessionKey !== "" && active.backend.sessionId && req.sessionKey !== active.backend.sessionId) {
+    // 无可答进程 = 无人可答(根因修复,勿回退):此前不过滤直接投递——陈旧问句文件(上轮
+    // 进程死掉留下的)或别的 dsh 进程(CLI/GUI)的问句经全局桥混进来,卡片照常显示、
+    // 用户作答时 answerQuestion 才炸「内核未启动」——呈现了一个根本没人等答案的问题。
+    // 现在投递点就丢弃(带 warn 可诊断),不投递死问句。
+    if (!active) {
+      console.warn(`[session-store] 提问到达时无可答会话进程,丢弃(陈旧/外来问句): ${req.requestId}`);
+      return;
+    }
+    if (req.sessionKey !== "" && active.backend.sessionId && req.sessionKey !== active.backend.sessionId) {
       return;
     }
     for (const cb of this.questionListeners) {
@@ -1242,10 +1252,19 @@ export class SessionStore implements
     }
     // 自动命名条件是"活跃会话还没有名字"而非"新会话":真实使用多为 CLI 建会话、
     // desktop 打开续聊,wasNewSession(activeSessionPath===null) 恒 false,autoName 永不触发。
-    // latestSnapshot.state.sessionName 由 dispatch 对 sessionInfoChanged 的增量 patch 保持新鲜,
-    // 故手动 rename 后不会被自动命名覆盖;清空后重发消息会重新自动命名(已知取舍,见
-    // docs/design/session-name-tracks.md §4.4)。
-    if (this.activeSessionPath && !this.latestSnapshot?.state.sessionName) {
+    // 「有没有名字」的真相源(根因修复,勿回退):latestSnapshot 是 pi 专属面,dsh 恒 null——
+    // 旧判据 !latestSnapshot?.state.sessionName 对 dsh 恒真,每条消息都重命名一遍(改名
+    // 分隔线刷屏、「每次输入都更新会话名」的根因)。改读中立层 header.name(两内核共享;
+    // 手动 rename 经 writeNeutralHeader 同步进来,不会被自动命名覆盖;清空后重发消息会
+    // 重新自动命名——已知取舍,见 docs/design/session-name-tracks.md §4.4),pi 侧保留
+    // 快照优先(进程内实时真相)。
+    const neutralName = (() => {
+      if (!this.activeSessionPath) return undefined;
+      const ns = this.neutralSessionIdFromPath(this.activeSessionPath);
+      return ns ? this.neutralStore?.get(ns)?.header.name : undefined;
+    })();
+    const currentName = this.latestSnapshot?.state.sessionName ?? neutralName;
+    if (this.activeSessionPath && !currentName) {
       const autoName = truncateSessionName(text);
       if (autoName) {
         try {
@@ -1858,12 +1877,20 @@ export class SessionStore implements
       const entry = (event as { entry?: unknown }).entry;
       if (entry != null) (event as { entry?: unknown }).entry = this.withEntryModel(proc, entry);
     }
-    if (event.type === "sessionInfoChanged" && key === this.activeProcKey && this.latestSnapshot) {
+    if (event.type === "sessionInfoChanged" && key === this.activeProcKey) {
       // 基线增量:改名即时反映到 latestSnapshot.state.sessionName——prompt() 的自动命名
       // 判定(无名字才命名)依赖基线新鲜;不走全量 sync(事件驱动,见 §5.3 收敛)。
       // 显式收窄:SessionEvent 联合末尾的宽松兑底成员使 case 判别不自动窄化,与 renderer 同一手法。
       // sessionName 已由 gateway 翻译器规范化(空名→undefined),此处直接赋值。
-      this.latestSnapshot.state.sessionName = (event as { sessionName?: string }).sessionName;
+      const name = (event as { sessionName?: string }).sessionName;
+      if (this.latestSnapshot) this.latestSnapshot.state.sessionName = name;
+      // 中立层同步记名(根因修复,勿回退):latestSnapshot 是 pi 专属快照面,dsh 恒 null——
+      // 内核侧改名(dsh 的 session/title 自动命名)不进中立层时,prompt() 的「还没有名字」
+      // 判据永远成立 → 每条消息都重命名一遍(改名分隔线刷屏)。中立层 header.name 是两内核
+      // 共享的「是否已命名」真相源,事件到了就记(fire-and-forget,失败下次再写)。
+      if (typeof name === "string" && name && this.activeSessionPath) {
+        void this.writeNeutralHeader(this.activeSessionPath, { name }).catch(() => {});
+      }
     }
     if (event.type === "agentStart") {
       this.busyStates.set(key, true);

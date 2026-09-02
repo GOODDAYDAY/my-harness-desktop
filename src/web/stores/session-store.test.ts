@@ -804,3 +804,50 @@ describe("applyEvent → pending 占位搁浅防线(「思考中」不自旋的�
     expect((msgs[0] as { stopped?: boolean }).stopped).toBe(true);
   });
 });
+
+describe("sendMessage → 新会话草稿清账(「enter 后要清理」根因回归)", () => {
+  beforeEach(() => {
+    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj", sessionModelPending: {}, composerDrafts: {} });
+    useSessionStore.setState({ snapshot: null, messages: [], lastSendNonce: 0 });
+  });
+
+  it("发送成功:new:<cwd> 键下的草稿残留被清(物化晚于发送完成是常态,不再复活已发文本)", async () => {
+    vi.stubGlobal("window", {
+      kernel: {
+        models: { getFallbackModel: async () => null },
+        sessions: {
+          sync: async () => ({}),
+          setContext: async () => {},
+          prompt: async () => {},
+          list: async () => [],
+          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+        },
+        kernel: { fitPiExtensionAvailable: async () => true },
+      },
+    });
+    // 模拟物化竞态的产物:发送完成时 new: 键下仍有文本(键变更瞬间 hook 存回的)
+    useUiStore.getState().setComposerDraft("new:/tmp/proj", "已发送的正文");
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "已发送的正文");
+    expect(res.ok).toBe(true);
+    expect(useUiStore.getState().composerDrafts["new:/tmp/proj"]).toBeUndefined();
+  });
+
+  it("发送失败:new: 键草稿保留(用户文本不丢,可改可重发)", async () => {
+    vi.stubGlobal("window", {
+      kernel: {
+        models: { getFallbackModel: async () => { throw new Error("no model"); } },
+        sessions: {
+          sync: async () => ({}),
+          setContext: async () => {},
+          prompt: async () => {},
+          list: async () => [],
+          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+        },
+      },
+    });
+    useUiStore.getState().setComposerDraft("new:/tmp/proj", "别丢");
+    const res = await useSessionStore.getState().sendMessage("/tmp/proj", "别丢");
+    expect(res.ok).toBe(false);
+    expect(useUiStore.getState().composerDrafts["new:/tmp/proj"]).toBe("别丢");
+  });
+});

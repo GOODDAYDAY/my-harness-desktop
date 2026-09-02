@@ -686,6 +686,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     if (pending && pendingKey) {
       ui.clearSessionModelPending(pendingKey);
     }
+    // 新会话物化(new: → 真身)的草稿清账(根因修复,勿回退):物化是事件异步,晚于发送
+    // 完成是常态——草稿 hook 在键变更那一刻会把当前文本存回 new: 键,下次新会话(⌘N)
+    // 复活已发送的文本。发送成功即清 new: 键残留(对既有会话是无害 no-op)。
+    ui.clearComposerDraft(`new:${cwd}`);
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, toolFilterFlushed };
   },
