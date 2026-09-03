@@ -325,6 +325,10 @@ sessionStore.onQuestion((req) => {
 sessionStore.onSnapshot((snapshot) => {
   gateway.broadcast("session:snapshot", snapshot);
 });
+// 中立层变更通知 → WS 扇出(session-single-source §3.2:写穿回执,渲染层镜像的数据源)。
+sessionStore.onNeutralChange((change) => {
+  gateway.broadcast("session:neutralChange", change);
+});
 
 // ---- 内核专属适配器组装(注入 MainContext,api/ipc 不直连 client/{kernel})----
 // 模型配置中性 API:pi(models.json/settings.json)与 dsh(settings.yaml + prefs 密钥)各交一个适配器。

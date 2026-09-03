@@ -327,3 +327,157 @@ export function lineageContent(session: NeutralSession, lineageId: string): Neut
   walk(lineageId);
   return acc;
 }
+
+// ============ seed 投影组装(session-single-source §4.1)============
+
+/** seed 投影的对话 role 白名单:只有对话内容进内核投影;divider/custom 等展示条目
+ *  与 display 元数据永不进 AI 上下文(图是交流机制,不是 AI 输入)。
+ *  两内核同一份——契约单源,适配器不再各自过滤。 */
+export const SEED_PROJECTION_ROLES: ReadonlySet<string> = new Set(["user", "assistant", "toolResult"]);
+
+/** 压缩摘要代身的协议前缀(发往内核的协议指令,与渲染层 stripToolLimitNote 同先河——
+ *  非 UI 文案,勿 i18n)。 */
+const SEED_SUMMARY_PREFIX = "[此前会话的压缩摘要]";
+
+/** 压缩边界条目判定:role=divider 且 kind=compaction(sessionEntryToNeutral 的 divider 形状)。 */
+function isCompactionBoundary(e: NeutralEntry): boolean {
+  const m = e.message as { role?: unknown; kind?: unknown };
+  return m.role === "divider" && m.kind === "compaction";
+}
+
+/** 边界条目的摘要文本(detail 字段;无摘要返回 null——调用方退回全量投影,宁多灌不丢语义)。 */
+function compactionSummaryOf(e: NeutralEntry): string | null {
+  const d = (e.message as { detail?: unknown }).detail;
+  return typeof d === "string" && d ? d : null;
+}
+
+/**
+ * seed 投影组装(契约单源,壳的 seed 调用点统一经此):活跃 lineage 的完整线性内容
+ * → 压缩截断 → role 白名单。
+ * - 压缩截断:最新一条「带摘要的」压缩边界条目以摘要代身(合成一条 user 消息承载摘要,
+ *  摘要文本是内核压缩的产物,前缀标记它是摘要而非用户原话),丢弃其前条目;
+ *  无边界 / 边界无摘要 → 全量投影(保守)。
+ * - role 白名单:只留对话内容;divider/custom/工具卡片等展示条目与 display 不进内核。
+ * 纯函数、零依赖——两个内核的 seed 路径(dsh 经 session/seed,pi 经写文件)吃同一份输出。 */
+export function assembleSeedProjection(session: NeutralSession, lineageId: string): NeutralEntry[] {
+  const full = lineageContent(session, lineageId);
+  let cut = -1;
+  let summary: string | null = null;
+  for (let i = full.length - 1; i >= 0; i--) {
+    if (isCompactionBoundary(full[i])) {
+      const s = compactionSummaryOf(full[i]);
+      if (s) {
+        cut = i;
+        summary = s;
+      }
+      break; // 最新边界无摘要也不往前找——更早的摘要对应更旧的上下文形态,无意义
+    }
+  }
+  const tail = cut >= 0 ? full.slice(cut + 1) : full;
+  const head: NeutralEntry[] = summary != null
+    ? [{ neutralEntryId: "", message: { role: "user", content: `${SEED_SUMMARY_PREFIX}\n${summary}` } }]
+    : [];
+  return [...head, ...tail].filter((e) => SEED_PROJECTION_ROLES.has(e.message.role));
+}
+
+// ============ 中立层变更通知与镜像归约(session-single-source §3.2)============
+
+/**
+ * 中立层变更通知(写穿回执):壳的唯一写口每写一次产一条,经 WS 广播给渲染层镜像。
+ * - entry:某条 lineage 里落了一条/回填了一条——载荷带条目本体(通知即数据,不回拉),
+ *   header 附带写后值(append 会派生 lastMessage/lastEntryId/updatedAt,随条目一起新鲜)。
+ * - header:头域变更(改名/归档置顶/模型域写回)——没有条目本体,只带写后的头。
+ * - lineage:整枝变更(fork 插新分支);session:全量替换(快照重建/书签发起的重投影)。
+ */
+export type NeutralChange =
+  | { ns: string; kind: "entry"; lineageId: string; entry: NeutralEntry; header: NeutralSessionHeader }
+  | { ns: string; kind: "header"; header: NeutralSessionHeader }
+  | { ns: string; kind: "lineage"; lineage: NeutralLineage; header: NeutralSessionHeader }
+  | { ns: string; kind: "session"; session: NeutralSession };
+
+/**
+ * 变更通知归约(镜像端与壳端共用,契约单源):把一条变更应用到中立会话镜像。
+ * - entry:按中立 entryId 幂等——同 id 替换(回填场景:后到权威字段覆盖先到占位),无则 append。
+ * - header:浅合并(写后值整体覆盖对应字段);lineage:整枝 upsert;session:全量替换。
+ * 纯函数,不 mutate 入参。
+ */
+export function applyNeutralChange(session: NeutralSession, change: NeutralChange): NeutralSession {
+  switch (change.kind) {
+    case "entry": {
+      const idx = session.lineages.findIndex((l) => l.lineageId === change.lineageId);
+      const lineage = idx >= 0 ? session.lineages[idx] : null;
+      let next: NeutralSession;
+      if (lineage && lineage.entries.some((e) => e.neutralEntryId === change.entry.neutralEntryId)) {
+        const entries = lineage.entries.map((e) => (e.neutralEntryId === change.entry.neutralEntryId ? change.entry : e));
+        next = { ...session, lineages: session.lineages.map((l, i) => (i === idx ? { ...l, entries } : l)) };
+      } else {
+        next = appendNeutralEntry(session, change.lineageId, change.entry);
+      }
+      return { ...next, header: change.header };
+    }
+    case "header":
+      return { ...session, header: { ...session.header, ...change.header } };
+    case "lineage":
+      return { ...upsertNeutralLineage(session, change.lineage), header: change.header };
+    case "session":
+      return change.session;
+  }
+}
+
+// ============ 克隆(session-single-source §4.2:clone 归壳)============
+
+/** 分叉边界归一:把调用方给的 boundary(可能是中立 entryId `{lineageId}:{seq}`,也可能是
+ *  内核私有条目 id)解析成父 lineage 里的中立 entryId。解析不出(陈旧/外部坐标)则原样透传——
+ *  投影语义对未知边界是安全兜底(继承完整父前缀),不丢调用方信息、也不静默挂错父。 */
+export function resolveBoundaryEntryId(session: NeutralSession, parentLineageId: string, boundary: string): string {
+  const parent = session.lineages.find((l) => l.lineageId === parentLineageId);
+  if (!parent) return boundary;
+  if (parent.entries.some((e) => e.neutralEntryId === boundary)) return boundary;
+  const byKernel = parent.entries.find((e) => e.kernelEntryId && e.kernelEntryId === boundary);
+  return byKernel?.neutralEntryId ?? boundary;
+}
+
+/**
+ * 克隆一个中立会话为全新会话(纯壳操作,内核不参与):
+ * 整树复制,根 lineage 取新 ns;分支 lineage 用确定性派生 id(`<newNs>-fork-<序>`),
+ * fork 引用与 boundaryEntryId 随 id 映射一并改写;条目的中立 entryId 按新 lineage 重派生,
+ * kernelEntryId/message.id 清除(目标内核 seed 时重分配——投影线索不跨会话携带)。
+ * 纯函数:nowIso 由调用方注入(创建时间),不在圆心读环境。
+ */
+export function cloneNeutralSession(session: NeutralSession, newNs: string, opts: { name?: string; nowIso: string }): NeutralSession {
+  // 第一遍:lineage id 映射(根 → newNs;分支按拓扑序派生确定性 id)
+  const sorted = sortLineagesTopologically(session.lineages);
+  const idMap = new Map<string, string>();
+  let forkSeq = 0;
+  for (const l of sorted) {
+    idMap.set(l.lineageId, l.fork === null ? newNs : `${newNs}-fork-${forkSeq++}`);
+  }
+  const lineages: NeutralLineage[] = sorted.map((l) => {
+    const newId = idMap.get(l.lineageId)!;
+    const entries: NeutralEntry[] = l.entries.map((e, i) => ({
+      neutralEntryId: neutralEntryId(newId, i),
+      message: { ...e.message, id: undefined },
+      ...(e.display ? { display: e.display } : {}),
+    }));
+    if (!l.fork) return { lineageId: newId, fork: null, entries };
+    // fork 引用换绑:父 lineage id 经 idMap 翻译;boundary 先按源树归一为中立 id 再换绑。
+    const newParent = idMap.get(l.fork.parentLineageId) ?? newNs;
+    const sourceBoundary = resolveBoundaryEntryId(session, l.fork.parentLineageId, l.fork.boundaryEntryId);
+    const seqPart = sourceBoundary.includes(":") ? Number(sourceBoundary.split(":").pop()) : NaN;
+    return {
+      lineageId: newId,
+      fork: {
+        parentLineageId: newParent,
+        boundaryEntryId: Number.isFinite(seqPart) ? neutralEntryId(newParent, seqPart) : "",
+      },
+      entries,
+    };
+  });
+  const header: NeutralSessionHeader = {
+    ...session.header,
+    name: opts.name ?? session.header.name,
+    createdAt: opts.nowIso,
+    updatedAt: opts.nowIso,
+  };
+  return { neutralSessionId: newNs, header, lineages };
+}

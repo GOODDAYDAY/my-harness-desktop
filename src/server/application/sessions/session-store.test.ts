@@ -385,7 +385,8 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     async sendMessage(): Promise<void> { this.calls.push("sendMessage"); }
     async setModel(): Promise<void> { this.calls.push("setModel"); }
     async setSessionName(): Promise<void> { this.calls.push("setSessionName"); }
-    async seed(): Promise<string> { return "seeded"; }
+    seedLineageLength: number | null = null;
+    async seed(lineage?: unknown[]): Promise<string> { this.calls.push("seed"); this.seedLineageLength = lineage?.length ?? 0; return "seeded"; }
     async fork(): Promise<unknown> { return { lineageId: "f", sessionReplaced: false }; }
     async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
     async getEntries(): Promise<NeutralMessage[]> { return []; }
@@ -447,23 +448,37 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     expect(backend.calls.filter((c) => c === "setSessionName")).toHaveLength(1);
   });
 
-  it("重开历史 dsh 会话续发:中立层有历史 → 发送前先 continue 恢复持久化会话(id collision 补面)", async () => {
+  it("重开历史 dsh 会话续发:中立层有历史 → 发送前 seed 投影回填(session-single-source §4.4,替代旧的 continue 重放)", async () => {
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
     const created: string[] = [];
     const backends: { sessionId?: string }[] = [];
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
     const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
     s.setContext(CWD, null);
-    // 第一发:新会话(中立层空)→ 不 continue。
+    // 第一发:新会话(中立层空)→ 不 seed 不 continue。
     await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     const backend = backends[0] as unknown as { calls: string[] };
-    expect(backend.calls).not.toContain("continue"); // 新会话无历史,不 continue
+    expect(backend.calls).not.toContain("continue");
+    expect(backend.calls).not.toContain("seed"); // 空投影不 seed
+
+    // 同进程第二发:进程已有内容(物化标记已对齐)→ 不重复 seed。
     backend.calls.length = 0;
-    // 模拟重开:同会话继续发(中立层已有历史)→ 先 continue 再 sendMessage。
     await s.prompt("第二发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
-    expect(backend.calls).toContain("continue");
-    expect(backend.calls[backend.calls.indexOf("continue") - 1]).not.toBe("sendMessage"); // continue 在 sendMessage 之前
+    expect(backend.calls).not.toContain("seed");
     expect(backend.calls).toContain("sendMessage");
+
+    // 真重开形态:新 SessionStore + 新进程,中立层带历史 → 首发前 seed 投影,且在 sendMessage 之前。
+    const ns = neutralStore.listByCwd(CWD)[0].neutralSessionId;
+    const created2: string[] = [];
+    const backends2: { sessionId?: string }[] = [];
+    const s2 = new SessionStore(makeDshFactory(created2, backends2), catalogFactory, dir, undefined, neutralStore, catalog);
+    s2.setContext(CWD, ns); // dsh 投影地址 = 裸 ns(中立主键反查会话归属)
+    await s2.prompt("重开后续聊", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    const reopened = backends2[0] as unknown as { calls: string[]; seedLineageLength: number | null };
+    expect(reopened.calls).toContain("seed");
+    expect(reopened.calls.indexOf("seed")).toBeLessThan(reopened.calls.indexOf("sendMessage"));
+    expect(reopened.calls).not.toContain("continue"); // continue 重放补面已删
+    expect(reopened.seedLineageLength).toBeGreaterThan(0); // 中立层历史灌进内核
   });
 
   it("dsh 第二发:进程模型未变 → 不重发 session/setModel(无快照面内核的已生效真相源 = 起进程模型)", async () => {
