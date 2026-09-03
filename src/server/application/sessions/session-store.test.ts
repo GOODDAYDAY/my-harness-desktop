@@ -207,6 +207,37 @@ describe("abort 双保险与强杀兜底", () => {
     expect(dshMock.calls).toContain("abort");
   });
 
+  it("dsh 会话 fork 出第二 lineage + 活跃切换(forkFromSession 内核无关,纯中立层)", async () => {
+    // forkFromSession 只写中立层(不碰后端)——两内核同一条路径。钉死:dsh 会话也能 fork,
+    // 分支 lineage 建出、活跃 lineage 切到新分支(分支发送的写穿锚点)。
+    const dshMock = new MockBackend();
+    const dshSource: KernelModelSource = {
+      listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
+    };
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const dshFactory: BackendFactory = {
+      create: (opts) => opts.kernel === "dsh"
+        ? dshMock as unknown as BaseBackend
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+    };
+    const dshStore = new SessionStore(dshFactory, catalogFactory, dir, undefined, new NeutralSessionStore(join(dir, "neutral")), catalog);
+    dshStore.setContext(CWD, null);
+    await dshStore.setModel("us-new", "dsh-model", "dsh");
+    await dshStore.prompt("ping base"); // 建中立层会话 + 一条 user
+    const ns = (dshStore as unknown as { activeSessionPath: string }).activeSessionPath;
+    const readNs = (dshStore as unknown as { neutralSessionIdFromPath: (p: string) => string | undefined }).neutralSessionIdFromPath(ns);
+    expect(readNs).toBeTruthy();
+    const before = (dshStore as unknown as { neutralStore: { get: (id: string) => { lineages: unknown[] } | null } }).neutralStore.get(readNs!);
+    expect(before?.lineages).toHaveLength(1);
+    const anchorEntry = (before as { lineages: { entries: { neutralEntryId: string }[] }[] }).lineages[0].entries[0]?.neutralEntryId;
+    expect(anchorEntry).toBeTruthy();
+    await dshStore.forkFromSession(CWD, readNs!, anchorEntry!, "at");
+    const after = (dshStore as unknown as { neutralStore: { get: (id: string) => { lineages: { fork: unknown; entries: unknown[] }[] } | null } }).neutralStore.get(readNs!);
+    expect(after?.lineages).toHaveLength(2);
+    expect(after?.lineages[1].fork).toBeTruthy();
+    expect(after?.lineages[1].entries).toHaveLength(0); // 分支空,待物化
+  });
+
   it("先发 abort_bash 再发 abort(executeBash 路径兜底)", async () => {
     await store.abort();
     const cmds = adapter.sent.filter((t) => t === "abort_bash" || t === "abort");
