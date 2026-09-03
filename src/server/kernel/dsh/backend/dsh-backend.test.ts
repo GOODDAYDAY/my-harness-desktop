@@ -30,7 +30,7 @@ class FakeTransport {
 
 function makeBackend(): { t: FakeTransport; b: DshBackend } {
   const t = new FakeTransport();
-  const b = new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m" });
+  const b = new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m", sessionId: "s-test" });
   return { t, b };
 }
 
@@ -153,11 +153,23 @@ describe("dsh seed 转录(wire 形状对齐 session/seed 的 NeutralSessionWire 
     expect(params.session.lineages[0].entries.map((e) => e.message.role)).toEqual(["user", "assistant"]);
   });
 
-  it("seed 成功后重绑 currentSessionId 为服务端返回的 id", async () => {
+  it("seed 成功后重绑 currentSessionId 为服务端返回的 id(=lineageId,身份断言通过)", async () => {
+    const { t, b } = makeBackend();
+    t.results.set("session/seed", { sessionId: "root" });
+    const id = await b.seed(entries, { neutralSessionId: "ns", lineageId: "root", header });
+    expect(id).toBe("root");
+    expect(b.sessionId).toBe("root");
+  });
+
+  it("seed 身份断言:服务端返回与 lineageId 不一致即抛错,不静默错绑", async () => {
     const { t, b } = makeBackend();
     t.results.set("session/seed", { sessionId: "rebound-id" });
-    const id = await b.seed(entries, { neutralSessionId: "ns", lineageId: "root", header });
-    expect(id).toBe("rebound-id");
-    expect(b.sessionId).toBe("rebound-id");
+    await expect(b.seed(entries, { neutralSessionId: "ns", lineageId: "root", header })).rejects.toThrow(/身份断言失败/);
+    expect(b.sessionId).toBe("s-test"); // 不重绑,保持构造时标识
+  });
+
+  it("构造缺 sessionId 直接抛错(桶名回落已删除,宁可早炸不串会话)", () => {
+    const t = new FakeTransport();
+    expect(() => new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m" })).toThrow(/缺少会话标识/);
   });
 });

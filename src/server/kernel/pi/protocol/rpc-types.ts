@@ -108,11 +108,7 @@ export type RpcCommand =
   | { id?: string; type: "bash"; command: string; excludeFromContext?: boolean }
   | { id?: string; type: "abort_bash" }
   | { id?: string; type: "get_session_stats" }
-  | { id?: string; type: "export_html"; outputPath?: string }
   | { id?: string; type: "switch_session"; sessionPath: string }
-  | { id?: string; type: "fork"; entryId: string; position?: "before" | "at" }
-  | { id?: string; type: "clone" }
-  | { id?: string; type: "get_fork_messages" }
   | { id?: string; type: "get_entries"; since?: string }
   | { id?: string; type: "get_tree" }
   | { id?: string; type: "get_last_assistant_text" }
