@@ -92,12 +92,17 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
    *  基类参数属性,字段初始化器里读序不可靠,勿回退为字段初始化)。 */
   private readonly translateEvent: (event: unknown) => SessionEvent[];
 
+  /** 重开历史会话的载入标记：以既有 sessionId 构造（重开旧会话）时为 true，首次发送前
+   *  需先 session/continue 把磁盘日志载入本进程；新会话（桶名默认）与 seed 重绑后为 false。 */
+  private needsResume: boolean;
+
   constructor(
     private readonly transport: JsonRpcTransport,
     config: DshBackendConfig,
   ) {
     super(config);
     this.currentSessionId = config.sessionId ?? cwdToBucketName(config.cwd);
+    this.needsResume = config.sessionId !== undefined;
     this.translateEvent = createDshEventTranslator({ provider: config.provider, model: config.model });
   }
 
@@ -194,7 +199,21 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     }
   }
 
+  /** 重开历史会话的载入（适配器内部细节，不构成契约意图）：dsh 的 session/prompt 只新建
+   *  空会话、不加载磁盘日志——重开旧会话后首次发送前，先 session/continue 把持久化会话
+   *  载入本进程（getOrResumeSession 重放日志），否则撞 id collision。
+   *  旧运行时缺 session/continue → requestSession 记缺面；其余失败吞掉,由随后的 prompt
+   *  以其原错误显形（不静默伪造成功,也不引入新崩）。 */
+  private async ensureSessionLoaded(): Promise<void> {
+    if (!this.needsResume) return;
+    this.needsResume = false;
+    try {
+      await this.requestSession(DSH_METHODS.sessionContinue, { sessionId: this.currentSessionId });
+    } catch { /* 缺面已记录；其余失败由随后的 prompt 以其原错误显形 */ }
+  }
+
   async sendMessage(text: string, images?: ImageInput[]): Promise<void> {
+    await this.ensureSessionLoaded();
     await this.transport.request(DSH_METHODS.sessionPrompt, {
       sessionId: this.sessionId,
       contentBlocks: [{ type: "text", text }],
@@ -206,24 +225,6 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
 
   async abort(): Promise<void> {
     await this.requestSession(DSH_METHODS.sessionAbort, { sessionId: this.sessionId });
-  }
-
-  /** 继续执行（第八意图）：dsh 走 session/continue RPC，服务端按 turn/end reason 语义分发
-   *  （重挂 goal 或注入续跑提示）。懒探测缺面：旧 dsh 内核无此方法 → 记缺面 + 抛清晰错误。
-   *
-   *  带 text 时(根因修复,勿回退):改用 session/prompt 真发文本。dsh 的 session/continue
-   *  「重挂 goal」只对 dsh **原生** goal 有效——桌面的 goal 是壳层状态机(dsh 服务端无此
-   *  goal),continue 重挂落空:turn/end reason=completed 时服务端什么都不起,续跑提示
-   *  又被静默丢弃,桌面 goal 在 dsh 下首轮即空转(「只发两轮就停」的 dsh 侧根因)。
-   *  真发文本后:内核落 user/message,时间线由 goal 插件的 auxParser 把 <goal_round>
-   *  包装渲成目标续跑卡(另一种展示,不冒充用户气泡);无文本(异常停机原地续跑)仍走
-   *  session/continue 原语义。 */
-  async continue(text?: string): Promise<void> {
-    if (text !== undefined && text !== "") {
-      await this.sendMessage(text);
-      return;
-    }
-    await this.requestSession(DSH_METHODS.sessionContinue, { sessionId: this.sessionId });
   }
 
   /** 回答一次提问:写答案文件(dsh ask 扩展轮询读取;文件侧车桥封装进适配器)。 */
@@ -308,6 +309,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
       session: buildDshSeedSession(lineage, opts),
     });
     this.currentSessionId = res.sessionId;
+    this.needsResume = false; // session/seed 已在本进程创建会话,无需再载入
     return res.sessionId;
   }
 }

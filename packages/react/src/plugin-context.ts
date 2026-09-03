@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import { usePluginId } from "./plugin-id-context";
 import { eventBus, type PluginEventsApi } from "./event-bus";
 import { useLayoutStore } from "../../../src/web/stores/layout-store";
-import { continueSession } from "../../../src/web/stores/session-store";
+import { promptSession } from "../../../src/web/stores/session-store";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();
@@ -91,11 +91,10 @@ export function usePluginContext(): PluginContext {
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({
-    prompt: (text, images?: ImageInput[], display?, prefs?) => window.kernel.sessions.prompt(text, images, display, prefs),
+    // promptSession:系统发送面——prefs 缺省时框架三级解析(pending>头>兜底),插件不传也有归属;
+    // 不过输入框管线(无乐观回显/待发队列)。goal 续跑等插件自驱动发送走这里。
+    prompt: (text, images?: ImageInput[], display?, prefs?) => promptSession(text, images, display, prefs),
     abort: () => window.kernel.sessions.abort(),
-    // 续跑走 continueSession(renderer 侧三级偏好解析:pending>头>兜底,随 text 透传服务端)——
-    // 全新会话的首轮续跑也需要模型归属,空偏好服务端只能抛「会话未启动」(goal 首轮曾因此卡死)。
-    continue: (text?: string) => continueSession(text),
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 

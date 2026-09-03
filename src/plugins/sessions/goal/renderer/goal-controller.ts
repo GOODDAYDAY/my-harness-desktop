@@ -99,10 +99,8 @@ export function useGoalController() {
   const setGoalRef = useRef(setGoal);
   setGoalRef.current = setGoal;
 
-  /** 发一轮续跑提示:经 continue(text) 注入续跑文案(pi=空闲起回合/忙时 followUp、dsh=session/continue),
-   *  不落 user 消息、不在会话框展示——goal 是 desktop 自驱动,不伪造用户输入(用户要求 #4/#5)。
-   *  失败不风暴重试——目标保持 active,下次 agentSettled 自然再续;但失败须显形(不静默),
-   *  此前 catch 全吞导致「首轮进程未起」类失败完全不可见(实测卡死 1/256 无任何线索)。
+  /** 发一轮续跑提示:经 messaging.prompt 把续跑文案作为一条普通消息发出（续跑=发消息,
+   *  设计 docs/design/goal.md §3.2——契约无独立 continue 意图;忙态由内核发消息面吸收）。
    *
    *  在飞收口时补发欠账(根因修复,勿回退):回合收敛撞上在飞续跑时,此前实现「推进了 round
    *  却丢了 prompt」——轮数空转、目标停摆(「让跑三轮只发两轮」的根因)。现在欠账挂起
@@ -110,7 +108,7 @@ export function useGoalController() {
   const deferredRef = useRef(false);
   const firePrompt = useCallback((prompt: string): void => {
     inflightRef.current = true;
-    void messaging.continue(prompt)
+    void messaging.prompt(prompt)
       .catch((err) => { console.warn(`[goal] 续跑发送失败(目标保持 active,下次收敛再续):`, err); })
       .finally(() => {
         inflightRef.current = false;

@@ -7,9 +7,13 @@ const STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] te
 
 /**
  * 继续执行按钮:异常停机的 assistant 消息(工具失败/LLM 失败/用户停止)上出现,
- * 点一下经 ctx.messaging.continue() 原地续跑——经中立第八意图(pi=followUp 翻译,
- * dsh=session/continue RPC),不 fork、不重发旧消息,与 retry 语义分开。
+ * 点一下经 ctx.messaging.prompt() 发一条通用「继续」提示原地续跑——续跑就是发消息
+ * (设计 docs/design/goal.md §3.2,契约无独立 continue 意图),不 fork、不重发旧消息,
+ * 与 retry 语义分开。
  */
+
+/** 模型向的通用续跑文案(内容归插件,不进壳)。 */
+const CONTINUE_PROMPT = "继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。";
 export function ContinueAction({ message }: MessageActionProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
@@ -28,7 +32,7 @@ export function ContinueAction({ message }: MessageActionProps): React.ReactNode
       return;
     }
     try {
-      await ctx.messaging.continue();
+      await ctx.messaging.prompt(CONTINUE_PROMPT);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setToast(t("shell.continueFailed", { error: msg }));

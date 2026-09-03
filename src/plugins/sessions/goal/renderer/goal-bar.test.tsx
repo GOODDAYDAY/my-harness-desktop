@@ -31,7 +31,7 @@ vi.mock("react-i18next", () => {
 });
 
 const mocks = vi.hoisted(() => ({
-  continue: vi.fn(),
+  prompt: vi.fn(),
   updateHeader: vi.fn(),
   openSession: vi.fn(),
   notify: vi.fn(),
@@ -50,7 +50,7 @@ vi.mock("@my-harness-desktop/react", () => {
     updateHeader: mocks.updateHeader,
     openSession: mocks.openSession,
   };
-  const messaging = { continue: mocks.continue };
+  const messaging = { prompt: mocks.prompt };
   const notify = { show: mocks.notify };
   const events = { emit: mocks.eventsEmit, on: vi.fn(() => () => {}) };
   const stateOf = (): { currentSessionPath: string; pendingQueue: Record<string, { id: string }[]> } =>
@@ -74,8 +74,8 @@ function emit(e: SessionEvent): void {
 
 describe("GoalBar DOM e2e(设置 + 删改停)", () => {
   beforeEach(() => {
-    mocks.continue.mockReset();
-    mocks.continue.mockResolvedValue(undefined);
+    mocks.prompt.mockReset();
+    mocks.prompt.mockResolvedValue(undefined);
     mocks.updateHeader.mockReset();
     mocks.updateHeader.mockResolvedValue(undefined);
     mocks.openSession.mockReset();
@@ -102,7 +102,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     expect(screen.getByText("把 e2e 测试补齐")).toBeInTheDocument();
     // set 不装弹:kickoff 消息(目标正文)本身就是第 0 轮,它的收敛自然接第 1 轮
     expect(screen.getByText("0/256")).toBeInTheDocument();
-    expect(mocks.continue).toHaveBeenCalledTimes(0);
+    expect(mocks.prompt).toHaveBeenCalledTimes(0);
     // active 态视觉:成功色左边框 + 停止按钮在位(内联样式含 var() 原样断言,不依赖 jsdom 解析变量)
     expect(container.firstElementChild?.getAttribute("style")).toContain("var(--color-accent-success)");
     expect(screen.getByTitle("停止")).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
 
     // kickoff 回合收敛 → 第 1 轮续跑
     emit({ type: "agentSettled" });
-    expect(mocks.continue).toHaveBeenCalledTimes(1);
+    expect(mocks.prompt).toHaveBeenCalledTimes(1);
     expect(screen.getByText("1/256")).toBeInTheDocument();
   });
 
@@ -128,7 +128,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     expect(container.firstElementChild?.getAttribute("style")).toContain("var(--color-accent-warning)");
     expect(container.querySelector('[data-goal-phase="paused"]')).not.toBeNull();
     emit({ type: "agentSettled" });
-    expect(mocks.continue).toHaveBeenCalledTimes(0); // 暂停不续跑
+    expect(mocks.prompt).toHaveBeenCalledTimes(0); // 暂停不续跑
   });
 
   it("恢复:点按钮 → 立即补发一轮续跑(DOM 上见新轮次)", async () => {
@@ -140,7 +140,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
 
     // DOM 点击恢复:空闲即装弹,不用等下一次回合收敛
     await act(async () => { fireEvent.click(screen.getByTitle("恢复")); });
-    expect(mocks.continue).toHaveBeenCalledTimes(1); // 恢复轮
+    expect(mocks.prompt).toHaveBeenCalledTimes(1); // 恢复轮
     expect(screen.getByText("1/256")).toBeInTheDocument();
   });
 
@@ -162,7 +162,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
 
     // 下次续跑提示用新目标
     emit({ type: "agentSettled" });
-    const last = mocks.continue.mock.calls[mocks.continue.mock.calls.length - 1][0];
+    const last = mocks.prompt.mock.calls[mocks.prompt.mock.calls.length - 1][0];
     expect(last).toContain("改过的新目标");
   });
 
@@ -190,7 +190,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     expect(mocks.updateHeader).toHaveBeenLastCalledWith("/p/s.jsonl", { custom: { goal: null } });
 
     emit({ type: "agentSettled" });
-    expect(mocks.continue).toHaveBeenCalledTimes(0); // 关闭后不再续跑
+    expect(mocks.prompt).toHaveBeenCalledTimes(0); // 关闭后不再续跑
   });
 
   it("完成态(achieved):展示「目标已完成」,不再有停/恢复/编辑入口,只剩关闭", async () => {

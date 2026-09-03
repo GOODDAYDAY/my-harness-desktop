@@ -392,7 +392,6 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
     async deleteBookmark(): Promise<void> {}
     async abort(): Promise<void> {}
-    async continue(): Promise<void> { this.calls.push("continue"); }
   }
   const dshSource: KernelModelSource = {
     listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
@@ -447,23 +446,19 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     expect(backend.calls.filter((c) => c === "setSessionName")).toHaveLength(1);
   });
 
-  it("重开历史 dsh 会话续发:中立层有历史 → 发送前先 continue 恢复持久化会话(id collision 补面)", async () => {
+  it("prompt 路径不调任何 continue(契约已删;dsh 重开载入内建于适配器,dsh-backend.test.ts 覆盖)", async () => {
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
     const created: string[] = [];
     const backends: { sessionId?: string }[] = [];
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
     const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
     s.setContext(CWD, null);
-    // 第一发:新会话(中立层空)→ 不 continue。
     await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
-    const backend = backends[0] as unknown as { calls: string[] };
-    expect(backend.calls).not.toContain("continue"); // 新会话无历史,不 continue
-    backend.calls.length = 0;
-    // 模拟重开:同会话继续发(中立层已有历史)→ 先 continue 再 sendMessage。
     await s.prompt("第二发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
-    expect(backend.calls).toContain("continue");
-    expect(backend.calls[backend.calls.indexOf("continue") - 1]).not.toBe("sendMessage"); // continue 在 sendMessage 之前
-    expect(backend.calls).toContain("sendMessage");
+    const backend = backends[0] as unknown as { calls: string[] };
+    // 发送链路只有 sendMessage:continue 意图已从契约删除(fake 里也没有这个方法可调)
+    expect(backend.calls.filter((c) => c === "sendMessage")).toHaveLength(2);
+    expect(backend.calls).not.toContain("continue");
   });
 
   it("dsh 第二发:进程模型未变 → 不重发 session/setModel(无快照面内核的已生效真相源 = 起进程模型)", async () => {

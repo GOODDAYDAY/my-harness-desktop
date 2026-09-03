@@ -176,24 +176,6 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     await this.adapter.send(buildAbortCommand(), { timeoutMs: ABORT_TIMEOUT_MS });
   }
 
-  /** 继续执行（第八意图）：pi 无语义化 continue，适配器按在飞状态分流——
-   *  有在飞回合 → followUp 排队(回合末消费);空闲 → prompt 直接起回合。
-   *  根因:pi 的 followUp 只入队(pi-agent-core: "run only after the agent would otherwise stop"),
-   *  空闲时无条件 followUp = 消息挂进队列永不被消费(goal 首轮续跑曾因此卡死在 1/256)。
-   *  text 缺省用通用「继续」提示;goal 续跑传入具体 objective 文案。 */
-  async continue(text?: string): Promise<void> {
-    const content = text ?? "继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。";
-    let busy = false;
-    try {
-      const res = await this.adapter.send({ type: "get_state" } as RpcCommand);
-      busy = !!(res.success && (res.data as { isStreaming?: boolean } | undefined)?.isStreaming);
-    } catch {
-      busy = false; // 状态探测失败按空闲处理(prompt 直发,忙了还有 sendMessage 的 followUp 兜底)
-    }
-    if (busy) await this.followUp(content);
-    else await this.sendMessage(content);
-  }
-
   /** pi 专属 fork(带 position + cancelled 语义):返回 RpcResponse,SessionStore 查 cancelled 后自行对账。
    *  与中性 BaseBackend.fork(返回 lineageId)并存——后者给新 lineage API 用,本方法给现有 SessionTreeApi。 */
   forkCommand(entryId: string, position?: "before" | "at"): Promise<RpcResponse> {

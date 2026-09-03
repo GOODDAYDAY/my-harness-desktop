@@ -55,28 +55,6 @@ describe("PiBackend", () => {
     expect(sent[0]).toMatchObject({ type: "set_model", provider: "p", modelId: "m" });
   });
 
-  it("continue 空闲发 prompt 起回合(此前无条件 followUp,空闲时只入队不消费,goal 首轮卡死)", async () => {
-    const { adapter, sent } = fakeAdapter();
-    await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).continue();
-    // fakeAdapter 的 get_state 无 isStreaming → 空闲 → prompt
-    expect(sent.map((c) => c.type)).toEqual(["get_state", "prompt"]);
-  });
-
-  it("continue 在飞发 follow_up 排队(回合末消费)", async () => {
-    const { adapter, sent } = fakeAdapter();
-    const a = adapter as unknown as { send: (cmd: RpcCommand) => Promise<RpcResponse> };
-    const orig = a.send;
-    a.send = async (cmd: RpcCommand) => {
-      if (cmd.type === "get_state") {
-        sent.push(cmd);
-        return { type: "response", success: true, data: { isStreaming: true } } as RpcResponse;
-      }
-      return orig(cmd);
-    };
-    await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).continue();
-    expect(sent.map((c) => c.type)).toEqual(["get_state", "follow_up"]);
-  });
-
   it("sendMessage 撞「already processing」自动降级 followUp 排队(用户消息不再丢)", async () => {
     const { adapter, sent } = fakeAdapter();
     const a = adapter as unknown as { send: (cmd: RpcCommand) => Promise<RpcResponse> };

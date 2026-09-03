@@ -878,18 +878,6 @@ export class SessionStore implements
     return this.neutralStore?.get(proc.neutralSessionId) ?? null;
   }
 
-  /** 中立层是否已有历史(任一 lineage 有 entry):用于判「重开历史会话续聊」vs「新会话」。
-   *  重开时 dsh 新进程无法经 session/prompt 加载磁盘日志,需先 continue 恢复(见 prompt)。
-   *  只数对话内容条目(user/assistant/toolResult):divider 等元条目(模型/思考强度分隔线)
-   *  不算历史——合成分隔线双落点(视图流+中立层)后,新会话首发的 model_change 分隔线
-   *  曾把「还没说过话的新会话」误判成有历史 → 首发就先 continue(dsh 补面误触发,回归)。 */
-  private neutralHasHistory(proc: SessionProc): boolean {
-    const session = this.readNeutral(proc);
-    if (!session) return false;
-    return session.lineages.some((l) =>
-      l.entries.some((e) => e.message.role === "user" || e.message.role === "assistant" || e.message.role === "toolResult"));
-  }
-
   /** 中立层的写:读 → 纯函数 → 写,不 mutate 持久化对象。
    *  entry 缺 neutralEntryId 时由 appendNeutralEntryWithHeader 按 seq 生成。
    *  append 即内容变更 → 列表行 header 字段(lastMessage/lastEntryId/updatedAt)随 header 一并回填。 */
@@ -1234,15 +1222,8 @@ export class SessionStore implements
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     // 惰性物化(§kernel-forkless §15.1):活跃 lineage 未物化(fork 后)则先 seed 投影再发。
     await this.materializeActiveLineage(proc);
-    // 重开历史 dsh 会话续聊(§7.6 显式降级的补面):dsh 的 session/prompt 只新建空会话、不加载
-    // 磁盘日志——app 重启后重开旧会话再发,直接 prompt 撞 "id collision"。先经 session/continue
-    // 把持久化会话载入新进程(getOrResumeSession 走 ctx.agents.resume 重放日志),再 prompt 命中
-    // 内存会话即续上。仅对无 pi 运行时切模能力的内核(能力探测,非内核身份分支)且中立层已有
-    // 历史时触发;旧运行时缺 session/continue → requestSession 记缺面并抛清晰错误,这里降级
-    // 为原 session/prompt 路径(id collision 以其原错误显形,不静默吞、也不引入新崩)。
-    if (!proc.backend.capabilities.pi && this.neutralHasHistory(proc)) {
-      await proc.backend.continue?.().catch(() => { /* 缺面降级,见上 */ });
-    }
+    // 重开历史 dsh 会话续聊的载入已内建进 DshBackend.sendMessage(适配器内部细节,见
+    // dsh-backend.ts ensureSessionLoaded)——发送面在此不感知。
     // 中立层先写 user entry(message + display):展示元数据归中立层,不进后端投影(neutral-first §10)。
     this.appendNeutral(proc, { neutralEntryId: "", message: { role: "user", content: text }, display });
     await proc.backend.sendMessage(text, images);
@@ -1607,39 +1588,6 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) return;
     await this.asPi(proc).abortRetry();
-  }
-
-  /** 继续执行（第八意图）：异常停机后原地续跑，不 fork、不重发旧消息。
-   *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核显式抛错。
-   *  text 可选：要注入的续跑提示（goal 续跑用），不落 user 消息（followUp/session/continue 语义）。
-   *  prefs 可选:renderer 三级解析的模型偏好(全新会话首轮续跑也有归属)。
-   *  进程未起兜底(根因修复):模型走「点选=pending、发送=落盘」时,从未发送的会话没有活进程,
-   *  continue 曾直接抛错被 goal 引擎吞掉(首轮永卡 1/256)。此处 prefs 优先、中立头行兜底,
-   *  ensureForSend 懒起进程(与 prompt 的未启动路径同源),查无实据才显式报错。 */
-  async continue(text?: string, prefs?: SessionModelPrefs): Promise<void> {
-    let proc = this.activeProc();
-    if (!proc || !proc.backend.alive) {
-      // 进程未起:renderer 三级解析的 prefs 优先(全新会话首轮续跑也有模型归属),
-      // 否则读中立头行(重开历史会话续聊)——两路都没有才显式报错。
-      const fromPrefs = prefs?.provider && prefs?.modelId && prefs.kernel
-        ? { provider: prefs.provider, modelId: prefs.modelId, kernel: prefs.kernel }
-        : null;
-      const resolved = fromPrefs ?? (() => {
-        const ns = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
-        const headerPrefs = ns ? parseSessionModelPrefs(this.neutralStore?.get(ns)?.header.custom ?? undefined) : null;
-        return headerPrefs?.provider && headerPrefs?.modelId && headerPrefs.kernel
-          ? { provider: headerPrefs.provider, modelId: headerPrefs.modelId, kernel: headerPrefs.kernel }
-          : null;
-      })();
-      if (resolved) {
-        await this.setModel(resolved.provider, resolved.modelId, resolved.kernel); // 内部 ensureForSend 起进程
-        proc = this.activeProc();
-      }
-    }
-    if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
-    if (!proc.backend.continue) throw new Error("当前内核不支持继续执行");
-    await proc.backend.continue(text);
-    proc.touched = true;
   }
 
   // ============ ModelApi ============

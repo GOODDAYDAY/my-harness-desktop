@@ -36,7 +36,7 @@ export interface BackendContext {
  *
  * - 15 条必实现意图全部声明为 abstract,由 PiBackend / DshBackend 各自 override——
  *   加第 N 个内核时编译器逼着它实现全量意图,漏一条就编译错,杜绝静默缺面。
- * - 4 条可缺面意图(listTools / answerQuestion / continue / setThinkingLevel)给缺面默认:
+ * - 3 条可缺面意图(listTools / answerQuestion / setThinkingLevel)给缺面默认:
  *   listTools 返回 null(壳走降级),其余抛错(不静默吞、不伪造成功)。
  *
  * 本类不 import 任何具体内核,只依赖圆心契约 + 中性类型。
@@ -111,11 +111,6 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   /** 缺面默认:内核不支持交互式提问 → 显式抛错,不静默吞、不伪造成功。子类可 override。 */
   answerQuestion(_questionId: string, _answers: QuestionAnswer[]): Promise<void> {
     return Promise.reject(new Error("当前内核不支持交互式提问"));
-  }
-
-  /** 缺面默认:内核不支持「继续执行」→ 显式抛错,不静默吞、不伪造成功。子类可 override。 */
-  continue(_text?: string): Promise<void> {
-    return Promise.reject(new Error("当前内核不支持继续执行"));
   }
 
   /** 缺面默认:内核不支持思考强度运行时切换 → 显式抛错,不静默吞、不伪造成功(§7.6)。

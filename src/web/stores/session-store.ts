@@ -11,7 +11,7 @@
 // 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent, KernelId } from "@my-harness-desktop/shared";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent, KernelId, ImageInput, DisplayMeta } from "@my-harness-desktop/shared";
 import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/shared";
 import { useUiStore } from "./ui-store";
 
@@ -183,18 +183,21 @@ async function resolveSessionModelPrefs(cwd: string): Promise<SessionModelPrefs 
   return undefined;
 }
 
-/** 续跑(第八意图)的 renderer 入口:三级偏好解析 + 透传服务端 continue。
- *  goal 续跑在全新会话上首轮也需要模型归属——此前 continue 不带偏好,服务端读空头行
- *  只能抛「会话未启动」,goal 首轮永卡(已实测)。偏好随 text 一次性透传,服务端 setModel 对齐。 */
-export async function continueSession(text?: string): Promise<void> {
-  const cwd = useUiStore.getState().currentCwd;
-  let prefs: SessionModelPrefs | undefined;
-  try {
-    prefs = cwd ? await resolveSessionModelPrefs(cwd) : undefined;
-  } catch {
-    prefs = undefined; // 偏好解析失败不阻断续跑——服务端还有头行/已起进程两条路
+/** 系统发送面（插件自驱动发送的唯一入口，goal 续跑/原地续跑都走这里）：三级偏好解析
+ *  + 透传服务端 prompt。与用户管线（sendMessage）的区别：不过输入框管线——无乐观回显、
+ *  无待发队列、无工具闸拼装。prefs 缺省时框架解析（pending>头>兜底），插件不传也有归属——
+ *  全新会话的首轮发送也需要模型归属，空偏好服务端只能抛「会话未启动」。 */
+export async function promptSession(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs): Promise<void> {
+  let p = prefs;
+  if (!p) {
+    const cwd = useUiStore.getState().currentCwd;
+    try {
+      p = cwd ? await resolveSessionModelPrefs(cwd) : undefined;
+    } catch {
+      p = undefined; // 偏好解析失败不阻断发送——服务端还有头行/已起进程两条路
+    }
   }
-  await window.kernel.sessions.continue(text, prefs);
+  await window.kernel.sessions.prompt(text, images, display, p);
 }
 
 /** 流式 message 事件(Start/Update/End)的计时归一。

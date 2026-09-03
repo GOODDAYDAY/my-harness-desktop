@@ -195,7 +195,6 @@ export const IPC = {
     abortRetry: "session:abortRetry",
     clone: "session:clone",
     compact: "session:compact",
-    continue: "session:continue",
     copySession: "session:copySession",
     cycleModel: "session:cycleModel",
     cycleThinkingLevel: "session:cycleThinkingLevel",
