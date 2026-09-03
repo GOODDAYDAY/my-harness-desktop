@@ -17,6 +17,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { FileSystemSkillProvider } from "@deepseek-ai/dsh-skill-filesystem";
 import { HarnessSdkJsonRpcServer } from "@deepseek-ai/dsh-sdk-jsonrpc-server";
+import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { KNOWN_SESSION_EVENT_TYPES } from "@deepseek-ai/dsh-session";
 
 export const name = "my-harness-fit-dsh-extension";
@@ -42,33 +43,41 @@ if (!KNOWN_SESSION_EVENT_TYPES.has("session/meta")) {
 }
 
 // ==============================================================================================
-// 5. session/setModel 补面 —— 旧 dsh(0.1.1-rc.2)的 sdk-jsonrpc-server 只有 3 个 request 方法,
-//    缺 session/setModel(运行时切模型,模型停在 initialize 握手值)。deepseek-harness 源码已补
-//    (commit 5d70fb1883),但 npm 未发版。这里在进程启动加载本插件时给 server 原型打补丁:
-//    拦截 session/setModel 走 dispose+flush+resume 热切,与 server 实现同款。内核发版追上
-//    (prototype 上出现 setModel 方法)即自动跳过,届时此段删除(与 pi patch-rpc-mode 同款临时桥)。
+// 5. session/setModel 原地热切 —— 给全部运行时版本提供「比原生更强」的切模型语义
+//    (docs/model-switching.md §11.1):
+//    - 0.1.1-rc.2 的 sdk-jsonrpc-server 只有 3 个 request 方法,没有 session/setModel;
+//    - 上游 master 已补(commit 5d70fb1883),但实现是 dispose+flush+resume(agent 级重建);
+//    - 本补丁统一升级为 installModelSelection 原地热切——与 dsh-web 的 session.selectModel
+//      同一个 dsh-agent 核心公开机制:不 dispose、不 resume、agent 与进程不动,下一个
+//      step 生效。补丁语义严格强于原生,因此不做「原生存在即跳过」;等原生也长出
+//      in-place 热切再退役(届时把接管判据换成原生实现的特征检测)。
+//    只对已物化会话生效:sessions 表里没有 record = 会话未惰性创建,维持抛
+//    「unknown session」(壳对未物化会话的模型失配走重建,根本不会调到这里)。
 //    纯代码补面,随 cordis.yml 动态装载,不预编译、不落中间产物。
 // ==============================================================================================
 
-if (typeof HarnessSdkJsonRpcServer.prototype.setModel !== "function") {
-  const __dshServerHandleRequest = HarnessSdkJsonRpcServer.prototype.handleRequest;
-  HarnessSdkJsonRpcServer.prototype.handleRequest = async function (method, params) {
-    if (method === "session/setModel") {
-      const record = this.sessions.get(params.sessionId);
-      if (!record) throw new Error(`unknown session: ${params.sessionId}`);
-      const sessionId = record.handle.agent.id;
-      await this.ctx.sessions.flush(record.handle.agent.session);
-      await record.handle.dispose();
-      const handle = await this.ctx.agents.resume({
-        resumeSessionId: sessionId,
-        agentOptions: { provider: params.provider, model: params.modelId },
-      });
-      this.sessions.set(params.sessionId, { handle });
-      return {};
-    }
+// agent → ModelSelectionRef(installModelSelection 的持有方)。每 agent 首次 setModel 时
+// 安装一次;SDK server 部署里没有别的 selection 安装者(apiproxy 的 selection 装在
+// web host 进程,不在这),WeakMap 即防双安装。
+const modelSelectionRefs = new WeakMap();
+
+const __dshServerHandleRequest = HarnessSdkJsonRpcServer.prototype.handleRequest;
+HarnessSdkJsonRpcServer.prototype.handleRequest = async function (method, params) {
+  if (method !== "session/setModel") {
     return __dshServerHandleRequest.call(this, method, params);
-  };
-}
+  }
+  const record = this.sessions.get(params.sessionId);
+  if (!record) throw new Error(`unknown session: ${params.sessionId}`);
+  const agent = record.handle.agent;
+  let ref = modelSelectionRefs.get(agent);
+  if (!ref) {
+    ref = { current: undefined, assembled: undefined };
+    modelSelectionRefs.set(agent, ref);
+    installModelSelection(agent.ctx, ref);
+  }
+  ref.current = { provider: params.provider, model: params.modelId };
+  return {};
+};
 
 // ==============================================================================================
 // 1. ask —— ask_user_question 工具(文件侧车桥,同轮回填)

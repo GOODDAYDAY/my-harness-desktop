@@ -67,6 +67,15 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     expect(onMissing).toHaveBeenCalledWith("session/setModel");
   });
 
+  it("supportsRuntimeSetModel 能力位:未探测过为 true(乐观),记缺面后翻 false", async () => {
+    const { t, b } = makeBackend();
+    expect(b.supportsRuntimeSetModel).toBe(true);
+    t.errors.set("session/setModel", unknownMethod("session/setModel"));
+    await b.setModel("p", "m2");
+    expect(b.capabilities.dsh.missing.has("session/setModel")).toBe(true);
+    expect(b.supportsRuntimeSetModel).toBe(false); // 壳据此把模型失配回落成停旧起新
+  });
+
   it("非缺面错误(参数错)照常外抛,不记缺面", async () => {
     const { t, b } = makeBackend();
     t.errors.set("session/getTree", new DshRpcError("bad boundary", -1, "session/getTree"));

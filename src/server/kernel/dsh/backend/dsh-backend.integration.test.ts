@@ -131,4 +131,60 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
       await backend.stop().catch(() => {});
     }
   }, 90_000);
+
+  it("原地热切:已物化会话 setModel 换模型,进程不死、缺面不记、下条消息走新模型(docs/model-switching.md §11)", async () => {
+    const backend = createDshBackend({
+      cwd: process.cwd(),
+      agentDir: join(homedir(), ".pi"),
+      kernel: "dsh",
+      neutralSessionId: "hot-switch-integration",
+      provider: "us-new",
+      model: "bifrost/tencent/deepseek-v4-pro",
+      ephemeral: true,
+      cliPath: CLI,
+      cordisConfig: CORDIS,
+      env: { US_NEW_API_KEY: resolveApiKey()! },
+    });
+
+    /** 等一条无 error 的 assistant messageEnd(超时/出错即失败)。 */
+    const waitReply = (): Promise<void> => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("reply timeout")), 60_000);
+      const off2 = backend.onEvent((event) => {
+        if (event.type === "messageEnd") {
+          const msg = (event as { message?: { role?: string; error?: unknown } }).message;
+          if (msg?.role === "assistant" && !msg.error) { clearTimeout(timer); off2(); resolve(); }
+          else if (msg?.error) { clearTimeout(timer); off2(); reject(new Error("assistant error")); }
+        }
+      });
+    });
+
+    const events: SessionEvent[] = [];
+    const off = backend.onEvent((e) => events.push(e));
+    try {
+      await backend.start();
+      // 第一条:物化会话(sessions 表有 record,热切才有挂载点)
+      const r1 = waitReply();
+      await backend.sendMessage("ping");
+      await r1;
+      // 热切:同 provider 换模型——补丁(或原生)应答成功,不记缺面、能力位保持 true
+      await backend.setModel("us-new", "bifrost/dashscope/kimi-k3");
+      expect(backend.capabilities.dsh.missing.has("session/setModel")).toBe(false);
+      expect(backend.supportsRuntimeSetModel).toBe(true);
+      // 进程不死(热切不重启:桌面侧可观察的边界就是进程/传输不动)
+      expect(backend.alive).toBe(true);
+      // 第二条:翻译器从 request/header 派生 kimi-k3 的 model_change 分隔线 = 新模型真实生效
+      events.length = 0;
+      const r2 = waitReply();
+      await backend.sendMessage("ping again");
+      await r2;
+      const divider = events.find((e) =>
+        e.type === "entryAppended"
+        && (e as { entry?: { type?: string; modelId?: string } }).entry?.type === "model_change"
+        && (e as { entry?: { modelId?: string } }).entry?.modelId === "bifrost/dashscope/kimi-k3");
+      expect(divider).toBeDefined();
+    } finally {
+      off();
+      await backend.stop().catch(() => {});
+    }
+  }, 120_000);
 });

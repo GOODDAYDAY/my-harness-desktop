@@ -721,8 +721,155 @@ describe("fork:父 lineage 尊重调用方指定(根因修复回归——此前�
   });
 });
 
-describe("sessionStart 携带 neutralSessionId(fork/bookmark 入口水合的命脉)", () => {
-  it("setContext 合成 sessionStart:事件带 proc.neutralSessionId", async () => {
+describe("dsh 热切与缺面回落(docs/model-switching.md §11,断言落在机制上:重启没重启)", () => {
+  const dshTwoModels: KernelModelSource = {
+    listModels: () => [
+      { kernel: "dsh", provider: "us-new", id: "dsh-model-a", name: "dsh-model-a" },
+      { kernel: "dsh", provider: "us-new", id: "dsh-model-b", name: "dsh-model-b" },
+    ],
+  };
+  /** 双内核 catalog 工厂:dsh 惰性(newSessionId=null),pi 走真实目录。 */
+  const dualCatalogFactory: SessionCatalogFactory = {
+    create: (kernel) => kernel === "dsh"
+      ? ({ kernel: "dsh", newSessionId: () => null, projectionPath: (_cwd: string, l: string) => l } as unknown as ReturnType<SessionCatalogFactory["create"]>)
+      : new PiSessionCatalog(dir),
+  };
+
+  /** dsh 热切假后端(补丁在位的形态):supportsRuntimeSetModel=true,记录调用序列。
+   *  注意能力位用 getter 不用字段——字段会在实例上落成自有属性,子类的 getter override
+   *  会被它永久遮蔽(缺面回落用例的坑)。 */
+  class FakeDshHotBackend {
+    alive = false;
+    capabilities = { dsh: { missing: new Set<string>(), onMissing: null as null | ((m: string) => void) } };
+    get supportsRuntimeSetModel(): boolean { return true; }
+    calls: string[] = [];
+    constructor(public opts?: { neutralSessionId?: string }) {}
+    get sessionId(): string { return this.opts?.neutralSessionId ?? "dsh-s1"; }
+    async start(): Promise<void> { this.alive = true; this.calls.push("start"); }
+    async stop(): Promise<void> { this.alive = false; this.calls.push("stop"); }
+    onEvent(): () => void { return () => {}; }
+    async sendMessage(): Promise<void> { this.calls.push("sendMessage"); }
+    async setModel(p?: string, m?: string): Promise<void> { this.calls.push(`setModel:${p}/${m}`); }
+    async setSessionName(): Promise<void> {}
+    async seed(): Promise<string> { return "seeded"; }
+    async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+    async getEntries(): Promise<NeutralMessage[]> { return []; }
+    async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
+    async deleteBookmark(): Promise<void> {}
+    async abort(): Promise<void> {}
+    async continue(): Promise<void> { this.calls.push("continue"); }
+  }
+
+  function makeHotStore(): { s: SessionStore; created: { kernel: string; model?: string }[]; backends: FakeDshHotBackend[] } {
+    const created: { kernel: string; model?: string }[] = [];
+    const backends: FakeDshHotBackend[] = [];
+    const factory: BackendFactory = {
+      create: (opts) => {
+        created.push({ kernel: opts.kernel, model: opts.model });
+        const b = new FakeDshHotBackend({ neutralSessionId: opts.neutralSessionId });
+        backends.push(b);
+        return b as unknown as BaseBackend;
+      },
+    };
+    const s = new SessionStore(factory, dualCatalogFactory, dir, undefined, undefined, new ModelCatalog([dshTwoModels]));
+    s.setContext(CWD, null);
+    return { s, created, backends };
+  }
+
+  it("dsh 热切:已物化会话换模型 → 进程不重启、setModel 恰好一次、分隔线恰好一条、账本跟到新模型", async () => {
+    const { s, created, backends } = makeHotStore();
+    await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model-a", thinkingLevel: "", kernel: "dsh" });
+    expect(created).toHaveLength(1);
+    const b1 = backends[0];
+    const dividerTypes: string[] = [];
+    s.onEvent((e) => {
+      if (e.type === "entryAppended") {
+        const t = (e as { entry?: { type?: string } }).entry?.type;
+        if (t) dividerTypes.push(t);
+      }
+    });
+    b1.calls.length = 0;
+    await s.setModel("us-new", "dsh-model-b", "dsh");
+    // 机制断言:进程不重启(stop/start 零调用)、热切 RPC 恰好一次、分隔线恰好一条
+    expect(b1.calls).not.toContain("stop");
+    expect(b1.calls).not.toContain("start");
+    expect(b1.calls.filter((c) => c === "setModel:us-new/dsh-model-b")).toHaveLength(1);
+    expect(dividerTypes.filter((t) => t === "model_change")).toHaveLength(1);
+    expect(created).toHaveLength(1); // 没起新进程
+    // 账本更新:下一条同模型发送判「已生效」,不再重发 setModel
+    b1.calls.length = 0;
+    await s.prompt("第二发", undefined, undefined, { provider: "us-new", modelId: "dsh-model-b", thinkingLevel: "", kernel: "dsh" });
+    expect(b1.calls).toContain("sendMessage");
+    expect(b1.calls.filter((c) => c.startsWith("setModel"))).toHaveLength(0);
+  });
+
+  it("dsh 缺面回落:热切 RPC 撞缺面 → 现场停旧起新,新进程握手带目标模型", async () => {
+    /** 懒探测形态假后端:setModel 撞 unknown method → 记缺面 → 能力位翻 false。 */
+    class FakeDshMissingBackend extends FakeDshHotBackend {
+      override async setModel(): Promise<void> {
+        this.calls.push("setModel");
+        this.capabilities.dsh.missing.add("session/setModel");
+      }
+      override get supportsRuntimeSetModel(): boolean {
+        return !this.capabilities.dsh.missing.has("session/setModel");
+      }
+    }
+    const created: { kernel: string; model?: string }[] = [];
+    const backends: FakeDshHotBackend[] = [];
+    const factory: BackendFactory = {
+      create: (opts) => {
+        created.push({ kernel: opts.kernel, model: opts.model });
+        const b = new FakeDshMissingBackend({ neutralSessionId: opts.neutralSessionId });
+        backends.push(b);
+        return b as unknown as BaseBackend;
+      },
+    };
+    const s = new SessionStore(factory, dualCatalogFactory, dir, undefined, undefined, new ModelCatalog([dshTwoModels]));
+    s.setContext(CWD, null);
+    await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model-a", thinkingLevel: "", kernel: "dsh" });
+    const b1 = backends[0];
+    await s.setModel("us-new", "dsh-model-b", "dsh");
+    // b1:热切尝试一次 → 撞缺面 → 被停;b2:带目标模型握手起来
+    expect(b1.calls.filter((c) => c === "setModel")).toHaveLength(1);
+    expect(b1.calls).toContain("stop");
+    expect(created).toHaveLength(2);
+    expect(created[1]).toMatchObject({ kernel: "dsh", model: "dsh-model-b" });
+    const b2 = backends[1];
+    b2.calls.length = 0;
+    await s.prompt("第二发", undefined, undefined, { provider: "us-new", modelId: "dsh-model-b", thinkingLevel: "", kernel: "dsh" });
+    expect(b2.calls).toContain("sendMessage");
+    expect(b2.calls.filter((c) => c.startsWith("setModel"))).toHaveLength(0);
+  });
+
+  it("dsh 未物化会话换模型:不走热切 RPC,直接停旧起新(握手是唯一定模点)", async () => {
+    const { s, created, backends } = makeHotStore();
+    await s.setModel("us-new", "dsh-model-a", "dsh"); // 起进程,未发消息(touched=false)
+    expect(created).toHaveLength(1);
+    const b1 = backends[0];
+    b1.calls.length = 0;
+    await s.setModel("us-new", "dsh-model-b", "dsh");
+    expect(b1.calls).toContain("stop");
+    expect(b1.calls.filter((c) => c.startsWith("setModel"))).toHaveLength(0);
+    expect(created).toHaveLength(2);
+    expect(created[1]).toMatchObject({ kernel: "dsh", model: "dsh-model-b" });
+  });
+
+  it("pi 回归:未物化会话换模型不重启,set_model 热切照发(文件型内核不落入惰性重建)", async () => {
+    let created = 0;
+    const factory: BackendFactory = {
+      create: (opts) => { created++; return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
+    };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath); // 起进程,touched=false
+    adapter.sent = [];
+    await s.setModel("p", "b", "pi");
+    expect(created).toBe(1); // 不重建
+    expect(adapter.sent).toContain("set_model"); // 热切 RPC 照发
+  });
+});
+
+describe("sessionStart 携带 neutralSessionId(fork/bookmark 入口水合的命脉)", () => {  it("setContext 合成 sessionStart:事件带 proc.neutralSessionId", async () => {
     const events: { type: string; neutralSessionId?: string }[] = [];
     const off = store.onEvent((e) => events.push(e as { type: string; neutralSessionId?: string }));
     store.setContext(CWD, sessionPath); // 激活即推 synthetic sessionStart(进程已在 beforeEach 起过)
