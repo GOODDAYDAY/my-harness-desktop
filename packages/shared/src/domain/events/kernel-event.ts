@@ -60,6 +60,38 @@ export interface QuestionRequestEvent {
   questions: Question[];
 }
 
+/**
+ * 挂起提问记录(壳持久化的请求单;进程生死不影响其存续)。
+ * 依据 docs/design/ask-design.md §3.2:提问 = 壳持有的持久请求单,内核只是发起方与投递通道。
+ * 无 TTL、无 expired——死问句只有一种:store 里查无此单。
+ */
+export interface PendingQuestionRecord {
+  /** 内核铸造的提问 id(pi=extension_ui 帧 id;dsh=扩展 randomUUID)。 */
+  requestId: string;
+  /** 发起内核(答案的归宿内核;路由按它找槽位,不读全局 activeKernel 偶然态)。 */
+  kernel: KernelId;
+  /** 归属会话中立主键(水合/级联删除的 join 键)。 */
+  neutralSessionId: string;
+  /** 会话 cwd(dsh 续路定位会话桶用)。 */
+  cwd: string;
+  /** 发起时的 proc key(pi=会话文件路径;dsh=投影地址)。诊断 + 续路定位用。 */
+  sessionKey: string;
+  /** 发起进程的出生证(SessionProc 每次创建/换绑生成)。answer 时比对,判定活路/续路。 */
+  procNonce: string;
+  /** 发起提问的 ask_user_question 工具调用 id(壳从 toolCallStart 对账捕获;卡片精确锚定)。 */
+  toolCallId: string | null;
+  /** 发起时的生效模型(续路回填消息的 prefs 路由用——回到提问的归宿内核,不读全局偶然态)。 */
+  model?: { provider: string; modelId: string };
+  /** 中性问题数组;id 已按 toolCallStart.args.questions 对账为模型出题时的真实 id。 */
+  questions: Question[];
+  status: "pending" | "answered" | "cancelled";
+  answers?: QuestionAnswer[];
+  createdAt: string;
+  answeredAt?: string;
+  /** 答案是否已成功送达内核(落账与送达分离:落账先,送达后补标;水合据此补投)。 */
+  delivered?: boolean;
+}
+
 // ============ 来源二:desktop 自产 ============
 
 /** 进程退出(期望退出或崩溃)。 */

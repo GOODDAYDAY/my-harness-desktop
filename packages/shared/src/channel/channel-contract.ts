@@ -221,6 +221,8 @@ export const IPC = {
     readToolConfig: "session:readToolConfig",
     rename: "session:rename",
     answerQuestion: "session:answerQuestion",
+    /** 读激活会话的挂起提问记录(ask 续问;卡片复活用,docs/design/ask-design.md §3.2)。 */
+    pendingQuestions: "session:pendingQuestions",
     listTools: "session:listTools",
     runBash: "session:runBash",
     setAutoCompaction: "session:setAutoCompaction",

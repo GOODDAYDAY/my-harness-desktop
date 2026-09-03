@@ -2,12 +2,15 @@
 // ctx.sessions + sessionPersistence,所以目录/CRUD 经一个懒初始化的 dsh transport 走
 // JSON-RPC(session/list/get/rename/delete),不读 dsh 日志文件(壳不读内核存储不变量)。
 // transport 由 bootstrap 注入工厂(闭包捕获 dsh spawn 配置),首次目录操作时懒 spawn、之后复用。
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "@my-harness-desktop/shared";
 import type { ProjectStats, NeutralMessage } from "@my-harness-desktop/shared";
-import type { SessionCatalog, LineageTree, Anchor } from "@my-harness-desktop/shared";
+import type { SessionCatalog, LineageTree, Anchor, ToolResultWriteback } from "@my-harness-desktop/shared";
 import { cwdToBucketName } from "@my-harness-desktop/shared";
+import { withDirLock } from "../../../application/config/config-file";
 import type { JsonRpcTransport } from "../protocol/json-rpc";
 import { DSH_METHODS } from "../protocol/dsh-methods";
 
@@ -83,11 +86,100 @@ export class DshSessionCatalog implements SessionCatalog {
 
   rawFilePath(cwd: string, lineageId: string): string | null {
     // dsh 投影地址是裸 lineageId(坐标系,不是文件路径)——真实落盘形状是
-    // <sessionRoot>/<cwd 桶>/<lineageId>/session.jsonl.zstd(session-persistence-jsonl)。
-    // 根未注入或文件不存在(临时会话/未落盘)→ null,调用方显式降级(§7.6 不静默)。
+    // <sessionRoot>/<cwd 桶>/<lineageId>/session.jsonl(明文诊断模式,ask 续问起;
+    // 旧形态是 .zstd 压缩)。两种形态都认(存在才返回);根未注入 → null(显式降级)。
     if (!this.opts.sessionRoot) return null;
-    const p = join(this.opts.sessionRoot, cwdToBucketName(cwd), lineageId, "session.jsonl.zstd");
-    return existsSync(p) ? p : null;
+    const dir = join(this.opts.sessionRoot, cwdToBucketName(cwd), lineageId);
+    for (const name of ["session.jsonl", "session.jsonl.zstd"]) {
+      const p = join(dir, name);
+      if (existsSync(p)) return p;
+    }
+    return null;
+  }
+
+  /** 迟到的 toolResult 补写(ask 续路,docs/design/ask-design.md §5.2/§6.4):
+   *  直接编辑明文会话日志(<sessionRoot>/<cwd 桶>/<lineageId>/session.jsonl)追加
+   *  一行 tool/result 事件(形状照抄 dsh repair 的合法闭合件)。前提:发起进程已死
+   *  (调用方已停同槽位存活进程)——编辑发生在下一次 resume 的加载路径之前,repair 不抢先。
+   *  降级红线:压缩形态(.zstd)/文件不存在/锚点缺失 → 抛错,调用方降级用户消息通道,
+   *  不静默、不伪造。cwd 由调用方从记录带过来(catalog 不从 sessionId 反推桶)。 */
+  async appendToolResult(sessionId: string, toolCallId: string, outcome: ToolResultWriteback, cwd?: string): Promise<void> {
+    if (!this.opts.sessionRoot || !cwd) {
+      throw new Error("dsh 续路缺会话根或 cwd,显式降级");
+    }
+    const dir = join(this.opts.sessionRoot, cwdToBucketName(cwd), sessionId);
+    const file = join(dir, "session.jsonl");
+    if (!existsSync(file)) {
+      throw new Error(existsSync(join(dir, "session.jsonl.zstd"))
+        ? "dsh 会话日志是压缩形态(.zstd),续路写显式降级"
+        : `dsh 会话日志不存在: ${file}`);
+    }
+    await withDirLock(dir, async () => {
+      let content = readFileSync(file, "utf-8");
+      // 撕裂尾部截断:上次死亡留下的不完整末行,截到最后一个完整换行——并写回文件,
+      // 只截变量不写回 = 追加仍在撕裂尾之后(修复:test 抓到半截行残留)。
+      if (content.length > 0 && !content.endsWith("\n")) {
+        const lastNl = content.lastIndexOf("\n");
+        content = lastNl === -1 ? "" : content.slice(0, lastNl + 1);
+        writeFileSync(file, content, "utf-8");
+      }
+      let hasCall = false;
+      let hasResult = false;
+      let lastSeq = 0;
+      let callTurn = 0;
+      let callStep = 0;
+      let callSeq: number | null = null;
+      for (const line of content.split("\n")) {
+        const t = line.trim();
+        if (!t) continue;
+        try {
+          const j = JSON.parse(t) as { type?: unknown; seq?: unknown; data?: Record<string, unknown> };
+          if (typeof j.seq === "number" && j.seq > lastSeq) lastSeq = j.seq;
+          if (j.type === "tool/call" && String(j.data?.callId ?? "") === toolCallId) {
+            hasCall = true;
+            callSeq = typeof j.seq === "number" ? j.seq : null;
+            callTurn = typeof j.data?.turn === "number" ? j.data.turn : 0;
+            callStep = typeof j.data?.step === "number" ? j.data.step : 0;
+          }
+          if (j.type === "tool/result") {
+            const msg = j.data?.message as { content?: unknown[] } | undefined;
+            const block = (Array.isArray(msg?.content) ? msg!.content[0] : undefined) as Record<string, unknown> | undefined;
+            if (block && String(block.toolCallId ?? "") === toolCallId) hasResult = true;
+          }
+        } catch { /* 损坏行跳过 */ }
+      }
+      if (hasResult) return; // 幂等:已配对,不重复追加
+      if (!hasCall) throw new Error(`锚点不在该 lineage 日志: ${toolCallId}`);
+      const cancelled = outcome.cancelled === true;
+      const answers = cancelled ? [] : outcome.answers;
+      // 事件形状照抄 dsh repair 的合法闭合件(core/session/src/repair.ts):
+      // data.turn/step 是契约必填(session/types.ts 的 tool/result),surfaceOp 是 surface
+      // 事件的强制元数据,sourceEventSeqs 引用被闭合的 tool/call;isError:false + 真答案,
+      // cancelled 走 isError:true 同形。
+      const entry = {
+        type: "tool/result",
+        seq: lastSeq + 1,
+        time: Date.now(),
+        data: {
+          turn: callTurn,
+          step: callStep,
+          message: {
+            id: randomUUID().slice(0, 8),
+            role: "user",
+            source: { kind: "tool", callId: toolCallId },
+            content: [{
+              type: "tool-result",
+              toolCallId,
+              isError: cancelled,
+              content: [{ type: "text", text: cancelled ? "User cancelled the question" : JSON.stringify({ answers }) }],
+            }],
+          },
+        },
+        surfaceOp: "append",
+        ...(callSeq !== null ? { sourceEventSeqs: [callSeq] } : {}),
+      };
+      await appendFile(file, JSON.stringify(entry) + "\n", "utf-8");
+    });
   }
 
   async projectStats(cwd: string): Promise<ProjectStats> {

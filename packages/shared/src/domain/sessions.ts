@@ -22,7 +22,7 @@
 // 同一个激活会话——这是继承关系,不是组合关系。
 // 新内核命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
-import type { KernelEvent, QuestionAnswer, QuestionRequestEvent } from "./events/kernel-event";
+import type { KernelEvent, QuestionAnswer, QuestionRequestEvent, PendingQuestionRecord } from "./events/kernel-event";
 import type { LineageTree } from "./backend";
 import type { KernelId } from "./kernel";
 import type { DisplayMeta } from "./session-neutral";
@@ -352,6 +352,8 @@ export interface SessionsApi {
   onQuestion(cb: (req: QuestionRequestEvent) => void): () => void;
   /** 回答一次提问:把用户答案回填给当前内核。 */
   answerQuestion(requestId: string, answers: QuestionAnswer[]): Promise<void>;
+  /** 读激活会话的挂起提问记录(重启水合后卡片据此恢复交互态;docs/design/ask-design.md §3.2)。 */
+  getPendingQuestions(): Promise<PendingQuestionRecord[]>;
   /** 工具清单(可缺面):返回当前内核可用工具;null = 内核不支持工具发现(壳走降级)。 */
   listTools(): Promise<KnownToolInfo[] | null>;
   /** 订阅投影基线(start/switch/new 后每次推送一次)。 */
