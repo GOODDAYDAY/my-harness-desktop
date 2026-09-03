@@ -364,7 +364,7 @@ function TooltipButton({ tooltip, onClick, disabled, children }: {
     <Tooltip.Root delayDuration={1000}>
       <Tooltip.Trigger asChild>
         <span style={{ display: "inline-flex" }}>
-          <button onClick={onClick} disabled={disabled} style={iconBtn(disabled)}>
+          <button onClick={onClick} disabled={disabled} style={iconBtn(disabled)} aria-label={tooltip}>
             {children}
           </button>
         </span>
