@@ -10,7 +10,7 @@
     "themes": [
       {
         "id": "dark",
-        "name": "theme.dark",
+        "name": "Dark",
         "tokens": {
           "color.bg": "#0e0e11",
           "color.fg": "#e8e8eb",
@@ -52,7 +52,7 @@
       },
       {
         "id": "light",
-        "name": "theme.light",
+        "name": "Light",
         "tokens": {
           "color.bg": "#ffffff",
           "color.fg": "#1e1e2e",
@@ -83,7 +83,7 @@
       },
       {
         "id": "auto",
-        "name": "theme.auto",
+        "name": "Auto",
         "tokens": {},
         "base": "__auto__"
       }
