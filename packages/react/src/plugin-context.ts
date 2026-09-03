@@ -11,7 +11,7 @@ import type {
   ModelInfo, SessionStats, NeutralMessage, KnownToolInfo,
 } from "@my-harness-desktop/shared";
 import type { SessionEvent, SyncSnapshot } from "@my-harness-desktop/shared";
-import type { KernelEvent, QuestionRequestEvent, QuestionAnswer } from "@my-harness-desktop/shared";
+import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, PendingQuestionRecord } from "@my-harness-desktop/shared";
 import type { LineageTree, BookmarkSnapshot } from "@my-harness-desktop/shared";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -62,6 +62,7 @@ export function usePluginContext(): PluginContext {
     onKernelEvent: (cb) => window.kernel.sessions.onKernelEvent((e) => cb(e as KernelEvent)),
     onQuestion: (cb) => window.kernel.sessions.onQuestion((req) => cb(req as QuestionRequestEvent)),
     answerQuestion: (requestId, answers) => window.kernel.sessions.answerQuestion(requestId, answers as QuestionAnswer[]),
+    getPendingQuestions: () => window.kernel.sessions.getPendingQuestions() as Promise<PendingQuestionRecord[]>,
     listTools: () => window.kernel.sessions.listTools() as Promise<KnownToolInfo[] | null>,
     onSnapshot: (cb) => window.kernel.sessions.onSnapshot((s) => cb(s as SyncSnapshot)),
     list: (cwd) => window.kernel.sessions.list(cwd) as Promise<SessionInfo[]>,

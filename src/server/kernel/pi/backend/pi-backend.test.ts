@@ -122,6 +122,35 @@ describe("PiBackend", () => {
     expect(got).toHaveLength(2);
   });
 
+  // ask-design §7:单值帧的多选编码——内核不校验 value 原样透传,selected>1 或
+  // selected+custom 共存时 JSON 编码,扩展侧 multi_select 题 parse 解码。
+  it("answerQuestion 编码:单选原样、多选 JSON、custom+selected 共存 JSON、空值 cancelled", async () => {
+    const { adapter } = fakeAdapter();
+    const responses: unknown[] = [];
+    (adapter as { sendExtensionUIResponse?: unknown }).sendExtensionUIResponse = (r: unknown) => { responses.push(r); };
+    const backend = new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" });
+
+    // 单选:原样单值(现状不变)
+    await backend.answerQuestion("r1", [{ id: "q1", selected: ["A"] }]);
+    expect(responses[0]).toMatchObject({ id: "r1", value: "A" });
+
+    // 多选:JSON 编码
+    await backend.answerQuestion("r2", [{ id: "q1", selected: ["A", "B"] }]);
+    expect(JSON.parse((responses[1] as { value: string }).value)).toEqual({ selected: ["A", "B"] });
+
+    // 选项 + 自定义共存(多选题的合法组合):都进 JSON
+    await backend.answerQuestion("r3", [{ id: "q1", selected: ["A"], custom: "补充" }]);
+    expect(JSON.parse((responses[2] as { value: string }).value)).toEqual({ selected: ["A"], custom: "补充" });
+
+    // 仅自定义:原样单值
+    await backend.answerQuestion("r4", [{ id: "q1", selected: [], custom: "自由文本" }]);
+    expect(responses[3]).toMatchObject({ id: "r4", value: "自由文本" });
+
+    // 全空(跳过/放弃):cancelled
+    await backend.answerQuestion("r5", [{ id: "q1", selected: [] }]);
+    expect(responses[4]).toMatchObject({ id: "r5", cancelled: true });
+  });
+
 
   it("getTree/getEntries 走 resync,空树投出空 lineage 树", async () => {
     const { adapter } = fakeAdapter();
