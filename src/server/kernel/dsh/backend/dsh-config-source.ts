@@ -251,6 +251,22 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
     writeFileSync(file, lines.join("\n") + "\n", "utf-8");
   }
 
+  /** 读 sessions 块的 compression 配置('none'/'zstd'/undefined=内核默认 zstd)。
+   *  给工件编码迁移(dsh-artifact-migration)当门:只有明文部署才该把根迁成明文,
+   *  用户手改回 zstd 部署时迁移不动手(尊重部署选择,不反向打架)。 */
+  sessionsCompression(): string | undefined {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) return undefined;
+    const lines = readFileSync(file, "utf-8").split("\n");
+    const block = this.findBlock(lines, "sessions");
+    if (!block) return undefined;
+    for (const l of lines.slice(block.start, block.end)) {
+      const m = /^\s*compression\s*:\s*['"]?(\w+)['"]?\s*$/.exec(l);
+      if (m) return m[1];
+    }
+    return undefined;
+  }
+
   /** 确保凭证服务(dsh-credentials-local)挂在 cordis 插件树:llm-pi-ai 的 resolveApiKey 经
    *  ctx.credentials 读 ~/.dsh/.credentials.yaml——缺了这个插件,桌面端写进凭证库的 key 永远
    *  读不到,自定义 provider 的每次发起都报 MISSING_CREDENTIAL(实测)。幂等:块已在则不动。

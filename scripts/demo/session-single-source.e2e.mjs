@@ -144,19 +144,25 @@ try {
   ok(nlog.some((x) => x.startsWith("entry:")), `④ 渲染层镜像收到条目回执(${nlog.length} 条变更)`);
 
   // ⑤ 刷新重开 → 内容仍在(单源一致性)
+  // ⑤ 刷新重开 → 内容仍在(单源一致性)
+  // 启动只恢复 lastCwd、停在新会话壳是两内核一致的设计行为,所以这里必须主动点行重开;
+  // 且断言打在时间线上([data-message-id])——body.innerText 会被侧栏会话预览里的
+  // 同款文本蒙混(侧栏有「ping」≠ 时间线渲染出「ping」)。锚点用 sessions-list 的
+  // data-session-path 行([data-sidebar-style] 是主题预览卡的私有锚,匹配不到列表)。
   await page.reload({ waitUntil: "networkidle2", timeout: 60000 });
   await page.waitForSelector("[data-timeline-composer]", { timeout: 30000 });
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 20000 });
-  const hasPing = await page.evaluate(() => document.body.innerText.includes("ping"));
-  if (!hasPing) {
-    // 刷新后可能停在空态:点会话列表第一项
+  const timelineHasPing = () => page.evaluate(() =>
+    [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("ping")));
+  if (!(await timelineHasPing())) {
     await page.evaluate(() => {
-      const items = [...document.querySelectorAll("[data-sidebar-style] *")].filter((e) => (e.innerText || "").includes("ping"));
-      items[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const rows = [...document.querySelectorAll("[data-session-path]")];
+      const row = rows.find((r) => (r.innerText || "").includes("ping"));
+      row?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await waitForDomIdle(page, { quietMs: 900, timeoutMs: 15000 }).catch(() => {});
   }
-  ok(await page.evaluate(() => document.body.innerText.includes("ping")), "⑤ 刷新重开后会话内容仍在(中立层单源)");
+  ok(await timelineHasPing(), "⑤ 刷新重开后时间线会话内容仍在(中立层单源)");
 
   const errs = consoleTail.filter((l) => l.startsWith("[error]") || l.startsWith("[pageerror]"));
   ok(errs.length === 0, `页面零报错(实际 ${errs.length} 条${errs[0] ? `: ${errs[0].slice(0, 120)}` : ""})`);

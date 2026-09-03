@@ -71,8 +71,17 @@ const clickSend = (page) => page.evaluate(() => {
   return true;
 });
 
-/** 等回合收敛:发送键出现「停止」→ 消失,且「思考中」计时不再出现。超时就失败,不吞。 */
+/** 等回合收敛:发送键出现「停止」→ 消失,且「思考中」计时不再出现。超时就失败,不吞。
+ *  两阶段(与 session-single-source e2e 同款):先等「停止」出现(回合真的起跑),
+ *  再等它消失(收敛)——只等消失有竞态:发送后停止钮尚未挂载的几百 ms 里查询即通过,
+ *  断言打在在飞回合上(端点慢时必现,2026-09-03 实测)。 */
 async function settle(page, timeoutMs = 120000) {
+  const appeared = await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).then(() => true).catch(() => false);
+  if (!appeared) {
+    // 停止钮从未出现:回合可能根本没起跑(发送失败/模型未选上)——不在这里炸,
+    // 留给后续断言拿更具体的现场。
+    console.warn("   [settle] 20s 内停止钮未出现,回合可能未起跑");
+  }
   await page.waitForFunction(
     () => !document.querySelector("[aria-label*='停止']"),
     { timeout: timeoutMs, polling: 500 },
@@ -255,15 +264,25 @@ try {
   // 刷新后停留在最后会话(sessions list 恢复);若停在空态则点第一个会话
   const hasDivider = await page.evaluate(() => document.body.innerText.includes("模型 →"));
   if (!hasDivider) {
+    // 刷新后停在新会话壳(两内核一致的设计行为:启动只恢复 lastCwd,不恢复会话)——
+    // 点会话列表行重开。锚点是 sessions-list 的 data-session-path 行;
+    // 历史上的 [data-sidebar-style] 选择器匹配不到任何节点(那是主题预览卡的私有锚),
+    // 回退静默落空、断言超时——锚点必须跟真实渲染源走。
     const clicked = await page.evaluate(() => {
-      const items = [...document.querySelectorAll("[data-sidebar-style] *")].filter((e) => (e.innerText || "").trim() === "ping" || (e.innerText || "").includes("ping"));
-      const el = items[0];
-      if (!el) return false;
-      el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const rows = [...document.querySelectorAll("[data-session-path]")];
+      const row = rows.find((r) => (r.innerText || "").includes("ping"));
+      if (!row) return false;
+      row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       return true;
     });
     if (clicked) await waitForDomIdle(page, { quietMs: 1200, timeoutMs: 15000 }).catch(() => {});
   }
+  // Virtuoso 只渲染可视窗口:重开后视图停在底部,模型分隔线在顶部、未挂载即不在 DOM——
+  // 与 ② 同手法先滚到顶再断言(不滚则断言必超时,与数据是否持久化无关)。
+  await page.evaluate(() => {
+    document.querySelectorAll("div").forEach((d) => { if (d.scrollHeight > d.clientHeight + 200) d.scrollTop = 0; });
+  });
+  await waitForDomIdle(page, { quietMs: 400, timeoutMs: 5000 }).catch(() => {});
   await page.waitForFunction(() => document.body.innerText.includes("模型 →"), { timeout: 15000, polling: 400 });
   ok(true, "⑤ 刷新重开后模型分隔线仍在(问题1持久化)");
   await shot("after-reload");

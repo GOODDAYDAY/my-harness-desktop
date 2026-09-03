@@ -6,7 +6,7 @@
 // 形态与 GoalRoundCard 同族:居中窄卡、固定结构、默认不占视觉。
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Target, Pause, Play, Pencil, Trash2, Gauge, AlertTriangle } from "lucide-react";
+import { Pause, Play, Pencil, Trash2, Gauge, AlertTriangle } from "lucide-react";
 import type { MessageRendererProps } from "@my-harness-desktop/react";
 
 /** 动作 → 图标:内容层映射,新增动作在这里加一行。 */

@@ -195,14 +195,17 @@ export function useGoalController() {
         }
       } finally {
         inflightRef.current = false;
-        if (!deferredRef.current) return;
-        deferredRef.current = false;
-        const g = goalRef.current;
-        // 补发按当时最新状态重算(编辑/暂停/排队让路都生效),不欠旧账、不抢用户输入。
-        if (!g || !shouldContinue(g) || userSendPending()) return;
-        const round = g.round + 1;
-        setGoalRef.current({ ...g, round });
-        firePrompt(renderContinuationPrompt(g.objective, round, g.maxRounds));
+        // finally 里不写 return(no-unsafe-finally:会吞掉在飞异常)——改条件嵌套,语义等价。
+        if (deferredRef.current) {
+          deferredRef.current = false;
+          const g = goalRef.current;
+          // 补发按当时最新状态重算(编辑/暂停/排队让路都生效),不欠旧账、不抢用户输入。
+          if (g && shouldContinue(g) && !userSendPending()) {
+            const round = g.round + 1;
+            setGoalRef.current({ ...g, round });
+            firePrompt(renderContinuationPrompt(g.objective, round, g.maxRounds));
+          }
+        }
       }
     })();
   }, [messaging, notify, markNote]);
@@ -305,7 +308,9 @@ export function useGoalController() {
       }
       if (next !== goalRef.current) setGoal(next);
     });
-  }, [sessions, messaging, setGoal, firePrompt]);
+    // deps 必须含 markNote/notify:markNote 闭包随 sessionPath 重建,缺依赖=切会话后
+    // 旧订阅仍往旧会话写留痕(闭包旧值)。messaging 不被本 effect 使用,移出。
+  }, [sessions, setGoal, firePrompt, markNote, notify]);
 
   // 后台归账(设计 §9.1):视图流只含激活会话,而 onKernelEvent 带 sessionKey、后台会话也派发。
   // 后台会话里模型调 set_goal/achieve_goal 时,按来源会话归账写进那个会话自己的头行——
@@ -430,7 +435,7 @@ export function useGoalController() {
         });
         return true;
     }
-  }, [notify, setGoal, armIfIdle, pause, resume, edit, limit, clear]);
+  }, [notify, setGoal, pause, resume, edit, limit, clear]);
 
   // 桥接:把当前控制器挂到模块级入口(静态导出侧)。卸载时只清自己,不误伤后续挂载者。
   const handleCommandRef = useRef(handleCommand);

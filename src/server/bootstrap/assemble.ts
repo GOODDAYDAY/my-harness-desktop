@@ -12,6 +12,7 @@ import { ModelsStore } from "../kernel/pi/model/models-store";
 import { ModelCatalog } from "../application/models/model-catalog";
 import { PiModelSource } from "../kernel/pi/model/pi-model-source";
 import { DshConfigSource } from "../kernel/dsh/backend/dsh-config-source";
+import { migrateZstdSessionArtifacts } from "../kernel/dsh/backend/dsh-artifact-migration";
 import { writeApiKey } from "../kernel/dsh/backend/dsh-credentials-store";
 import { createPiModelsApi } from "../kernel/pi/manager/pi-kernel-api";
 import { createDshModelsApi } from "../kernel/dsh/manager/dsh-kernel-api";
@@ -175,6 +176,22 @@ dshConfigSource.ensureCredentialsPlugin();
 // ask 续问前提(docs/design/ask-design.md §5.2):sessions 持久化插件跑明文诊断模式
 // (compression:'none' + packChunks:false),壳才能在进程死亡窗口往会话日志追加 tool/result。
 dshConfigSource.ensurePlainSessionLog();
+// 明文部署的历史欠账收编(同 §5.2):配置落地前同一根里已写出的 zstd 工件,会触发持久化层
+// 的根编码守卫(ensureRootEncoding:list/append 前扫全根,遇混合编码抛 encodingMismatch)——
+// 有一个遗留 zstd,所有 dsh 会话的创建/列举/续跑全挂(「生成失败 session artifact …zstd」)。
+// 启动时一次性迁成明文(幂等;zstd 是同一明文字节流的确定性压缩,字节 1:1);
+// 只在明文部署下做——用户手改回 zstd 时尊重其部署选择,不反向打架。
+if (dshConfigSource.sessionsCompression() === "none") {
+  try {
+    const mig = migrateZstdSessionArtifacts(DSH_SESSION_ROOT);
+    if (mig.migrated + mig.deduped + mig.quarantined > 0) {
+      console.log(`[dsh-migration] zstd 工件转明文: 迁移 ${mig.migrated},去重 ${mig.deduped},隔离 ${mig.quarantined}`);
+    }
+  } catch (err) {
+    // 迁移失败不挡启动(幂等,下次启动再试);但显形,不静默。
+    console.warn("[dsh-migration] 工件编码迁移失败:", err instanceof Error ? err.message : String(err));
+  }
+}
 // 清理悬空默认:agent-default-model 可能指向已删路由(如废弃的 deepseek-official 官方路由)
 // → 清掉指针,回落首个 provider/模型。fire-and-forget,不阻断启动(与 dshDefaultProviderModel 的
 // 运行时校验双保险:即便这里没清掉,spawn 兜底也不会再落到死路由)。

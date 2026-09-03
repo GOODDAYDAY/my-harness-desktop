@@ -265,10 +265,6 @@ export function TimelineView(): React.ReactNode {
     ]);
     if (settingsRes.status === "fulfilled") {
       const s = settingsRes.value;
-      setDefaults({
-        provider: typeof s.defaultProvider === "string" ? s.defaultProvider : undefined,
-        modelId: typeof s.defaultModel === "string" ? s.defaultModel : undefined,
-      });
       const mr = (s.retry as { maxRetries?: unknown } | undefined)?.maxRetries;
       if (typeof mr === "number" && Number.isFinite(mr) && mr > 0) setRetryMax(mr);
     }
@@ -377,10 +373,6 @@ export function TimelineView(): React.ReactNode {
     }
   }, [ctx.events, setPendingImage, setInput]);
 
-  // 默认配置层的本地镜像(设计 §2.1):只服务新会话壳的显示与 pending 种子,
-  // 已活会话的任何路径都不读它。「设为默认」广播只刷新这份镜像,不写任何持久状态。
-  // 装载已并入 refreshExternals(与 models 并行、同批落地,原子解析无闪跳、无门控延迟)。
-  const [defaults, setDefaults] = useState<{ provider?: string; modelId?: string }>({});
   // 兜底模型(新会话无显式选择时实际会用到的模型):dsh agent-default-model 优先,否则 pi 兜底。
   // 与 main 的 models.getFallbackModel 同源;currentModel 链据此显示,不再落到 models[0] 的 pi 首项。
   const [fallbackModel, setFallbackModel] = useState<{ provider?: string; modelId?: string; kernel?: KernelId }>({});
@@ -423,14 +415,13 @@ export function TimelineView(): React.ReactNode {
     () => phaseFromView(messages, streaming, { retrying: retrying !== null, compacting }),
     [messages, streaming, retrying, compacting],
   );
+  // 「设为默认」广播(设计 session-model-config §4.3):订阅语义收窄为刷新壳显示——
+  // 显示链「默认」环读的是 fallbackModel(getFallbackModel),这里触发重探即刷新,
+  // 不镜像任何本地状态(写口只认持久层,读口只认 refreshExternals)。
   useEffect(() => {
-    const off = ctx.events.on("pi-manager:defaultChanged", (payload) => {
-      const p = payload as { provider?: string; modelId?: string };
-      if (!p.provider || !p.modelId) return;
-      setDefaults({ provider: p.provider, modelId: p.modelId });
-    });
+    const off = ctx.events.on("pi-manager:defaultChanged", () => void refreshExternals());
     return off;
-  }, [ctx]);
+  }, [ctx, refreshExternals]);
 
   // general.json 经 ui-store 单源读(分层合并视图;框架管重读,插件不碰文件通道)
   const generalConfig = useUiStore((s) => s.generalConfig);

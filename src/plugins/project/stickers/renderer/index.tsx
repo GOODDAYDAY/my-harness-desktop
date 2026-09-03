@@ -28,6 +28,9 @@ import {
 } from "@my-harness-desktop/react";
 import type { PluginContext } from "@my-harness-desktop/shared";
 import { StickerDisplay, StickerEditor, readBannerDataUri, type StickerDraft } from "./sticker-card";
+// composerActions 槽贡献(设计 docs/design/sticker-plugin.md §5):框架按 manifest 声明的
+// 组件名在本入口 module exports 里自动匹配——必须 re-export,否则按钮静默缺席。
+export { StickerComposerButton } from "./sticker-composer-button";
 import {
   createSticker, loadStickers, moveLayer, moveToLayer, removeSticker, reorderStickers, updateSticker,
   exportStickersZip, importStickersZip,
