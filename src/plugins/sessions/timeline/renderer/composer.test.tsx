@@ -153,6 +153,25 @@ describe("Composer 发送拦截接线(与 timeline sendText 同款顺序)", () =
     expect(document.body.getAttribute("data-sent")).toBe("/compact");
     document.body.removeAttribute("data-sent");
   });
+
+  it("发送在飞(sending=true)时敲命令回车 → 仍提交(命令不被发送闸吃掉)", async () => {
+    // 根因回归守卫:发送 RPC 在飞窗口(sending=true)里 canSend=false,旧代码 Enter 整吞
+    // 命令——输入框清了但 handle 没跑(goal 会话里 /goal stop 停不掉续跑)。
+    // 命令永不进内核消息流(sendText 先拦截),不该被「发送在飞」闸挡。
+    const onSubmit = vi.fn();
+    render(<Composer value="/goal stop" onValueChange={() => {}} onSubmit={onSubmit} sending commands={[{ name: "goal", description: "x", source: "plugin" } as never]} />);
+    const textarea = document.querySelector("textarea")!;
+    await act(async () => { fireEvent.keyDown(textarea, { key: "Enter" }); });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("发送在飞 + 普通消息回车 → 仍不提交(防重复发送的门不变)", async () => {
+    const onSubmit = vi.fn();
+    render(<Composer value="普通消息" onValueChange={() => {}} onSubmit={onSubmit} sending />);
+    const textarea = document.querySelector("textarea")!;
+    await act(async () => { fireEvent.keyDown(textarea, { key: "Enter" }); });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });
 
 describe("Composer goal 生效着色(输入框上方目标条的呼应面)", () => {

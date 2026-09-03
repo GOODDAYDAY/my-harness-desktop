@@ -248,6 +248,13 @@ export function Composer({
     return name ? (commands.find((c) => c.name.toLowerCase() === name.toLowerCase()) ?? null) : null;
   }, [value, commands]);
 
+  // 提交闸:斜杠命令(/goal 等)是即时状态动作、永远不进内核消息流(sendText 的
+  // 命令分支在任何发送前拦截),不该被「发送在飞」(sending)闸挡——否则发送 RPC 的
+  // 在飞窗口里敲命令被吃掉(实弹复现:goal 会话里 /goal stop 输入框清了但命令没跑,
+  // 续跑停不掉)。命令放行后:拦截→消费;放行类命令(handle 返 false)落入 sendText
+  // 常规路径,doSend 的 sendingRef 闸仍防重复真发送——双保险不冲突。
+  const canSubmit = canSend || matchedCommand !== null;
+
   const slashMatches = useMemo((): CommandItem[] => {
     if (slashQuery === null || !commands?.length) return [];
     const q = slashQuery.toLowerCase();
@@ -295,7 +302,7 @@ export function Composer({
       onDragOver={(e) => { e.preventDefault(); }}
       onSubmit={(e) => {
         e.preventDefault();
-        if (canSend) void onSubmit();
+        if (canSubmit) void onSubmit();
       }}
     >
       {slashOpen && popupPos && slashMatches.length > 0 && (
@@ -329,7 +336,7 @@ export function Composer({
             }
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              if (canSend) void onSubmit();
+              if (canSubmit) void onSubmit();
             }
           }}
           onBlur={() => { setTimeout(() => setSlashOpen(false), 150); }}
