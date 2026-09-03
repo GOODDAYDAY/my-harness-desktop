@@ -16,6 +16,7 @@ export * from "./domain/bookmark-snapshot";
 export * from "./domain/context";
 export * from "./domain/contributions";
 export * from "./domain/custom-order";
+export * from "./domain/events/execution-state";
 export * from "./domain/events/kernel-event";
 export * from "./domain/events/session-bus";
 export * from "./domain/events/session-state";
