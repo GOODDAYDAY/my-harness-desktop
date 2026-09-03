@@ -67,6 +67,9 @@ export interface PiBackendContext extends BackendContext {
  *
  * 单独导出供 switchKernel 在 spawn 之前调用(§4.5 生命周期不对称:pi seed 不依赖进程,
  * 必须「先 seed 得路径、再以该路径 spawn」)。`PiBackend.seed` 委托本函数,两者同源。
+ *
+ * 入参契约(session-single-source §4.1):lineage 必须经壳的 assembleSeedProjection 组装
+ * (压缩截断 + role 白名单)——过滤规则在壳一处,适配器不再各自过滤(契约单源)。
  */
 export async function piSeedSession(agentDir: string, cwd: string, lineage: NeutralEntry[], opts: { lineageId: string; header: NeutralSessionHeader }): Promise<string> {
   const sessionId = opts.lineageId;
@@ -77,7 +80,6 @@ export async function piSeedSession(agentDir: string, cwd: string, lineage: Neut
   ];
   let prevId: string | null = null;
   for (const entry of lineage) {
-    if (!["user", "assistant", "toolResult"].includes(entry.message.role)) continue;
     const piId = entry.kernelEntryId ?? randomUUID();
     const msg = entry.message;
     const message: Record<string, unknown> = { role: msg.role, content: msg.content ?? "" };

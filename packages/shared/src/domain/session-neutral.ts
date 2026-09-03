@@ -327,3 +327,55 @@ export function lineageContent(session: NeutralSession, lineageId: string): Neut
   walk(lineageId);
   return acc;
 }
+
+// ============ seed 投影组装(session-single-source §4.1)============
+
+/** seed 投影的对话 role 白名单:只有对话内容进内核投影;divider/custom 等展示条目
+ *  与 display 元数据永不进 AI 上下文(图是交流机制,不是 AI 输入)。
+ *  两内核同一份——契约单源,适配器不再各自过滤。 */
+export const SEED_PROJECTION_ROLES: ReadonlySet<string> = new Set(["user", "assistant", "toolResult"]);
+
+/** 压缩摘要代身的协议前缀(发往内核的协议指令,与渲染层 stripToolLimitNote 同先河——
+ *  非 UI 文案,勿 i18n)。 */
+const SEED_SUMMARY_PREFIX = "[此前会话的压缩摘要]";
+
+/** 压缩边界条目判定:role=divider 且 kind=compaction(sessionEntryToNeutral 的 divider 形状)。 */
+function isCompactionBoundary(e: NeutralEntry): boolean {
+  const m = e.message as { role?: unknown; kind?: unknown };
+  return m.role === "divider" && m.kind === "compaction";
+}
+
+/** 边界条目的摘要文本(detail 字段;无摘要返回 null——调用方退回全量投影,宁多灌不丢语义)。 */
+function compactionSummaryOf(e: NeutralEntry): string | null {
+  const d = (e.message as { detail?: unknown }).detail;
+  return typeof d === "string" && d ? d : null;
+}
+
+/**
+ * seed 投影组装(契约单源,壳的 seed 调用点统一经此):活跃 lineage 的完整线性内容
+ * → 压缩截断 → role 白名单。
+ * - 压缩截断:最新一条「带摘要的」压缩边界条目以摘要代身(合成一条 user 消息承载摘要,
+ *  摘要文本是内核压缩的产物,前缀标记它是摘要而非用户原话),丢弃其前条目;
+ *  无边界 / 边界无摘要 → 全量投影(保守)。
+ * - role 白名单:只留对话内容;divider/custom/工具卡片等展示条目与 display 不进内核。
+ * 纯函数、零依赖——两个内核的 seed 路径(dsh 经 session/seed,pi 经写文件)吃同一份输出。 */
+export function assembleSeedProjection(session: NeutralSession, lineageId: string): NeutralEntry[] {
+  const full = lineageContent(session, lineageId);
+  let cut = -1;
+  let summary: string | null = null;
+  for (let i = full.length - 1; i >= 0; i--) {
+    if (isCompactionBoundary(full[i])) {
+      const s = compactionSummaryOf(full[i]);
+      if (s) {
+        cut = i;
+        summary = s;
+      }
+      break; // 最新边界无摘要也不往前找——更早的摘要对应更旧的上下文形态,无意义
+    }
+  }
+  const tail = cut >= 0 ? full.slice(cut + 1) : full;
+  const head: NeutralEntry[] = summary != null
+    ? [{ neutralEntryId: "", message: { role: "user", content: `${SEED_SUMMARY_PREFIX}\n${summary}` } }]
+    : [];
+  return [...head, ...tail].filter((e) => SEED_PROJECTION_ROLES.has(e.message.role));
+}

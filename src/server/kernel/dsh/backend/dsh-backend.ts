@@ -19,7 +19,7 @@ import { AbstractBackend, type BackendContext } from "../../core/abstract-backen
 import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
 import type { NeutralEntry } from "@my-harness-desktop/shared";
-import { cwdToBucketName, type ImageInput } from "@my-harness-desktop/shared";
+import { type ImageInput } from "@my-harness-desktop/shared";
 import { createDshEventTranslator } from "./dsh-event-translator";
 import { writeDshAnswer } from "../manager/dsh-question-bridge";
 import { DSH_METHODS } from "../protocol/dsh-methods";
@@ -97,11 +97,15 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     config: DshBackendConfig,
   ) {
     super(config);
-    this.currentSessionId = config.sessionId ?? cwdToBucketName(config.cwd);
+    // 身份不变量守卫(session-single-source §2.3/§4.3):会话标识必须由壳显式给出(中立主键 ns),
+    // 缺了直接抛错——宁可早炸,不串会话。历史上这里回落 cwd 桶名,真走到就是
+    // 「消息发进桶名会话」的静默错绑。
+    if (!config.sessionId) throw new Error("dsh 后端缺少会话标识(应由壳传入中立主键)");
+    this.currentSessionId = config.sessionId;
     this.translateEvent = createDshEventTranslator({ provider: config.provider, model: config.model });
   }
 
-  /** 当前内核侧会话标识(缺省=桶名,seed 后重绑为服务端返回的 childSessionId)。 */
+  /** 当前内核侧会话标识(= 当前物化 lineage 的 id;构造时由壳传入中立主键,seed 断言后重绑)。 */
   override get sessionId(): string {
     return this.currentSessionId;
   }
@@ -287,6 +291,10 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
 
   async resume(anchor: Anchor): Promise<string> {
     const res = await this.requestSession<{ lineageId: string }>(DSH_METHODS.sessionResume, { anchor });
+    // 身份守卫:回切结果必须是有效 lineageId,空响应即显式报错(不静默错绑)。
+    if (typeof res?.lineageId !== "string" || !res.lineageId) {
+      throw new Error("dsh resume 返回了无效的 lineageId");
+    }
     return res.lineageId;
   }
 
@@ -301,12 +309,17 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
    *  「单 lineage 树」再发——这是 dsh 适配器的转录职责(pi 对应 piSeedSession 写 JSONL)。
    *  sessionId 传 lineageId 当 SessionId(dsh 的 SessionId 是值对象,可显式指定)。
    *  关键:重绑 this.sessionId——sendMessage/abort/setModel 全读 this.sessionId,不重绑则
-   *  首切 pi→dsh 后所有消息发到构造时的桶名会话(§13.1)。 */
+   *  首切 pi→dsh 后所有消息发到构造时的桶名会话(§13.1)。
+   *  身份断言(session-single-source §4.3):服务端返回的标识必须等于按规则派生的值
+   *  (=lineageId)——不等即显式报错,不静默重绑到错会话。 */
   async seed(lineage: NeutralEntry[], opts: SeedOptions): Promise<string> {
     const res = await this.requestSession<{ sessionId: string }>(DSH_METHODS.sessionSeed, {
       sessionId: opts.lineageId,
       session: buildDshSeedSession(lineage, opts),
     });
+    if (res.sessionId !== opts.lineageId) {
+      throw new Error(`dsh seed 身份断言失败: 期望 ${opts.lineageId},服务端返回 ${res.sessionId}`);
+    }
     this.currentSessionId = res.sessionId;
     return res.sessionId;
   }

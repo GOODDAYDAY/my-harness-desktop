@@ -17,7 +17,7 @@ import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnaps
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, lineageContent } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, lineageContent, assembleSeedProjection } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "@my-harness-desktop/shared";
@@ -29,7 +29,7 @@ import type {
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
   SessionModelPrefs, SessionRole, KnownToolInfo, SessionRawFilePaths,
 } from "@my-harness-desktop/shared";
-import { truncateSessionName, cwdToBucketName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "@my-harness-desktop/shared";
+import { truncateSessionName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "@my-harness-desktop/shared";
 
 import type { ModelCatalog } from "../models/model-catalog";
 import { classifyModel } from "../models/model-catalog";
@@ -432,7 +432,12 @@ export class SessionStore implements
       ephemeral,
     });
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
-    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, effectiveModel: provider && model ? { provider, modelId: model, kernel } : undefined, activeLineageId: ns, materializedLineageId: ns };
+    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, effectiveModel: provider && model ? { provider, modelId: model, kernel } : undefined, activeLineageId: ns,
+      // 物化标记(session-single-source §4.4):文件型内核(有预 seed 面=pi)spawn 即经
+      // --session 读文件,内容已在;RPC seed 面内核(dsh)新进程空空,标记置空——
+      // 首发时 materializeActiveLineage 用中立层 seed 回填(替代旧的 continue 重放补面)。
+      // 能力探测(factory.seed 有无),不写内核身份分支(§1.5)。
+      materializedLineageId: this.factory.seed ? ns : "" };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -878,18 +883,6 @@ export class SessionStore implements
     return this.neutralStore?.get(proc.neutralSessionId) ?? null;
   }
 
-  /** 中立层是否已有历史(任一 lineage 有 entry):用于判「重开历史会话续聊」vs「新会话」。
-   *  重开时 dsh 新进程无法经 session/prompt 加载磁盘日志,需先 continue 恢复(见 prompt)。
-   *  只数对话内容条目(user/assistant/toolResult):divider 等元条目(模型/思考强度分隔线)
-   *  不算历史——合成分隔线双落点(视图流+中立层)后,新会话首发的 model_change 分隔线
-   *  曾把「还没说过话的新会话」误判成有历史 → 首发就先 continue(dsh 补面误触发,回归)。 */
-  private neutralHasHistory(proc: SessionProc): boolean {
-    const session = this.readNeutral(proc);
-    if (!session) return false;
-    return session.lineages.some((l) =>
-      l.entries.some((e) => e.message.role === "user" || e.message.role === "assistant" || e.message.role === "toolResult"));
-  }
-
   /** 中立层的写:读 → 纯函数 → 写,不 mutate 持久化对象。
    *  entry 缺 neutralEntryId 时由 appendNeutralEntryWithHeader 按 seq 生成。
    *  append 即内容变更 → 列表行 header 字段(lastMessage/lastEntryId/updatedAt)随 header 一并回填。 */
@@ -985,9 +978,10 @@ export class SessionStore implements
       // 2. 读中立层(唯一真相源,§kernel-forkless §15.3/§22);中立层缺失才快照兜底重建。
       //    常规路径不读内核树——中立层随上行同步持续新鲜,快照只是损坏兜底。
       const session = this.readNeutral(proc) ?? await this.snapshotNeutralSession(proc);
-      // 2b. 活跃 lineage 的完整线性内容(§11)——seed 投影的是这一条,不是整棵树
+      // 2b. 活跃 lineage 的 seed 投影(§4.1 契约单源:压缩截断 + role 白名单)——
+      //    投的是组装后的投影,不是整棵树的原始内容
       const activeLineageId = proc.activeLineageId;
-      const lineage = lineageContent(session, activeLineageId);
+      const lineage = assembleSeedProjection(session, activeLineageId);
       // 3. stop 旧内核
       await proc.backend.stop();
       // 并发护栏(§15.3):stop 的 await 窗口内激活态被切走则中止
@@ -1021,10 +1015,15 @@ export class SessionStore implements
           systemPromptPaths: this.getSystemPromptPaths(),
         });
         await newBackend.start();
-        // 空 lineage 跳过 seed:没东西可灌,直接以后端默认标识起目标内核
-        newSessionId = lineage.length === 0
-          ? (newBackend.sessionId ?? cwdToBucketName(proc.cwd))
-          : await newBackend.seed(lineage, seedOpts);
+        // 空 lineage 跳过 seed:没东西可灌,直接以后端构造标识起目标内核——
+        // 身份不变量(§4.3):标识必须已在,不为空会话拼兜底名。
+        if (lineage.length === 0) {
+          const sid = newBackend.sessionId;
+          if (!sid) throw new Error("目标内核未返回会话标识(身份不变量)");
+          newSessionId = sid;
+        } else {
+          newSessionId = await newBackend.seed(lineage, seedOpts);
+        }
       }
       // 5. 模型中立化(§11):读 proc.lastModelRef 跨切换载体,不读 latestSnapshot(dsh 下恒 null)
       if (proc.lastModelRef && this.modelCatalog) {
@@ -1232,17 +1231,11 @@ export class SessionStore implements
     }
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
-    // 惰性物化(§kernel-forkless §15.1):活跃 lineage 未物化(fork 后)则先 seed 投影再发。
+    // 惰性物化(§kernel-forkless §15.1 + session-single-source §4.4):活跃 lineage 未物化
+    // (fork 后 / dsh 重开历史会话的新进程)则先把中立层 seed 投影进内核再发。
+    // dsh 侧这条替代旧的 session/continue 重放补面——中立层内容灌给内核,比内核
+    // 演自己的日志更全(含分隔线),也消掉「重放期间发送撞 id collision」的时序窗口。
     await this.materializeActiveLineage(proc);
-    // 重开历史 dsh 会话续聊(§7.6 显式降级的补面):dsh 的 session/prompt 只新建空会话、不加载
-    // 磁盘日志——app 重启后重开旧会话再发,直接 prompt 撞 "id collision"。先经 session/continue
-    // 把持久化会话载入新进程(getOrResumeSession 走 ctx.agents.resume 重放日志),再 prompt 命中
-    // 内存会话即续上。仅对无 pi 运行时切模能力的内核(能力探测,非内核身份分支)且中立层已有
-    // 历史时触发;旧运行时缺 session/continue → requestSession 记缺面并抛清晰错误,这里降级
-    // 为原 session/prompt 路径(id collision 以其原错误显形,不静默吞、也不引入新崩)。
-    if (!proc.backend.capabilities.pi && this.neutralHasHistory(proc)) {
-      await proc.backend.continue?.().catch(() => { /* 缺面降级,见上 */ });
-    }
     // 中立层先写 user entry(message + display):展示元数据归中立层,不进后端投影(neutral-first §10)。
     this.appendNeutral(proc, { neutralEntryId: "", message: { role: "user", content: text }, display });
     await proc.backend.sendMessage(text, images);
@@ -1685,20 +1678,29 @@ export class SessionStore implements
     return newLineageId;
   }
 
-  /** 惰性物化(§kernel-forkless §15):换分支 = 换投影。当前内核物化的 lineage 与活跃
-   *  lineage 不一致时(fork 后),把活跃 lineage 的完整线性内容 seed 投影进内核,
-   *  换绑 proc.backend 到新会话(单线执行器)。幂等:同 lineageId → 同派生 id。 */
+  /** 惰性物化(§kernel-forkless §15 + session-single-source §4.4):换分支 = 换投影;
+   *  dsh 重开历史会话的新进程 = 同一条路径(新进程空空,首发前回填)。
+   *  当前内核物化的 lineage 与活跃 lineage 不一致时,把活跃 lineage 的 seed 投影
+   *  (assembleSeedProjection:压缩截断 + role 白名单,契约单源)灌进内核。
+   *  幂等:同 lineageId → 同派生 id。 */
   private async materializeActiveLineage(proc: SessionProc): Promise<void> {
     if (proc.materializedLineageId === proc.activeLineageId) return;
     const session = this.readNeutral(proc);
-    const lineage = session ? lineageContent(session, proc.activeLineageId) : [];
-    await proc.backend.stop();
+    const lineage = session ? assembleSeedProjection(session, proc.activeLineageId) : [];
     const seedOpts = {
       kernel: proc.kernel, cwd: proc.cwd, agentDir: this.agentDir,
       neutralSessionId: proc.neutralSessionId, lineageId: proc.activeLineageId,
       header: session?.header ?? { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
     };
     const seedFn = this.factory.seed;
+    // RPC seed 面(无预 seed 能力的内核,如 dsh):进程活着就在现进程上 seed,不重建——
+    // 重建是双 spawn 浪费;seed 是按 lineageId 幂等的会话级投影,现进程直接灌即可。
+    if (seedFn == null && proc.backend.alive) {
+      if (lineage.length > 0) await proc.backend.seed(lineage, seedOpts);
+      proc.materializedLineageId = proc.activeLineageId;
+      return;
+    }
+    await proc.backend.stop();
     const seeded = seedFn ? await seedFn(lineage, seedOpts) : null;
     let newBackend: BaseBackend;
     let newSessionId: string;
@@ -1718,9 +1720,14 @@ export class SessionStore implements
         systemPromptPaths: this.getSystemPromptPaths(),
       });
       await newBackend.start();
-      newSessionId = lineage.length === 0
-        ? (newBackend.sessionId ?? cwdToBucketName(proc.cwd))
-        : await newBackend.seed(lineage, seedOpts);
+      if (lineage.length === 0) {
+        // 身份不变量(§4.3):空投影时内核标识必须已在(构造注入),不为空会话拼兜底名。
+        const sid = newBackend.sessionId;
+        if (!sid) throw new Error("内核未返回会话标识(身份不变量)");
+        newSessionId = sid;
+      } else {
+        newSessionId = await newBackend.seed(lineage, seedOpts);
+      }
     }
     proc.backend = newBackend;
     proc.boundSessionPath = newBackend.capabilities.pi ? newSessionId : null;
