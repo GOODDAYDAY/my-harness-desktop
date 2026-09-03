@@ -361,6 +361,11 @@ export interface SessionsApi {
   renameSession(sessionPath: string, name: string): Promise<void>;
   /** 改写会话元字段;name 语义同 renameSession,pinned/archived/toolConfig 落 custom-my-harness-desktop 保留键。同一把锁,一处写头。 */
   updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void>;
+  /** 追加一条会话注解(中立层会话注解机制,设计 docs/design/goal.md §8.3):
+   *  只写中立层、不写内核会话文件——不进模型上下文,刷新/重开仍在;
+   *  渲染由 messageRenderers 槽按 role(=customType)认领。激活会话即时进视图流,
+   *  后台会话静默落盘、切过去即见。goal 控制动作留痕是首个消费方。 */
+  annotate(sessionPath: string, customType: string, content: string): Promise<void>;
   /** 删除会话文件(真删 JSONL,不可恢复);批量=同目录一把锁内逐个删,不存在的跳过;活跃会话由实现侧跳过(删了也会被进程 append 复活)。 */
   deleteSessions(paths: string[]): Promise<void>;
   /** 记录发送路径上下文(cwd + 会话文件,null=新会话);只记,不动进程。 */

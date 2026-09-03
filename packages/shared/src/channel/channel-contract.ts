@@ -193,6 +193,7 @@ export const IPC = {
     abort: "session:abort",
     abortBash: "session:abortBash",
     abortRetry: "session:abortRetry",
+    annotate: "session:annotate",
     clone: "session:clone",
     compact: "session:compact",
     copySession: "session:copySession",

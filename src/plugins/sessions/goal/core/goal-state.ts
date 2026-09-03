@@ -112,6 +112,11 @@ export type GoalCommand =
 /** 注册的命令名(不带前导 /)。 */
 export const GOAL_COMMAND_NAME = "goal";
 
+/** 控制动作留痕卡的消息 role(中立层会话注解的 customType;messageRenderers 槽按它认领)。
+ *  注解内容 = 机读 JSON({ action: "pause"|"resume"|"edit"|"limit"|"clear"|"auto_pause_error"|
+ *  "auto_pause_interrupt"|"send_failed", detail? }),卡片渲染时按当前语言翻译。 */
+export const GOAL_NOTE_ROLE = "goal_note";
+
 const PAUSE_WORDS = new Set(["stop", "pause"]);
 const RESUME_WORDS = new Set(["resume", "start", "continue"]);
 const CLEAR_WORDS = new Set(["clear", "rm", "delete"]);

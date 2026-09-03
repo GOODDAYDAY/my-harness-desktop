@@ -10,5 +10,13 @@
   "goal.bar.achieved": "目标已完成",
   "goal.settings.group": "目标（Goal）",
   "goal.settings.maxRounds": "续跑轮数上限",
-  "goal.settings.maxRoundsDesc": "目标未指定上限时的默认值，只对新建目标生效；进行中的目标用 /goal limit <n> 改"
+  "goal.settings.maxRoundsDesc": "目标未指定上限时的默认值，只对新建目标生效；进行中的目标用 /goal limit <n> 改",
+  "goal.note.pause": "已暂停目标续跑",
+  "goal.note.resume": "已恢复目标续跑",
+  "goal.note.edit": "已修改目标：{{detail}}",
+  "goal.note.limit": "轮数上限改为 {{detail}}",
+  "goal.note.clear": "已删除目标",
+  "goal.note.auto_pause_error": "回合异常结束，目标已自动暂停",
+  "goal.note.auto_pause_interrupt": "回合被中断，目标已自动暂停",
+  "goal.note.send_failed": "续跑发送失败，目标已自动暂停：{{detail}}"
 }

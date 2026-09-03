@@ -121,6 +121,8 @@ export interface KernelApi {
     readToolConfig: (sessionPath: string) => Promise<SessionToolConfig | null>;
     renameSession: (sessionPath: string, name: string) => Promise<{ ok: boolean }>;
     updateHeader: (sessionPath: string, patch: HeaderPatch) => Promise<{ ok: boolean }>;
+    /** 中立层会话注解(docs/design/goal.md §8.3):只写中立层不进内核,渲染由 messageRenderers 槽认领。 */
+    annotate: (sessionPath: string, customType: string, content: string) => Promise<void>;
     deleteSessions: (paths: string[]) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<SessionInfo[]>;
     /** 解析会话可打开的原始文件地址(中立层文件 + 内核原始文件;不存在返回 null 项)。 */

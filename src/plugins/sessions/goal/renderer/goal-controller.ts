@@ -23,7 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePluginContext, useUiStore, useSessionStore } from "@my-harness-desktop/react";
 import type { ComposerCommandResult, NeutralMessage } from "@my-harness-desktop/shared";
 import type { GoalState } from "../core/goal-state";
-import { createGoal, editGoal, parseGoal, parseGoalCommand, pauseGoal, resumeGoal, setGoalMaxRounds, shouldContinue } from "../core/goal-state";
+import { createGoal, editGoal, GOAL_NOTE_ROLE, parseGoal, parseGoalCommand, pauseGoal, resumeGoal, setGoalMaxRounds, shouldContinue } from "../core/goal-state";
 import { applyGoalEvent, renderContinuationPrompt } from "./goal-reduce";
 
 export const GOAL_USAGE =
@@ -140,6 +140,15 @@ export function useGoalController() {
   const setGoalRef = useRef(setGoal);
   setGoalRef.current = setGoal;
 
+  /** 控制动作留痕(设计 §8.3):中立层会话注解,不写内核、不进模型上下文。
+   *  内容是机读 JSON({action, detail?}),卡片渲染时按当前语言翻译——存储与语言解耦。
+   *  未物化(new:)会话没有中立层可写,静默跳过。 */
+  const markNote = useCallback((note: { action: string; detail?: string }) => {
+    const p = sessionPath;
+    if (!p || p.startsWith("new:")) return;
+    void sessions.annotate(p, GOAL_NOTE_ROLE, JSON.stringify(note)).catch(() => {});
+  }, [sessions, sessionPath]);
+
   /** 发一轮续跑提示:经 messaging.prompt 把续跑文案作为一条普通消息发出（续跑=发消息,
    *  设计 docs/design/goal.md §3.2——契约无独立 continue 意图;忙态由内核发消息面吸收）。
    *
@@ -179,6 +188,7 @@ export function useGoalController() {
               setLastSendError(msg);
               setSendErrorState(msg);
               void notify.show({ title: "Goal", body: `续跑发送失败,目标已暂停:${msg}` });
+              markNote({ action: "send_failed", detail: msg });
               return;
             }
           }
@@ -195,7 +205,7 @@ export function useGoalController() {
         firePrompt(renderContinuationPrompt(g.objective, round, g.maxRounds));
       }
     })();
-  }, [messaging, notify]);
+  }, [messaging, notify, markNote]);
 
   const sendRound = useCallback((g: GoalState, round: number) => {
     firePrompt(renderContinuationPrompt(g.objective, round, g.maxRounds));
@@ -274,6 +284,9 @@ export function useGoalController() {
             setLastSendError(msg);
             setSendErrorState(msg);
             void notify.show({ title: "Goal", body: msg });
+            markNote({ action: "auto_pause_error" });
+          } else {
+            markNote({ action: "auto_pause_interrupt" });
           }
           return;
         }
@@ -318,26 +331,46 @@ export function useGoalController() {
     });
   }, [sessions]);
 
-  const pause = useCallback(() => { const g = goalRef.current; if (g) setGoal(pauseGoal(g)); }, [setGoal]);
+  const pause = useCallback(() => {
+    const g = goalRef.current;
+    if (!g || g.phase !== "active") return;
+    setGoal(pauseGoal(g));
+    markNote({ action: "pause" });
+  }, [setGoal, markNote]);
   // 恢复即「继续干活」:空闲时立即装下一轮,不等下一次回合收敛(否则 active 但无人触发,停摆)。
   // 恢复同时清失败态(上次失败已被处置)。
   const resume = useCallback(() => {
     const g = goalRef.current;
-    if (!g) return;
+    if (!g || g.phase !== "paused") return;
     setLastSendError(null);
     setSendErrorState(null);
     setGoal(armIfIdle(resumeGoal(g)));
-  }, [setGoal, armIfIdle]);
+    markNote({ action: "resume" });
+  }, [setGoal, armIfIdle, markNote]);
   const edit = useCallback((objective: string) => {
     const g = goalRef.current;
+    if (!g || g.phase === "achieved") return;
+    try {
+      setGoal(editGoal(g, objective));
+      markNote({ action: "edit", detail: objective });
+    } catch { /* 空 objective 忽略 */ }
+  }, [setGoal, markNote]);
+  const limit = useCallback((maxRounds: number) => {
+    const g = goalRef.current;
     if (!g) return;
-    try { setGoal(editGoal(g, objective)); } catch { /* 空 objective 忽略 */ }
-  }, [setGoal]);
+    try {
+      // 到顶停摆(active 但 round 到顶)且空闲时 armIfIdle 立即装弹续跑(§5.3)。
+      setGoal(armIfIdle(setGoalMaxRounds(g, maxRounds)));
+      markNote({ action: "limit", detail: String(maxRounds) });
+    } catch { /* 非正整数忽略 */ }
+  }, [setGoal, armIfIdle, markNote]);
   const clear = useCallback(() => {
+    if (!goalRef.current) return;
     setLastSendError(null);
     setSendErrorState(null);
     setGoal(null);
-  }, [setGoal]);
+    markNote({ action: "clear" });
+  }, [setGoal, markNote]);
 
   /** 用户 /goal 命令的唯一实现:解析 → 套状态机 → 通知反馈。
    *  返回值语义(ComposerCommandResult):
@@ -369,30 +402,25 @@ export function useGoalController() {
         return { send: cmd.request.objective };
       }
       case "pause":
-        if (g) setGoal(pauseGoal(g)); else notifyNoGoal();
+        if (g) pause(); else notifyNoGoal();
         return true;
       case "resume":
-        if (g) {
-          setLastSendError(null);
-          setSendErrorState(null);
-          setGoal(armIfIdle(resumeGoal(g)));
-        } else notifyNoGoal();
+        if (g) resume(); else notifyNoGoal();
         return true;
       case "edit":
         if (!g) { notifyNoGoal(); return true; }
-        try { setGoal(editGoal(g, cmd.objective)); }
-        catch { void notify.show({ title: "Goal", body: GOAL_USAGE, silent: true }); }
+        if (g.phase === "achieved") {
+          void notify.show({ title: "Goal", body: "目标已达成,不可编辑(/goal clear 删除后可设新目标)", silent: true });
+          return true;
+        }
+        edit(cmd.objective);
         return true;
       case "limit":
-        // 只换上限;到顶停摆(active 但 round 到顶)且空闲时 armIfIdle 立即装弹续跑(§5.3)。
         if (!g) { notifyNoGoal(); return true; }
-        try { setGoal(armIfIdle(setGoalMaxRounds(g, cmd.maxRounds))); }
-        catch { void notify.show({ title: "Goal", body: GOAL_USAGE, silent: true }); }
+        limit(cmd.maxRounds);
         return true;
       case "clear":
-        setLastSendError(null);
-        setSendErrorState(null);
-        setGoal(null);
+        clear();
         return true;
       case "status":
         void notify.show({
@@ -402,7 +430,7 @@ export function useGoalController() {
         });
         return true;
     }
-  }, [notify, setGoal, armIfIdle]);
+  }, [notify, setGoal, armIfIdle, pause, resume, edit, limit, clear]);
 
   // 桥接:把当前控制器挂到模块级入口(静态导出侧)。卸载时只清自己,不误伤后续挂载者。
   const handleCommandRef = useRef(handleCommand);

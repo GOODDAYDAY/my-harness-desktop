@@ -11,6 +11,7 @@ import type { SessionEvent } from "@my-harness-desktop/shared";
 const mocks = vi.hoisted(() => ({
   prompt: vi.fn(),
   updateHeader: vi.fn(),
+  annotate: vi.fn(),
   openSession: vi.fn(),
   notify: vi.fn(),
   eventsEmit: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@my-harness-desktop/react", () => {
     },
     updateHeader: mocks.updateHeader,
     openSession: mocks.openSession,
+    annotate: mocks.annotate,
   };
   const messaging = { prompt: mocks.prompt };
   const notify = { show: mocks.notify };
@@ -69,6 +71,8 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.prompt.mockResolvedValue(undefined);
     mocks.updateHeader.mockReset();
     mocks.updateHeader.mockResolvedValue(undefined);
+    mocks.annotate.mockReset();
+    mocks.annotate.mockResolvedValue(undefined);
     mocks.openSession.mockReset();
     mocks.openSession.mockResolvedValue(null); // 默认无既有目标
     mocks.notify.mockReset();
@@ -395,6 +399,31 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
       await Promise.resolve();
     });
     expect(mocks.updateHeader).not.toHaveBeenCalled();
+  });
+
+  it("控制动作留痕:停/恢复/改/提限/删各出一条 goal_note 注解(中立层,机读 JSON)", async () => {
+    renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 留痕目标"); });
+    await act(async () => { await runGoalCommand("/goal stop"); });
+    await act(async () => { await runGoalCommand("/goal resume"); });
+    await act(async () => { await runGoalCommand("/goal edit 新目标"); });
+    await act(async () => { await runGoalCommand("/goal limit 500"); });
+    await act(async () => { await runGoalCommand("/goal clear"); });
+    const notes = mocks.annotate.mock.calls.map((c) => JSON.parse(c[2] as string).action);
+    expect(notes).toEqual(["pause", "resume", "edit", "limit", "clear"]);
+    for (const c of mocks.annotate.mock.calls) {
+      expect(c[0]).toBe("/p/s.jsonl"); // 写当前会话
+      expect(c[1]).toBe("goal_note");
+    }
+  });
+
+  it("引擎自动迁移也留痕:异常收敛自动暂停出注解卡", async () => {
+    renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 异常目标"); });
+    mocks.messages = [{ role: "assistant", content: "x", error: true }];
+    emit({ type: "agentSettled" });
+    expect(mocks.annotate).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mocks.annotate.mock.calls[0][2] as string).action).toBe("auto_pause_error");
   });
 
   it("裸 /goal 查看状态(通知);无目标时子命令提示而非崩溃(仍吞发送)", async () => {

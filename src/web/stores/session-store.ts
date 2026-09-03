@@ -446,6 +446,8 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
     // 非消息条目(分隔线/custom 消息)按身份去重(防内核重复推送同一 entry)。
     // divider 的 content 恒为 ""(session-state.ts:372),不可用 textOf(content) 判重——
     // 否则任意两条 divider 互判重复,model/thinking 分隔线全被吞(根因)。
+    // id 优先于文本判重:带唯一 id 的注解条目(中立层会话注解,custom_message)同文案
+    // 出现多次是合法的(如同轮两次暂停),按 id 区分;无 id 的走文本判重(原语义)。
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m.role !== neutral.role) continue;
@@ -454,8 +456,12 @@ export function applyEvent(messages: NeutralMessage[], event: SessionEvent): Neu
         if (neutral.id && m.id) { if (m.id === neutral.id) return messages; continue; }
         if (m.kind === neutral.kind && m.i18nKey === neutral.i18nKey
           && JSON.stringify(m.i18nArgs) === JSON.stringify(neutral.i18nArgs)) return messages;
-      } else if (textOf(m.content) === textOf(neutral.content)) {
-        return messages;
+      } else {
+        if (neutral.id && m.id) {
+          if (m.id === neutral.id) return messages;
+          continue;
+        }
+        if (textOf(m.content) === textOf(neutral.content)) return messages;
       }
     }
     return [...messages, neutral];

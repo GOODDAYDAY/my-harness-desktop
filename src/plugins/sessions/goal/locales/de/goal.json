@@ -10,5 +10,13 @@
   "goal.bar.achieved": "Ziel erreicht",
   "goal.settings.group": "Ziel",
   "goal.settings.maxRounds": "Fortsetzungsrunden-Limit",
-  "goal.settings.maxRoundsDesc": "Standard, wenn ein Ziel kein eigenes Limit setzt; gilt nur für neue Ziele. Für laufende Ziele: /goal limit <n>."
+  "goal.settings.maxRoundsDesc": "Standard, wenn ein Ziel kein eigenes Limit setzt; gilt nur für neue Ziele. Für laufende Ziele: /goal limit <n>.",
+  "goal.note.pause": "Ziel-Fortsetzung pausiert",
+  "goal.note.resume": "Ziel-Fortsetzung fortgesetzt",
+  "goal.note.edit": "Ziel bearbeitet: {{detail}}",
+  "goal.note.limit": "Rundenlimit auf {{detail}} gesetzt",
+  "goal.note.clear": "Ziel entfernt",
+  "goal.note.auto_pause_error": "Runde mit Fehler beendet; Ziel automatisch pausiert",
+  "goal.note.auto_pause_interrupt": "Runde unterbrochen; Ziel automatisch pausiert",
+  "goal.note.send_failed": "Fortsetzung senden fehlgeschlagen; Ziel automatisch pausiert: {{detail}}"
 }

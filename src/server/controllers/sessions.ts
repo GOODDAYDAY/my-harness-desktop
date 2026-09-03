@@ -115,6 +115,9 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.session.steer, (_e, text: string, images?: ImageInput[]) => sessionStore.steer(text, images));
   gateway.register(IPC.session.followUp, (_e, text: string, images?: ImageInput[]) => sessionStore.followUp(text, images));
   gateway.register(IPC.session.abortRetry, () => sessionStore.abortRetry());
+  // 中立层会话注解(机制面,goal 控制动作留痕是首个消费方)
+  gateway.register(IPC.session.annotate, (_e, sessionPath: string, customType: string, content: string) =>
+    sessionStore.annotate(sessionPath, customType, content));
 
   // ---- ModelApi(模型快捷切换)----
   gateway.register(IPC.session.cycleModel, () => sessionStore.cycleModel());

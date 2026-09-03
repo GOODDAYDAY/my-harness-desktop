@@ -74,6 +74,8 @@ export function usePluginContext(): PluginContext {
       window.kernel.sessions.renameSession(sessionPath, name).then(() => undefined),
     updateHeader: (sessionPath, patch) =>
       window.kernel.sessions.updateHeader(sessionPath, patch).then(() => undefined),
+    annotate: (sessionPath, customType, content) =>
+      window.kernel.sessions.annotate(sessionPath, customType, content),
     deleteSessions: (paths) =>
       window.kernel.sessions.deleteSessions(paths).then(() => undefined),
     start: (cwd, sessionPath) => window.kernel.sessions.start(cwd, sessionPath).then(() => undefined),

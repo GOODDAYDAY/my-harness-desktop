@@ -65,11 +65,15 @@ export function buildDshSeedSession(lineage: NeutralEntry[], opts: SeedOptions):
     lineages: [{
       lineageId: opts.lineageId,
       fork: null,
-      entries: lineage.map(({ neutralEntryId, kernelEntryId, message }) => ({
-        neutralEntryId,
-        ...(kernelEntryId !== undefined ? { kernelEntryId } : {}),
-        message,
-      })),
+      // 只投影对话内容条目(user/assistant/toolResult):divider/注解(中立层会话注解,
+      // 自定义 role)是壳的展示数据,不进内核投影——与 piSeedSession 的过滤同口径。
+      entries: lineage
+        .filter((e) => ["user", "assistant", "toolResult"].includes(e.message.role))
+        .map(({ neutralEntryId, kernelEntryId, message }) => ({
+          neutralEntryId,
+          ...(kernelEntryId !== undefined ? { kernelEntryId } : {}),
+          message,
+        })),
     }],
   };
 }

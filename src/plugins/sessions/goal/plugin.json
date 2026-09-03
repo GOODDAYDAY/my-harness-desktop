@@ -50,6 +50,12 @@
         ]
       }
     ],
+    "messageRenderers": [
+      {
+        "role": "goal_note",
+        "component": "GoalNoteCard"
+      }
+    ],
     "languages": [
       { "id": "goal.zh-CN", "locale": "zh-CN", "resources": "./locales/zh-CN/goal.json" },
       { "id": "goal.en", "locale": "en", "resources": "./locales/en/goal.json" },

@@ -33,6 +33,7 @@ vi.mock("react-i18next", () => {
 const mocks = vi.hoisted(() => ({
   prompt: vi.fn(),
   updateHeader: vi.fn(),
+  annotate: vi.fn(),
   openSession: vi.fn(),
   notify: vi.fn(),
   eventsEmit: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock("@my-harness-desktop/react", () => {
     onKernelEvent: () => () => {},
     updateHeader: mocks.updateHeader,
     openSession: mocks.openSession,
+    annotate: mocks.annotate,
   };
   const messaging = { prompt: mocks.prompt };
   const notify = { show: mocks.notify };
@@ -88,6 +90,8 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     mocks.prompt.mockResolvedValue(undefined);
     mocks.updateHeader.mockReset();
     mocks.updateHeader.mockResolvedValue(undefined);
+    mocks.annotate.mockReset();
+    mocks.annotate.mockResolvedValue(undefined);
     mocks.openSession.mockReset();
     mocks.openSession.mockResolvedValue(null);
     mocks.notify.mockReset();

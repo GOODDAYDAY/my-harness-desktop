@@ -164,6 +164,16 @@ describe("dsh seed 转录(wire 形状对齐 session/seed 的 NeutralSessionWire 
     });
   });
 
+  it("buildDshSeedSession 只投影对话角色:user/assistant/toolResult 之外的条目(分隔线/注解卡)不进内核", () => {
+    const mixed: NeutralEntry[] = [
+      ...entries,
+      { neutralEntryId: "root:2", message: { role: "divider", content: "" } },
+      { neutralEntryId: "root:3", message: { role: "goal_note", content: '{"action":"pause"}' } },
+    ];
+    const s = buildDshSeedSession(mixed, { neutralSessionId: "ns", lineageId: "root", header });
+    expect(s.lineages[0].entries.map((e) => e.message.role)).toEqual(["user", "assistant"]);
+  });
+
   it("seed 发给 session/seed 的 session 参数是树,不是线性数组(回归护栏)", async () => {
     const { t, b } = makeBackend();
     t.results.set("session/seed", { sessionId: "root" });

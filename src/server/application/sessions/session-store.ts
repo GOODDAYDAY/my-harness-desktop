@@ -756,6 +756,35 @@ export class SessionStore implements
   async copySession(srcPath: string, targetPath: string): Promise<void> {
     this.catalog.copy(srcPath, targetPath);
   }
+
+  /** 中立层会话注解(设计 docs/design/goal.md §8.3):只写中立层、不写内核会话文件——
+   *  不进模型上下文,刷新/重开仍在;激活会话即时进视图流(custom_message 形状的
+   *  entryAppended,web 侧非消息分支自然 append),后台会话静默落盘、切过去即见。
+   *  渲染由 messageRenderers 槽按 role(=customType)认领。goal 控制动作留痕是首个消费方。
+   *  已知边界:中立层缺失时的兜底快照重建(snapshotNeutralSession)从内核重读,注解不重建——
+   *  注解是壳自有的展示数据,不参与内核投影,可接受。 */
+  async annotate(sessionPath: string, customType: string, content: string): Promise<void> {
+    if (!this.neutralStore) return;
+    const ns = this.neutralSessionIdFromPath(sessionPath);
+    if (!ns) return;
+    const session = this.neutralStore.get(ns);
+    if (!session) return;
+    // 活跃 lineage:激活会话取 proc 的活跃 lineage,否则落根 lineage(注解挂当前可见线);
+    // 中立树还没有任何 lineage 时以 ns 为根(appendNeutralEntry 缺 lineage 会自动建根)。
+    const key = this.resolveProcKey(sessionPath);
+    const proc = key === this.activeProcKey ? this.activeProc() : null;
+    const lineageId = proc?.activeLineageId ?? session.lineages[0]?.lineageId ?? ns;
+    const entry: NeutralEntry = { neutralEntryId: "", message: { role: customType, content, timestamp: Date.now() } };
+    this.neutralStore.put(appendNeutralEntryWithHeader(session, lineageId, entry, new Date().toISOString()));
+    // 激活会话即时进视图流;entry 带唯一 id(web 侧非消息分支按 id 判重优先于文本判重——
+    // 同文案的两次注解(如同轮两次暂停)不互相吞掉)。
+    if (key === this.activeProcKey) {
+      this.dispatch(key, {
+        type: "entryAppended",
+        entry: { type: "custom_message", customType, content, id: `note-${randomUUID()}`, timestamp: new Date().toISOString() },
+      });
+    }
+  }
   async deleteSessions(paths: string[]): Promise<void> {
     // 活跃会话禁止删除:进程 append 会让文件复活,删了也白删(机制兜底,UI 侧另有 deletable 过滤)
     const targets = paths.filter((p) => p !== this.activeSessionPath);

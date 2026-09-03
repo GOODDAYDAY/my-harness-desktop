@@ -342,6 +342,9 @@ const kernel = {
       transport.invoke(IPC.session.rename, sessionPath, name),
     updateHeader: (sessionPath: string, patch: HeaderPatch): Promise<{ ok: boolean }> =>
       transport.invoke(IPC.session.updateHeader, sessionPath, patch),
+    // 中立层会话注解(机制面):只写中立层不进内核,渲染由 messageRenderers 槽按 role 认领
+    annotate: (sessionPath: string, customType: string, content: string): Promise<void> =>
+      transport.invoke(IPC.session.annotate, sessionPath, customType, content),
     deleteSessions: (paths: string[]): Promise<{ ok: boolean }> =>
       transport.invoke(IPC.session.delete, paths),
     list: (cwd: string): Promise<unknown[]> => transport.invoke(IPC.sessions.list, cwd),

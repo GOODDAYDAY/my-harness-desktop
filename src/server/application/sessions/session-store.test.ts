@@ -632,6 +632,18 @@ describe("归档/置顶:中立层真相源不被内核投影失败阻断", () =>
     expect(h?.name).toBe("我的会话");
     expect(h?.custom).toEqual({ subagent: { parent_id: "main" } });
   });
+
+  it("会话注解:落中立层条目(自定义 role,不进对话角色),openSession 消息流可读回", async () => {
+    const { s, neutralStore, ns, sessionPath } = newNeutralStore();
+    await s.annotate(sessionPath, "goal_note", '{"action":"pause"}');
+    const session = neutralStore.get(ns);
+    const notes = session?.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "goal_note");
+    expect(notes).toHaveLength(1);
+    expect(notes?.[0].message.content).toBe('{"action":"pause"}');
+    // 注解条目随 openSession 进消息流(messageRenderers 槽按 role 认领渲染)
+    const detail = await s.openSession(ns);
+    expect(detail?.messages.some((m) => m.role === "goal_note")).toBe(true);
+  });
 });
 
 describe("rawFilePaths(打开原始文件:不拿投影地址硬猜)", () => {

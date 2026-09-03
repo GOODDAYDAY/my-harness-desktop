@@ -10,5 +10,13 @@
   "goal.bar.achieved": "目標已完成",
   "goal.settings.group": "目標（Goal）",
   "goal.settings.maxRounds": "續跑輪數上限",
-  "goal.settings.maxRoundsDesc": "目標未指定上限時的預設值，只對新建目標生效；進行中的目標用 /goal limit <n> 改"
+  "goal.settings.maxRoundsDesc": "目標未指定上限時的預設值，只對新建目標生效；進行中的目標用 /goal limit <n> 改",
+  "goal.note.pause": "已暫停目標續跑",
+  "goal.note.resume": "已恢復目標續跑",
+  "goal.note.edit": "已修改目標：{{detail}}",
+  "goal.note.limit": "輪數上限改為 {{detail}}",
+  "goal.note.clear": "已刪除目標",
+  "goal.note.auto_pause_error": "回合異常結束，目標已自動暫停",
+  "goal.note.auto_pause_interrupt": "回合被中斷，目標已自動暫停",
+  "goal.note.send_failed": "續跑發送失敗，目標已自動暫停：{{detail}}"
 }
