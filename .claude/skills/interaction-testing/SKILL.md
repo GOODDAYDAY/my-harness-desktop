@@ -106,7 +106,7 @@ DOM 只断「呈现对不对」(右对齐/徽章/按钮在不在),数据正确�
 
 **消息动作全是「arm-confirm 两段式」**(收藏/分叉/重试/删除):第一次点 = armed(钮文案变「确认X?」),第二次点才执行。探针只点一次 = 没执行(r61 踩过)。重试的「重发」语义 = fork 当前 lineage + messaging.prompt 重发——重试后视图切到新分支,消息行数可能变少(旧分支的后续不在视图),不是丢消息。
 
-**dsh fork(已厘清)**:服务端 fork 内核无关、有确定性单测守卫(`31b56efe`);UI 触发链(悬停→armed→确认分叉)正常;API 直调 `window.kernel.sessions.pi.forkFromSession(cwd, ns, entryId, "at")` 也验证过(绕过 UI 点击的探针手法)。分支物化(分支发送后 assistant 回写分支 lineage)在端点慢时是唯一未决项——与 pi 共享同一段 seed+发送代码(pi 已实弹验证),只差「dsh 分支回合收敛」这最后一步要一个快端点窗口复核。复核手法:API fork(可靠)→ 分支发 → 磁盘轮询中立层分支条目(protocolTimeout 已拉大,c2ef99b2)。
+**dsh fork(已厘清,含一处待查)**:fork 本身三层皆证(服务端单测 `31b56efe` + UI 触发链 + API 直调 forkFromSession 建第二 lineage)。**待查**:fork 后分支上发送,中立层分支只落 user 条目、assistant 不回写,且分支回合疑似在 dsh 内核侧 seed 后不收敛(不发 turn/end → 壳无 agentSettled)——疑似 dsh 内核对「seed 过的全新分支会话」的回合处理问题(桌面侧与 pi 共享同段 seed+发送代码,pi 已实弹过)。复核手法:API fork → 分支发 → 磁盘轮询中立层分支条目 + 插桩 onEvent 看分支回合有无 agentStart/agentSettled。注意 dsh 端点常在慢态,先确认 base 回合能正常收敛再判分支。
 
 **跨内核边角(已厘清)**:pi 会话有历史后改选 dsh 模型再发,设计是显式降级抛错(「跨内核切换暂缓」)。早前实测的「渲染层 CDP 长阻塞」根因不是产品 bug,是 **CDP `protocolTimeout`(默认 180s)< 探针的等待超时(300s)**——单调用超 180s 被协议层截断成 `Runtime.callFunctionOn timed out` 假失败。已在 `scripts/demo/lib/app.mjs` 的 connect 补 `protocolTimeout: 600000`(c2ef99b2)根治。教训:凡是「等收敛/长回合」类等待,先确认协议层超时不比你的 timeout 小。
 
