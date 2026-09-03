@@ -17,11 +17,11 @@ import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnaps
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader, NeutralChange } from "@my-harness-desktop/shared";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, neutralMessagesOfSession } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, neutralMessagesOfSession, neutralSessionToTree } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import { PendingQuestionStore } from "./pending-question-store";
-import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "@my-harness-desktop/shared";
+import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage, TreeNode } from "@my-harness-desktop/shared";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage, sessionEntryToNeutral, shellSessionStats } from "@my-harness-desktop/shared";
 import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities, PendingQuestionRecord, Question, ToolResultWriteback } from "@my-harness-desktop/shared";
 import type { SessionStoreForRestart } from "@my-harness-desktop/shared";
@@ -1275,8 +1275,16 @@ export class SessionStore implements
     return neutralMessagesOfSession(session, proc.activeLineageId);
   }
 
+  /** 逐条明细树的中立层投影(§209:get_tree → 中立层读,两内核同一数据源)。
+   *  中立层缺失(迁移过渡)回落空树——树是诊断视图,空树是诚实缺面,不伪造。 */
+  private neutralTreeOf(proc: SessionProc): TreeNode[] {
+    const session = this.readNeutral(proc);
+    if (!session) return [];
+    return neutralSessionToTree(session);
+  }
+
   /** resync 一次并广播新基线(start 后与显式刷新走这里)。作用于激活会话。
-   *  内容面(messages)= 中立层(两内核同源);状态面(state/tree)= pi 仍走内核实况
+   *  内容面(messages/tree)= 中立层(两内核同源,§209);状态面(state)= pi 仍走内核实况
    *  (过渡——执行态面 §3.4 收敛后退役),dsh 由壳记账 + 中立头组装。 */
   async sync(): Promise<SyncSnapshot> {
     const proc = this.activeProc();
@@ -1297,6 +1305,9 @@ export class SessionStore implements
           messageCount: messages.length,
         },
         messages,
+        // 逐条明细树同走中立层投影(session-single-source §209:get_tree → 中立层读)——
+        // dsh 从此有真树(此前恒空),与 pi 同一数据源、同一新鲜度。
+        tree: this.neutralTreeOf(proc),
       };
       this.latestSnapshot = snapshot;
       for (const cb of this.snapshotListeners) {
@@ -1311,6 +1322,9 @@ export class SessionStore implements
     const snapshot = await this.asPi(proc).resync();
     // 内容面换中立层(单源):pi 的 get_entries 读到的内核文件内容不再是渲染基线。
     snapshot.messages = messages;
+    // 逐条明细树同换中立层投影(§209):pi 的 get_tree 只剩灾难恢复工具面(§6),
+    // 渲染基线的树与消息同源同新鲜度——此前树停在 sync 发起时刻的内核态,回合间走旧。
+    snapshot.tree = this.neutralTreeOf(proc);
     // 内核 auto-retry 退避期 get_state.isStreaming 报 false,以 busyStates 记账为准折算。
     snapshot.state.isStreaming = snapshot.state.isStreaming || this.isBusy(this.activeProcKey);
     this.latestSnapshot = snapshot;
@@ -2391,6 +2405,21 @@ export class SessionStore implements
       // 完成回合数:agentSettled 是跨内核中性回合收敛信号(pi agent_settled / dsh turn/end),
       // 只数 agentSettled 不数 agentEnd——pi 两者同帧双发,双数会翻倍,dsh 无 agentEnd。
       if (proc) proc.turns += 1;
+      // 回合收敛推一次中立层快照(免 RPC:messages/tree 都是中立层内存投影)——会话树/统计
+      // 等快照消费方在回合间不再走旧(此前快照只在 open/switch/切模型时推,树面板停在
+      // 会话开场态)。只服务激活会话;无基线(未 sync 过)不推,等首个真基线。
+      if (key === this.activeProcKey && proc && this.latestSnapshot) {
+        const snapshot: SyncSnapshot = {
+          ...this.latestSnapshot,
+          state: { ...this.latestSnapshot.state, isStreaming: false, messageCount: this.neutralMessagesOf(proc).length },
+          messages: this.neutralMessagesOf(proc),
+          tree: this.neutralTreeOf(proc),
+        };
+        this.latestSnapshot = snapshot;
+        for (const cb of this.snapshotListeners) {
+          try { cb(snapshot); } catch (err) { console.error("[session-store] 快照监听器抛错已隔离:", err); }
+        }
+      }
     } else if (event.type === "autoRetryStart") {
       this.busyStates.set(key, true);
     } else if (event.type === "autoRetryEnd") {

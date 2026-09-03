@@ -7,7 +7,7 @@
 // 本文件零依赖(只 import domain 内部的 kernel + 中性事件),是圆心最内层的原子。
 
 import type { KernelId } from "./kernel";
-import type { NeutralMessage } from "./events/session-state";
+import type { NeutralMessage, TreeNode } from "./events/session-state";
 import { deduplicateAdjacent } from "./events/session-state";
 import { messageContentText, sessionMessagePreview } from "./text";
 
@@ -301,7 +301,6 @@ export function backfillUserAuthority(
 }
 
 // ============ 完整线性内容(kernel-forkless §11)============
-
 /** 一条 lineage 的完整线性内容:沿 fork 链向上,取父 lineage 到分叉点为止的前缀
  *  (boundary 是「含端点的继承前缀」——父条目从根到 boundaryEntryId 都继承,之后的丢弃),
  *  再拼自身独有条目。root lineage(fork=null)就是自己的 entries。
@@ -327,6 +326,93 @@ export function lineageContent(session: NeutralSession, lineageId: string): Neut
   };
   walk(lineageId);
   return acc;
+}
+
+// ============ 逐条明细树投影(session-single-source §209:get_tree → 中立层读)============
+
+/** divider kind → 树 entryType 映射(树消费侧词表:user/assistant/toolResult/model_change/
+ *  thinking_level_change/compaction/branch_summary/session_info…,见 session-tree 插件
+ *  groupOf/dotColor)。内核树的 entryType 是内核私有词表,中立层按语义映射,不直抄。 */
+const DIVIDER_ENTRY_TYPE: Record<string, string> = {
+  model: "model_change",
+  thinking: "thinking_level_change",
+  compaction: "compaction",
+  branch: "branch_summary",
+  info: "session_info",
+};
+
+/** 单条中立 entry → 树节点(preview:对话取文本首行压平;model 分隔线取 provider · modelId
+ *  双段;rename 取新名;其余分隔线取 detail;空 → undefined 不伪造)。 */
+function neutralEntryToTreeNode(entry: NeutralEntry): TreeNode {
+  const m = entry.message;
+  const entryType = m.role === "divider"
+    ? (DIVIDER_ENTRY_TYPE[String(m.kind ?? "")] ?? "divider")
+    : m.role;
+  let preview: string | undefined;
+  if (m.role === "divider") {
+    const args = (m.i18nArgs ?? {}) as Record<string, unknown>;
+    if (m.kind === "model") {
+      preview = [args.provider, args.modelId].filter((x): x is string => typeof x === "string" && !!x).join(" · ") || undefined;
+    } else if (typeof args.name === "string") {
+      preview = args.name;
+    } else if (typeof m.detail === "string") {
+      preview = m.detail;
+    }
+  } else {
+    preview = sessionMessagePreview(messageContentText(m.content));
+  }
+  return {
+    entryId: entry.neutralEntryId,
+    entryType,
+    preview,
+    timestamp: typeof m.timestamp === "number" ? m.timestamp : undefined,
+  };
+}
+
+/** 中立会话 → 逐条明细树(TreeNode[],与内核 get_tree 同形状)。
+ *  结构规则:每条 lineage 内部是线性链(后一条是前一条的 child);fork lineage 的链头
+ *  挂到父 lineage 的 boundary 节点做额外 child;boundary 悬空(损坏/外部坐标)降级为
+ *  挂到森林根(不丢分支、不静默挂错父)。拓扑序保证父链先建(sortLineagesTopologically)。
+ *  纯函数、零依赖——渲染层会话树/detail 视图与 sync 快照共用同一投影(契约单源)。 */
+export function neutralSessionToTree(session: NeutralSession): TreeNode[] {
+  const forest: TreeNode[] = [];
+  const byEntryId = new Map<string, TreeNode>();
+  for (const lineage of sortLineagesTopologically(session.lineages)) {
+    let prev: TreeNode | null = null;
+    let head: TreeNode | null = null;
+    for (const entry of lineage.entries) {
+      const node = neutralEntryToTreeNode(entry);
+      byEntryId.set(entry.neutralEntryId, node);
+      if (prev) {
+        prev.children = [...(prev.children ?? []), node];
+        prev.isLeaf = false;
+      } else {
+        head = node;
+      }
+      prev = node;
+    }
+    if (!head) continue;
+    if (!lineage.fork) {
+      forest.push(head);
+      continue;
+    }
+    const boundaryNode = byEntryId.get(lineage.fork.boundaryEntryId);
+    if (boundaryNode) {
+      boundaryNode.children = [...(boundaryNode.children ?? []), head];
+      boundaryNode.isLeaf = false;
+    } else {
+      forest.push(head); // boundary 悬空:降级挂根,不丢分支
+    }
+  }
+  // isLeaf 终态:无 children 即叶(初始 undefined 视为叶,统一落 true 供渲染侧直读)
+  const markLeaves = (nodes: TreeNode[]): void => {
+    for (const n of nodes) {
+      if (!n.children || n.children.length === 0) n.isLeaf = true;
+      else markLeaves(n.children);
+    }
+  };
+  markLeaves(forest);
+  return forest;
 }
 
 // ============ seed 投影组装(session-single-source §4.1)============
