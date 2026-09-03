@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { SessionStore, type BackendFactory } from "./session-store";
 import { PiBackend } from "../../kernel/pi/backend/pi-backend";
 import { PiSessionCatalog } from "../../kernel/pi/backend/pi-catalog";
@@ -185,6 +185,28 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
 });
 
 describe("abort 双保险与强杀兜底", () => {
+  it("dsh 后端(无 pi 扩展面)abort 不崩、真中断到底——asPi 同步抛错不拦主中断", async () => {
+    // 根因回归守卫:abort 里 `await this.asPi(proc).abortBash().catch(...)` —— asPi 在 dsh
+    // 同步抛错(.catch 只兜 promise 拒绝、兜不住同步抛),整个 abort 崩在中断前,dsh 会话
+    // 停止按钮完全失效(实弹复现:停止钮不消失、无 stopped 落盘)。修复:能力面门控,
+    // 无 pi 面就跳过 abortBash。
+    const dshMock = new MockBackend();
+    const dshSource: KernelModelSource = {
+      listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
+    };
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const dshFactory: BackendFactory = {
+      create: (opts) => opts.kernel === "dsh"
+        ? dshMock as unknown as BaseBackend
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+    };
+    const dshStore = new SessionStore(dshFactory, catalogFactory, dir, undefined, undefined, catalog);
+    dshStore.setContext(CWD, null); // 空会话
+    await dshStore.setModel("us-new", "dsh-model", "dsh"); // 选 dsh 模型 → 起 dsh 后端
+    await expect(dshStore.abort()).resolves.toBeUndefined();
+    expect(dshMock.calls).toContain("abort");
+  });
+
   it("先发 abort_bash 再发 abort(executeBash 路径兜底)", async () => {
     await store.abort();
     const cmds = adapter.sent.filter((t) => t === "abort_bash" || t === "abort");

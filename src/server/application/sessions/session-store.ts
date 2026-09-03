@@ -1721,7 +1721,10 @@ export class SessionStore implements
     // executeBash 路径(type:"bash" 直接命令)持独立 abortController,agent.abort 不覆盖,
     // 需 abort_bash 单独中断。顺序不能反:abort 会等 waitForIdle,工具不响应时阻塞,
     // abort_bash 排在后面永远执行不到——先发 abort_bash 快速中断 bash,再发 abort 收尾 agent。
-    await this.asPi(proc).abortBash().catch(() => {});
+    // abortBash 是 pi 扩展面(§7.6 能力探测):dsh 无此面。asPi 在 dsh 上**同步抛错**
+    // (.catch 只兜 promise 拒绝、兜不住同步抛)——不拦则整个 abort 在 dsh 上崩在
+    // 中断前,停止按钮完全失效(实弹复现:dsh 流式点停止,停止钮不消失、无 stopped 落盘)。
+    if (proc.backend.capabilities.pi) await this.asPi(proc).abortBash().catch(() => {});
     try {
       await proc.backend.abort();
     } catch {
