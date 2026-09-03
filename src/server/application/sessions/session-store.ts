@@ -17,7 +17,7 @@ import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnaps
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader, NeutralChange } from "@my-harness-desktop/shared";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "@my-harness-desktop/shared";
@@ -1483,6 +1483,19 @@ export class SessionStore implements
     this.putNeutral({ ...cur, header }, { ns, kind: "header", header });
   }
 
+  /** 旁路改模型的头域回写(§4.5):只更新 provider/modelId/kernel,thinkingLevel 读现存域保留——
+   *  旁路事件不带档位,不能清掉已存值。fire-and-forget(事件流里不阻塞)。 */
+  private async writeBackModelRef(sessionPath: string, provider: string, modelId: string, kernel: KernelId): Promise<void> {
+    const ns = this.neutralSessionIdFromPath(sessionPath);
+    if (!ns || !this.neutralStore) return;
+    const cur = this.neutralStore.get(ns);
+    const existing = parseSessionModelPrefs(cur?.header.custom ?? undefined);
+    await this.writeNeutralModelPrefs(sessionPath, {
+      provider, modelId, kernel,
+      thinkingLevel: existing?.thinkingLevel ?? "",
+    }).catch(() => {});
+  }
+
   /** 从快照拼全量三字段 + kernel;凑不齐(进程未就绪边界)返回 null——交给下一次 sync 回写。 */
   private modelPrefsFromState(state: SyncSnapshot["state"]): SessionModelPrefs | null {
     const model = state.model;
@@ -1805,7 +1818,10 @@ export class SessionStore implements
     }
     const newLineageId = randomUUID();
     if (cur && this.neutralStore) {
-      const lineage = { lineageId: newLineageId, fork: { parentLineageId: parent, boundaryEntryId: boundary ?? "" }, entries: [] };
+      // 边界归一:调用方传的 boundary 可能是内核条目 id(老渲染层路径)——先按中立树
+      // 解析成中立 entryId,解析不到按根处理(不静默挂错)。
+      const resolvedBoundary = boundary ? resolveBoundaryEntryId(cur, parent, boundary) : "";
+      const lineage = { lineageId: newLineageId, fork: { parentLineageId: parent, boundaryEntryId: resolvedBoundary }, entries: [] };
       const next = upsertNeutralLineage(cur, lineage);
       this.putNeutral(next, { ns: proc.neutralSessionId, kind: "lineage", lineage, header: next.header });
     }
@@ -1872,9 +1888,33 @@ export class SessionStore implements
   }
 
   async clone(): Promise<void> {
-    // clone 是 pi 专属(文件复制语义);dsh 无此面 → piSend 经 asPi 抛错降级(§7.6)。
-    await this.piSend((pi) => pi.clone());
-    await this.reconcileAfterSessionReplacement();
+    // clone 归壳(session-single-source §4.2):中立层整树复制 + 新 ns——离线可克隆,
+    // 不再需要 pi 进程在线做文件 fork;内核侧下次发送时按新 lineage 惰性 seed(§4.4)。
+    const srcNs = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
+    const cur = srcNs ? this.neutralStore?.get(srcNs) : null;
+    if (!cur || !this.neutralStore || !this.activeCwd) throw new Error("克隆失败:当前会话无中立层数据");
+    const newNs = randomUUID();
+    const cloned = cloneNeutralSession(cur, newNs, { name: forkCopyName(cur.header.name), nowIso: new Date().toISOString() });
+    this.putNeutral(cloned, { ns: newNs, kind: "session", session: cloned });
+    // 切激活到克隆会话:投影地址按源会话内核归属派生(内容型内核=派生路径,惰性内核=裸 id)。
+    const catalog = this.catalogFor(cur.header.kernel);
+    const rootLineageId = cloned.lineages.find((l) => l.fork === null)?.lineageId ?? newNs;
+    const newPath = catalog.projectionPath(this.activeCwd, rootLineageId);
+    this.setContext(this.activeCwd, newPath);
+    // 克隆后无活进程(惰性 seed 等下次发送)——基线直接从中立层出并广播,
+    // renderer 即时看到克隆内容(内容单源:基线不需要活进程)。
+    const messages = deduplicateAdjacent(lineageContent(cloned, rootLineageId).map((e) =>
+      e.display?.image ? ({ ...e.message, __image: e.display.image } as NeutralMessage) : e.message,
+    ));
+    const snapshot: SyncSnapshot = {
+      ...emptySnapshot(),
+      state: { ...emptySnapshot().state, sessionId: newNs, sessionFile: newPath, sessionName: cloned.header.name ?? "" },
+      messages,
+    };
+    this.latestSnapshot = snapshot;
+    for (const cb of this.snapshotListeners) {
+      try { cb(snapshot); } catch (err) { console.error("[session-store] 快照监听器抛错已隔离:", err); }
+    }
   }
 
   /** 从任意会话分叉(§kernel-forkless §14/§33):书签 fork = 在源会话中立树切一条新 lineage,
@@ -1885,7 +1925,8 @@ export class SessionStore implements
     if (!cur) return;
     const newLineageId = randomUUID();
     const rootLineageId = cur.lineages.find((l) => l.fork === null)?.lineageId ?? srcNs;
-    const lineage = { lineageId: newLineageId, fork: { parentLineageId: rootLineageId, boundaryEntryId: entryId }, entries: [] };
+    const resolvedBoundary = resolveBoundaryEntryId(cur, rootLineageId, entryId);
+    const lineage = { lineageId: newLineageId, fork: { parentLineageId: rootLineageId, boundaryEntryId: resolvedBoundary }, entries: [] };
     const next = upsertNeutralLineage(cur, lineage);
     this.putNeutral(next, { ns: srcNs, kind: "lineage", lineage, header: next.header });
     const proc = this.activeProc();
@@ -1913,8 +1954,16 @@ export class SessionStore implements
     this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sf });
   }
 
+  /** 分叉点之前的消息序列(session-single-source §4.2):中立层前缀截取,不再走 pi RPC。
+   *  entryId 可能是内核条目 id(老调用方)——先归一为中立坐标再截。 */
   async getForkMessages(entryId: string): Promise<NeutralMessage[]> {
-    return this.piSend((pi) => pi.getForkMessages(entryId));
+    const proc = this.activeProc();
+    const session = proc ? this.readNeutral(proc) : null;
+    if (!session || !proc) return [];
+    const boundary = resolveBoundaryEntryId(session, proc.activeLineageId, entryId);
+    const prefix = materializeLineagePrefix(session, proc.activeLineageId, boundary || entryId);
+    if (!prefix) return [];
+    return prefix.entries.map((e) => e.message);
   }
 
   // ============ PiExtensions:维护面(compact/auto/export/lastText) ============
@@ -1929,10 +1978,6 @@ export class SessionStore implements
 
   async setAutoRetry(enabled: boolean): Promise<void> {
     await this.piSend((pi) => pi.setAutoRetry(enabled));
-  }
-
-  async exportHtml(outputPath?: string): Promise<string> {
-    return this.piSend((pi) => pi.exportHtml(outputPath));
   }
 
   async getLastAssistantText(): Promise<string> {
@@ -2023,6 +2068,22 @@ export class SessionStore implements
       // 与中立层(openSession/refresh)读到同一模型,message.model 固定到发送时。
       const entry = (event as { entry?: unknown }).entry;
       if (entry != null) (event as { entry?: unknown }).entry = this.withEntryModel(proc, entry);
+      // 内核旁路改模型的回写(session-single-source §4.5):dsh 的 request/header 派生
+      // model_change 条目进事件流即写回头域——中立层头域成为模型实况的共享真相源。
+      const rawType = (event as { entry?: { type?: unknown } }).entry?.type;
+      if (rawType === "model_change" && key === this.activeProcKey && this.activeSessionPath) {
+        const e = (event as { entry?: { provider?: unknown; modelId?: unknown } }).entry!;
+        if (typeof e.provider === "string" && typeof e.modelId === "string") {
+          void this.writeBackModelRef(this.activeSessionPath, e.provider, e.modelId, proc.kernel);
+        }
+      }
+    }
+    // pi 的 modelSelect 事件(内核 CLI /model 等旁路)同样回写头域(§4.5,两内核同一条)。
+    if (event.type === "modelSelect" && key === this.activeProcKey && this.activeSessionPath) {
+      const m = (event as { model?: { provider?: string; id?: string } }).model;
+      if (m?.provider && m.id && proc) {
+        void this.writeBackModelRef(this.activeSessionPath, m.provider, m.id, proc.kernel);
+      }
     }
     // 写穿(§4.1):messageEnd 是内容落盘的主触发——两内核都产出终态 messageEnd,
     // 不再依赖内核落盘回执事件(pi 的 entry_appended 补丁)作为唯一来源。

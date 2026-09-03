@@ -201,7 +201,6 @@ export const IPC = {
     cycleThinkingLevel: "session:cycleThinkingLevel",
     delete: "session:delete",
     event: "session:event",
-    exportHtml: "session:exportHtml",
     question: "session:question",
     followUp: "session:followUp",
     fork: "session:fork",

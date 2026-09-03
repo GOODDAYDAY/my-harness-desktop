@@ -1,7 +1,8 @@
 // assembleSeedProjection 单测:seed 投影组装的纯函数行为。
 // 业务语义对齐 session-single-source §4.1:压缩截断(摘要代身) + role 白名单。
 import { describe, it, expect } from "vitest";
-import { assembleSeedProjection, emptyNeutralSession, appendNeutralEntry, type NeutralSession, type NeutralEntry, type NeutralMessage } from "./session-neutral";
+import { assembleSeedProjection, emptyNeutralSession, appendNeutralEntry, type NeutralSession, type NeutralEntry } from "./session-neutral";
+import type { NeutralMessage } from "./events/session-state";
 
 function msg(role: string, text: string): NeutralMessage {
   return { role, content: text } as NeutralMessage;

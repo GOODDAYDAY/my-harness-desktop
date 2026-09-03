@@ -158,6 +158,25 @@ describe("写穿:messageEnd 是内容落中立层的主触发", () => {
     expect(comp!.detail).toBe("摘要:聊过天气"); // 摘要落库,作 seed 投影的截断代身
   });
 
+  it("clone 归壳:中立层整树复制 + 新 ns,内核零参与(§4.2)", async () => {
+    await store.prompt("问", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "", kernel: "pi" });
+    adapter.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "答" }] } });
+    const rpcBefore = adapter.sent.length;
+    await store.clone();
+    // 内核零参与:clone 全程没有发任何 RPC
+    expect(adapter.sent.length).toBe(rpcBefore);
+    const sessions = neutralStore.listByCwd(CWD);
+    expect(sessions).toHaveLength(2);
+    const cloned = sessions.find((x) => x.header.name?.includes("(copy)"));
+    expect(cloned).toBeTruthy();
+    expect(cloned!.neutralSessionId).not.toBe(ns);
+    // 内容整树复制(对话条目同文)
+    const clonedConvo = cloned!.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "user" || e.message.role === "assistant");
+    expect(clonedConvo.map((e) => e.message.role)).toEqual(["user", "assistant"]);
+    // 克隆条目不携带源会话的内核 id(目标内核 seed 时重分配)
+    expect(clonedConvo.every((e) => e.kernelEntryId === undefined)).toBe(true);
+  });
+
   it("sync 内容基线从中立层出(§4.2):pi 的 get_entries 返回空也照见中立层内容", async () => {
     await store.prompt("问", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "", kernel: "pi" });
     adapter.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "答" }] } });

@@ -27,7 +27,6 @@ import {
   buildPromptCommand,
   buildAbortCommand,
   buildSetModelCommand,
-  buildForkCommand,
   buildSetSessionNameCommand,
   buildSteerCommand,
   buildFollowUpCommand,
@@ -37,14 +36,11 @@ import {
   buildCompactCommand,
   buildSetAutoCompactionCommand,
   buildSetAutoRetryCommand,
-  buildExportHtmlCommand,
   buildGetLastAssistantTextCommand,
   buildSetSteeringModeCommand,
   buildSetFollowUpModeCommand,
   buildBashCommand,
   buildAbortBashCommand,
-  buildCloneCommand,
-  buildGetForkMessagesCommand,
 } from "../protocol/commands";
 import { translateEvent } from "../protocol/event-translator";
 import type { RpcCommand, RpcResponse, RpcExtensionUIResponse, Model } from "../protocol/rpc-types";
@@ -196,12 +192,6 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     else await this.sendMessage(content);
   }
 
-  /** pi 专属 fork(带 position + cancelled 语义):返回 RpcResponse,SessionStore 查 cancelled 后自行对账。
-   *  与中性 BaseBackend.fork(返回 lineageId)并存——后者给新 lineage API 用,本方法给现有 SessionTreeApi。 */
-  forkCommand(entryId: string, position?: "before" | "at"): Promise<RpcResponse> {
-    return this.adapter.send(buildForkCommand(entryId, position));
-  }
-
   async setModel(provider: string, modelId: string): Promise<void> {
     await this.adapter.send(buildSetModelCommand({ provider, modelId }));
   }
@@ -257,14 +247,6 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     await this.adapter.send(buildSetAutoRetryCommand(enabled));
   }
 
-  exportHtml(outputPath?: string): Promise<string> {
-    return this.adapter.send(buildExportHtmlCommand(outputPath)).then((r) => {
-      const res = r as RpcResponse & { data?: { path?: string } | string };
-      if (typeof res.data === "string") return res.data;
-      return (res.data as { path?: string } | undefined)?.path ?? "";
-    });
-  }
-
   getLastAssistantText(): Promise<string> {
     return this.adapter.send(buildGetLastAssistantTextCommand()).then((r) => {
       const res = r as RpcResponse & { data?: { text?: string } | string };
@@ -295,18 +277,6 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
 
   abortBash(): Promise<RpcResponse> {
     return this.adapter.send(buildAbortBashCommand());
-  }
-
-  async clone(): Promise<void> {
-    await this.adapter.send(buildCloneCommand());
-  }
-
-  getForkMessages(entryId: string): Promise<NeutralMessage[]> {
-    return this.adapter.send(buildGetForkMessagesCommand(entryId)).then((r) => {
-      const res = r as RpcResponse & { data?: { messages?: { role: string; content?: unknown; timestamp?: number }[] } };
-      const messages = (res.data as { messages?: unknown[] } | undefined)?.messages ?? [];
-      return deduplicateAdjacent((messages as NeutralMessage[]).filter(isVisibleMessage));
-    });
   }
 
   getSessionStats(local: { tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null; turns: number; steps: number }): Promise<SessionStats> {

@@ -423,3 +423,61 @@ export function applyNeutralChange(session: NeutralSession, change: NeutralChang
       return change.session;
   }
 }
+
+// ============ 克隆(session-single-source §4.2:clone 归壳)============
+
+/** 分叉边界归一:把调用方给的 boundary(可能是中立 entryId `{lineageId}:{seq}`,也可能是
+ *  内核私有条目 id)解析成父 lineage 里的中立 entryId。解析不出(陈旧/外部坐标)则原样透传——
+ *  投影语义对未知边界是安全兜底(继承完整父前缀),不丢调用方信息、也不静默挂错父。 */
+export function resolveBoundaryEntryId(session: NeutralSession, parentLineageId: string, boundary: string): string {
+  const parent = session.lineages.find((l) => l.lineageId === parentLineageId);
+  if (!parent) return boundary;
+  if (parent.entries.some((e) => e.neutralEntryId === boundary)) return boundary;
+  const byKernel = parent.entries.find((e) => e.kernelEntryId && e.kernelEntryId === boundary);
+  return byKernel?.neutralEntryId ?? boundary;
+}
+
+/**
+ * 克隆一个中立会话为全新会话(纯壳操作,内核不参与):
+ * 整树复制,根 lineage 取新 ns;分支 lineage 用确定性派生 id(`<newNs>-fork-<序>`),
+ * fork 引用与 boundaryEntryId 随 id 映射一并改写;条目的中立 entryId 按新 lineage 重派生,
+ * kernelEntryId/message.id 清除(目标内核 seed 时重分配——投影线索不跨会话携带)。
+ * 纯函数:nowIso 由调用方注入(创建时间),不在圆心读环境。
+ */
+export function cloneNeutralSession(session: NeutralSession, newNs: string, opts: { name?: string; nowIso: string }): NeutralSession {
+  // 第一遍:lineage id 映射(根 → newNs;分支按拓扑序派生确定性 id)
+  const sorted = sortLineagesTopologically(session.lineages);
+  const idMap = new Map<string, string>();
+  let forkSeq = 0;
+  for (const l of sorted) {
+    idMap.set(l.lineageId, l.fork === null ? newNs : `${newNs}-fork-${forkSeq++}`);
+  }
+  const lineages: NeutralLineage[] = sorted.map((l) => {
+    const newId = idMap.get(l.lineageId)!;
+    const entries: NeutralEntry[] = l.entries.map((e, i) => ({
+      neutralEntryId: neutralEntryId(newId, i),
+      message: { ...e.message, id: undefined },
+      ...(e.display ? { display: e.display } : {}),
+    }));
+    if (!l.fork) return { lineageId: newId, fork: null, entries };
+    // fork 引用换绑:父 lineage id 经 idMap 翻译;boundary 先按源树归一为中立 id 再换绑。
+    const newParent = idMap.get(l.fork.parentLineageId) ?? newNs;
+    const sourceBoundary = resolveBoundaryEntryId(session, l.fork.parentLineageId, l.fork.boundaryEntryId);
+    const seqPart = sourceBoundary.includes(":") ? Number(sourceBoundary.split(":").pop()) : NaN;
+    return {
+      lineageId: newId,
+      fork: {
+        parentLineageId: newParent,
+        boundaryEntryId: Number.isFinite(seqPart) ? neutralEntryId(newParent, seqPart) : "",
+      },
+      entries,
+    };
+  });
+  const header: NeutralSessionHeader = {
+    ...session.header,
+    name: opts.name ?? session.header.name,
+    createdAt: opts.nowIso,
+    updatedAt: opts.nowIso,
+  };
+  return { neutralSessionId: newNs, header, lineages };
+}

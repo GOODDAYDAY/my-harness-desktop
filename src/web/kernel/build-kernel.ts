@@ -405,6 +405,9 @@ const kernel = {
       transport.invoke(IPC.session.setThinkingLevel, level),
     // SessionTreeApi
     fork: (parentLineageId: string, boundary?: string): Promise<string> => transport.invoke(IPC.session.fork, parentLineageId, boundary),
+    // 中性树面(session-single-source §4.2):壳的实现,与内核无关
+    clone: (): Promise<void> => transport.invoke(IPC.session.clone),
+    getForkMessages: (entryId: string): Promise<unknown[]> => transport.invoke(IPC.session.getForkMessages, entryId),
     // SessionMaintenanceApi
     getStats: (): Promise<unknown> => transport.invoke(IPC.session.getStats),
     // QueueModeApi
@@ -424,12 +427,9 @@ const kernel = {
       cycleThinkingLevel: (): Promise<void> => transport.invoke(IPC.session.cycleThinkingLevel),
       forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at"): Promise<void> =>
         transport.invoke(IPC.session.forkFromSession, cwd, srcNs, entryId, position),
-      clone: (): Promise<void> => transport.invoke(IPC.session.clone),
-      getForkMessages: (entryId: string): Promise<unknown[]> => transport.invoke(IPC.session.getForkMessages, entryId),
       compact: (customInstructions?: string): Promise<void> => transport.invoke(IPC.session.compact, customInstructions),
       setAutoCompaction: (enabled: boolean): Promise<void> => transport.invoke(IPC.session.setAutoCompaction, enabled),
       setAutoRetry: (enabled: boolean): Promise<void> => transport.invoke(IPC.session.setAutoRetry, enabled),
-      exportHtml: (outputPath?: string): Promise<string> => transport.invoke(IPC.session.exportHtml, outputPath),
       getLastAssistantText: (): Promise<string> => transport.invoke(IPC.session.getLastAssistantText),
       setSteeringMode: (mode: "all" | "one-at-a-time"): Promise<void> => transport.invoke(IPC.session.setSteeringMode, mode),
       setFollowUpMode: (mode: "all" | "one-at-a-time"): Promise<void> => transport.invoke(IPC.session.setFollowUpMode, mode),

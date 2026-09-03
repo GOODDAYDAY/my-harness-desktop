@@ -533,27 +533,19 @@ export function TimelineView(): React.ReactNode {
     virtuosoRef.current.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
   }, [visibleMessages]);
 
-  // 模型显示只认 models.json 已配置清单:任何解析源(快照/头行/默认)引用的模型
-  // 不在配置清单里就返回 null(不合成兜底对象)——否则内核 get_state 的内置回落模型
-  // (实证 anthropic/claude-opus-4-8)会在用户没配模型时露出来(与 session-store
-  // spawn 回落注释同源)。
+  // 模型显示只认 models.json 已配置清单:任何解析源(头域/默认)引用的模型
+  // 不在配置清单里就返回 null(不合成兜底对象)。
   // 模型身份 = (kernel, provider, id)——按三者全匹配,不做 provider+id 反查(pi/dsh 同名歧义)。
   const toModelInfoFallback = (provider: string, modelId: string, kernel?: KernelId): ModelInfo | null =>
     kernel ? (models.find((m) => m.kernel === kernel && m.provider === provider && m.id === modelId) ?? null) : null;
-  // 活会话快照是实时真相,但同样过配置清单校验——内核可能报出未配置的内置回落模型。
-  const snapshotModel = snapshot?.state.model
-    ? toModelInfoFallback(snapshot.state.model.provider, snapshot.state.model.id, snapshot.state.model.kernel)
-    : null;
-  // 展示链优先级:显式意图(pending)→ 活会话实况(快照)→ 会话头持久域 → 应用级默认模型
-  // (getFallbackModel,带内核归属)→ pi settings 默认(仅 pi 语义,排在应用级默认之后)→ 清单首项。
-  // 应用级默认先于 pi 默认:此前 pi settings 默认把 dsh 默认模型盖住,新会话显示成 pi 模型、
-  // 内核标误导成 pi(「选了 dsh 却像在用 pi」的显示层根因)。
+  // 展示链(session-single-source §4.5):点选意图(pending)→ 中立层头域(两内核共享,
+  // 主侧事件驱动写回收敛)→ 应用级默认模型(getFallbackModel,带内核归属)→ 清单首项。
+  // 六级收四级:删掉 pi 专属的「快照实况」与「pi settings 默认」两环——实况改由头域承担
+  // (旁路改模型经 modelSelect/model_change 事件回写头域,主侧 dispatch 收口),pi 与 dsh 同一条链。
   const currentModel =
     (pending ? toModelInfoFallback(pending.provider, pending.modelId, pending.kernel) : null)
-    ?? snapshotModel
     ?? (headerPrefs ? toModelInfoFallback(headerPrefs.provider, headerPrefs.modelId, headerPrefs.kernel) : null)
     ?? (fallbackModel.provider && fallbackModel.modelId ? toModelInfoFallback(fallbackModel.provider, fallbackModel.modelId, fallbackModel.kernel) : null)
-    ?? (defaults.provider && defaults.modelId ? toModelInfoFallback(defaults.provider, defaults.modelId, "pi") : null)
     ?? models[0]
     ?? null;
   // 内核可用性门跟随当前模型归属内核:模型链解析/切换后重探对应内核状态。

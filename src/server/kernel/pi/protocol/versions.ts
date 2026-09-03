@@ -15,8 +15,10 @@ export const FALLBACK_COMMAND_SET: ReadonlySet<string> = new Set([
   "compact", "set_auto_compaction",
   "set_auto_retry", "abort_retry",
   "bash", "abort_bash",
-  "get_session_stats", "export_html",
-  "switch_session", "fork", "clone", "get_fork_messages",
+  "get_session_stats",
+  "switch_session",
   "get_entries", "get_tree", "get_last_assistant_text",
   "set_session_name", "get_messages", "get_commands",
 ]);
+// 已从壳退役的 pi 命令(不再发送,内核侧保留无妨):export_html / fork / clone /
+// get_fork_messages —— session-single-source §4.2(内容面收归中立层,fork/clone 归壳)。
