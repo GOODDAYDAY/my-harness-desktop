@@ -17,7 +17,7 @@ import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnaps
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, lineageContent, assembleSeedProjection } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "@my-harness-desktop/shared";
@@ -893,8 +893,13 @@ export class SessionStore implements
     this.neutralStore.put(appendNeutralEntryWithHeader(cur, proc.activeLineageId, entry, new Date().toISOString()));
   }
 
-  /** 上行同步:entryAppended → 中立层 append/回填(neutral-first §7)。
-   *  user 已在 prompt 时乐观写入中立层,这里回填权威 id/timestamp/kernelEntryId;其余 role 直接 append。 */
+  /** 上行同步:entryAppended → 中立层(session-single-source §4.1:降级为「回填/补漏」)。
+   *  内容落盘的主触发是 messageEnd(writeThroughMessageEnd);本路径只剩三个职责:
+   *  ① user 条目回填权威 id/timestamp/kernelEntryId(乐观写入的后补);
+   *  ② messageEnd 已写条目的 kernelEntryId 回填(绑最近未绑的同 role 条目);
+   *  ③ 不随 messageEnd 的条目(部分内核的工具结果等)兜底 append。
+   *  去重:同 kernelEntryId 已在活跃 lineage → 跳过(双跑期 messageEnd 与补丁/合成
+   *  entryAppended 并存,同一内容只落一条)。 */
   private syncNeutralEntry(proc: SessionProc, event: SessionEvent): void {
     if (!this.neutralStore) return;
     const raw = (event as { entry?: unknown }).entry;
@@ -904,14 +909,77 @@ export class SessionStore implements
     // assistant 消息注入「执行时模型」:message.model 固定到发送时,中立层成为模型真相源(refresh 读得到)。
     const msg = sessionEntryToNeutral(this.withEntryModel(proc, raw));
     if (!msg) return;
+    const cur = this.readNeutral(proc);
+    if (!cur) return;
     if (msg.role === "user") {
-      const cur = this.readNeutral(proc);
-      if (!cur) return;
-      // 回填权威 id/timestamp(此前只回填 kernelEntryId,message.id/timestamp 仍缺 → refresh 无时间徽标)。
-      this.neutralStore.put(backfillUserAuthority(cur, proc.activeLineageId, kernelEntryId, msg.id, msg.timestamp));
+      const next = backfillUserAuthority(cur, proc.activeLineageId, kernelEntryId, msg.id, msg.timestamp);
+      if (next !== cur) {
+        // 回填权威 id/timestamp(此前只回填 kernelEntryId,message.id/timestamp 仍缺 → refresh 无时间徽标)。
+        this.neutralStore.put(next);
+        return;
+      }
+      // steer/总线/续跑注入的用户消息没有乐观条目可绑 → 落一条(否则中立层缺用户侧)。
+      this.appendNeutral(proc, { neutralEntryId: "", kernelEntryId, message: msg });
+      return;
+    }
+    const lineage = cur.lineages.find((l) => l.lineageId === proc.activeLineageId);
+    if (lineage?.entries.some((e) => e.kernelEntryId === kernelEntryId)) return; // 幂等
+    const backfilled = backfillKernelEntryId(cur, proc.activeLineageId, kernelEntryId, msg.role);
+    if (backfilled !== cur) {
+      this.neutralStore.put(backfilled);
       return;
     }
     this.appendNeutral(proc, { neutralEntryId: "", kernelEntryId, message: msg });
+  }
+
+  /** 写穿(session-single-source §4.1):messageEnd 是内容落盘的主触发——两个内核都产出
+   *  终态 messageEnd(pi 原生;dsh 由翻译器把增量组装成完整消息)。
+   *  计时归一(与渲染层 withStreamTiming 同语义):内核 message.timestamp = LLM 调用开始
+   *  时间 → startedAt;条目的 timestamp = 壳写穿时刻(完成时间)。
+   *  幂等:同 kernelEntryId 已落则跳过(重放/双事件防御);无 kernelEntryId(pi 补丁删后)
+   *  的消息按序落,后续 entryAppended 回填补上权威 id。 */
+  private writeThroughMessageEnd(proc: SessionProc, event: SessionEvent): void {
+    if (!this.neutralStore) return;
+    const raw = (event as { message?: NeutralMessage }).message;
+    if (!raw || typeof raw !== "object") return;
+    if (raw.role !== "user" && raw.role !== "assistant" && raw.role !== "toolResult") return;
+    const kernelEntryId = typeof raw.id === "string" ? raw.id : undefined;
+    const cur = this.readNeutral(proc);
+    if (!cur) return;
+    if (raw.role === "user") {
+      const lineage = cur.lineages.find((l) => l.lineageId === proc.activeLineageId);
+      if (kernelEntryId) {
+        if (lineage?.entries.some((e) => e.kernelEntryId === kernelEntryId)) return; // 幂等
+        // 优先回填 prompt() 乐观写入的条目(权威 id/timestamp 转正)
+        const next = backfillUserAuthority(cur, proc.activeLineageId, kernelEntryId, kernelEntryId, raw.timestamp);
+        if (next !== cur) {
+          this.neutralStore.put(next);
+          return;
+        }
+      }
+      // 内容匹配(与渲染层水合同源的双轨语义):末条未绑定 user 条目与本事件同文 →
+      // 是内核回放,不重复落(权威 id 由后续 entryAppended 带回);不同文 →
+      // 注入消息(steer/总线/续跑,无乐观条目)→ 落一条,否则中立层缺用户侧。
+      const lastUnbound = [...(lineage?.entries ?? [])].reverse().find((e) => e.kernelEntryId === undefined && e.message.role === "user");
+      if (lastUnbound && messageContentText(lastUnbound.message.content) === messageContentText(raw.content)) return;
+      this.appendNeutral(proc, { neutralEntryId: "", kernelEntryId, message: { ...raw, timestamp: raw.timestamp ?? Date.now() } });
+      return;
+    }
+    if (kernelEntryId) {
+      const lineage = cur.lineages.find((l) => l.lineageId === proc.activeLineageId);
+      if (lineage?.entries.some((e) => e.kernelEntryId === kernelEntryId)) return; // 幂等
+    }
+    this.appendNeutral(proc, {
+      neutralEntryId: "",
+      kernelEntryId,
+      message: {
+        ...raw,
+        startedAt: raw.startedAt ?? (typeof raw.timestamp === "number" ? raw.timestamp : undefined),
+        timestamp: Date.now(),
+        // assistant 消息注入「执行时模型」(与 entryAppended 路径的 withEntryModel 同语义)
+        ...(proc.effectiveModel && raw.role === "assistant" ? { model: proc.effectiveModel } : {}),
+      },
+    });
   }
 
   /** assistant 消息注入「执行时模型」:message.model 由 proc.effectiveModel 决定。
@@ -1884,12 +1952,17 @@ export class SessionStore implements
       }
     }
     if (event.type === "entryAppended" && proc) {
-      // 上行同步:AI 生成内容增量 append 进中立层(neutral-first §7)
+      // 上行同步:entryAppended 降级为回填/补漏(session-single-source §4.1)
       this.syncNeutralEntry(proc, event);
       // 注入「执行时模型」到广播事件条目——renderer applyEvent 水合时据此补 message.model,
       // 与中立层(openSession/refresh)读到同一模型,message.model 固定到发送时。
       const entry = (event as { entry?: unknown }).entry;
       if (entry != null) (event as { entry?: unknown }).entry = this.withEntryModel(proc, entry);
+    }
+    // 写穿(§4.1):messageEnd 是内容落盘的主触发——两内核都产出终态 messageEnd,
+    // 不再依赖内核落盘回执事件(pi 的 entry_appended 补丁)作为唯一来源。
+    if (event.type === "messageEnd" && proc) {
+      this.writeThroughMessageEnd(proc, event);
     }
     if (event.type === "sessionInfoChanged" && key === this.activeProcKey) {
       // 基线增量:改名即时反映到 latestSnapshot.state.sessionName——prompt() 的自动命名
@@ -1930,6 +2003,20 @@ export class SessionStore implements
       this.busyStates.set(key, true);
     } else if (event.type === "compactionEnd") {
       this.busyStates.set(key, false);
+      // 压缩边界条目落中立层(session-single-source §4.1 压缩感知):中立层不靠读内核文件
+      // 感知压缩点,靠事件。条目形状与文件读路径同一映射(sessionEntryToNeutral,契约单源);
+      // 事件带摘要则记(作 seed 投影的截断代身),不带则只记边界。
+      if (proc) {
+        const payload = event as { summary?: unknown; tokensBefore?: unknown };
+        const synthetic = sessionEntryToNeutral({
+          type: "compaction",
+          id: `comp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          timestamp: new Date().toISOString(),
+          ...(typeof payload.summary === "string" ? { summary: payload.summary } : {}),
+          ...(typeof payload.tokensBefore === "number" ? { tokensBefore: payload.tokensBefore } : {}),
+        });
+        if (synthetic) this.appendNeutral(proc, { neutralEntryId: "", message: synthetic });
+      }
     }
     if (proc) {
       if (event.type === "messageStart") {
