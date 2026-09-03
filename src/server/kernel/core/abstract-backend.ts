@@ -79,11 +79,17 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
   /**
    * 切模型。⚠ 两个内核定模型的时机不对称,实现者必须记住:
    * - pi:模型在 setModel 时定(set_model RPC),start 时不定;
-   * - dsh:模型在 start 的 initialize 握手时定,setModel 因旧运行时缺 session/setModel 是 no-op。
-   * 因此「发起 LLM 前必须先定模型」——dsh 侧要换模型,只能停旧进程、带新 provider/model 重启
-   * (由 session-store 的 ensureForSend 编排),不能指望 setModel 生效。
+   * - dsh:模型在 start 的 initialize 握手时定;运行时热切由内核插件补丁提供
+   *   (installModelSelection 原地热切,docs/model-switching.md §11.1),补丁缺席的
+   *   旧运行时缺 session/setModel → setModel 记缺面 + no-op,壳按 supportsRuntimeSetModel
+   *   翻转回落停旧起新(由 session-store 的 ensureForSend/setModel 编排)。
    */
   abstract setModel(provider: string, modelId: string): Promise<void>;
+
+  /** 能力轴(docs/model-switching.md §11.2):运行时切模型对已物化会话是否生效。
+   *  乐观默认 true(setModel 是必实现契约);子类按运行时实况 override(dsh 读懒探测
+   *  缺面集)。壳的 ensureForSend 据此决定模型失配时是热切还是停旧起新。 */
+  get supportsRuntimeSetModel(): boolean { return true; }
 
   /** 命名当前会话(中立命名意图)。 */
   abstract setSessionName(name: string): Promise<void>;

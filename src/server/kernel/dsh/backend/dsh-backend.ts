@@ -86,6 +86,13 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     dsh: { missing: this.missingMethods, onMissing: null },
   };
 
+  /** 能力轴(docs/model-switching.md §11.2):运行时切模型 = session/setModel 不缺面。
+   *  未探测过按乐观 true(第一次调用见真章);懒探测记缺面后翻 false,壳据此把
+   *  模型失配回落成停旧起新。 */
+  override get supportsRuntimeSetModel(): boolean {
+    return !this.missingMethods.has(DSH_METHODS.sessionSetModel);
+  }
+
   /** 带流式状态的翻译器(每会话进程一个):assistant/chunk 增量组装成 messageStart/Update。
    *  初值带 spawn 握手的 provider/model:request/header 派生分隔线只在「实际生效配置 ≠
    *  握手配置」时触发——重开/重spawn 同模型不刷假分隔线(防刷屏)。构造体赋值(ctx 是

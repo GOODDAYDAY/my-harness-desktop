@@ -491,10 +491,10 @@ sequenceDiagram
 - **跨内核锁死**：有历史（任意内核槽位发过消息）且要换内核 → 抛"当前会话已固定内核"；空会话/预热自由切 activeKernel。
 - **选模型 = 激活对应内核槽位**（并存，不替换其他内核）。
 - **记中立模型引用**：`proc.lastModelRef = { ref: classifyModel(...) }`——跨切换模型中立化的持久载体。
-- **差量执行**：`alreadyEffective` 判据（快照现值匹配 且 未跨内核切换）时跳过同值 set_model（纯噪声，内核会落 model_change 分隔线）；dsh 无运行时切模能力，判据改用 `proc.model`（起进程模型）。
+- **差量执行**：`alreadyEffective` 判据（快照现值匹配 且 未跨内核切换）时跳过同值 set_model（纯噪声，内核会落 model_change 分隔线）；dsh 无快照面，判据改用壳侧账本 `proc.effectiveModel` 的旧值（setModel 成功才更新）。
 - **双写**：中立层（全内核真相源，header.kernel + custom.model 原子落盘）+ pi 文件头行（仅 pi 投影面）。
 
-`ensureForSend` 里的 dsh 模型失配处理（§4.3）是切模型的另一半：dsh 的模型在 initialize 握手定死，运行时切模失效——`setModel` 会记录缺面 + warn + no-op，真正换模型靠 `ensureForSend` 停旧起新。
+`ensureForSend` 里的模型失配处置（§4.3）是切模型的另一半：热切优先、缺面回落——运行时切模轴在位（pi 恒有；dsh 靠内核插件补丁的 `installModelSelection` 原地热切）则 `set_model`/`session/setModel` RPC 原地生效、进程不动；轴缺面（dsh 旧运行时且无补丁）或未物化的惰性会话，才停旧起新带新模型握手。详见 docs/model-switching.md §11。
 
 ## 11 pi 与 dsh 的差异点
 
@@ -523,7 +523,7 @@ pi 和 dsh 在会话模型、事件形状、fork 语义、seed 时序上处处�
 
 ### 11.4 切模型 / fork / 快照的其他差异
 
-- **切模型**：pi 支持运行时 `set_model`（差量执行不重启）；dsh 模型在 initialize 握手定死，换模型必须停旧起新（`ensureForSend`）。
+- **切模型**：pi 支持运行时 `set_model`（差量执行不重启）；dsh 模型在 initialize 握手定死，运行时热切由内核插件补丁提供（`installModelSelection` 原地热切，缺面旧运行时回落停旧起新，见 docs/model-switching.md §11）。
 - **fork**：pi 的 fork 是内核 `fork` RPC（带 position + cancelled 语义，`PiBackend.forkCommand`）；但 forkless 终态下 fork 是**壳在中立层的纯操作**（`SessionStore.fork` 只 `upsertNeutralLineage` 切新 lineage，内核不 fork 不物化，下次 send 时 `materializeActiveLineage` 惰性 seed）。dsh 的 fork 是 session forest（父会话 + 子会话），经 `session/fork` 投影。
 - **快照**：pi 有 `get_state` 快照面（`resync` 四 RPC）；dsh 无 get_state 面，`sync()` 降级为 no-op 返回现有基线（`emptySnapshot`），状态走事件流。
 - **存储**：pi 是 JSONL 文件 + parentId 树；dsh 是 append-only 日志 + session forest，目录/CRUD 经懒 spawn 的 dsh transport 走 JSON-RPC。
@@ -542,9 +542,9 @@ pi 和 dsh 在会话模型、事件形状、fork 语义、seed 时序上处处�
 
 因为内核的 `session_start` 是纯扩展事件，只经 `_extensionRunner.emit` 走扩展通道，`AgentSessionEvent` 联合不含 sessionStart，RPC stdout 永远见不到它。所以 main 在 `setContext`/`prompt` 后主动 `dispatch` synthetic `sessionStart`，真相源单一在 main。这就是"水合契约两层"里权威层的由来。
 
-**Q4：dsh 换模型为什么要停旧进程、起新进程，不能像 pi 一样运行时切？**
+**Q4：dsh 换模型能像 pi 一样运行时热切吗，还是要停旧进程起新进程？**
 
-因为 dsh 的模型在 `initialize` 握手时定死（provider/model/maxTokens 都在握手参数里），`session/setModel` 是懒探测缺面（旧运行时没有此方法），即使有也是 no-op——模型停在握手值。所以 `ensureForSend` 判据里：dsh 模型失配（含进程未记录模型的未知态）必须停旧起新，否则用户选的模型被旧进程握手模型截胡。
+能热切。dsh 的模型在 `initialize` 握手时定死，但运行时热切由内核插件补丁提供（`installModelSelection` 原地热切：改 agent 的模型选择引用，不 dispose、不重启，与 dsh-web 的 `session.selectModel` 同一个机制）。壳的判据是能力轴 `supportsRuntimeSetModel`：补丁/新运行时在位 → `session/setModel` RPC 原地生效；补丁缺席的旧运行时（撞 unknown method 记缺面、轴翻 false）或未物化的惰性会话，才回落停旧起新带新模型握手。
 
 **Q5：`fork` 之后内核没 fork、没物化，为什么下次发消息能正确落在新分支上？**
 

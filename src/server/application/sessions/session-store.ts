@@ -137,8 +137,9 @@ interface SessionProc {
   /** 最近一次 setModel 的中立模型引用(档位分类)。跨切换模型中立化的持久载体,
    *  不读 latestSnapshot(dsh 无快照面恒 null,§9.3/§11)。 */
   lastModelRef: NeutralModelRef | null;
-  /** 本进程创建时绑定的模型(provider/modelId)。dsh 无 session/setModel,模型只能在
-   *  initialize 握手时定;ensureForSend 复用时比对,变了 → 停旧起新(§7.6 适配器翻译)。 */
+  /** 本进程创建时绑定的模型(provider/modelId;spawn 握手值)。热切内核(pi、补面后的 dsh)
+   *  运行时切模后它不再代表生效值(生效值看 effectiveModel,docs/model-switching.md §11.3)——
+   *  它只剩两个用途:ensureForSend 的失配比对输入、未热切过时的账本兜底。 */
   model?: { provider: string; modelId: string };
   /** 当前「生效模型」(provider/modelId/kernel)。与 model 不同:setModel 运行时切模后 model 仍
    *  是 spawn 时定死值(pi 切模不重启),effectiveModel 则随 setModel 更新——它是「本条消息
@@ -590,7 +591,19 @@ export class SessionStore implements
     const existing = this.procs.get(this.activeProcKey)?.get(kernel);
     const modelMismatch = !!(provider && model && (!existing?.model
       || existing.model.provider !== provider || existing.model.modelId !== model));
-    const needsRestart = modelMismatch && !!existing && !existing.backend.capabilities.pi;
+    // 模型失配的重启判据(docs/model-switching.md §11.2:两根正交的轴,勿回退为读
+    // capabilities.pi——那是「pi 扩展面」的桶探测,不是「能不能热切」的轴):
+    // ① 运行时切模轴缺面(后端自报 supportsRuntimeSetModel=false,如 dsh 旧运行时缺
+    //    session/setModel)→ 只能停旧起新;
+    // ② 未物化的惰性内核会话(从没发过消息,服务端还没有会话可热切)→ 握手是唯一
+    //    定模点,重建零代价。惰性判据复用 catalog.newSessionId==null(文件型内核
+    //    预生成路径返非 null,惰性内核返 null)。
+    const lazyKernel = existing != null
+      && this.catalogFor(kernel).newSessionId(this.activeCwd) == null;
+    const needsRestart = modelMismatch && !!existing && (
+      !existing.backend.supportsRuntimeSetModel
+      || (!existing.touched && lazyKernel)
+    );
     if (existing && existing.backend.alive && !this.isConfigStale(existing) && !needsRestart) return;
     // 配置过期 / 模型失配需重启:只停该内核旧进程,重起一个带新模型。
     if (existing && existing.backend.alive) {
@@ -1745,11 +1758,13 @@ export class SessionStore implements
     const currentKernel = this.activeKernel;
     this.activeKernel = targetKernel;
     await this.ensureForSend(targetKernel, provider, modelId);
-    const proc = this.activeProc();
+    let proc = this.activeProc();
     if (!proc) throw new Error("内核未启动");
     // 新会话壳:spawn 时内核已在会话文件落 model_change 条目,但基线 sync 的「全元数据不冲掉
     // 乐观消息」守卫让它永不进 live 视图流(只在刷新后补现)——补一条合成分隔线直投视图流。
     const freshSpawn = !proc.touched;
+    // 先留旧账本再等差量判读:effectiveModel 在下方即被写成目标值,判「已生效」要用旧值。
+    const prevEffectiveModel = proc.effectiveModel ?? proc.model;
     // 记中立模型引用(§9.3/§11):跨切换模型中立化的持久载体,setModel 成功即更新。
     // 不依赖 latestSnapshot(dsh 无快照面恒 null),经受得住完整 pi→dsh→pi 往返。
     proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target.reasoning }) };
@@ -1765,18 +1780,26 @@ export class SessionStore implements
     // 若 pi/dsh 有同名模型(同 provider+id),「已生效」判据会误命中旧内核快照、跳过 set_model,
     // 新内核后端停在握手默认值——内核切换必须强制重发,不参与差量跳过。
     let alreadyEffective = targetKernel === currentKernel && !!cur && cur.provider === provider && cur.id === modelId;
-    // 无运行时切模能力的内核(能力探测,非内核身份分支):模型在起进程握手时定死,
-    // 「已生效」的真相源是起进程模型 proc.model,不是快照——dsh 无快照面,latestSnapshot
-    // 恒 null,旧判据恒「未生效」→ 每次发送都重发 session/setModel;该方法在部分 dsh
-    // 运行时是坏面(报 "cannot get property sessions without inject"),第二发起每次发送
-    // 都被它打断(「dsh 不能发送第二条语句」的根因)。模型失配已由 ensureForSend
-    // 停旧起新处理,走到这里进程模型必然 = 目标模型,判「已生效」跳过坏面调用。
-    if (!alreadyEffective && !proc.backend.capabilities.pi && proc.model
-      && proc.model.provider === provider && proc.model.modelId === modelId) {
-      alreadyEffective = true;
+    // 无快照面内核(dsh)的「已生效」真相源是壳侧账本 effectiveModel 的旧值
+    // (prevEffectiveModel,setModel 成功才更新;spawn 时 createProc 已按握手值初始化),
+    // 不是快照(dsh 恒 null)。热切落地后 proc.model 是 spawn 定死值、不再代表生效值——
+    // 勿回退读它(旧判据恒「未生效」→ 每次发送都重发 session/setModel,该方法在旧运行时
+    // 是坏面,第二发起每次发送都被打断,即「dsh 不能发送第二条语句」的根因;
+    // docs/model-switching.md §11.3)。
+    if (!alreadyEffective && !proc.backend.capabilities.pi) {
+      if (prevEffectiveModel && prevEffectiveModel.provider === provider && prevEffectiveModel.modelId === modelId) alreadyEffective = true;
     }
     if (!alreadyEffective) {
       await proc.backend.setModel(provider, modelId);
+      if (!proc.backend.supportsRuntimeSetModel) {
+        // 本次调用刚发现缺面(懒探测同步记进 missing):热切无路,现场回落停旧起新——
+        // ensureForSend 的 needsRestart 此刻按能力位判 true,带目标模型重建;新 proc 的
+        // model/effectiveModel 由 createProc 按握手参数初始化,补记中立引用与生效值即可。
+        await this.ensureForSend(targetKernel, provider, modelId);
+        proc = this.activeProc() ?? proc;
+        proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target.reasoning }) };
+        proc.effectiveModel = { provider, modelId, kernel: targetKernel };
+      }
     }
     // 模型分隔线直投视图流:值变化(!alreadyEffective)或新会话壳(spawn 已落但基线守卫挡住 live)。
     if (!alreadyEffective || freshSpawn) {
