@@ -161,12 +161,14 @@ describe("展示元数据(图)进中立层(neutral-first)", () => {
     expect(partial.snapshot).toBe(snapshot); // 基线照常更新
   });
 
-  it("applySnapshot:非空快照照常全量替换并递增 syncNonce", () => {
+  it("applySnapshot:快照只更新状态面,内容不动(内容归中立层镜像,session-single-source §3.3)", () => {
     const s = useSessionStore.getState();
     const msgs = [{ id: "m1", role: "assistant", content: "回复" }];
-    const snapshot = { state: {}, entries: [], messages: msgs } as never;
+    const snapshot = { state: { isStreaming: false }, entries: [], messages: msgs } as never;
     const partial = applySnapshot({ ...s, messages: [], syncNonce: 3 }, snapshot);
-    expect(partial.messages).toEqual(msgs);
-    expect(partial.syncNonce).toBe(4);
+    expect(partial.messages).toBeUndefined(); // 快照不再携带/替换消息数组
+    expect(partial.syncNonce).toBeUndefined(); // syncNonce 改由镜像分支切换递增
+    expect(partial.streaming).toBe(false);
+    expect(partial.snapshot).toBe(snapshot); // 状态面照常更新
   });
 });

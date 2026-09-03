@@ -375,13 +375,13 @@ export function createDshEventTranslator(initialHeader?: { provider?: string; mo
       if (!stateless) return [];
       // 持久化思考时长(§需求「思考时间要持久化」):把回合开始的计时锚写进 messageEnd 的
       // message.timestamp。中立层 sessionEntryToNeutral 把 message.timestamp 读成 startedAt、
-      // entry.timestamp(下方 withNeutralEntry 用事件 time)读成完成时间——重开会话后
+      // entry.timestamp 读成完成时间——重开会话后
       // 「完成-开始」的思考时长仍可算,不靠内存。error 终态不补(无有效内容可锚)。
       if (buf?.anchorTs !== undefined && stateless.type === "messageEnd") {
         const sm = (stateless as { message?: Record<string, unknown> }).message;
         if (sm && !sm.error) sm.timestamp = buf.anchorTs;
       }
-      return withNeutralEntry(e, stateless);
+      return [stateless];
     }
 
     // turn/end:回合收敛(→ agentSettled)。三个收尾职责,全是「pending 不残留」的根因修复:
@@ -462,25 +462,6 @@ export function createDshEventTranslator(initialHeader?: { provider?: string; mo
     }
 
     const stateless = translateDshEvent(event);
-    return stateless ? withNeutralEntry(e, stateless) : [];
+    return stateless ? [stateless] : [];
   };
-}
-
-/** 中立层条目补面(§7.6 适配器翻译):壳的中立层上行同步(syncNeutralEntry)只认
- *  entryAppended(pi entry 形状 type=message + message)——dsh 此前无此面,assistant
- *  回复从不进中立层:重开会话缺回复、列表 lastMessage 停在用户语、会话流不完整(根因)。
- *  补面:消息终态时按同一语义多投一个 entryAppended,pi/dsh 经同一条路收敛进中立层。
- *  仅带权威 id 的终态消息投影(无 id 无法在中立层锚定);error 终态不落条目(不伪造内容)。 */
-function withNeutralEntry(raw: Record<string, unknown>, stateless: SessionEvent): SessionEvent[] {
-  if (stateless.type !== "messageEnd") return [stateless];
-  const msg = (stateless as { message?: Record<string, unknown> }).message;
-  if (!msg || msg.error) return [stateless];
-  const id = typeof msg.id === "string" ? msg.id : undefined;
-  if (!id) return [stateless];
-  const time = raw.time;
-  const timestamp = typeof time === "string" || typeof time === "number" ? time : undefined;
-  return [
-    stateless,
-    { type: "entryAppended", entry: { type: "message", id, ...(timestamp !== undefined ? { timestamp } : {}), message: msg } },
-  ];
 }
