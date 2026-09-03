@@ -294,6 +294,30 @@ export function useGoalController() {
     });
   }, [sessions, messaging, setGoal, firePrompt]);
 
+  // 后台归账(设计 §9.1):视图流只含激活会话,而 onKernelEvent 带 sessionKey、后台会话也派发。
+  // 后台会话里模型调 set_goal/achieve_goal 时,按来源会话归账写进那个会话自己的头行——
+  // 不丢、不串台、不续跑(驱动只服务激活会话);切回时由恢复 effect 读回。引擎不持后台
+  // 内存态:读头行 → 套状态机迁移 → 写回头行(头行是跨会话唯一真相源)。
+  useEffect(() => {
+    return sessions.onKernelEvent((ke) => {
+      if (ke.kind !== "session") return;
+      const key = ke.sessionKey;
+      if (!key || key === useUiStore.getState().currentSessionPath) return; // 激活会话走视图流
+      if (key.startsWith("new:") || key.startsWith("bus:") || key.startsWith("test:")) return; // 未物化/运维键
+      const ev = ke.event;
+      if (ev.type !== "toolCallStart") return;
+      const toolName = (ev as { toolName?: unknown }).toolName;
+      if (toolName !== "set_goal" && toolName !== "achieve_goal") return;
+      void (async () => {
+        const detail = await sessions.openSession(key).catch(() => null);
+        const custom = (detail as { info?: { custom?: Record<string, unknown> } } | null)?.info?.custom;
+        const cur = parseGoal(custom?.goal);
+        const { goal: next } = applyGoalEvent(cur, ev, { defaultMaxRounds: configuredMaxRounds() });
+        if (next !== cur) await sessions.updateHeader(key, { custom: { goal: next } }).catch(() => {});
+      })();
+    });
+  }, [sessions]);
+
   const pause = useCallback(() => { const g = goalRef.current; if (g) setGoal(pauseGoal(g)); }, [setGoal]);
   // 恢复即「继续干活」:空闲时立即装下一轮,不等下一次回合收敛(否则 active 但无人触发,停摆)。
   // 恢复同时清失败态(上次失败已被处置)。

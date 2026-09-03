@@ -49,6 +49,7 @@ vi.mock("@my-harness-desktop/react", () => {
       mocks.onEventCb = cb;
       return () => { mocks.onEventCb = null; };
     },
+    onKernelEvent: () => () => {},
     updateHeader: mocks.updateHeader,
     openSession: mocks.openSession,
   };

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   eventsEmit: vi.fn(),
   onEventCb: null as ((e: SessionEvent) => void) | null,
+  onKernelEventCb: null as ((e: { kind: string; sessionKey: string; event: SessionEvent }) => void) | null,
   pendingQueue: {} as Record<string, { id: string }[]>,
   generalConfig: {} as Record<string, unknown>,
   messages: [] as unknown[],
@@ -26,6 +27,10 @@ vi.mock("@my-harness-desktop/react", () => {
     onEvent: (cb: (e: SessionEvent) => void) => {
       mocks.onEventCb = cb;
       return () => { mocks.onEventCb = null; };
+    },
+    onKernelEvent: (cb: (e: { kind: string; sessionKey: string; event: SessionEvent }) => void) => {
+      mocks.onKernelEventCb = cb;
+      return () => { mocks.onKernelEventCb = null; };
     },
     updateHeader: mocks.updateHeader,
     openSession: mocks.openSession,
@@ -346,6 +351,50 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     expect(result.current.goal?.phase).toBe("active");
     expect(result.current.goal?.round).toBe(1);
     expect(mocks.prompt).toHaveBeenCalledTimes(1);
+  });
+
+  it("后台归账:后台会话的 set_goal 写那个会话自己的头行,不动当前目标、不续跑(§9.1)", async () => {
+    const { result } = renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 前台目标"); });
+    const promptCalls = mocks.prompt.mock.calls.length;
+
+    // 后台会话 /other/s.jsonl 里模型调了 set_goal(经 keyed 内核事件流)
+    mocks.openSession.mockResolvedValueOnce({ info: { custom: {} } });
+    await act(async () => {
+      mocks.onKernelEventCb?.({
+        kind: "session",
+        sessionKey: "/other/s.jsonl",
+        event: { type: "toolCallStart", toolName: "set_goal", args: { objective: "后台目标" } } as SessionEvent,
+      });
+      await Promise.resolve();
+    });
+
+    // 归账到后台会话自己的头行
+    expect(mocks.updateHeader).toHaveBeenCalledWith(
+      "/other/s.jsonl",
+      { custom: { goal: expect.objectContaining({ objective: "后台目标", phase: "active", round: 0 }) } },
+    );
+    // 前台目标不动、不续跑、不抢目标条
+    expect(result.current.goal?.objective).toBe("前台目标");
+    expect(mocks.prompt.mock.calls.length).toBe(promptCalls);
+  });
+
+  it("后台归账忽略激活会话(视图流已捕获,不双写)与未物化键", async () => {
+    renderHook(() => useGoalController());
+    await act(async () => {
+      mocks.onKernelEventCb?.({
+        kind: "session",
+        sessionKey: "/p/s.jsonl", // 激活会话(mock stateOf 的 currentSessionPath)
+        event: { type: "toolCallStart", toolName: "set_goal", args: { objective: "x" } } as SessionEvent,
+      });
+      mocks.onKernelEventCb?.({
+        kind: "session",
+        sessionKey: "new:/proj", // 未物化壳
+        event: { type: "toolCallStart", toolName: "set_goal", args: { objective: "y" } } as SessionEvent,
+      });
+      await Promise.resolve();
+    });
+    expect(mocks.updateHeader).not.toHaveBeenCalled();
   });
 
   it("裸 /goal 查看状态(通知);无目标时子命令提示而非崩溃(仍吞发送)", async () => {
