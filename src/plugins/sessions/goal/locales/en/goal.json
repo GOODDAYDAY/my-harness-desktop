@@ -6,5 +6,6 @@
   "goal.bar.save": "Save",
   "goal.roundCard.title": "Goal round",
   "goal.roundCard.roundOf": "Round {{round}}/{{max}}",
-  "goal.roundCard.toggle": "Toggle continuation prompt text"
+  "goal.roundCard.toggle": "Toggle continuation prompt text",
+  "goal.bar.achieved": "Goal achieved"
 }

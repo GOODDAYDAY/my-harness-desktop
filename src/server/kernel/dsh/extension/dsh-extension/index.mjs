@@ -79,16 +79,16 @@ if (typeof HarnessSdkJsonRpcServer.prototype.setModel !== "function") {
 // ==============================================================================================
 
 const QUESTIONS_DIR = join(homedir(), ".pi", "agent", ".my-harness-desktop-questions");
-const ASK_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 200;
 
 const questionPath = (id) => join(QUESTIONS_DIR, `${id}.json`);
 const answerPath = (id) => join(QUESTIONS_DIR, `${id}.answer.json`);
 
-/** 轮询答案文件直到出现或超时;返回 { answers } 或 { cancelled: true }。 */
+/** 轮询答案文件直到出现;无超时(用户要求:提问不该超时,爱啥时候回答就啥时候回答)——
+ *  只有回合被中止(signal.aborted)才收 cancelled;用户走开多久都等。
+ *  此前有 60s 超时自动取消:用户稍一离开,问题就被"代答"成取消,模型拿到假答案。 */
 async function waitForAnswer(id, signal) {
-  const deadline = Date.now() + ASK_TIMEOUT_MS;
-  while (Date.now() < deadline) {
+  for (;;) {
     if (signal?.aborted) return { cancelled: true };
     try {
       const parsed = JSON.parse(readFileSync(answerPath(id), "utf8"));
@@ -99,8 +99,6 @@ async function waitForAnswer(id, signal) {
       await new Promise((r) => globalThis.setTimeout(r, POLL_INTERVAL_MS));
     }
   }
-  rmSync(questionPath(id), { force: true });
-  return { cancelled: true };
 }
 
 const ASK_DESCRIPTION =

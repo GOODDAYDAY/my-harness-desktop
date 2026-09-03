@@ -6,5 +6,6 @@
   "goal.bar.save": "Speichern",
   "goal.roundCard.title": "Ziel-Runde",
   "goal.roundCard.roundOf": "Runde {{round}}/{{max}}",
-  "goal.roundCard.toggle": "Fortsetzungstext ein-/ausblenden"
+  "goal.roundCard.toggle": "Fortsetzungstext ein-/ausblenden",
+  "goal.bar.achieved": "Ziel erreicht"
 }

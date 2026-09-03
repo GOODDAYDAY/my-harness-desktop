@@ -6,5 +6,6 @@
   "goal.bar.save": "保存",
   "goal.roundCard.title": "目标续跑",
   "goal.roundCard.roundOf": "第 {{round}}/{{max}} 轮",
-  "goal.roundCard.toggle": "展开/收起续跑提示原文"
+  "goal.roundCard.toggle": "展开/收起续跑提示原文",
+  "goal.bar.achieved": "目标已完成"
 }

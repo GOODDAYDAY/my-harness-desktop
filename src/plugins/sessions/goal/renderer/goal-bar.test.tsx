@@ -17,6 +17,7 @@ vi.mock("react-i18next", () => {
     "bar.edit": "编辑目标",
     "bar.clear": "关闭目标",
     "bar.save": "保存",
+    "bar.achieved": "目标已完成",
     "roundCard.title": "目标续跑",
     "roundCard.roundOf": "第 {{round}}/{{max}} 轮",
     "roundCard.toggle": "展开/收起续跑提示原文",
@@ -190,6 +191,25 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
 
     emit({ type: "agentSettled" });
     expect(mocks.continue).toHaveBeenCalledTimes(0); // 关闭后不再续跑
+  });
+
+  it("完成态(achieved):展示「目标已完成」,不再有停/恢复/编辑入口,只剩关闭", async () => {
+    render(<GoalBar />);
+    // 模型调 set_goal 再 achieve_goal → achieved
+    emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "三轮 ping" } });
+    emit({ type: "toolCallStart", toolName: "achieve_goal" });
+
+    expect(screen.getByText("目标已完成")).toBeInTheDocument(); // 完成标记展示(用户要求 #4 扩展)
+    expect(screen.getByText("三轮 ping")).toBeInTheDocument(); // 目标原文还在
+    // 完成态:停/恢复/编辑入口全部撤离(完成的目标没有这些语义),只剩关闭
+    expect(screen.queryByTitle("停止")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("恢复")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("编辑目标")).not.toBeInTheDocument();
+    expect(screen.getByTitle("关闭目标")).toBeInTheDocument();
+
+    // 关闭后横幅消失
+    fireEvent.click(screen.getByTitle("关闭目标"));
+    expect(screen.queryByText("三轮 ping")).not.toBeInTheDocument();
   });
 
   it("模型 set_goal 与用户 /goal 同状态机:工具设置的目标一样能删改停", async () => {

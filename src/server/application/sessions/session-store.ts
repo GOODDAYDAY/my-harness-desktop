@@ -1155,12 +1155,18 @@ export class SessionStore implements
   }
 
   async answerQuestion(requestId: string, answers: QuestionAnswer[]): Promise<void> {
-    const proc = this.activeProc();
+    // 路由按「激活会话里有 answerQuestion 能力的槽位」找后端,不读全局 activeKernel 偶然态
+    // (activeKernel 是「最后用过的内核」,多内核并存时不可靠——dsh 问句撞上 activeKernel=pi
+    // 时 activeProc() 落空,误报「内核未启动」的根因)。
+    const kernels = this.procs.get(this.activeProcKey);
+    const candidates = kernels ? [...kernels.values()] : [];
+    const proc = candidates.find((p) => p.backend.answerQuestion && p.backend.alive)
+      ?? candidates.find((p) => p.backend.answerQuestion)
+      ?? null;
     // 诚实文案(勿回退为「内核未启动」):能走到这的提问都已投递成功(投递点拦了死问句),
-    // 此处 proc 缺席 = 提问后进程没了(应用重启/内核崩)——问题本身已死,照实说。
+    // 此处无可用后端 = 提问后进程没了(应用重启/内核崩)——问题本身已死,照实说。
     if (!proc) throw new Error("提问已失效：会话进程已不在（应用可能重启过），请让模型重新发起提问");
-    if (!proc.backend.answerQuestion) throw new Error("当前内核不支持交互式提问");
-    await proc.backend.answerQuestion(requestId, answers);
+    await proc.backend.answerQuestion!(requestId, answers);
   }
 
   /** 工具清单(可缺面):读当前内核可用工具;无活跃进程或不支持工具发现 → null(壳走降级)。 */
@@ -1172,20 +1178,21 @@ export class SessionStore implements
 
 
   /** 注入外部(非 backend)来源的提问请求(dsh 文件侧车桥由 bootstrap 装配后经此投递,汇入统一中性通道)。
-   *  视图流仅激活会话:sessionKey(dsh 服务端会话 id)与 activeProc 的 backend.sessionId(中立会话 id/桶名)
-   *  比对,不匹配(后台会话提问)不投给渲染层——提问不跨 session。空串(旧桥/归属未知)不拦,保持向后兼容。 */
+   *  视图流仅激活会话;归属判定按 sessionKey 匹配**激活会话任一内核槽位**的后端 sessionId——
+   *  不读全局 activeKernel(它是「最后用过的内核」的偶然态:先开过 pi 会话再开 dsh 会话时
+   *  activeKernel 仍停在 pi,dsh 问句按 activeProc(activeKernel) 查找会落空误丢——
+   *  「问问题不展示」的根因之一)。空串(旧桥/归属未知)不拦,保持向后兼容。
+   *  无可答进程(激活会话没有任何内核进程)直接丢弃:无人能答的问题不呈现(死问句)。 */
   injectQuestion(req: QuestionRequestEvent): void {
-    const active = this.activeProc();
-    // 无可答进程 = 无人可答(根因修复,勿回退):此前不过滤直接投递——陈旧问句文件(上轮
-    // 进程死掉留下的)或别的 dsh 进程(CLI/GUI)的问句经全局桥混进来,卡片照常显示、
-    // 用户作答时 answerQuestion 才炸「内核未启动」——呈现了一个根本没人等答案的问题。
-    // 现在投递点就丢弃(带 warn 可诊断),不投递死问句。
-    if (!active) {
+    const kernels = this.procs.get(this.activeProcKey);
+    const candidates = kernels ? [...kernels.values()].filter((p) => p.backend.alive) : [];
+    if (candidates.length === 0) {
       console.warn(`[session-store] 提问到达时无可答会话进程,丢弃(陈旧/外来问句): ${req.requestId}`);
       return;
     }
-    if (req.sessionKey !== "" && active.backend.sessionId && req.sessionKey !== active.backend.sessionId) {
-      return;
+    if (req.sessionKey !== "") {
+      const hit = candidates.some((p) => p.backend.sessionId && p.backend.sessionId === req.sessionKey);
+      if (!hit) return; // 别的会话的提问,不投给当前视图
     }
     for (const cb of this.questionListeners) {
       try { cb(req); } catch (err) { console.error("[session-store] 提问监听器抛错已隔离:", err); }
