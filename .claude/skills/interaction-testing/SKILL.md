@@ -102,6 +102,8 @@ DOM 只断「呈现对不对」(右对齐/徽章/按钮在不在),数据正确�
 
 **dsh**:先按 §1 备齐三件 → 模型下拉(`button[id^=radix]` 开 menu → 点 `DSH` 页签 → 选 `qwen3.8-max`)→ 发送。注意 dsh 无 thinking 档、事件形状不同(回合收敛 = turn/end 合成的 agentSettled)。
 
+**dsh fork 分支物化(疑似缺口,待复核)**:dsh 下 fork 能正确建第二 lineage(中立层 fork 指针在),但分支上发送后,实测分支 lineage 只落 user 条目、assistant 不回写(同一时窗口 pi 分支正常物化)。环境端点慢时难定「慢」还是「不写」——复核手法:fork → 分支发 → 轮询中立层分支 lineage 的 assistant 条目(90s+),配合 `window.kernel.sessions.onEvent` 插桩看分支回合是否起了 agentStart。
+
 **跨内核边角(已知待查)**:pi 会话有历史后改选 dsh 模型再发,设计是显式降级抛错(「跨内核切换暂缓」);但该混合路径在「dsh store 符号链接 + 默认模型解析到 dsh」下实测会让渲染层 CDP 长阻塞(`Runtime.callFunctionOn timed out`)——探针若卡死,先 `pkill -f remote-debugging-port` 清场,把 `protocolTimeout` 调大,或拆成「只选不跨发」两步隔离。
 
 **goal 引擎**:`/goal limit N`(须先有别目标时无效,limit 只改现存目标;要限速先在设置里改 goal.maxRounds 再设目标)→ `/goal <目标>`(正文作为真实用户消息发出,所见即所得)→ `[data-goal-phase]` 观察 active→(暂停)→paused→(恢复)→active;留痕卡 role=`goal_note` 落中立层。
