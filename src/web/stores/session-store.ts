@@ -671,6 +671,10 @@ export function initSessionStore(): void {
     const event = eventRaw as SessionEvent;
     if (event.type === "sessionStart") {
       hydrateSessionStart(event);
+      // 能力面随首发刷新(根因修复):新会话壳初始化时无进程,piExtension=false;
+      // 首发 sessionStart 时进程已注册(piExtension 转真)——不刷则思考档位的 levels
+      // 恒空、开关永久 disabled,直到切会话/换内核才自愈(实测复现)。
+      refreshCapabilities();
     }
     if (event.type === "compactionEnd") {
       void window.kernel.sessions.sync();
