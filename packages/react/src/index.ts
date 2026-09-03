@@ -142,6 +142,9 @@ export interface KernelApi {
     answerQuestion: (requestId: string, answers: QuestionAnswer[]) => Promise<void>;
     listTools: () => Promise<KnownToolInfo[] | null>;
     onSnapshot: (cb: (snapshot: SyncSnapshot) => void) => () => void;
+    /** 中立层基线读 + 写穿回执订阅(session-single-source §3.2,镜像数据源)。 */
+    getNeutral: (ns: string) => Promise<unknown>;
+    onNeutralChange: (cb: (change: unknown) => void) => () => void;
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: SessionModelPrefs) => Promise<void>;
     abort: () => Promise<void>;
     getModels: () => Promise<unknown[]>;
@@ -152,6 +155,10 @@ export interface KernelApi {
     fork: (parentLineageId: string, boundary?: string) => Promise<string>;
     copySession: (srcPath: string, targetPath: string) => Promise<void>;
     getStats: () => Promise<unknown>;
+    /** 克隆当前会话(session-single-source §4.2:壳的中性实现,内核不参与)。 */
+    clone: () => Promise<void>;
+    /** 取分叉点的消息(中立层前缀截取)。 */
+    getForkMessages: (entryId: string) => Promise<unknown[]>;
     pi: {
       steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
       followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
@@ -160,12 +167,9 @@ export interface KernelApi {
       getThinkingLevels: () => Promise<string[]>;
       cycleThinkingLevel: () => Promise<void>;
       forkFromSession: (cwd: string, srcPath: string, entryId: string) => Promise<void>;
-      clone: () => Promise<void>;
-      getForkMessages: (entryId: string) => Promise<unknown[]>;
       compact: (customInstructions?: string) => Promise<void>;
       setAutoCompaction: (enabled: boolean) => Promise<void>;
       setAutoRetry: (enabled: boolean) => Promise<void>;
-      exportHtml: (outputPath?: string) => Promise<string>;
       getLastAssistantText: () => Promise<string>;
       setSteeringMode: (mode: "all" | "one-at-a-time") => Promise<void>;
       setFollowUpMode: (mode: "all" | "one-at-a-time") => Promise<void>;

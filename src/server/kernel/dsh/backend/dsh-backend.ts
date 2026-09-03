@@ -19,7 +19,7 @@ import { AbstractBackend, type BackendContext } from "../../core/abstract-backen
 import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
 import type { NeutralEntry } from "@my-harness-desktop/shared";
-import { cwdToBucketName, type ImageInput } from "@my-harness-desktop/shared";
+import { type ImageInput } from "@my-harness-desktop/shared";
 import { createDshEventTranslator } from "./dsh-event-translator";
 import { writeDshAnswer } from "../manager/dsh-question-bridge";
 import { DSH_METHODS } from "../protocol/dsh-methods";
@@ -90,27 +90,33 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     dsh: { missing: this.missingMethods, onMissing: null },
   };
 
+  /** 能力轴(docs/model-switching.md §11.2):运行时切模型 = session/setModel 不缺面。
+   *  未探测过按乐观 true(第一次调用见真章);懒探测记缺面后翻 false,壳据此把
+   *  模型失配回落成停旧起新。 */
+  override get supportsRuntimeSetModel(): boolean {
+    return !this.missingMethods.has(DSH_METHODS.sessionSetModel);
+  }
+
   /** 带流式状态的翻译器(每会话进程一个):assistant/chunk 增量组装成 messageStart/Update。
    *  初值带 spawn 握手的 provider/model:request/header 派生分隔线只在「实际生效配置 ≠
    *  握手配置」时触发——重开/重spawn 同模型不刷假分隔线(防刷屏)。构造体赋值(ctx 是
    *  基类参数属性,字段初始化器里读序不可靠,勿回退为字段初始化)。 */
   private readonly translateEvent: (event: unknown) => SessionEvent[];
 
-  /** 重开历史会话的载入标记：以既有 sessionId 构造（重开旧会话）时为 true，首次发送前
-   *  需先 session/continue 把磁盘日志载入本进程；新会话（桶名默认）与 seed 重绑后为 false。 */
-  private needsResume: boolean;
-
   constructor(
     private readonly transport: JsonRpcTransport,
     config: DshBackendConfig,
   ) {
     super(config);
-    this.currentSessionId = config.sessionId ?? cwdToBucketName(config.cwd);
-    this.needsResume = config.sessionId !== undefined;
+    // 身份不变量守卫(session-single-source §2.3/§4.3):会话标识必须由壳显式给出(中立主键 ns),
+    // 缺了直接抛错——宁可早炸,不串会话。历史上这里回落 cwd 桶名,真走到就是
+    // 「消息发进桶名会话」的静默错绑。
+    if (!config.sessionId) throw new Error("dsh 后端缺少会话标识(应由壳传入中立主键)");
+    this.currentSessionId = config.sessionId;
     this.translateEvent = createDshEventTranslator({ provider: config.provider, model: config.model });
   }
 
-  /** 当前内核侧会话标识(缺省=桶名,seed 后重绑为服务端返回的 childSessionId)。 */
+  /** 当前内核侧会话标识(= 当前物化 lineage 的 id;构造时由壳传入中立主键,seed 断言后重绑)。 */
   override get sessionId(): string {
     return this.currentSessionId;
   }
@@ -203,21 +209,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     }
   }
 
-  /** 重开历史会话的载入（适配器内部细节，不构成契约意图）：dsh 的 session/prompt 只新建
-   *  空会话、不加载磁盘日志——重开旧会话后首次发送前，先 session/continue 把持久化会话
-   *  载入本进程（getOrResumeSession 重放日志），否则撞 id collision。
-   *  旧运行时缺 session/continue → requestSession 记缺面；其余失败吞掉,由随后的 prompt
-   *  以其原错误显形（不静默伪造成功,也不引入新崩）。 */
-  private async ensureSessionLoaded(): Promise<void> {
-    if (!this.needsResume) return;
-    this.needsResume = false;
-    try {
-      await this.requestSession(DSH_METHODS.sessionContinue, { sessionId: this.currentSessionId });
-    } catch { /* 缺面已记录；其余失败由随后的 prompt 以其原错误显形 */ }
-  }
-
   async sendMessage(text: string, images?: ImageInput[]): Promise<void> {
-    await this.ensureSessionLoaded();
     await this.transport.request(DSH_METHODS.sessionPrompt, {
       sessionId: this.sessionId,
       contentBlocks: [{ type: "text", text }],
@@ -292,6 +284,10 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
 
   async resume(anchor: Anchor): Promise<string> {
     const res = await this.requestSession<{ lineageId: string }>(DSH_METHODS.sessionResume, { anchor });
+    // 身份守卫:回切结果必须是有效 lineageId,空响应即显式报错(不静默错绑)。
+    if (typeof res?.lineageId !== "string" || !res.lineageId) {
+      throw new Error("dsh resume 返回了无效的 lineageId");
+    }
     return res.lineageId;
   }
 
@@ -306,14 +302,18 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
    *  「单 lineage 树」再发——这是 dsh 适配器的转录职责(pi 对应 piSeedSession 写 JSONL)。
    *  sessionId 传 lineageId 当 SessionId(dsh 的 SessionId 是值对象,可显式指定)。
    *  关键:重绑 this.sessionId——sendMessage/abort/setModel 全读 this.sessionId,不重绑则
-   *  首切 pi→dsh 后所有消息发到构造时的桶名会话(§13.1)。 */
+   *  首切 pi→dsh 后所有消息发到构造时的桶名会话(§13.1)。
+   *  身份断言(session-single-source §4.3):服务端返回的标识必须等于按规则派生的值
+   *  (=lineageId)——不等即显式报错,不静默重绑到错会话。 */
   async seed(lineage: NeutralEntry[], opts: SeedOptions): Promise<string> {
     const res = await this.requestSession<{ sessionId: string }>(DSH_METHODS.sessionSeed, {
       sessionId: opts.lineageId,
       session: buildDshSeedSession(lineage, opts),
     });
+    if (res.sessionId !== opts.lineageId) {
+      throw new Error(`dsh seed 身份断言失败: 期望 ${opts.lineageId},服务端返回 ${res.sessionId}`);
+    }
     this.currentSessionId = res.sessionId;
-    this.needsResume = false; // session/seed 已在本进程创建会话,无需再载入
     return res.sessionId;
   }
 }

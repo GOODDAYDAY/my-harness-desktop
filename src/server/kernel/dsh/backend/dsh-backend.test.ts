@@ -30,16 +30,10 @@ class FakeTransport {
 
 function makeBackend(): { t: FakeTransport; b: DshBackend } {
   const t = new FakeTransport();
-  const b = new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m" });
+  const b = new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m", sessionId: "s-test" });
   return { t, b };
 }
 
-/** 重开旧会话的构造（带既有 sessionId）→ 触发 ensureSessionLoaded 载入路径。 */
-function makeReopenBackend(): { t: FakeTransport; b: DshBackend } {
-  const t = new FakeTransport();
-  const b = new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m", sessionId: "old-session" });
-  return { t, b };
-}
 
 const session: NeutralSession = {
   neutralSessionId: "ns",
@@ -74,6 +68,15 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     expect(onMissing).toHaveBeenCalledWith("session/setModel");
   });
 
+  it("supportsRuntimeSetModel 能力位:未探测过为 true(乐观),记缺面后翻 false", async () => {
+    const { t, b } = makeBackend();
+    expect(b.supportsRuntimeSetModel).toBe(true);
+    t.errors.set("session/setModel", unknownMethod("session/setModel"));
+    await b.setModel("p", "m2");
+    expect(b.capabilities.dsh.missing.has("session/setModel")).toBe(true);
+    expect(b.supportsRuntimeSetModel).toBe(false); // 壳据此把模型失配回落成停旧起新
+  });
+
   it("非缺面错误(参数错)照常外抛,不记缺面", async () => {
     const { t, b } = makeBackend();
     t.errors.set("session/getTree", new DshRpcError("bad boundary", -1, "session/getTree"));
@@ -88,48 +91,6 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     expect(t.requests.some((r) => r.method === "session/rename")).toBe(true);
   });
 
-  it("重开旧会话首发:先 session/continue 载入磁盘日志,再 session/prompt(适配器内建)", async () => {
-    const { t, b } = makeReopenBackend();
-    t.results.set("session/continue", {});
-    t.results.set("session/prompt", {});
-    await b.sendMessage("hi");
-    const methods = t.requests.map((r) => r.method);
-    expect(methods).toEqual(["session/continue", "session/prompt"]);
-  });
-
-  it("新会话首发不带 session/continue(无磁盘日志可载入)", async () => {
-    const { t, b } = makeBackend();
-    t.results.set("session/prompt", {});
-    await b.sendMessage("hi");
-    expect(t.requests.some((r) => r.method === "session/continue")).toBe(false);
-  });
-
-  it("重开载入只发生一次:第二次发送不再 session/continue", async () => {
-    const { t, b } = makeReopenBackend();
-    t.results.set("session/continue", {});
-    t.results.set("session/prompt", {});
-    await b.sendMessage("a");
-    await b.sendMessage("b");
-    expect(t.requests.filter((r) => r.method === "session/continue")).toHaveLength(1);
-  });
-
-  it("旧内核缺 session/continue:记缺面、降级不炸,prompt 以其原路径照发", async () => {
-    const { t, b } = makeReopenBackend();
-    t.errors.set("session/continue", unknownMethod("session/continue"));
-    t.results.set("session/prompt", {});
-    await expect(b.sendMessage("hi")).resolves.toBeUndefined();
-    expect(b.capabilities.dsh.missing.has("session/continue")).toBe(true);
-    expect(t.requests.some((r) => r.method === "session/prompt")).toBe(true);
-  });
-
-  it("seed 重绑后不再触发载入(会话已由 session/seed 在本进程创建)", async () => {
-    const { t, b } = makeReopenBackend();
-    t.results.set("session/seed", { sessionId: "seeded" });
-    t.results.set("session/prompt", {});
-    await b.seed([], { neutralSessionId: "ns", lineageId: "root", header: session.header });
-    await b.sendMessage("hi");
-    expect(t.requests.some((r) => r.method === "session/continue")).toBe(false);
-  });
 });
 
 describe("dsh seed 转录(wire 形状对齐 session/seed 的 NeutralSessionWire 树)", () => {
@@ -188,11 +149,23 @@ describe("dsh seed 转录(wire 形状对齐 session/seed 的 NeutralSessionWire 
     expect(params.session.lineages[0].entries.map((e) => e.message.role)).toEqual(["user", "assistant"]);
   });
 
-  it("seed 成功后重绑 currentSessionId 为服务端返回的 id", async () => {
+  it("seed 成功后重绑 currentSessionId 为服务端返回的 id(=lineageId,身份断言通过)", async () => {
+    const { t, b } = makeBackend();
+    t.results.set("session/seed", { sessionId: "root" });
+    const id = await b.seed(entries, { neutralSessionId: "ns", lineageId: "root", header });
+    expect(id).toBe("root");
+    expect(b.sessionId).toBe("root");
+  });
+
+  it("seed 身份断言:服务端返回与 lineageId 不一致即抛错,不静默错绑", async () => {
     const { t, b } = makeBackend();
     t.results.set("session/seed", { sessionId: "rebound-id" });
-    const id = await b.seed(entries, { neutralSessionId: "ns", lineageId: "root", header });
-    expect(id).toBe("rebound-id");
-    expect(b.sessionId).toBe("rebound-id");
+    await expect(b.seed(entries, { neutralSessionId: "ns", lineageId: "root", header })).rejects.toThrow(/身份断言失败/);
+    expect(b.sessionId).toBe("s-test"); // 不重绑,保持构造时标识
+  });
+
+  it("构造缺 sessionId 直接抛错(桶名回落已删除,宁可早炸不串会话)", () => {
+    const t = new FakeTransport();
+    expect(() => new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m" })).toThrow(/缺少会话标识/);
   });
 });

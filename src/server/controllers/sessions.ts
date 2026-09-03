@@ -96,6 +96,8 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   );
   gateway.register(IPC.session.getStats, () => sessionStore.getStats());
   gateway.register(IPC.sessions.list, (_e, cwd: string) => sessionStore.list(cwd));
+  // 中立层基线读口(session-single-source §3.2):渲染层镜像的全量来源。
+  gateway.register(IPC.sessions.getNeutral, (_e, ns: string) => sessionStore.getNeutralSession(ns));
   gateway.register(IPC.sessions.rawFilePaths, (_e, sessionId: string) => sessionStore.rawFilePaths(sessionId));
   gateway.register(IPC.sessions.projectStats, (_e, cwd: string) => sessionStore.projectStats(cwd));
   gateway.register(IPC.sessions.getTree, (_e, sessionId: string) => sessionStore.getTree(sessionId));
@@ -154,10 +156,6 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.session.compact, (_e, customInstructions?: string) => sessionStore.compact(customInstructions));
   gateway.register(IPC.session.setAutoCompaction, (_e, enabled: boolean) => sessionStore.setAutoCompaction(enabled));
   gateway.register(IPC.session.setAutoRetry, (_e, enabled: boolean) => sessionStore.setAutoRetry(enabled));
-  gateway.register(IPC.session.exportHtml, async (_e, outputPath?: string) => {
-    const result = await sessionStore.exportHtml(outputPath);
-    return result;
-  });
   gateway.register(IPC.session.getLastAssistantText, () => sessionStore.getLastAssistantText());
 
   // ---- QueueModeApi(队列模式)----

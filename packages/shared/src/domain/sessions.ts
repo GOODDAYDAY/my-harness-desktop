@@ -275,6 +275,11 @@ export interface SessionTreeApi extends RpcOps {
   /** 回退重跑(§2.4.1 中性 fork):从指定 lineage 的 boundary 分叉出新 lineage。
    *  pi 后端 = 在 boundary 条目处 fork + 框架对账,返回分叉产物路径;position 语义收进后端(默认 at)。 */
   fork(parentLineageId: string, boundary?: string): Promise<string>;
+  /** 克隆当前会话(session-single-source §4.2:壳纯操作——中立层整树复制 + 新 ns,
+   *  内核不参与、离线可克隆;不再经 pi 内核 clone 命令)。 */
+  clone(): Promise<void>;
+  /** 取分叉点的消息(session-single-source §4.2:中立层前缀截取,不再经内核 RPC)。 */
+  getForkMessages(entryId: string): Promise<NeutralMessage[]>;
 }
 
 /** pi 内核专属扩展面(§7.6 内核扩展面):dsh 无此面,壳插件经 capabilities.piExtension
@@ -293,20 +298,14 @@ export interface PiExtensions {
   getThinkingLevels(): Promise<string[]>;
   /** 快捷循环切换思考强度(内核 cycle_thinking_level)。 */
   cycleThinkingLevel(): Promise<void>;
-  /** 克隆当前会话(内核 clone)。 */
-  clone(): Promise<void>;
   /** 从任意会话文件分叉(书签 fork 的原子用例)。 */
   forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void>;
-  /** 取分叉点的消息(内核 get_fork_messages)。 */
-  getForkMessages(entryId: string): Promise<NeutralMessage[]>;
   /** 压缩上下文(内核 compact)。 */
   compact(customInstructions?: string): Promise<void>;
   /** 设置自动压缩开关(内核 set_auto_compaction)。 */
   setAutoCompaction(enabled: boolean): Promise<void>;
   /** 设置自动重试开关(内核 set_auto_retry)。 */
   setAutoRetry(enabled: boolean): Promise<void>;
-  /** 导出会话为 HTML(内核 export_html)。 */
-  exportHtml(outputPath?: string): Promise<string>;
   /** 取最后一条 assistant 回复的纯文本(内核 get_last_assistant_text)。 */
   getLastAssistantText(): Promise<string>;
   /** 设置 steer 排队模式(内核 set_steering_mode)。 */

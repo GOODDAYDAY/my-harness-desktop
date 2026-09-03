@@ -12,7 +12,7 @@
 //
 // 本文件在 client/pi（pi 内核适配器层），import core/domain 的中性类型（依赖只向内）。
 
-import type { SyncSnapshot, SessionStats, TurnUsage, ModelInfo, NeutralMessage } from "@my-harness-desktop/shared";
+import type { SyncSnapshot, SessionStats, TurnUsage, ModelInfo } from "@my-harness-desktop/shared";
 import type { Question } from "@my-harness-desktop/shared";
 import type { ImageInput, BashResult } from "@my-harness-desktop/shared";
 import type { ProcessExitInfo } from "@my-harness-desktop/shared";
@@ -36,16 +36,12 @@ export interface PiBackendExtensions {
   getLastAssistantText(): Promise<string>;
   getModels(): Promise<ModelInfo[]>;
   getThinkingLevels(): Promise<string[]>;
-  clone(): Promise<void>;
-  getForkMessages(entryId: string): Promise<NeutralMessage[]>;
   compact(customInstructions?: string): Promise<void>;
   setAutoCompaction(enabled: boolean): Promise<void>;
   setAutoRetry(enabled: boolean): Promise<void>;
-  exportHtml(outputPath?: string): Promise<string>;
   setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void>;
   setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<void>;
   bash(command: string, excludeFromContext?: boolean): Promise<BashResult>;
-  forkCommand(entryId: string, position?: "before" | "at"): Promise<unknown>;
   /** $bus 上行帧透传。 */
   onBusFrame(cb: (frame: Record<string, unknown>) => void): () => void;
   /** 中性提问投递(pi extension_ui 帧翻译)。 */

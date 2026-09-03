@@ -44,13 +44,10 @@ export function usePluginContext(): PluginContext {
     cycleModel: () => window.kernel.sessions.pi.cycleModel(),
     getThinkingLevels: () => window.kernel.sessions.pi.getThinkingLevels(),
     cycleThinkingLevel: () => window.kernel.sessions.pi.cycleThinkingLevel(),
-    clone: () => window.kernel.sessions.pi.clone(),
     forkFromSession: (cwd, srcPath, entryId) => window.kernel.sessions.pi.forkFromSession(cwd, srcPath, entryId),
-    getForkMessages: (entryId) => window.kernel.sessions.pi.getForkMessages(entryId) as Promise<NeutralMessage[]>,
     compact: (customInstructions?) => window.kernel.sessions.pi.compact(customInstructions),
     setAutoCompaction: (enabled) => window.kernel.sessions.pi.setAutoCompaction(enabled),
     setAutoRetry: (enabled) => window.kernel.sessions.pi.setAutoRetry(enabled),
-    exportHtml: (outputPath?) => window.kernel.sessions.pi.exportHtml(outputPath),
     getLastAssistantText: () => window.kernel.sessions.pi.getLastAssistantText(),
     setSteeringMode: (mode) => window.kernel.sessions.pi.setSteeringMode(mode),
     setFollowUpMode: (mode) => window.kernel.sessions.pi.setFollowUpMode(mode),
@@ -111,6 +108,9 @@ export function usePluginContext(): PluginContext {
   const tree: SessionTreeApi = useMemo(() => ({
     fork: (parentLineageId, boundary) => window.kernel.sessions.fork(parentLineageId, boundary) as Promise<string>,
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
+    // clone/getForkMessages 已是壳的中性实现(session-single-source §4.2),从 pi 扩展面收编到树面
+    clone: () => window.kernel.sessions.clone(),
+    getForkMessages: (entryId) => window.kernel.sessions.getForkMessages(entryId) as Promise<NeutralMessage[]>,
   }), []);
 
 

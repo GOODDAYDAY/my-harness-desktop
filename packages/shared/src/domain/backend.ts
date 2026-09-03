@@ -112,6 +112,12 @@ export interface BaseBackend {
   /** 切模型。 */
   setModel(provider: string, modelId: string): Promise<void>;
 
+  /** 能力轴:运行时切模型对本后端已物化的会话是否生效(docs/model-switching.md §11.2)。
+   *  乐观默认 true——setModel 本是必实现契约;内核/运行时无热切能力时置 false(如 dsh
+   *  旧运行时缺 session/setModel,懒探测记缺面后翻转),壳据此让「模型失配」回落停旧
+   *  起新,而不是盲目 RPC。 */
+  readonly supportsRuntimeSetModel: boolean;
+
   /** 设置思考强度档位(会话级状态,与 setModel 同级)。可缺面:pi=set_thinking_level RPC;
    *  dsh 无运行时切换(reasoningEffort 只在 initialize/settings.yaml 定)→ 显式降级抛错。
    *  设计 docs/design/atomic-send.md §3。 */

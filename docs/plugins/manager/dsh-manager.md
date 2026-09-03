@@ -205,7 +205,7 @@ dsh 有两处原生配置面（`dsh-config-source.ts` 文件头 §2.3 依据）�
 
 ### 6.6 默认模型链路：agent-default-model → initialize 握手
 
-dsh 无 `session/setModel` 运行时切换（`setModel` 懒探测缺面时 no-op，`dsh-backend.ts` 第 235-252 行），模型只能在 initialize 握手时定。所以「默认模型」不是摆设，是 warmup 起进程未带显式模型时的真实兜底：`assemble.ts` 的 `dshDefaultProviderModel()` 读 `settings.yaml` 的 `agent-default-model`，再回落首个 provider/模型（**不再写死 deepseek-official**）；`baseBackendFactory` 与 `sessionCatalogFactory`（目录 transport）共用这一同源兜底。`getDefaultModel()` 读 `settings.yaml` 的 `agent-default-model` 命名空间，模型 TAB 里「设为默认」最终经 `setDefaultModel` 写回这个命名空间。
+dsh 的模型在 initialize 握手时定；运行时热切由内核插件补丁提供（`installModelSelection` 原地热切，docs/model-switching.md §11.1），补丁缺席的旧运行时缺 `session/setModel` → 懒探测记缺面 + no-op，壳按能力轴回落停旧起新。所以「默认模型」不是摆设，是 warmup 起进程未带显式模型时的真实兜底：`assemble.ts` 的 `dshDefaultProviderModel()` 读 `settings.yaml` 的 `agent-default-model`，再回落首个 provider/模型（**不再写死 deepseek-official**）；`baseBackendFactory` 与 `sessionCatalogFactory`（目录 transport）共用这一同源兜底。`getDefaultModel()` 读 `settings.yaml` 的 `agent-default-model` 命名空间，模型 TAB 里「设为默认」最终经 `setDefaultModel` 写回这个命名空间。
 
 ## 7 与其他插件交互（专节）
 
@@ -308,7 +308,7 @@ dsh-manager 在 `src/plugins/manager/`，是内容层（壳插件）。它之上
 
 **Q：dsh-manager 改了默认模型后，正在跑的会话会立即用新模型吗？**
 
-不会。dsh 的模型在 initialize 握手时定（`dsh-backend.ts` 的 `start()` 发 `initialize` 带 `provider/model`），运行中 `session/setModel` 缺面时 no-op（模型停在握手值）。所以改默认模型只影响**下一次 spawn**（`assemble.ts` 的 `getDefaultModel()` 兜底在 create 时读），正在跑的会话要重开才生效。`dsh-manager:defaultChanged` 事件只是通知其他插件「默认模型配置变了」，不驱动运行时切换。
+不会。dsh 的模型在 initialize 握手时定（`dsh-backend.ts` 的 `start()` 发 `initialize` 带 `provider/model`），所以改默认模型只影响**下一次 spawn**（`assemble.ts` 的 `getDefaultModel()` 兜底在 create 时读），正在跑的会话要重开才生效。`dsh-manager:defaultChanged` 事件只是通知其他插件「默认模型配置变了」，不驱动运行时切换。（会话内主动换模型是另一条路：`session/setModel` 原地热切，见 docs/model-switching.md §11。）
 
 **Q：为什么 dsh-manager 和 pi-manager 的拓展 TAB 文案完全相同？**
 

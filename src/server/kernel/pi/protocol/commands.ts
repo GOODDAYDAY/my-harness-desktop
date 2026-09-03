@@ -79,26 +79,6 @@ export function buildAbortRetryCommand(): RpcCommand {
   return { type: "abort_retry" };
 }
 
-/** 构造 fork 命令。 */
-export function buildForkCommand(entryId: string, position?: "before" | "at"): RpcCommand {
-  return position ? { type: "fork", entryId, position } : { type: "fork", entryId };
-}
-
-/** 构造 clone 命令。 */
-export function buildCloneCommand(): RpcCommand {
-  return { type: "clone" };
-}
-
-/** 构造 get_fork_messages 命令。entryId 作为内核协议的 id 字段传。 */
-export function buildGetForkMessagesCommand(entryId: string): RpcCommand {
-  return { type: "get_fork_messages", id: entryId };
-}
-
-/** 构造 export_html 命令。 */
-export function buildExportHtmlCommand(outputPath?: string): RpcCommand {
-  return { type: "export_html", outputPath };
-}
-
 /** 构造 get_last_assistant_text 命令。 */
 export function buildGetLastAssistantTextCommand(): RpcCommand {
   return { type: "get_last_assistant_text" };

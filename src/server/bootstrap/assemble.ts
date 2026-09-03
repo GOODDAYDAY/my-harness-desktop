@@ -281,7 +281,9 @@ const dshCliPath = (): string | undefined => {
 };
 // dsh 默认 provider/模型(纯自定义):agent-default-model → 首个 provider/模型 → 空串。
 // baseBackendFactory(spawn 会话进程)与 sessionCatalogFactory(目录 transport)共用同源兜底,
-// 不再写死 deepseek-official。dsh 无 session/setModel,模型只能在 initialize 握手时定。
+// 不再写死 deepseek-official。dsh 模型在 initialize 握手定;运行时热切由内核插件补丁提供
+// (installModelSelection 原地热切,docs/model-switching.md §11.1),补丁缺席的旧运行时
+// 缺 session/setModel → 壳按 supportsRuntimeSetModel 回落停旧起新。
 // 校验:agent-default-model 可能指向已删路由(如旧 deepseek-official 官方路由已废弃),此时回落首个 provider。
 const dshDefaultProviderModel = (): { provider: string; model: string } => {
   const providers = dshConfigSource.listProviders();
@@ -322,6 +324,10 @@ sessionStore.onQuestion((req) => {
 });
 sessionStore.onSnapshot((snapshot) => {
   gateway.broadcast("session:snapshot", snapshot);
+});
+// 中立层变更通知 → WS 扇出(session-single-source §3.2:写穿回执,渲染层镜像的数据源)。
+sessionStore.onNeutralChange((change) => {
+  gateway.broadcast("session:neutralChange", change);
 });
 
 // ---- 内核专属适配器组装(注入 MainContext,api/ipc 不直连 client/{kernel})----
