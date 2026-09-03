@@ -106,9 +106,9 @@ DOM 只断「呈现对不对」(右对齐/徽章/按钮在不在),数据正确�
 
 **消息动作全是「arm-confirm 两段式」**(收藏/分叉/重试/删除):第一次点 = armed(钮文案变「确认X?」),第二次点才执行。探针只点一次 = 没执行(r61 踩过)。重试的「重发」语义 = fork 当前 lineage + messaging.prompt 重发——重试后视图切到新分支,消息行数可能变少(旧分支的后续不在视图),不是丢消息。
 
-**dsh fork 分支物化(疑似缺口,待复核)**:dsh 下 fork 能正确建第二 lineage(中立层 fork 指针在),但分支上发送后,实测分支 lineage 只落 user 条目、assistant 不回写(同一时窗口 pi 分支正常物化)。环境端点慢时难定「慢」还是「不写」——复核手法:fork → 分支发 → 轮询中立层分支 lineage 的 assistant 条目(90s+),配合 `window.kernel.sessions.onEvent` 插桩看分支回合是否起了 agentStart。
+**dsh fork(已厘清)**:服务端 fork 内核无关、有确定性单测守卫(`31b56efe`);UI 触发链(悬停→armed→确认分叉)在干净环境下正常。分支物化(分支发送后 assistant 回写分支 lineage)在慢端点下实测不稳定——根因多是 CDP `protocolTimeout` 截断(见上条),不是产品 bug。复核先确认 protocolTimeout 已拉大,再轮询中立层分支条目。
 
-**跨内核边角(已知待查)**:pi 会话有历史后改选 dsh 模型再发,设计是显式降级抛错(「跨内核切换暂缓」);但该混合路径在「dsh store 符号链接 + 默认模型解析到 dsh」下实测会让渲染层 CDP 长阻塞(`Runtime.callFunctionOn timed out`)——探针若卡死,先 `pkill -f remote-debugging-port` 清场,把 `protocolTimeout` 调大,或拆成「只选不跨发」两步隔离。
+**跨内核边角(已厘清)**:pi 会话有历史后改选 dsh 模型再发,设计是显式降级抛错(「跨内核切换暂缓」)。早前实测的「渲染层 CDP 长阻塞」根因不是产品 bug,是 **CDP `protocolTimeout`(默认 180s)< 探针的等待超时(300s)**——单调用超 180s 被协议层截断成 `Runtime.callFunctionOn timed out` 假失败。已在 `scripts/demo/lib/app.mjs` 的 connect 补 `protocolTimeout: 600000`(c2ef99b2)根治。教训:凡是「等收敛/长回合」类等待,先确认协议层超时不比你的 timeout 小。
 
 **goal 引擎**:`/goal limit N`(须先有别目标时无效,limit 只改现存目标;要限速先在设置里改 goal.maxRounds 再设目标)→ `/goal <目标>`(正文作为真实用户消息发出,所见即所得)→ `[data-goal-phase]` 观察 active→(暂停)→paused→(恢复)→active;留痕卡 role=`goal_note` 落中立层。
 
