@@ -17,7 +17,7 @@ import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnaps
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader, NeutralChange } from "@my-harness-desktop/shared";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, neutralMessagesOfSession } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import { PendingQuestionStore } from "./pending-question-store";
@@ -961,9 +961,14 @@ export class SessionStore implements
     return () => this.neutralListeners.delete(cb);
   }
 
-  /** 读一个中立会话全量(渲染层镜像的基线读口;§3.2)。不存在返回 null。 */
-  getNeutralSession(ns: string): NeutralSession | null {
-    return this.neutralStore?.get(ns) ?? null;
+  /** 读一个中立会话全量 + 当前活跃 lineage(渲染层镜像的基线读口;§3.2)。
+   *  活跃 lineage:活进程读 proc 实况;无进程(冷开/刷新)回退根 lineage。 */
+  getNeutralSession(ns: string): { session: NeutralSession | null; activeLineageId: string | null } {
+    const session = this.neutralStore?.get(ns) ?? null;
+    if (!session) return { session: null, activeLineageId: null };
+    const proc = this.allProcs().find((p) => p.neutralSessionId === ns);
+    const activeLineageId = proc?.activeLineageId ?? session.lineages.find((l) => l.fork === null)?.lineageId ?? ns;
+    return { session, activeLineageId };
   }
 
   /** 中立层唯一写口:持久化 + 产变更通知(写与通知焊死,不落一边)。 */
@@ -1262,9 +1267,7 @@ export class SessionStore implements
   private neutralMessagesOf(proc: SessionProc): NeutralMessage[] {
     const session = this.readNeutral(proc);
     if (!session) return [];
-    return deduplicateAdjacent(lineageContent(session, proc.activeLineageId).map((e) =>
-      e.display?.image ? ({ ...e.message, __image: e.display.image } as NeutralMessage) : e.message,
-    ));
+    return neutralMessagesOfSession(session, proc.activeLineageId);
   }
 
   /** resync 一次并广播新基线(start 后与显式刷新走这里)。作用于激活会话。

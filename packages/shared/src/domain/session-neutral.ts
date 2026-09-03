@@ -8,6 +8,7 @@
 
 import type { KernelId } from "./kernel";
 import type { NeutralMessage } from "./events/session-state";
+import { deduplicateAdjacent } from "./events/session-state";
 import { messageContentText, sessionMessagePreview } from "./text";
 
 /** 中立会话身份:壳生成、跨内核稳定的会话 id(UUID)。壳的会话列表/书签/分组都以它为主键。 */
@@ -422,6 +423,20 @@ export function applyNeutralChange(session: NeutralSession, change: NeutralChang
     case "session":
       return change.session;
   }
+}
+
+// ============ 镜像内容读口(session-single-source §3.2,契约单源)============
+
+/** 中立会话 → 活跃 lineage 的消息视图:完整线性内容 → 展示图合回 __image →
+ *  锚点 id 提升为中立 entryId(收藏/分叉/锚定全走中立坐标)→ 相邻去重。
+ *  壳(openSession/sync)与渲染层镜像(neutral-mirror)共用这一份推导,不写两遍。 */
+export function neutralMessagesOfSession(session: NeutralSession, lineageId?: string | null): NeutralMessage[] {
+  const lid = lineageId ?? session.lineages.find((l) => l.fork === null)?.lineageId ?? session.neutralSessionId;
+  return deduplicateAdjacent(lineageContent(session, lid).map((e) => ({
+    ...e.message,
+    id: e.neutralEntryId,
+    ...(e.display?.image ? { __image: e.display.image } : {}),
+  })));
 }
 
 // ============ 克隆(session-single-source §4.2:clone 归壳)============

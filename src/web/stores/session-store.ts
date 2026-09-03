@@ -14,9 +14,112 @@ import { create } from "zustand";
 import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent, KernelId, ImageInput, DisplayMeta } from "@my-harness-desktop/shared";
 import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/shared";
 import { useUiStore } from "./ui-store";
-import { initNeutralMirror } from "./neutral-mirror";
+import { initNeutralMirror, useNeutralMirror, mirrorMessages } from "./neutral-mirror";
+
+// ============ 内容镜像 + 执行态叠加(session-single-source §2.2/§3.2)============
+
+/** 在飞工具结果登记表(toolCallStart/End 事件驱动,视图层单例):
+ *  镜像条目在 messageEnd 定稿时可能尚无工具结果(pi 的 toolCall 块结果在下一事件才齐)——
+ *  合并视图按 toolCallId 把结果/状态补到内容块上,与旧 applyEvent 的就地 patch 同语义。 */
+const toolResultLedger = new Map<string, { result?: unknown; isError?: boolean; state?: string }>();
+
+/** 把登记表里的工具结果/状态补到消息内容块上(合并视图用,纯函数不 mutate)。 */
+function withToolResults(messages: NeutralMessage[], ledger: Map<string, { result?: unknown; isError?: boolean; state?: string }>): NeutralMessage[] {
+  if (ledger.size === 0) return messages;
+  let changed = false;
+  const out = messages.map((m) => {
+    if (!Array.isArray(m.content)) return m;
+    const content = m.content.map((b) => {
+      if (typeof b !== "object" || b === null) return b;
+      const block = b as Record<string, unknown>;
+      if (block.type !== "toolCall" || typeof block.id !== "string") return b;
+      const rec = ledger.get(block.id);
+      if (!rec) return b;
+      // 只补缺的:已定稿带结果的块不覆盖
+      if (block.result !== undefined && rec.state !== "running") return b;
+      changed = true;
+      return { ...block, ...(rec.result !== undefined ? { result: rec.result } : {}), ...(rec.isError !== undefined ? { isError: rec.isError } : {}), ...(rec.state ? { state: rec.state } : {}) };
+    });
+    return changed ? { ...m, content } : m;
+  });
+  return changed ? out : messages;
+}
+
+/** 合并视图(纯函数,可单测):base = 中立层镜像内容(唯一内容源);overlay = 执行态暂存
+ *  (乐观回显 + 流式占位)。镜像里已出现的乐观条目(同文 user)从叠加层摘除——转正即不双条。 */
+export function mergeMirrorWithOverlay(
+  base: NeutralMessage[],
+  overlay: NeutralMessage[],
+  ledger?: Map<string, { result?: unknown; isError?: boolean; state?: string }>,
+): NeutralMessage[] {
+  const mergedBase = ledger ? withToolResults(base, ledger) : base;
+  if (overlay.length === 0) return mergedBase;
+  const baseUserTexts = new Set(base.filter((m) => m.role === "user").map((m) => textOf(m.content)));
+  const visible = overlay.filter((m) => !(m.role === "user" && baseUserTexts.has(textOf(m.content))));
+  return [...mergedBase, ...visible];
+}
+
+/** 叠加层归约(纯函数;事件只驱动执行态,内容归镜像——session-single-source §3.3):
+ *  messageStart/Update 只维护「流式占位」(至多一条 pending assistant);
+ *  messageEnd 摘除占位(内容已由主侧写穿落中立层,回执先于本事件到达);
+ *  toolCallStart/End 登记表 + 补占位内容块;agent 三态只动 streaming(在 store 里)。 */
+export function applyOverlayEvent(overlay: NeutralMessage[], event: SessionEvent): NeutralMessage[] {
+  const rawMsg = (event as { message?: NeutralMessage }).message;
+  const msg = rawMsg && (event.type === "messageStart" || event.type === "messageUpdate" || event.type === "messageEnd")
+    ? withStreamTiming(rawMsg)
+    : rawMsg;
+  if (event.type === "messageStart" && msg?.role === "assistant") {
+    // 同一时刻至多一条在流式:先摘旧占位(防搁浅),再挂新占位。
+    const rest = overlay.filter((m) => !(m.role === "assistant" && m.pending === true));
+    return [...rest, { ...msg, pending: true, id: typeof msg.id === "string" ? msg.id : `stream-${++streamSeq}` }];
+  }
+  if (event.type === "messageUpdate" && msg) {
+    // patch 流式占位(末条 pending assistant);无占位说明 messageStart 未到(乱序防御)——补一条
+    for (let i = overlay.length - 1; i >= 0; i--) {
+      const m = overlay[i];
+      if (m.role === "assistant" && m.pending === true) {
+        return overlay.map((x, j) => (j === i ? { ...x, ...msg, id: x.id, startedAt: x.startedAt ?? msg.startedAt, pending: true } : x));
+      }
+    }
+    return [...overlay, { ...msg, pending: true, id: typeof msg.id === "string" ? msg.id : `stream-${++streamSeq}` }];
+  }
+  if (event.type === "messageEnd") {
+    // 定稿:占位摘除(中立层回执先于本事件到达——主侧 dispatch 先写穿再广播视图流)。
+    return overlay.filter((m) => !(m.role === "assistant" && m.pending === true));
+  }
+  if (event.type === "toolCallStart") {
+    const toolCallId = String((event as { toolCallId?: unknown }).toolCallId ?? "");
+    if (!toolCallId) return overlay;
+    inflightToolCalls.add(toolCallId);
+    toolResultLedger.set(toolCallId, { state: "running" });
+    return overlay;
+  }
+  if (event.type === "toolCallEnd") {
+    const toolCallId = String((event as { toolCallId?: unknown }).toolCallId ?? "");
+    if (!toolCallId) return overlay;
+    inflightToolCalls.delete(toolCallId);
+    toolResultLedger.set(toolCallId, { result: (event as { result?: unknown }).result, isError: (event as { isError?: unknown }).isError === true, state: "done" });
+    return overlay;
+  }
+  return overlay;
+}
+let streamSeq = 0;
+
+/** 重算合并视图(镜像或叠加层任一变化后调):
+ *  - 镜像就绪:内容归镜像(唯一内容源);
+ *  - 已有会话基线加载中(ns 已指、镜像未回):保持现状(openSession 基线 paint);
+ *  - 新会话壳(ns 未指):内容为空,只显叠加层(乐观回显/流式占位)。 */
+function recomputeMessages(): void {
+  const mirror = useNeutralMirror.getState();
+  if (!mirror.session && mirror.ns) return;
+  const base = mirror.session ? mirrorMessages(mirror.session, mirror.activeLineageId) : [];
+  useSessionStore.setState((s) => ({
+    messages: mergeMirrorWithOverlay(base, s.overlay, toolResultLedger),
+  }));
+}
 
 // ── 工具限制注入(从 timeline 收编,发送统一入口的构成部分) ──────────────
+
 // 注入文本是发往内核的协议指令(渲染层经 stripToolLimitNote 剥除,用户气泡不可见),
 // 非 UI 文案——演进:内核提供工具白名单 RPC 后整体移除(勿 i18n,勿当界面文案改)。
 const TOOL_LIMIT_PREFIX = "[System] 本次会话已限制可用工具。";
@@ -56,9 +159,11 @@ async function readHeaderPrefs(cwd: string, sessionPath: string): Promise<Sessio
 export interface SessionStoreState {
   /** 投影基线(null = pi 未启动/未同步;文件读不产生基线) */
   snapshot: SyncSnapshot | null;
-  /** 消息流(文件读基线 或 投影基线 + 事件流)。展示元数据(图)经 main 从中立层
-   *  (kernel 版本)合进消息的 __image 字段,不再经 imageIndex(neutral-first §11)。 */
+  /** 消息流 = 中立层镜像内容 + 执行态叠加层(乐观回显/流式占位)的合并视图。
+   *  内容真相源是中立层(neutral-mirror);事件不再拼内容(session-single-source §3.2)。 */
   messages: NeutralMessage[];
+  /** 执行态叠加层:乐观回显的 user 气泡 + 流式 pending assistant 占位。 */
+  overlay: NeutralMessage[];
   /** 会话统计(token 用量/上下文占用/tps)。双源:文件聚合基线(openSession 随 detail
    *  到达,打开即有)+ 活会话 RPC 真值(snapshot/轮次结束覆盖,带 tps/权威 contextUsage)。
    *  null = 未运行(新会话/空会话文件)。 */
@@ -226,249 +331,6 @@ export function getInflightToolCalls(): ReadonlySet<string> {
   return inflightToolCalls;
 }
 
-/** 事件增量应用(纯函数,便于测试)。
- *  按 messageId 精确 patch(L1.5 范式),不靠末条 role 替换。
- *  messageUpdate/messageEnd 的 event.message 带 id → find-by-id patch;
- *  找不到(id 不匹配,如 pi 直接推 messageUpdate 没经占位)→ 追加。
- *
- *  pending 生命周期(单一语义:"该消息流式进行中",渲染层依此挂流式光标):
- *  置 true:占位(appendPendingAssistant)、messageStart、messageUpdate;
- *  清 false:仅 messageEnd(终态,含 abort/失败收尾)。
- *  messageUpdate 绝不清 pending——此前 find-by-id / 末条替换两分支写死 pending:false,
- *  导致流式消息收到第一条 update 后就丢标记,渲染层被迫用全局 streaming 广播兜底,
- *  所有历史 assistant 消息在流式期间被误挂光标(根因修复,勿回退)。 */
-export function applyEvent(messages: NeutralMessage[], event: SessionEvent): NeutralMessage[] {
-  const rawMsg = (event as { message?: NeutralMessage }).message;
-  // 流式 message 事件入口统一计时归一(见 withStreamTiming 注释):
-  // 各分支的 ...msg 展开自动带上 startedAt、timestamp 已清,不重复手写。
-  const msg = rawMsg && (event.type === "messageStart" || event.type === "messageUpdate" || event.type === "messageEnd")
-    ? withStreamTiming(rawMsg)
-    : rawMsg;
-  if (event.type === "messageUpdate" && msg) {
-    if (msg.id) {
-      const idx = messages.findIndex(m => m.id === msg.id);
-      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...m, ...msg, startedAt: msg.startedAt ?? m.startedAt, timestamp: msg.timestamp ?? m.timestamp, pending: true } : m);
-    }
-    const last = messages[messages.length - 1];
-    if (last?.role === "assistant") return [...messages.slice(0, -1), { ...msg, pending: true }];
-    return [...messages, { ...msg, pending: true }];
-  }
-  if (event.type === "messageStart" && msg) {
-    if (msg.role === "user") {
-      const text = textOf(msg.content);
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const m = messages[i];
-        // 匹配键双轨(根因修复,勿回退):echo/send 双形态下(工具前缀)乐观回显
-        // 与实发文本不同,仅按全文匹配必失配——内核回放被当成新消息追加,时间线双条。
-        // __sendText 是发送时随乐观消息携带的实发全文,与回放全文精确对齐。
-        // 命中后保留乐观消息的正文(content),只吸收回放权威字段。
-        if (m.role === "user" && m.__optimistic === true
-          && (textOf(m.content) === text || m.__sendText === text)) {
-          return messages.map((x, idx) => idx === i
-            ? { ...x, ...msg, content: x.content, pending: true, __optimistic: true }
-            : x);
-        }
-      }
-    }
-    const last = messages[messages.length - 1];
-    if (last?.role === "assistant" && (last.pending || last.content === "" || last.content === undefined)) {
-      return [...messages.slice(0, -1), { ...msg, pending: true }];
-    }
-    // 占位搁浅防线(根因修复,勿回退):末条不是可替换的 assistant(如有用户消息在占位之后
-    // 插入)时,倒查最近的 pending assistant 占位就地替换——否则占位永远卡在数组中段,
-    // 「思考中」转到刷新才消失(dsh 回放/乱序事件序列实测触发)。无 pending 占位才追加。
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === "assistant" && m.pending === true) {
-        return messages.map((x, idx) => (idx === i ? { ...msg, pending: true } : x));
-      }
-      if (m.role === "assistant") break; // 越过最近一条已完成 assistant 就不再往前找(防误替换历史)
-    }
-    return [...messages, { ...msg, pending: true }];
-  }
-  if (event.type === "messageEnd" && msg) {
-    if (msg.id) {
-      const idx = messages.findIndex(m => m.id === msg.id);
-      // stopped 不能写死 false(根因修复):abort 终态(dsh turn/end aborted 合成的
-      // messageEnd stopped=true)经 id 精确命中时被抹成 false,「已停止」标记丢失。
-      // 终态语义 = 以 msg 为准:msg 带 stopped 就保留,不带才是正常完成(false)。
-      if (idx >= 0) return messages.map((m, i) => i === idx ? { ...msg, startedAt: msg.startedAt ?? m.startedAt, timestamp: msg.timestamp ?? m.timestamp, pending: false } : m);
-    }
-    const last = messages[messages.length - 1];
-    // 只替换「流式占位」(pending / 空内容),不替换已完成消息——dsh 一轮内每个 step 各推
-    // 一条完整的 assistant/message(→ messageEnd),若按「同 role 覆盖末条」处理,step2 会
-    // 盖掉 step1 的思考链+工具卡,只剩末条文本,会话流丢失整个处理过程(根因)。
-    if (last && last.role === msg.role && (last.pending === true || last.content === "" || last.content === undefined)) {
-      return [...messages.slice(0, -1), { ...msg, pending: false }];
-    }
-    // 占位搁浅防线(与 messageStart 同理):终态到达时末条已被别的消息(如内核回放的用户
-    // 消息)占住,倒查最近的 pending 同 role 消息就地收尾——pending 永挂 = 「思考中」
-    // 转到刷新才消失的根因之一(dsh abort/乱序实测)。
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === msg.role && m.pending === true) {
-        return messages.map((x, idx) => (idx === i ? { ...msg, pending: false } : x));
-      }
-      if (m.role === msg.role) break; // 越过最近一条已完成同 role 就不再往前找
-    }
-    if (msg.role === "user") {
-      const text = textOf(msg.content);
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const m = messages[i];
-        // 同 messageStart 的 user 分支:__sendText 双轨匹配,命中保留正文并转正。
-        if (m.role === "user" && m.__optimistic === true
-          && (textOf(m.content) === text || m.__sendText === text)) {
-          return messages.map((x, idx) => idx === i
-            ? { ...x, ...msg, content: x.content, __optimistic: false }
-            : x);
-        }
-      }
-    }
-    return [...messages, msg];
-  }
-  if (event.type === "toolCallStart") {
-    const toolCallId = String((event as { toolCallId?: unknown }).toolCallId ?? "");
-    if (!toolCallId) return messages;
-    inflightToolCalls.add(toolCallId);
-    // 内容块可能已到(messageEnd 先于 toolCallStart,pi 实测事件序)→ 就地补 state:"running";
-    // 未到的由块分解器读 inflight 集合兜底(blocks.ts deriveToolCallState)。
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (!Array.isArray(m.content)) continue;
-      let patched = false;
-      const content = m.content.map((block) => {
-        if (typeof block !== "object" || block === null) return block;
-        const b = block as Record<string, unknown>;
-        if (b.type === "toolCall" && b.id === toolCallId && b.result === undefined) {
-          patched = true;
-          return { ...b, state: "running" };
-        }
-        return block;
-      });
-      if (patched) return messages.map((x, idx) => (idx === i ? { ...x, content } : x));
-    }
-    return messages;
-  }
-  if (event.type === "toolCallEnd") {
-    const toolCallId = String((event as { toolCallId?: unknown }).toolCallId ?? "");
-    if (!toolCallId) return messages;
-    inflightToolCalls.delete(toolCallId);
-    const result = (event as { result?: unknown }).result;
-    const isError = (event as { isError?: boolean }).isError === true;
-    // dsh 的工具结果经独立 tool/result 事件到达(pi 经 messageUpdate 把 result 流进内容块),
-    // 而工具卡渲染读的是 assistant 消息内容块的 toolCall.result——按 toolCallId 回填到
-    // 最近一条含该 toolCall 块的消息;找不到则 no-op(pi 已在内容块里,不重复写)。
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (!Array.isArray(m.content)) continue;
-      let patched = false;
-      const content = m.content.map((block) => {
-        if (typeof block !== "object" || block === null) return block;
-        const b = block as Record<string, unknown>;
-        if (b.type === "toolCall" && b.id === toolCallId) {
-          patched = true;
-          return { ...b, result, isError, state: "done" };
-        }
-        return block;
-      });
-      if (patched) return messages.map((x, idx) => (idx === i ? { ...x, content } : x));
-    }
-    return messages;
-  }
-  if (event.type === "agentStart") {
-    // 回合起:排队中的消息仍有机会被内核消费确认——暂清未确认标记(确认回转由 entryAppended 水合完成)。
-    let changed = false;
-    const next = messages.map((m) => {
-      if (m.__unconfirmed === true) { changed = true; return { ...m, __unconfirmed: false }; }
-      return m;
-    });
-    return changed ? next : messages;
-  }
-  if (event.type === "agentSettled" || event.type === "agentEnd") {
-    // 回合收敛仍处乐观态的用户消息 = 内核从未把它落盘确认(bus 竞态注入吃掉、inbox 覆盖等)。
-    // 诚实显形:标 __unconfirmed 让气泡挂「未送达」记号,而不是静默丢(刷新后被内核基线冲掉)。
-    // 自愈:后续回合 agentStart 暂清、entryAppended 水合永清。
-    let changed = false;
-    const next = messages.map((m) => {
-      if (m.role === "user" && m.__optimistic === true && m.__unconfirmed !== true) {
-        changed = true;
-        return { ...m, __unconfirmed: true };
-      }
-      return m;
-    });
-    return changed ? next : messages;
-  }
-  if (event.type === "entryAppended") {
-    const entry = (event as { entry?: unknown }).entry;
-    if (!entry) return messages;
-    const neutral = sessionEntryToNeutral(entry);
-    if (!neutral) return messages;
-    if ((entry as { type?: string }).type === "message") {
-      // 消息条目落盘回执:消息体已由 messageStart/Update/End 渲染(内核 AgentMessage 无 id 字段),
-      // 这里只做 id 水合——把权威 entryId 补到已渲染消息上(书签/fork/patch 的锚点)。
-      // 匹配两段制(终态契约,勿回退):
-      //   ① 严格:倒序取最近一条同 role 且全文相等——正常流零漂移;重发/同文本消息不误绑旧位置。
-      //   ② 位置兜底:全文失配时(echo 注入前缀、stopped 截断、错误消息落盘差异),取最早未水合
-      //     的同 role 可锚消息——entries 与可视消息都按 FIFO 追加序产生,先到先得一一对齐;
-      //     早先失配滞留的消息也随后续 entry 顺序自愈。
-      //   水合即转正(清 __optimistic 标记):已转正消息不再参与锚定,后续同 role entry
-      //   不会误绑旧档(不清理则下一条同 role entry 会反复改绑同一条)。
-      //   两阶段都失败:console.warn 显形(锚点丢失无声 = 收藏按钮消失无人知,见 P-锚点评估)。
-      if (!neutral.id) return messages;
-      const text = textOf(neutral.content);
-      const anchorable = (m: NeutralMessage): boolean =>
-        m.id == null || m.__optimistic === true;
-      const hydrate = (x: NeutralMessage): NeutralMessage => ({
-        ...x,
-        id: neutral.id,
-        __optimistic: false,
-        __unconfirmed: false,
-        startedAt: neutral.startedAt ?? x.startedAt,
-        timestamp: neutral.timestamp,
-        ...(neutral.model ? { model: neutral.model } : {}),
-      });
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const m = messages[i];
-        // __sendText 双轨:echo/send 双形态下全文失配是常态,实发全文才是与落盘 entry 的对齐键
-        if (m.role === neutral.role && anchorable(m)
-          && (textOf(m.content) === text || m.__sendText === text)) {
-          return messages.map((x, idx) => (idx === i ? hydrate(x) : x));
-        }
-      }
-      for (let i = 0; i < messages.length; i++) {
-        const m = messages[i];
-        if (m.role === neutral.role && anchorable(m)) {
-          return messages.map((x, idx) => (idx === i ? hydrate(x) : x));
-        }
-      }
-      console.warn(`[session-store] entryAppended 水合失败:找不到可锚定的 ${neutral.role} 消息(id=${neutral.id}),收藏/回退锚点未建立`);
-      return messages;
-    }
-    // 非消息条目(分隔线/custom 消息)按身份去重(防内核重复推送同一 entry)。
-    // divider 的 content 恒为 ""(session-state.ts:372),不可用 textOf(content) 判重——
-    // 否则任意两条 divider 互判重复,model/thinking 分隔线全被吞(根因)。
-    // id 优先于文本判重:带唯一 id 的注解条目(中立层会话注解,custom_message)同文案
-    // 出现多次是合法的(如同轮两次暂停),按 id 区分;无 id 的走文本判重(原语义)。
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role !== neutral.role) continue;
-      if (m.role === "divider") {
-        // 两条都有 id 按 id 判重;否则回退 kind+i18nKey+i18nArgs(内核条目恒带 id)。
-        if (neutral.id && m.id) { if (m.id === neutral.id) return messages; continue; }
-        if (m.kind === neutral.kind && m.i18nKey === neutral.i18nKey
-          && JSON.stringify(m.i18nArgs) === JSON.stringify(neutral.i18nArgs)) return messages;
-      } else {
-        if (neutral.id && m.id) {
-          if (m.id === neutral.id) return messages;
-          continue;
-        }
-        if (textOf(m.content) === textOf(neutral.content)) return messages;
-      }
-    }
-    return [...messages, neutral];
-  }
-  return messages;
-}
 
 /** 投影拉取防竞态代际:基线替换(openSession/startNewChat)时递增,
  *  在飞的旧 RPC 回来后比对不一致即丢弃(切会话后旧会话的值不写回)。 */
@@ -506,6 +368,7 @@ function refreshCapabilities(): void {
 export const useSessionStore = create<SessionStoreState>((set, get) => ({
   snapshot: null,
   messages: [],
+  overlay: [],
   stats: null,
   thinkingLevels: [],
   capabilities: { kernel: null, locked: false, piExtension: false, dshExtension: false },
@@ -557,6 +420,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       useUiStore.getState().setCurrentNeutralSessionId(detail.info.neutralSessionId ?? null);
       set((s) => ({
         messages: detail.messages,
+        overlay: [], // 切会话清叠加层(旧会话的乐观回显/流式占位不带过来)
         snapshot: null,
         // 文件聚合基线:打开即有,不依赖活进程;活会话 snapshot/RPC 真值到达后覆盖
         stats: detail.stats,
@@ -592,18 +456,20 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     // 中立主键随会话上下文一并清(根因修复):不清则新会话残留上一会话的 ns,
     // 收藏/分叉会把新会话的消息锚到旧会话树上(静默错会话,比按钮不亮更糟)。
     useUiStore.getState().setCurrentNeutralSessionId(null);
-    set({ messages: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
+    set({ messages: [], overlay: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
   },
   appendOptimisticUser: (text, sendText) => {
-    set((s) => ({ messages: [...s.messages, {
+    set((s) => ({ overlay: [...s.overlay, {
       id: crypto.randomUUID(), role: "user", content: text,
       __sendText: sendText, __optimistic: true,
     }] }));
+    recomputeMessages();
   },
   appendPendingAssistant: () => {
     // startedAt=占位创建时刻:首个流式事件到达前,渲染层的等待计时以此起算
     // (流式事件到达后以其内核时间戳为准,见 withStreamTiming)。
-    set((s) => ({ messages: [...s.messages, { id: crypto.randomUUID(), role: "assistant", content: "", pending: true, startedAt: Date.now() }] }));
+    set((s) => ({ overlay: [...s.overlay.filter((m) => !(m.role === "assistant" && m.pending === true)), { id: crypto.randomUUID(), role: "assistant", content: "", pending: true, startedAt: Date.now() }] }));
+    recomputeMessages();
   },
   sendMessage: async (cwd, text, opts) => {
     // §atomic-send:三级来源(pending > 头 > fallback)拼一个 SessionModelPrefs,一次传给 main。
@@ -658,11 +524,11 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     const imageOpt = opts?.image;
     if (imageOpt) {
       const { src, title } = imageOpt;
-      const cur = get();
-      set({
-        messages: cur.messages.map((m, i) =>
-          i === cur.messages.length - 1 && m.role === "user" ? { ...m, __image: { src, title } } : m),
-      });
+      set((s) => ({
+        overlay: s.overlay.map((m, i) =>
+          i === s.overlay.length - 1 && m.role === "user" ? { ...m, __image: { src, title } } : m),
+      }));
+      recomputeMessages();
     }
     get().appendPendingAssistant();
     // §atomic-send:一次 prompt 带全参(回灌 + 发送)。失败统一中止——
@@ -681,15 +547,16 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       // 误以为「发不出去/卡死」(dsh session/setModel 坏面时期此残留是投诉的直接观感)。
       // 用户文本不丢:调用方(toast)报真实原因,输入框未清可重发。
       set((s) => {
-        const msgs = [...s.messages];
-        const last = msgs[msgs.length - 1];
-        if (last && last.role === "assistant" && last.pending === true && !last.content) msgs.pop();
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          const m = msgs[i] as NeutralMessage & { __sendText?: string; __optimistic?: boolean };
-          if (m.role === "user" && m.__optimistic === true && m.__sendText === sendText) { msgs.splice(i, 1); break; }
+        const ov = [...s.overlay];
+        const last = ov[ov.length - 1];
+        if (last && last.role === "assistant" && last.pending === true && !last.content) ov.pop();
+        for (let i = ov.length - 1; i >= 0; i--) {
+          const m = ov[i] as NeutralMessage & { __sendText?: string; __optimistic?: boolean };
+          if (m.role === "user" && m.__optimistic === true && m.__sendText === sendText) { ov.splice(i, 1); break; }
         }
-        return { messages: msgs, streaming: false };
+        return { overlay: ov, streaming: false };
       });
+      recomputeMessages();
       return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
     }
     // 执行成功才消费意图(session-model-config.md §4.1):pending 保留到此刻,失败不吞。
@@ -710,46 +577,13 @@ let inited = false;
  *  不得冲掉乐观消息——否则首条消息的乐观回显被清、entryAppended 水合找不到锚、首图丢失。
  *  此时基线(snapshot)照常更新,但 messages 保留、syncNonce 不递增(无全量替换)。
  *  非空快照 = 权威全量替换:照常清旧消息、递增 syncNonce 触发 Virtuoso 重挂。 */
+/** 快照应用(纯函数,可裸单测):快照只更新状态面(state/streaming/ready)——
+ *  消息内容归中立层镜像(neutral-mirror),快照不再携带/替换消息数组(session-single-source §3.3)。 */
 export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Partial<SessionStoreState> {
-  const msgs = snapshot.messages ?? [];
-  const streaming = snapshot.state?.isStreaming ?? false;
-  // 中立层基线已含壳乐观写入的 user 条目(壳先写中立层再发内核,session-single-source §4.1)——
-  // 乐观尾巴里同文的 user 条目已在基线,不再追加(否则气泡双条)。
-  const baselineUserTexts = new Set(msgs.filter((m) => m.role === "user").map((m) => textOf(m.content)));
-  const optimisticTail = s.messages.filter((m) =>
-    (m.__optimistic === true || m.pending === true)
-    && !(m.role === "user" && baselineUserTexts.has(textOf(m.content))),
-  );
-  const hasOptimistic = optimisticTail.length > 0;
-  // 快照只有 meta 条目(divider 等,无 user/assistant 内容)时不冲掉乐观消息——
-  // pi 起进程即 sync,快照带着 model_change/thinking_level_change 两条初始化 divider,
-  // 若视为权威全量替换,首条消息的乐观回显会被这俩 divider 顶掉(发送后立即消失)。
-  const hasContent = msgs.some((m) => m.role === "user" || m.role === "assistant");
-  if ((msgs.length === 0 || !hasContent) && hasOptimistic) {
-    return { snapshot, streaming, switching: false, ready: true };
-  }
-  // 快照是内核文件投影基线(权威),但缺展示元数据(__image)与执行模型(model)——两者只在中立层/事件流,
-  // 全量替换会丢。按 id 从旧 messages 合回;再补乐观尾巴(快照之后的新消息,冷开会话首发送时快照冲掉它)。
-  const byId = new Map<string, { __image?: { src: string; title?: string }; model?: NeutralMessage["model"] }>();
-  for (const m of s.messages) {
-    if (!m.id) continue;
-    const rec: { __image?: { src: string; title?: string }; model?: NeutralMessage["model"] } = {};
-    const img = (m as { __image?: { src: string; title?: string } }).__image;
-    if (img != null) rec.__image = img;
-    if (m.model) rec.model = m.model;
-    if (rec.__image != null || rec.model != null) byId.set(m.id, rec);
-  }
-  const merged = msgs.map((m) => {
-    const rec = m.id ? byId.get(m.id) : undefined;
-    return rec ? { ...m, ...rec } : m;
-  });
   return {
     snapshot,
-    // 内核快照是投影基线(权威);展示元数据(图)与执行模型按 id 从旧态合回,乐观尾巴保留。
-    messages: hasOptimistic ? [...merged, ...optimisticTail] : merged,
-    streaming,
+    streaming: snapshot.state?.isStreaming ?? false,
     switching: false,
-    syncNonce: s.syncNonce + 1,
     ready: true,
   };
 }
@@ -830,6 +664,9 @@ export function initSessionStore(): void {
 
   // session:event 只含激活会话(main dispatch 已按 activeProcKey 过滤),
   // 后台会话的定稿/轮结束/新文件事件不会进这里——不必再担心视图被别的会话污染。
+  //
+  // 事件语义(session-single-source §3.3):事件只驱动执行态(流式占位/streaming 标志/
+  // 统计触发),内容一律经中立层镜像(写穿回执 → applyNeutralChange → 重算合并视图)。
   window.kernel.sessions.onEvent((eventRaw) => {
     const event = eventRaw as SessionEvent;
     if (event.type === "sessionStart") {
@@ -854,10 +691,22 @@ export function initSessionStore(): void {
         : event.type === "autoRetryEnd" && (event as { success?: boolean }).success !== true ? false
         : s.streaming;
       return {
-        messages: applyEvent(s.messages, event),
+        overlay: applyOverlayEvent(s.overlay, event),
         streaming,
         snapshot: patched ? { ...s.snapshot!, state: patched } : s.snapshot,
       };
     });
+    recomputeMessages();
+  });
+
+  // 中立层镜像变化 → 重算合并视图;活跃分支切换(整树换内容)→ 递增 syncNonce
+  // 驱动 timeline Virtuoso 重挂(与 openSession 的 openNonce 同语义)。
+  let lastLineage = useNeutralMirror.getState().activeLineageId;
+  useNeutralMirror.subscribe((m) => {
+    if (m.activeLineageId !== lastLineage) {
+      lastLineage = m.activeLineageId;
+      useSessionStore.setState((s) => ({ syncNonce: s.syncNonce + 1 }));
+    }
+    recomputeMessages();
   });
 }

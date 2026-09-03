@@ -309,10 +309,9 @@ describe("createDshEventTranslator(带流式状态)", () => {
     expect(end).toEqual([
       // message.timestamp=计时锚(回合开始):持久化后 sessionEntryToNeutral 读成 startedAt,
       // 思考时长「完成-开始」重开会话仍可算(需求「思考时间要持久化」)。
+      // 会话单源(session-single-source §4.4)后:内容落盘由壳在 messageEnd 写穿,
+      // 翻译器不再代投人造 entryAppended(withNeutralEntry 已删)。
       { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1", timestamp: 1 } },
-      // 中立层上行同步只认 entryAppended(pi entry 形状)——dsh 补面后回复才进中立层。
-      // entry.timestamp=事件 time(完成时间),entry.message.timestamp=计时锚(开始时间)。
-      { type: "entryAppended", entry: { type: "message", id: "a1", timestamp: 2, message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1", timestamp: 1 } } },
     ]);
     // 下一 step 复用同一翻译器,不串流(新 step 新缓冲)。
     const next = t(chunkEvent(1, 2, { type: "text-delta", index: 0, text: "new" }));
@@ -331,7 +330,6 @@ describe("createDshEventTranslator(带流式状态)", () => {
     });
     expect(end).toEqual([
       { type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1", timestamp: 1 } },
-      { type: "entryAppended", entry: { type: "message", id: "a1", message: { role: "assistant", content: [{ type: "text", text: "partial" }], id: "a1", timestamp: 1 } } },
     ]);
     // finish-error:messageEnd 带 error,但不投影 entryAppended(错误终态无内容可落)。
     const err = t(chunkEvent(1, 2, { type: "finish", reason: { kind: "error", failure: { message: "boom" } } }));
@@ -348,7 +346,6 @@ describe("createDshEventTranslator(带流式状态)", () => {
     });
     expect(u).toEqual([
       { type: "messageEnd", message: { role: "user", content: [{ type: "text", text: "ping" }], id: "u1" } },
-      { type: "entryAppended", entry: { type: "message", id: "u1", timestamp: 3, message: { role: "user", content: [{ type: "text", text: "ping" }], id: "u1" } } },
     ]);
     // 系统上下文注入不是用户消息:既不产 messageEnd 也不产条目。
     const sys = t({

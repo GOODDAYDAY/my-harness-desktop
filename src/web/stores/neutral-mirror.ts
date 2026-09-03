@@ -5,11 +5,13 @@
 // - 增量:session:neutralChange 写穿回执,经圆心 applyNeutralChange 归约(与壳同一函数,
 //   契约单源);渲染层不拼消息、不比对文本,只有 upsert。
 // - 镜像只镜像激活会话:后台会话的变更通知不进来(切换即重读基线)。
-//
-// 双跑纪律(§5):本镜像与现有 applyEvent 事件路径并行,验证一致前不切换显示读口。
+// - activeLineageId:基线携带(主侧读活进程实况,无进程回退根 lineage);
+//   写穿回执天然带活跃归属(条目落哪条 lineage,哪条就是当前活跃——fork 切走后的
+//   第一条写入即换轨);fork 插枝的 lineage 变更通知也把活跃指到新分支。
 import { create } from "zustand";
 import type { NeutralSession, NeutralChange } from "@my-harness-desktop/shared";
-import { applyNeutralChange } from "@my-harness-desktop/shared";
+import { applyNeutralChange, neutralMessagesOfSession } from "@my-harness-desktop/shared";
+import type { NeutralMessage } from "@my-harness-desktop/shared";
 import { useUiStore } from "./ui-store";
 
 export interface NeutralMirrorState {
@@ -17,6 +19,8 @@ export interface NeutralMirrorState {
   ns: string | null;
   /** 中立会话镜像(基线读 + 变更归约的产物)。 */
   session: NeutralSession | null;
+  /** 当前活跃 lineage(渲染哪条分支)。 */
+  activeLineageId: string | null;
   /** 变更代际:每条变更通知递增,消费方据此做轻量重算依赖。 */
   nonce: number;
 }
@@ -24,17 +28,31 @@ export interface NeutralMirrorState {
 export const useNeutralMirror = create<NeutralMirrorState>(() => ({
   ns: null,
   session: null,
+  activeLineageId: null,
   nonce: 0,
 }));
+
+/** 镜像的内容读口(契约单源,与壳 openSession/sync 同一推导):
+ *  活跃 lineage 的完整线性内容 → 消息数组(展示图合回 __image + 去重)。
+ *  消息的锚点 id = 中立 entryId(收藏/分叉/锚定全走中立坐标)。 */
+export function mirrorMessages(session: NeutralSession | null, activeLineageId: string | null): NeutralMessage[] {
+  if (!session) return [];
+  return neutralMessagesOfSession(session, activeLineageId);
+}
 
 /** 加载基线(切会话/镜像缺失时的全量读)。防竞态:拉的期间又切走了就丢弃。 */
 async function loadBaseline(ns: string): Promise<void> {
   // 可选调用(与 onHeaderChanged 同先例):旧 mock/旧 API 面无此方法时显式跳过,不炸初始化。
   const getNeutral = window.kernel.sessions.getNeutral?.bind(window.kernel.sessions);
   if (!getNeutral) return;
-  const session = (await getNeutral(ns)) as NeutralSession | null;
+  const res = (await getNeutral(ns)) as { session: NeutralSession | null; activeLineageId: string | null };
   if (useUiStore.getState().currentNeutralSessionId !== ns) return;
-  useNeutralMirror.setState({ ns, session, nonce: useNeutralMirror.getState().nonce + 1 });
+  useNeutralMirror.setState({
+    ns,
+    session: res.session,
+    activeLineageId: res.activeLineageId ?? res.session?.lineages.find((l) => l.fork === null)?.lineageId ?? ns,
+    nonce: useNeutralMirror.getState().nonce + 1,
+  });
 }
 
 let inited = false;
@@ -50,7 +68,7 @@ export function initNeutralMirror(): void {
     if (state.currentNeutralSessionId === lastNs) return;
     lastNs = state.currentNeutralSessionId;
     if (!lastNs) {
-      useNeutralMirror.setState({ ns: null, session: null });
+      useNeutralMirror.setState({ ns: null, session: null, activeLineageId: null });
       return;
     }
     void loadBaseline(lastNs).catch(() => { /* 主侧未就绪:保持旧镜像,下条变更触发后再试 */ });
@@ -67,8 +85,15 @@ export function initNeutralMirror(): void {
       void loadBaseline(change.ns).catch(() => {});
       return;
     }
+    // 活跃 lineage 跟随:条目写到哪条 lineage,哪条就是当前活跃(fork 后首发即换轨);
+    // fork 插新分支的 lineage 通知同理指到新分支。
+    const nextActive =
+      change.kind === "entry" ? change.lineageId
+      : change.kind === "lineage" ? change.lineage.lineageId
+      : cur.activeLineageId;
     useNeutralMirror.setState({
       session: applyNeutralChange(cur.session, change),
+      activeLineageId: nextActive,
       nonce: cur.nonce + 1,
     });
   });
