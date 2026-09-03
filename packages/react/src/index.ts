@@ -323,7 +323,7 @@ export type {
 } from "@my-harness-desktop/shared";
 
 export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf, thinkingBlocksOf } from "@my-harness-desktop/shared";
-export { DEFAULT_GROUP_IDS } from "@my-harness-desktop/shared";
+export { DEFAULT_GROUP_IDS, matchComposerCommandName } from "@my-harness-desktop/shared";
 export {
   GENERAL_CONFIG_PATH,
   SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,

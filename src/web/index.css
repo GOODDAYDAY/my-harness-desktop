@@ -183,6 +183,25 @@ html, body, #root {
   pointer-events: none;
 }
 
+/* 命令生效高亮:输入内容命中已注册斜杠命令(内核/插件同享)时,药丸给主色边框 +
+   命令 chip。判定与发送前拦截用同一个纯函数(matchComposerCommandName)——看着生效
+   和实际生效永不脱节(设计 docs/design/goal.md §7.2)。 */
+.pi-composer-command {
+  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border)) !important;
+}
+.pi-composer-command-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  margin: 2px 0 0 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  width: fit-content;
+}
+
 .pi-composer-thinking::before,
 .pi-composer-fadeout::before {
   content: "";

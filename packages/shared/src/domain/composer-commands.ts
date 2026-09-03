@@ -44,3 +44,12 @@ export function matchComposerCommand(text: string, commands: ComposerCommand[]):
   const lower = head.name.toLowerCase();
   return commands.find((c) => c.name.toLowerCase() === lower) ?? null;
 }
+
+/** 命令名清单匹配(只读场景:生效高亮等,不需要 handle)。输入以某命令名开头
+ *  (整词、大小写不敏感)则返回该名字;无命中返回 null。 */
+export function matchComposerCommandName(text: string, names: string[]): string | null {
+  const head = parseComposerCommandText(text);
+  if (head === null) return null;
+  const lower = head.name.toLowerCase();
+  return names.find((n) => n.toLowerCase() === lower) ?? null;
+}
