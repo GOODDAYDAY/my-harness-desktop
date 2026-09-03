@@ -47,6 +47,7 @@ import { installFitPiExtension, fitPiExtensionAvailable } from "../kernel/pi/ext
 import { mirrorManagedDir } from "../application/bundled/mirror";
 import { initKernelRuntime } from "../kernel/core/kernel-manager";
 import { reconcileMissingKernels } from "../kernel/core/kernel-reconcile";
+import { importLegacyPiSessions } from "../application/sessions/neutral-migration";
 import { RestartCoordinatorImpl } from "../application/restart/restart-coordinator";
 import { createNpmKernelRuntime } from "../client/npm/kernel-runtime";
 import { PiExtensionManager } from "../kernel/pi/extension/pi-extension-manager";
@@ -735,6 +736,22 @@ registerRemote(gateway, auth, {
       }
     },
   ).catch((e) => console.error("[kernel-reconcile] 启动对账失败:", e));
+
+  // pi 旧命名会话文件的一次性中立层导入(session-single-source §4.3;§2.1 的显式例外,
+  // 离线迁移工具不是会话流读路径)。幂等,已有中立层的跳过;同步执行(文件量小、本地读),
+  // 失败只告警不阻断启动;有导入则广播刷新,让列表出现迁移进来的旧会话。
+  try {
+    const store = sessionStore.neutralStoreRef;
+    if (store) {
+      const r = importLegacyPiSessions(PI_AGENT_DIR, store);
+      if (r.imported > 0) {
+        console.log(`[neutral-migration] 旧 pi 会话文件导入中立层: ${r.imported} 个(跳过 ${r.skipped},失败 ${r.failed})`);
+        broadcastRefreshRequested(gateway);
+      }
+    }
+  } catch (e) {
+    console.warn("[neutral-migration] 启动导入失败(不阻断启动):", e);
+  }
 
   return { ctx, sessionStore, gateway, localToken: auth.localToken, port: PORT };
 }

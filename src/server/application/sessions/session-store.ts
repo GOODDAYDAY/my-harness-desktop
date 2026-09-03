@@ -955,6 +955,11 @@ export class SessionStore implements
     return this.neutralStore?.get(proc.neutralSessionId) ?? null;
   }
 
+  /** 中立层存储的只读暴露(启动迁移工具用;写仍只经本类写口)。 */
+  get neutralStoreRef(): NeutralSessionStore | null {
+    return this.neutralStore;
+  }
+
   /** 订阅中立层变更通知(写穿回执;§3.2)。返回取消函数。 */
   onNeutralChange(cb: (change: NeutralChange) => void): () => void {
     this.neutralListeners.add(cb);
