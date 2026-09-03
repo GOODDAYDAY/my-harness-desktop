@@ -14,7 +14,7 @@ import { PiSessionCatalog } from "../../kernel/pi/backend/pi-catalog";
 import { cwdToBucketName } from "@my-harness-desktop/shared";
 import type { RpcAdapter } from "../../kernel/pi/backend/rpc-adapter";
 import type { RpcCommand } from "../../kernel/pi/protocol/rpc-types";
-import type { BaseBackend, SessionCatalogFactory } from "@my-harness-desktop/shared";
+import type { BaseBackend, SessionCatalogFactory, LineageTree, Anchor, NeutralMessage } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { ModelCatalog } from "../models/model-catalog";
 import { PiModelSource } from "../../kernel/pi/model/pi-model-source";
@@ -66,6 +66,7 @@ let neutralStore: NeutralSessionStore;
 let adapter: FakeAdapter;
 let store: SessionStore;
 const ns = "s1";
+const catalogFactory: SessionCatalogFactory = { create: () => new PiSessionCatalog(dir) };
 
 function entries(): { role: string; kernelEntryId?: string; content: unknown; timestamp?: number; startedAt?: number; kind?: string; detail?: string }[] {
   const s = neutralStore.get(ns);
@@ -91,7 +92,6 @@ beforeEach(async () => {
   neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "wt-neutral-")));
   adapter = new FakeAdapter();
   const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-  const catalogFactory: SessionCatalogFactory = { create: () => new PiSessionCatalog(dir) };
   store = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
   store.setContext(CWD, join(bucket, "s1.jsonl"));
   await store.start(CWD, join(bucket, "s1.jsonl"));
@@ -156,5 +156,53 @@ describe("写穿:messageEnd 是内容落中立层的主触发", () => {
     const comp = entries().find((e) => e.role === "divider" && e.kind === "compaction");
     expect(comp).toBeDefined();
     expect(comp!.detail).toBe("摘要:聊过天气"); // 摘要落库,作 seed 投影的截断代身
+  });
+
+  it("sync 内容基线从中立层出(§4.2):pi 的 get_entries 返回空也照见中立层内容", async () => {
+    await store.prompt("问", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "", kernel: "pi" });
+    adapter.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "答" }] } });
+    const snapshot = await store.sync();
+    // FakeAdapter 的 get_entries 恒空——基线里的内容只能来自中立层(单源的证据);
+    // 分隔线(模型切换/自动命名)也是中立层内容,按对话 role 过滤断言。
+    const convo = snapshot.messages.filter((m) => m.role === "user" || m.role === "assistant");
+    expect(convo.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(convo[1].content).toEqual([{ type: "text", text: "答" }]);
+  });
+});
+
+describe("sync 对无快照面内核(dsh 形态)也产基线:内容中立层 + 状态壳记账", () => {
+  class FakeDsh {
+    alive = false;
+    capabilities = {};
+    calls: string[] = [];
+    private cb: ((e: unknown) => void) | null = null;
+    constructor(public sessionId?: string) {}
+    async start(): Promise<void> { this.alive = true; }
+    async stop(): Promise<void> { this.alive = false; }
+    onEvent(cb: (e: never) => void): () => void { this.cb = cb as (e: unknown) => void; return () => { this.cb = null; }; }
+    emit(e: Record<string, unknown>): void { this.cb?.(e); }
+    async sendMessage(): Promise<void> { this.calls.push("sendMessage"); }
+    async setModel(): Promise<void> {}
+    async setSessionName(): Promise<void> {}
+    async seed(): Promise<string> { return this.sessionId ?? "s"; }
+    async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+    async getEntries(): Promise<NeutralMessage[]> { return []; }
+    async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" } as Anchor; }
+    async deleteBookmark(): Promise<void> {}
+    async abort(): Promise<void> {}
+  }
+
+  it("dsh 形态:sync 产基线且消息来自中立层(不再降级返回旧基线)", async () => {
+    const dsh = new FakeDsh("ns-dsh");
+    const factory: BackendFactory = { create: () => dsh as unknown as BaseBackend };
+    const dshSource = { listModels: () => [{ kernel: "dsh" as const, provider: "p", id: "a", name: "a" }] };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([dshSource]));
+    s.setContext(CWD, null);
+    await s.prompt("问", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "", kernel: "dsh" });
+    dsh.emit({ type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "答" }] } });
+    const snapshot = await s.sync();
+    const convo = snapshot.messages.filter((m) => m.role === "user" || m.role === "assistant");
+    expect(convo.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(snapshot.state.sessionId).toBe("ns-dsh");
   });
 });

@@ -704,7 +704,13 @@ let inited = false;
 export function applySnapshot(s: SessionStoreState, snapshot: SyncSnapshot): Partial<SessionStoreState> {
   const msgs = snapshot.messages ?? [];
   const streaming = snapshot.state?.isStreaming ?? false;
-  const optimisticTail = s.messages.filter((m) => m.__optimistic === true || m.pending === true);
+  // 中立层基线已含壳乐观写入的 user 条目(壳先写中立层再发内核,session-single-source §4.1)——
+  // 乐观尾巴里同文的 user 条目已在基线,不再追加(否则气泡双条)。
+  const baselineUserTexts = new Set(msgs.filter((m) => m.role === "user").map((m) => textOf(m.content)));
+  const optimisticTail = s.messages.filter((m) =>
+    (m.__optimistic === true || m.pending === true)
+    && !(m.role === "user" && baselineUserTexts.has(textOf(m.content))),
+  );
   const hasOptimistic = optimisticTail.length > 0;
   // 快照只有 meta 条目(divider 等,无 user/assistant 内容)时不冲掉乐观消息——
   // pi 起进程即 sync,快照带着 model_change/thinking_level_change 两条初始化 divider,

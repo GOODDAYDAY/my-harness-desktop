@@ -52,12 +52,12 @@ function forkCopyName(sourceName?: string | null): string {
   return base ? `${base} (copy)` : "copy";
 }
 
-/** 空快照基线:非 pi 内核(dsh 无 get_state 面)sync 降级时返回的空形状。
- *  thinkingLevel 给中性默认(档位是 pi 专属概念,dsh 下无意义,仅保证类型完整)。 */
+/** 空快照基线(无快照面内核的组装底座)。thinkingLevel 置空串(诚实未知——
+ *  档位是 pi 语义,其他内核没有;渲染链对空串自然回落头域/默认,不伪造)。 */
 function emptySnapshot(): SyncSnapshot {
   return {
     state: {
-      thinkingLevel: "high",
+      thinkingLevel: "",
       isStreaming: false,
       isCompacting: false,
       steeringMode: "all",
@@ -1187,17 +1187,53 @@ export class SessionStore implements
     }
   }
 
-  /** resync 一次并广播新基线(start 后与显式刷新走这里)。作用于激活会话。 */
+  /** 内容基线(session-single-source §2.1/§4.2):活跃 lineage 的消息序列从中立层出,
+   *  两内核同一条读口,不再读内核存储(get_entries 降级为灾难恢复面,§6)。
+   *  与 openSession 同一推导:完整线性内容 + 展示元数据(图)合回 + 去重。 */
+  private neutralMessagesOf(proc: SessionProc): NeutralMessage[] {
+    const session = this.readNeutral(proc);
+    if (!session) return [];
+    return deduplicateAdjacent(lineageContent(session, proc.activeLineageId).map((e) =>
+      e.display?.image ? ({ ...e.message, __image: e.display.image } as NeutralMessage) : e.message,
+    ));
+  }
+
+  /** resync 一次并广播新基线(start 后与显式刷新走这里)。作用于激活会话。
+   *  内容面(messages)= 中立层(两内核同源);状态面(state/tree)= pi 仍走内核实况
+   *  (过渡——执行态面 §3.4 收敛后退役),dsh 由壳记账 + 中立头组装。 */
   async sync(): Promise<SyncSnapshot> {
     const proc = this.activeProc();
-    if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
-    // dsh 无 get_state 快照面(状态走事件流):sync 降级为 no-op,返回现有基线(无则空基线),
-    // 不抛错——否则 switchKernel/setModel 后的 sync 链在 dsh 上恒抛「当前后端不支持 pi 专属命令」,
-    // 误导「模型应用失败」。快照机制是 pi 专属,dsh 侧不更新基线也不广播。
+    if (!proc || !proc.backend.alive) throw new Error("内核未启动");
+    const messages = this.neutralMessagesOf(proc);
     if (!proc.backend.capabilities.pi) {
-      return this.latestSnapshot ?? emptySnapshot();
+      // dsh(无 pi 扩展面=无快照面):基线照常产出——内容来自中立层,状态由壳记账组装。
+      // 此前 sync 对 dsh 降级为返回旧基线/空,渲染层无基线可用;中立层单源后两内核同等待遇。
+      const base = this.latestSnapshot ?? emptySnapshot();
+      const header = this.readNeutral(proc)?.header;
+      const snapshot: SyncSnapshot = {
+        ...base,
+        state: {
+          ...base.state,
+          isStreaming: this.isBusy(this.activeProcKey),
+          sessionId: proc.backend.sessionId ?? "",
+          sessionName: header?.name ?? base.state.sessionName,
+          messageCount: messages.length,
+        },
+        messages,
+      };
+      this.latestSnapshot = snapshot;
+      for (const cb of this.snapshotListeners) {
+        try {
+          cb(snapshot);
+        } catch (err) {
+          console.error("[session-store] 快照监听器抛错已隔离:", err);
+        }
+      }
+      return snapshot;
     }
     const snapshot = await this.asPi(proc).resync();
+    // 内容面换中立层(单源):pi 的 get_entries 读到的内核文件内容不再是渲染基线。
+    snapshot.messages = messages;
     // 内核 auto-retry 退避期 get_state.isStreaming 报 false,以 busyStates 记账为准折算。
     snapshot.state.isStreaming = snapshot.state.isStreaming || this.isBusy(this.activeProcKey);
     this.latestSnapshot = snapshot;
