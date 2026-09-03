@@ -345,10 +345,19 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     });
   }
 
-  /** 回答一次提问:QuestionAnswer[] 翻译成 pi extension_ui_response 帧(单值,取首个答案)。 */
+  /** 回答一次提问:QuestionAnswer[] 翻译成 pi extension_ui_response 帧。
+   *  单值帧的多选编码(ask-design §7):帧的 value 是单个 string,但内核不校验、原样透传
+   *  (rpc-mode.ts 的 parseResponse 实证)——selected 多选/选项+自定义共存时 JSON 编码进
+   *  value,扩展侧 multi_select 题 JSON.parse 解码;TUI 纯 label 天然 fallback 单选。 */
   async answerQuestion(questionId: string, answers: QuestionAnswer[]): Promise<void> {
     const first = answers[0];
-    const value = first?.custom ?? first?.selected[0];
+    const custom = first?.custom?.trim() ? first!.custom : undefined;
+    const selected = first?.selected ?? [];
+    const value = custom !== undefined && selected.length > 0
+      ? JSON.stringify({ selected, custom })
+      : selected.length > 1
+        ? JSON.stringify({ selected })
+        : custom ?? selected[0];
     const response: RpcExtensionUIResponse = value === undefined || value === ""
       ? { type: "extension_ui_response", id: questionId, cancelled: true }
       : { type: "extension_ui_response", id: questionId, value };

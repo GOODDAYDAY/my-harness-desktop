@@ -10,7 +10,7 @@ import {
   piReadSessionName as readSessionName, piReadSessionHeader as readSessionHeader,
   piReadSessionCustom as readSessionCustom, piReadSessionToolConfig as readSessionToolConfig,
   piListSessions as listSessions, piReadSessionEntries as readSessionEntries,
-  PiSessionCatalog,
+  PiSessionCatalog, piAppendToolResult,
 } from "./pi-catalog";
 import { cwdToBucketName } from "@my-harness-desktop/shared";
 
@@ -295,5 +295,70 @@ describe("rawFilePath(打开原始文件的唯一权威来源)", () => {
   it("投影文件不存在(迁移前旧会话无投影)→ null,不返回幽灵地址", () => {
     const catalog = new PiSessionCatalog(agentDir);
     expect(catalog.rawFilePath(CWD, "no-such-lineage")).toBeNull();
+  });
+});
+
+// ask 续路面(ask-design §6.3):迟到的真 toolResult 追加进会话 JSONL。
+// 锚点校验在活跃路径(叶子沿 parentId 上溯)上做真,幂等跳过已配对。
+describe("piAppendToolResult(ask 续路)", () => {
+  function askCallEntry(id: string, parentId: string | null, toolCallId: string): string {
+    return JSON.stringify({
+      type: "message", id, parentId,
+      message: { role: "assistant", content: [{ type: "toolCall", id: toolCallId, name: "ask_user_question", arguments: { questions: [] } }] },
+    });
+  }
+
+  it("锚点在活跃路径 → 追加 toolResult 条目,形状对齐 ToolResultMessage", async () => {
+    writeFileSync(sessionPath, [
+      JSON.stringify({ type: "session", id: "s1", cwd: CWD }),
+      JSON.stringify({ type: "message", id: "m1", parentId: null, message: { role: "user", content: "问" } }),
+      askCallEntry("m2", "m1", "call_X"),
+    ].join("\n") + "\n");
+    await piAppendToolResult(sessionPath, "call_X", { answers: [{ id: "q1", selected: ["A"] }] });
+    const lines = linesOf(sessionPath);
+    const last = lines[lines.length - 1] as { type: string; parentId: string; message: Record<string, unknown> };
+    expect(last.type).toBe("message");
+    expect(last.parentId).toBe("m2"); // 挂叶子,parentId 链不断
+    const msg = last.message;
+    expect(msg.role).toBe("toolResult");
+    expect(msg.toolCallId).toBe("call_X");
+    expect(msg.toolName).toBe("ask_user_question");
+    expect(msg.isError).toBe(false);
+    // content[0].text 与扩展 ok() 输出逐字节同构(模型的形状一致性保证)
+    expect((msg.content as { text: string }[])[0].text).toBe(JSON.stringify({ answers: [{ id: "q1", selected: ["A"] }] }));
+    expect((msg.details as { answers: unknown[] }).answers).toHaveLength(1);
+  });
+
+  it("已配对(已有 toolResult)→ 幂等跳过,不重复追加", async () => {
+    writeFileSync(sessionPath, [
+      JSON.stringify({ type: "session", id: "s1" }),
+      JSON.stringify({ type: "message", id: "m1", parentId: null, message: { role: "user", content: "问" } }),
+      askCallEntry("m2", "m1", "call_X"),
+      JSON.stringify({ type: "message", id: "m3", parentId: "m2", message: { role: "toolResult", toolCallId: "call_X", content: [{ type: "text", text: "{}" }] } }),
+    ].join("\n") + "\n");
+    const before = readFileSync(sessionPath, "utf-8");
+    await piAppendToolResult(sessionPath, "call_X", { answers: [] });
+    expect(readFileSync(sessionPath, "utf-8")).toBe(before); // 一字节未动
+  });
+
+  it("锚点只在旧分支(fork 走远)→ 抛错,调用方降级(不制造孤儿 toolResult)", async () => {
+    writeFileSync(sessionPath, [
+      JSON.stringify({ type: "session", id: "s1" }),
+      JSON.stringify({ type: "message", id: "m1", parentId: null, message: { role: "user", content: "问" } }),
+      askCallEntry("m2", "m1", "call_X"), // ask 在旧分支
+      JSON.stringify({ type: "message", id: "m3", parentId: "m1", message: { role: "user", content: "fork 后的新分支" } }), // 活跃路径 m1→m3
+    ].join("\n") + "\n");
+    await expect(piAppendToolResult(sessionPath, "call_X", { answers: [] })).rejects.toThrow("锚点不在活跃路径");
+  });
+
+  it("cancelled → isError:true + \"User cancelled the question\"(与扩展活路取消逐字对齐)", async () => {
+    writeFileSync(sessionPath, [
+      JSON.stringify({ type: "session", id: "s1" }),
+      askCallEntry("m1", null, "call_X"),
+    ].join("\n") + "\n");
+    await piAppendToolResult(sessionPath, "call_X", { cancelled: true });
+    const last = linesOf(sessionPath).at(-1)!.message as Record<string, unknown>;
+    expect(last.isError).toBe(true);
+    expect((last.content as { text: string }[])[0].text).toBe("User cancelled the question");
   });
 });

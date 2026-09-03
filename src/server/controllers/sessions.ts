@@ -46,6 +46,7 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.session.answerQuestion,
     (_e, requestId: string, answers: QuestionAnswer[]) =>
       sessionStore.answerQuestion(requestId, answers));
+  gateway.register(IPC.session.pendingQuestions, () => sessionStore.getPendingQuestions());
   gateway.register(IPC.session.listTools, () => sessionStore.listTools());
   gateway.register(IPC.session.getSnapshot, () => sessionStore.getSnapshot());
   gateway.register(IPC.session.sync, () => sessionStore.sync());

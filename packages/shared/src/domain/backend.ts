@@ -319,7 +319,22 @@ export interface SessionCatalog {
 
   /** 删除书签锚点(回收副本)。同步:pi 是 rmSync。 */
   deleteBookmark(anchor: Anchor): void;
+
+  /**
+   * 迟到的工具结果补写(ask 续问的续路面,docs/design/ask-design.md §5):
+   * 把 toolResult 直接追加进内核会话存储——pi=会话 JSONL 追加 message 条目;
+   * dsh=明文会话日志追加 tool/result 事件。仅在「提问发起进程已死」的续路调用
+   * (活路由内核自己铸造);调用前调用方已停掉同槽位存活进程。
+   * cwd 仅供需要按桶定位存储的内核(dsh)使用;pi 的 sessionId 即文件路径,忽略之。
+   * 可缺面:内核无此写面则缺省不存在,壳显式降级(用户消息通道),不静默不伪造。
+   */
+  appendToolResult?(sessionId: string, toolCallId: string, outcome: ToolResultWriteback, cwd?: string): Promise<void>;
 }
+
+/** 补写的工具结果内容:正常答案(cancelled 缺省/false)或取消标记(cancelled=true → isError 落盘)。 */
+export type ToolResultWriteback =
+  | { answers: QuestionAnswer[]; cancelled?: false }
+  | { cancelled: true };
 
 /**
  * 目录/CRUD 工厂:产出某内核的 SessionCatalog。依赖倒置——application 只依赖本接口,

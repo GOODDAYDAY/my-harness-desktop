@@ -378,6 +378,8 @@ const kernel = {
     },
     answerQuestion: (requestId: string, answers: unknown): Promise<void> =>
       transport.invoke(IPC.session.answerQuestion, requestId, answers),
+    getPendingQuestions: (): Promise<unknown> =>
+      transport.invoke(IPC.session.pendingQuestions),
     listTools: (): Promise<unknown> =>
       transport.invoke(IPC.session.listTools),
     onSnapshot: (cb: (snapshot: unknown) => void): (() => void) => {

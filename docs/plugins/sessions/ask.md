@@ -1,5 +1,7 @@
 # ask 插件技术文档
 
+> **修订（续问持久化 + pi 多选拉平 + 结算卡补全，ask-design.md 落地）**：提问从「内核进程内挂起的 Promise」升级为**壳持有的持久请求单**（`PendingQuestionStore`，`~/.my-harness-desktop/pending-questions/<requestId>.json`）——发起即落账，答案先落账再分发，进程死/重启后重开会话卡片原地复活可答；进程死过的作答走**续路**（壳把迟到的真 toolResult 直接补进内核会话存储：pi 追加会话 JSONL、dsh 编辑明文会话日志）+ 回填消息触发新回合。pi 多选从「降级单选」升级为**单值帧 JSON 编码**（适配器编码、扩展解码、卡片 checkbox，TUI 纯 label 天然 fallback）。结算卡展开体渲染问句 + 选项（选中高亮）+ 答案。pi 侧 60 秒超时已随「提问永不超时」移除（无 TTL、无 expired，死问句只有「查无此单」）。
+>
 > **修订（提问进 timeline）**：提问交互已从「sidebar 常驻模态对话框（AskHost）→ composerTop 常驻卡片（AskComposer）」收敛为**时间线内联渲染（AskQuestionCard：问题气泡 + 选项 + 自定义输入）**。
 >
 > **修订（选项整行 + 多选 + 双模式自定义输入）**：选项从横向 chips 改为**每选项独占一整行**（纵向堆叠、整行宽、左对齐、`whitespace-pre-wrap` 支持多行 label；`description` 作第二行弱化展示，不再是 title 悬停）。`multi_select: true` 走 checkbox 语义（可勾多项）、否则 radio 语义（单选）；**两种情况都带自定义输入**（整行 textarea 支持多行，Enter 提交 / Shift+Enter 换行）——单选下键入即取代选项选择，多选下与已选共存一并提交。`plugin.json` 现只贡献 `blockRenderers` 一个槽，`AskHost`/`AskComposer` 已移除，`ask-host.tsx` 仅留档。下面的历史段落里对「AskHost 挂在 sidebar」「AskComposer」的描述已过时，以本节修订为准。
@@ -52,13 +54,12 @@ src/plugins/sessions/ask/
 
 - pi 侧的完整提问链路是六跳，每一跳都在特定文件落地，值得逐跳展开：
   - **第 1 跳**：pi 内核扩展 `execute` 调 `ctx.ui.select(title, options)` / `ctx.ui.input(title)`（`pi-extension/index.ts` 第 147 / 152 / 157 行）。`ctx.ui.select/input` 是 pi 内核暴露给扩展的 RPC 安全原语，内核据此向桌面端 stdin 写一个 `extension_ui_request` 帧并挂起等待回复。
-  - **第 2 跳**：壳后端 `src/server/kernel/pi/backend/rpc-adapter.ts` 的 `handleLine`（第 224 行）解析 stdout 行，`if (data.type === "extension_ui_request")` 分支（第 233 行）先登记一个 **60 秒超时定时器**（`extUiTimeouts.set(req.id, timer)`，第 236–240 行，超时自动回 `{ cancelled: true }` 防止内核无限挂起），再遍历 `extUiListeners` 投递。
+  - **第 2 跳**：壳后端 `src/server/kernel/pi/backend/rpc-adapter.ts` 的 `handleLine`（第 224 行）解析 stdout 行，`if (data.type === "extension_ui_request")` 分支遍历 `extUiListeners` 投递。**无超时**——提问永不超时（用户明确要求；曾经有的 60 秒兜底定时器已随「提问永不超时」移除，挂起点改由壳的持久请求单承接，进程死了也不丢）。
   - **第 3 跳**：`PiBackend.onQuestion`（`src/server/kernel/pi/backend/pi-backend.ts` 第 354 行）订阅 `adapter.onExtensionUI`，**只认 `select` 与 `input` 两种 method，其余显式降级不投**（第 356 行 `if (req.method !== "select" && req.method !== "input") return`），把 `req.payload.title` 当问句、`req.payload.options` 当选项，翻译成 `Question[]` 后 `cb({ requestId: req.id, questions: [{ id: `${req.id}-0`, question: title, options }] })`。
-  - **第 4 跳**：`src/server/application/sessions/session-store.ts` 的装配段（第 459–470 行）在 `bindProcEvents` 里调 `pi.onQuestion((req) => {...})`，把 pi 的提问包成 `QuestionRequestEvent`（`kind: "question"`，`sessionKey: proc.key`），既 `this.dispatchKernel(questionEvent)` 汇入全量事件流，又遍历 `this.questionListeners` 逐个回调。
+  - **第 4 跳**：`src/server/application/sessions/session-store.ts` 的装配段在 `bindProcEvents` 里调 `pi.onQuestion((req) => {...})`——**先落账**（`mintQuestionRecord`：准入只对能对账到 `ask_user_question` toolCallStart 的帧写 `PendingQuestionStore`，顺带把帧里的合成 id 对账成模型出题的真实 `q.id`），再把提问包成 `QuestionRequestEvent`（`kind: "question"`，`sessionKey: proc.key`），既 `this.dispatchKernel(questionEvent)` 汇入全量事件流，又遍历 `this.questionListeners` 逐个回调。
   - **第 5 跳**：renderer 侧 `AskHost` 的 `useEffect`（`ask-host.tsx` 第 15–23 行）`ctx.sessions.onQuestion((req) => {...})`，取 `req.questions?.[0]`，`setPending({ requestId: req.requestId, question: q })`。注意这里**只取第一题**（`questions?.[0]`）——pi 的 `extension_ui` 一帧一题，`questions` 数组长度恒为 1，`[0]` 是安全解包。
   - **第 6 跳**：用户点按钮/回车，`AskHost.reply`（第 32–40 行）构造 `QuestionAnswer[]` 后 `void ctx.sessions.answerQuestion(requestId, answers)`，经 `session-store.answerQuestion`（第 1104 行）→ `PiBackend.answerQuestion`（`pi-backend.ts` 第 365 行）→ `adapter.sendExtensionUIResponse`（`rpc-adapter.ts` 第 201 行，`fire-and-forget` 写 stdin 的 `extension_ui_response` 帧，不走 correlator）。
-- `PiBackend.answerQuestion` 的翻译语义（第 365–372 行）是关键：它只取 `answers[0]`，`value = first?.custom ?? first?.selected[0]`，`value` 为空/undefined 时发 `{ cancelled: true }`，否则发 `{ value }`——即"单选值 + 可空取消"的二元语义。pi 的 `extension_ui_response` 帧是单值帧，装不下 `multi_select` 的多选数组，这正是 §9 里 pi 扩展把 `multi_select` 降级为单选的原因，两边在语义上对齐。
-- 60 秒超时（`rpc-adapter.ts` 第 236–240 行）是"事件驱动不 sleep"的反面补强：正常流程是用户回填触发取消超时（`sendExtensionUIResponse` 里 `clearTimeout`，第 205–206 行），只有用户一直不回、内核挂起时才由超时兜底回 `cancelled`——超时是兜底护栏不是主路径。
+- `PiBackend.answerQuestion` 的翻译语义是关键：pi 的 `extension_ui_response` 帧是**单值帧**（`value: string`），装不下多选数组与「选项 + 自定义」共存——但内核不校验 value（`rpc-mode.ts` 的 `parseResponse` 原样透传），于是采用**单值帧 JSON 编码**（ask-design §7）：`selected` 多选或 `selected+custom` 共存 → `value = JSON.stringify({...})`；仅 custom → `value = custom`；仅单选 → `value = selected[0]`；全空 → `{ cancelled: true }`。扩展侧对 `multi_select` 题 `JSON.parse` 解码，TUI 纯 label parse 失败天然 fallback 单选。
 
 ## 6 渲染/事件流：dsh 路径（文件侧车桥）
 
@@ -69,7 +70,9 @@ src/plugins/sessions/ask/
 - 答案回填走 `DshBackend.answerQuestion`（`src/server/kernel/dsh/backend/dsh-backend.ts` 第 214 行）→ `writeDshAnswer(questionId, answers)`（`dsh-question-bridge.ts` 第 31 行），`writeFileSync(answerPath, JSON.stringify({ requestId, answers }))`——dsh 扩展轮询到答案文件后读走回灌模型。这是"文件侧车桥被封装进适配器，替换时桌面无感"的边界：桌面 renderer 只调 `ctx.sessions.answerQuestion`，写文件还是写帧由适配器决定。
 - 阶段演进标注在契约里（backend.ts 第 138 行注释"dsh=文件侧车（阶段一）/session/answer（阶段二）"）：当前是阶段一的文件侧车，终态是 dsh 提供 `session/answer` RPC 后由 `DshBackend.answerQuestion` 改走 RPC，桥退场——renderer 与圆心契约零改动，只换适配器实现。
 
-## 7 AskHost：常驻消费方与交互语义
+## 7 AskHost：常驻消费方与交互语义（历史留档）
+
+> ⚠ 本节描述的是已退场的 `AskHost` 模态框（`ask-host.tsx` 仅留档、无导出、不被引用）。当前交互在时间线内联卡片 `AskQuestionCard`（§8），续问持久化见 §7.1。
 
 - `AskHost` 的订阅生命周期（第 15–23 行）：`useEffect(() => { const off = ctx.sessions.onQuestion((req) => {...}); return off; }, [ctx])`，依赖数组是 `[ctx]`（`usePluginContext` 返回的稳定引用），订阅只建一次、卸载时取消——这是 §8.2"订阅返回清理函数"的规范写法，漏掉 `return off` 会在组件重挂时叠订阅、一道题弹两个框。
 - `onQuestion` 回调里的防御（第 17–18 行）：`const q = req.questions?.[0]; if (!q || typeof q.question !== "string") return;` 双保险——没有题或问句非字符串直接忽略，不因坏数据弹空框。
@@ -83,13 +86,27 @@ src/plugins/sessions/ask/
 - 自由输入分支（第 101–133 行）：`input` + `autoFocus`，`onKeyDown` 里 Enter 触发 `submitCustom`（`text.trim()` 非空才 `reply(text)`），配一个 `Submit` 按钮。右下角 `Cancel` 按钮（第 135–149 行）与遮罩点击同语义，都走 `reply(undefined, true)`。
 - 无 i18n：`ask-host.tsx` 里 `placeholder="输入你的回答…"`、`Submit`、`Cancel` 是**写死的文案**——这是 ask 插件的一个已知偏离（其余四个插件都走 `locales/` + `useTranslation`），ask 目录没有 `locales/`，插件靠 `title = question.header ?? question.question` 直接把内核问句当标题，UI 自身的按钮文案是硬编码。这不影响机制正确性，但与 §1.2"文案外挂"的纪律有差距，属内容泄漏待收。
 
-## 8 AskQuestionCard：时间线摘要卡
+## 7.1 续问：壳持有的持久请求单（ask-design.md）
 
-- `AskQuestionCard` 的 props 契约是 blockRenderers 的标准 props 之一（`{ toolCall: ToolCallBlock; collapseDefault?: boolean }`，第 12 行），`ToolCallBlock` 来自 `@my-harness-desktop/react`，含 `state`（`pending` / `running` / 结算态）、`result`、`isError` 字段。
-- 摘要状态机（第 16–27 行）：`isStreaming = toolCall.state === "pending" || toolCall.state === "running"`；`result = toolCall.result?.answers`；`answeredCount` 数 `selected.length > 0 || custom.length > 0` 的答案，`totalCount = result.length`。`summary` 四态：`isStreaming` → `"waiting"`；`result === undefined` → `"answered"`；`totalCount > 0` → `` `${answeredCount}/${totalCount} answered` ``；否则 `"answered"`。这是把"运行中/已答/部分答"三种语义压缩进一行摘要，不展示 args 全文（与 DSH `AskQuestionRow` 同语义）。
-- 左边框颜色（第 29–33 行）：`isError` → `var(--color-accent-error)`，`isStreaming` → `var(--color-accent-success)`，否则 `var(--color-primary)`——三态用三个主题 token，不写死色值。
-- 可折叠展开（第 44–58 行）：整行 `role="button"` + `tabIndex={0}`，点击 `setCollapsed((c) => !c)`，键盘 Enter/Space 也可切换（第 47 行 `onKeyDown`）。`collapseDefault` 默认 `true`，`useEffect(() => setCollapsed(collapseDefault), [collapseDefault])` 让外部可覆盖默认折叠态。
-- 展开体（第 59–71 行）逐条 `result.map` 渲染：每行左边 `a.id`（问题 id），右边 `a.custom ? "(wrote) ${a.custom}" : (a.selected?.join(", ") || "(skipped)")`——自定义答案标 `(wrote)`，有选项标选中的 label 列表，都没有标 `(skipped)`。这是时间线上"这次提问到底答了什么"的可读回溯，与 `AskHost` 的交互实时性形成互补。
+- **协议本质**：agent 循环是两个 step 之间缺一个 `tool_result`——ask 的全部工作就是把它填进去，隔 5 秒还是 5 天再填，协议看起来一模一样。所以提问的状态住壳的持久存储，不住内核进程内存。
+
+- **落账**：`PendingQuestionStore`（`src/server/application/sessions/pending-question-store.ts`，一单一文件 `~/.my-harness-desktop/pending-questions/<requestId>.json`）。准入条件：只对能对账到 `ask_user_question` 的 `toolCallStart` 的提问落账（别的扩展发 select/input 帧只投不落，防误持久化）。落账时按问句文本把帧里的合成 id 对账成模型出题的真实 `q.id`（真实 id 只在 `toolCallStart.args.questions` 里）。记录含 `procNonce`（进程出生证）——答案路由按 `record.kernel` 找槽位 + nonce 比对判活路/续路，不读全局 `activeKernel` 偶然态。
+
+- **活路/续路双通道**（`answerQuestion` 四步：查单 → 防重 → 先落账 → 分发）：nonce 匹配且进程活着 → 活路（现状：pi 写 `extension_ui_response` 帧、dsh 写答案文件）；否则**续路**——停掉同槽位存活旧进程（运行中的内核不重读存储）→ `SessionCatalog.appendToolResult` 把真 toolResult 直接补进内核会话存储（pi 追加会话 JSONL；dsh 编辑明文会话日志，`cordis.yml` 的 sessions 插件配 `compression:'none'` + `packChunks:false`）→ 中立层双写 + 合成 `toolCallEnd`（卡片免刷新即时结算）→ 结构化回填消息（`[ask-answer]` + 答案 JSON，零自然语言文案）触发新回合。cancelled 的续路落 `isError:true` 闭合悬空（不发回填消息）。
+
+- **锚点校验**（catalog 内文件级做真）：`toolCallId` 必须在活跃路径上（pi 从叶子沿 parentId 上溯；dsh 按 lineageId 分文件）且无配对 toolResult——已配对幂等跳过；不在活跃路径（提问后 fork 走远）抛错，降级为用户消息通道，不伪造落盘。
+
+- **水合**：会话激活（`setContext`）时重投该会话的 `pending` 记录（卡片原地复活）+ 补投 `answered && !delivered`（落账成功但分发中断——答案永不丢是闭环，投递不是一次性尝试）。`toolCallEnd` 命中 pending 记录自动对账结算（覆盖 abort 等不经卡片的收尾）。会话删除级联删记录。
+
+- **prompt 发送前对账**（ask-design §6.6）：nonce 不匹配的悬空 pending 记录，在任何新请求发出前先补 cancelled toolResult 闭合——悬空 `tool_use` + 新请求 = provider 400（「用户不答直接说话」是合法路径）。对账排在一切 spawn 之前（pi 在 spawn 时把会话文件读进内存且不重读，闭合必须赶在进程读文件之前）。
+
+## 8 AskQuestionCard：交互卡 + 结算卡 + 复活
+
+- `AskQuestionCard` 的 props 契约是 blockRenderers 的标准 props 之一（`{ toolCall: ToolCallBlock; collapseDefault?: boolean }`），`ToolCallBlock` 来自 `@my-harness-desktop/react`，含 `state`、`result`、`isError`、`args` 字段。
+- **三态分流**：`toolCall.state ∈ {pending, running}` → 运行中交互卡；块无 `result` 且命中持久请求单（`getPendingQuestions` 查询，`toolCallId` 精确锚定、会话唯一 pending 兜底）→ **复活**为交互卡（重启/刷新后 `state` 已不是 running，靠记录而不是内存态复活）；其余 → 结算摘要卡。
+- **运行中交互卡**：问题气泡 + 选项整行（单选 radio / 多选 checkbox 语义）+ 自定义输入（单选键入即取代、多选共存）+ 分页 + 跳过/放弃。双通道取数：`onQuestion` 订阅（实时）+ mount 时 `getPendingQuestions()` 查询（重启水合）——订阅 + 查询双通道无间隙。帧/文件装不下的字段（`multi_select`/`description`）从 `toolCall.args.questions` 按问句文本补回（pi 帧只有 title/options label）。
+- **结算卡**：折叠行摘要（`N/M answered` / cancelled），展开体按 `id` 连接 `toolCall.args.questions`（出题原文）与 `toolCall.result.answers`——逐题渲染问句正文 + 选项列表（选中高亮 ☑/☐）+ 自定义答案 `(wrote)` / `(skipped)` 标记。
+- 作答后 `settle` 清内存态；复活态卡片作答后经 `onDone` 退场（记录已结算，下次刷新走结算卡）。
 
 ## 9 pi 内核扩展：ask_user_question 工具
 
@@ -101,7 +118,7 @@ src/plugins/sessions/ask/
   - 无选项（第 157 行）：直接 `custom = await ctx.ui.input(q.question)`。
   - 每题答案 push 进 `answers`（第 159 行）：有 custom 的 `{ id, selected, custom }`，无 custom 的 `{ id, selected }`。
 - `CUSTOM_SENTINEL = "Type something."`（第 80 行）与 DSH `question.ts` 的哨兵同语义——自由文本入口伪装成一个选项，用户点它才转 `input`。这是 pi 的 `ctx.ui.select` 只有单选原语、没有"选其他并填文本"原语时的适配器翻译。
-- **决策 1A**（第 8–10 行注释）：DSH 的 `multi_select` 本期降级为单选——每题一次 `ctx.ui.select`，自定义答案经哨兵选项转入 `ctx.ui.input`。`multi_select` 字段仍进 schema（对齐契约），但渲染层不呈现复选框。这是 §7.6"显式降级"的正面例子：pi 的 `extension_ui` 帧装不下多选数组（§5），不是补面而是明确降级，字段保留以对齐 DSH 契约，未来 pi 内核给多选原语时可无缝升级。
+- **多选已拉平**（ask-design §7，原决策 1A 退役）：`multi_select` 不再是「进 schema 但不渲染」的降级字段——桌面端适配器把 `{selected, custom?}` JSON 编码进单值帧，扩展对 `multi_select === true` 的题 `JSON.parse` 解码（含与 custom 共存），卡片按 checkbox 语义渲染多选。TUI 兼容：`ctx.ui.select` 在终端返回纯 label → parse 失败 → 单选 fallback，行为与降级期一致。哨兵选项 `CUSTOM_SENTINEL` 保留（TUI 下「选其他」路径）。
 - `error` / `ok` 两个辅助函数（第 82–91 行）：`error(text)` 返回 `{ content: [{ type: "text", text }], isError: true, details: { answers: [] } }`；`ok(answers, text?)` 返回 `{ content: [{ type: "text", text: text ?? JSON.stringify({ answers }) }], details: { answers } }`——`details.answers` 是 `AskQuestionCard` 在时间线上读 `toolCall.result.answers` 的来源，`content.text` 是给模型看的纯文本（模型读不到 `details`，只读 `content`）。
 - dsh 侧为何没有独立 `dsh-extension/` 目录：ask 的 dsh 工具实现合并进 `src/server/kernel/dsh/extension/dsh-extension/index.mjs`（第 388 行起 `// ---- ask:ask_user_question ----`），这是壳后端对 dsh 的**统一适配扩展**（`extension.json` 第 3 行"桌面壳对 dsh 内核的统一适配：ask_user_question 提问、goal 三工具、全局 CLAUDE.md 注入、技能启用/禁用轴"）。即 dsh 侧的"补面"不在插件目录里，而在壳后端的内核适配目录里——这是 ask / goal 这类横跨内核插件与 dsh 适配的插件，在四件套物理布局上的现实形态：pi 补面在插件自己的 `pi-extension/`，dsh 补面收在壳后端统一 dsh 扩展里，两者语义都是"给内核补能力"，物理位置随内核适配策略不同而不同。
 
@@ -119,22 +136,22 @@ src/plugins/sessions/ask/
 
 因为"翻译归适配器、渲染归插件"的边界把差异封死在适配器层。pi 的 `extension_ui_request` 帧在 `PiBackend.onQuestion`（pi-backend.ts 第 354 行）翻译成 `Question[]`，dsh 的文件落盘在 `DshQuestionBridge.scan`（dsh-question-bridge.ts 第 56 行）翻译成同一 `DshQuestionRequest`，两者最终都经 `session-store` 的 `questionListeners` 投成 `QuestionRequestEvent`。renderer 的 `AskHost` 只认 `QuestionRequestEvent`，它根本不知道也不需要知道帧和文件的区别——§7.5 三条不变量的第二条"壳只认中性事件"。
 
-**Q：用户点了遮罩取消，内核会怎样？**
+**Q：用户点了「放弃整组问题」，内核会怎样？**
 
-`AskHost.reply(undefined, true)` 构造 `[{ id: question.id, selected: [] }]`，`selected` 空数组到 `PiBackend.answerQuestion`（pi-backend.ts 第 367–370 行）解码为 `value === undefined` → 发 `extension_ui_response { cancelled: true }`。pi 扩展 `execute` 里 `ctx.ui.select` 拿到 undefined 时立即返回 `"User cancelled the question"`（pi-extension/index.ts 第 148–150 行），已收集的答案保留、当前题丢弃，生成继续。dsh 侧同理：`writeDshAnswer` 写 `selected: []` 的答案文件，dsh 扩展读走回灌。
+卡片构造全空 `selected` 的答案数组，经 `answerQuestion` 落账为 cancelled；活路下 pi 发 `extension_ui_response { cancelled: true }` 帧，扩展 `execute` 里 `ctx.ui.select` 拿到 undefined 时立即返回 `"User cancelled the question"`，已收集的答案保留、当前题丢弃，生成继续。dsh 侧同理：`writeDshAnswer` 写 `selected: []` 的答案文件，dsh 扩展读走回灌。续路下则落 `isError: true` 的 toolResult 闭合悬空（不发回填消息——用户放弃 = 不推模型继续）。
 
-**Q：为什么 `AskHost` 只取 `questions?.[0]` 而不是渲染全部题目？**
+**Q：一次多题的提问，卡片怎么渲染全部题目？**
 
-pi 的 `extension_ui` 一帧一题（`PiBackend.onQuestion` 里 `questions: [{ id: `${req.id}-0`, ... }]` 恒单元素），dsh 的文件侧车桥虽然 `questions` 可以是数组，但桥注释明说"与文件侧车桥现状（取第一个问句）语义一致"。契约层 `QuestionRequestEvent.questions` 是数组（为未来多题预留），但两个内核当前都只产单题，`AskHost` 取 `[0]` 是"当前语义"的诚实实现，不是截断——多题支持要等内核侧先有多题原语，插件只是消费方。
+pi 的 `extension_ui` 一帧一题（扩展逐题顺序问），卡片按事件逐题到达、分页呈现（上一题/下一题）；dsh 的文件侧车桥一次写全部题，卡片一次拿到整组。契约层 `QuestionRequestEvent.questions` 是数组，两个内核的题数差异被卡片的逐题分页抹平。重启复活的卡片从持久请求单读完整 `questions` 数组，不依赖易失的内存事件。
 
 **Q：ask 为什么没有 `locales/`，按钮文案写死在 `ask-host.tsx`？**
 
 这是已知偏离。ask 的 UI 文案（`Submit` / `Cancel` / `placeholder="输入你的回答…"`）硬编码在组件里，没有走 `languages` 槽。机制上不影响正确性（问句本身来自内核、是动态内容，不归 i18n 管），但按钮文案是插件自己的静态内容，按 §1.2"文案外挂"纪律该收进 `locales/`。这是演进项，不是本插件的功能缺口。
 
-**Q：pi 扩展的 `multi_select` 为什么进了 schema 却不渲染复选框？**
+**Q：pi 扩展的 `multi_select` 是怎样从「不渲染」变成可勾选的？**
 
-决策 1A 明确降级：DSH 契约有 `multi_select`，pi 的 `ctx.ui.select` 是单选原语，装不下多选数组（§5 的 `extension_ui_response` 也是单值帧）。字段保留在 schema 是为了**契约对齐**——同一套 `ask_user_question` 工具 schema 在 pi/dsh 两侧一致，模型看到的参数形状相同，pi 侧运行时按单选实现，dsh 侧可支持多选。这是"字段进契约、能力按内核降级"的典型：不因 pi 缺多选就删字段，也不伪造多选成功。
+原决策 1A（降级单选）已退役。pi 的 `extension_ui_response` 是单值帧装不下多选数组，但内核不校验 value（原样透传）——于是约定式翻译：适配器把多选 `{selected, custom?}` JSON 编码进 value，扩展对 `multi_select` 题 `JSON.parse` 解码，卡片按 checkbox 语义渲染。TUI 下 `ctx.ui.select` 返回纯 label，parse 失败自动 fallback 单选。契约没动、内核没改，pi 运行时能力被补齐。
 
-**Q：60 秒超时和 `fs.watch` 轮询是什么关系，为什么一个用超时一个用事件？**
+**Q：提问会超时吗？60 秒兜底去哪了？**
 
-两者是不同内核不同机制的两套兜底，不冲突。pi 的 60 秒超时（rpc-adapter.ts 第 236 行）是**挂起兜底**：帧已发出、用户一直不回，内核进程不能永远挂住，超时自动回 `cancelled` 释放。dsh 的 `fs.watch`（dsh-question-bridge.ts 第 49 行）是**把轮询换成事件**：dsh 扩展本来靠轮询答案文件，桥在适配器层把"文件落盘"变成 `fs.watch` 事件，renderer 侧零轮询。一个解决"等不到答案"，一个解决"怎么感知到答案"，都是 §3.6"事件驱动、不轮询不 sleep"的落地。
+不会超时，也没有超时兜底了。曾经的 60 秒定时器（rpc-adapter 自动回 cancelled）已随「提问永不超时」移除——挂起点由壳的持久请求单（§7.1）承接：进程死/重启都不丢，重开会话卡片原地复活可答。无 TTL、无 expired 状态；死问句只有一种：store 里查无此单。dsh 侧的 `fs.watch`（把扩展轮询变成事件）不变， renderer 零轮询。

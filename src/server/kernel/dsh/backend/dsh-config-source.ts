@@ -75,6 +75,10 @@ const DEFAULT_CORDIS_YAML = [
   "  name: '@deepseek-ai/dsh-session-persistence-jsonl'",
   "  config:",
   "    root: !!js process.env.DSH_SESSION_ROOT ?? './.sessions'",
+  "    # 明文诊断模式(ask 续问的前提:壳要能在进程死亡窗口里往日志追加一行,",
+  "    # 压缩形态做不到;代价是日志体积约 +60% 无压缩——磁盘换续问真形态,docs/design/ask-design.md §5.2)。",
+  "    compression: 'none'",
+  "    packChunks: false",
   "- id: session-checkpoints",
   "  name: '@deepseek-ai/dsh-session-checkpoint-policy'",
   "- id: subprocess",
@@ -219,6 +223,29 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
       "        # disabled 名单过滤,必须独占 filesystem 名——这里改名 + 清空发现根,避免 duplicate provider 崩启动。",
       "        providerName: filesystem-builtin",
       "        includeDefaultRoots: false",
+    ];
+    lines.splice(block.end, 0, ...injection);
+    writeFileSync(file, lines.join("\n") + "\n", "utf-8");
+  }
+
+  /** 确保 sessions 插件(dsh-session-persistence-jsonl)跑明文诊断模式(compression:'none'
+   *  + packChunks:false)——ask 续问要在进程死亡窗口里往会话日志追加一行 tool/result,
+   *  压缩形态做不到(docs/design/ask-design.md §5.2)。幂等:块内已有 compression 键即不动
+   *  (尊重手改);块缺失/无 config 段不动(避免污染手改结构)。 */
+  ensurePlainSessionLog(): void {
+    const file = this.cordisPath;
+    if (!file || !existsSync(file)) return;
+    const lines = readFileSync(file, "utf-8").split("\n");
+    const block = this.findBlock(lines, "sessions");
+    if (!block) return;
+    const blockLines = lines.slice(block.start, block.end);
+    if (blockLines.some((l) => /^\s*compression\s*:/.test(l))) return;
+    if (!blockLines.some((l) => /^\s{2}config:\s*$/.test(l))) return;
+    const injection = [
+      "    # 明文诊断模式(ask 续问的前提:壳要能在进程死亡窗口里往日志追加一行,",
+      "    # 压缩形态做不到;代价是日志体积约 +60% 无压缩,docs/design/ask-design.md §5.2)。",
+      "    compression: 'none'",
+      "    packChunks: false",
     ];
     lines.splice(block.end, 0, ...injection);
     writeFileSync(file, lines.join("\n") + "\n", "utf-8");
