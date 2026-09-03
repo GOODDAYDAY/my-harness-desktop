@@ -14,6 +14,7 @@ import { create } from "zustand";
 import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent, KernelId } from "@my-harness-desktop/shared";
 import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/shared";
 import { useUiStore } from "./ui-store";
+import { initNeutralMirror } from "./neutral-mirror";
 
 // ── 工具限制注入(从 timeline 收编,发送统一入口的构成部分) ──────────────
 // 注入文本是发往内核的协议指令(渲染层经 stripToolLimitNote 剥除,用户气泡不可见),
@@ -759,6 +760,9 @@ export function hydrateSessionStart(event: SessionEvent): void {
 export function initSessionStore(): void {
   if (inited) return;
   inited = true;
+
+  // 中立层镜像(session-single-source §3.2):基线 + 写穿回执,与事件路径双跑。
+  initNeutralMirror();
 
   window.kernel.sessions.onSnapshot((snapshotRaw) => {
     const snapshot = snapshotRaw as SyncSnapshot;

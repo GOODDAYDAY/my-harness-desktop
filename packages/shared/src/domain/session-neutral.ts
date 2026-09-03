@@ -379,3 +379,47 @@ export function assembleSeedProjection(session: NeutralSession, lineageId: strin
     : [];
   return [...head, ...tail].filter((e) => SEED_PROJECTION_ROLES.has(e.message.role));
 }
+
+// ============ 中立层变更通知与镜像归约(session-single-source §3.2)============
+
+/**
+ * 中立层变更通知(写穿回执):壳的唯一写口每写一次产一条,经 WS 广播给渲染层镜像。
+ * - entry:某条 lineage 里落了一条/回填了一条——载荷带条目本体(通知即数据,不回拉),
+ *   header 附带写后值(append 会派生 lastMessage/lastEntryId/updatedAt,随条目一起新鲜)。
+ * - header:头域变更(改名/归档置顶/模型域写回)——没有条目本体,只带写后的头。
+ * - lineage:整枝变更(fork 插新分支);session:全量替换(快照重建/书签发起的重投影)。
+ */
+export type NeutralChange =
+  | { ns: string; kind: "entry"; lineageId: string; entry: NeutralEntry; header: NeutralSessionHeader }
+  | { ns: string; kind: "header"; header: NeutralSessionHeader }
+  | { ns: string; kind: "lineage"; lineage: NeutralLineage; header: NeutralSessionHeader }
+  | { ns: string; kind: "session"; session: NeutralSession };
+
+/**
+ * 变更通知归约(镜像端与壳端共用,契约单源):把一条变更应用到中立会话镜像。
+ * - entry:按中立 entryId 幂等——同 id 替换(回填场景:后到权威字段覆盖先到占位),无则 append。
+ * - header:浅合并(写后值整体覆盖对应字段);lineage:整枝 upsert;session:全量替换。
+ * 纯函数,不 mutate 入参。
+ */
+export function applyNeutralChange(session: NeutralSession, change: NeutralChange): NeutralSession {
+  switch (change.kind) {
+    case "entry": {
+      const idx = session.lineages.findIndex((l) => l.lineageId === change.lineageId);
+      const lineage = idx >= 0 ? session.lineages[idx] : null;
+      let next: NeutralSession;
+      if (lineage && lineage.entries.some((e) => e.neutralEntryId === change.entry.neutralEntryId)) {
+        const entries = lineage.entries.map((e) => (e.neutralEntryId === change.entry.neutralEntryId ? change.entry : e));
+        next = { ...session, lineages: session.lineages.map((l, i) => (i === idx ? { ...l, entries } : l)) };
+      } else {
+        next = appendNeutralEntry(session, change.lineageId, change.entry);
+      }
+      return { ...next, header: change.header };
+    }
+    case "header":
+      return { ...session, header: { ...session.header, ...change.header } };
+    case "lineage":
+      return { ...upsertNeutralLineage(session, change.lineage), header: change.header };
+    case "session":
+      return change.session;
+  }
+}

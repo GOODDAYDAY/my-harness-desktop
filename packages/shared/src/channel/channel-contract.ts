@@ -231,6 +231,8 @@ export const IPC = {
     setSteeringMode: "session:setSteeringMode",
     setThinkingLevel: "session:setThinkingLevel",
     snapshot: "session:snapshot",
+    /** 中立层变更通知推送(session-single-source §3.2 写穿回执):渲染层镜像的数据源。 */
+    neutralChange: "session:neutralChange",
     start: "session:start",
     steer: "session:steer",
     stop: "session:stop",
@@ -241,6 +243,8 @@ export const IPC = {
   },
   sessions: {
     list: "sessions:list",
+    /** 读一个中立会话全量(渲染层镜像的基线;内容单源 §3.2)。 */
+    getNeutral: "sessions:getNeutral",
     rawFilePaths: "sessions:rawFilePaths",
     projectStats: "sessions:projectStats",
     getTree: "sessions:getTree",

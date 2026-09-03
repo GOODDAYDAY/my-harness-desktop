@@ -382,6 +382,13 @@ const kernel = {
       transport.on("session:snapshot", listener);
       return () => { transport.off("session:snapshot", listener); };
     },
+    /** 中立层基线读 + 变更订阅(session-single-source §3.2,渲染层镜像的数据源)。 */
+    getNeutral: (ns: string): Promise<unknown> => transport.invoke(IPC.sessions.getNeutral, ns),
+    onNeutralChange: (cb: (change: unknown) => void): (() => void) => {
+      const listener = (change: unknown) => cb(change);
+      transport.on("session:neutralChange", listener);
+      return () => { transport.off("session:neutralChange", listener); };
+    },
     // MessagingApi
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: unknown): Promise<void> =>
       transport.invoke(IPC.session.prompt, text, images, display, prefs),
