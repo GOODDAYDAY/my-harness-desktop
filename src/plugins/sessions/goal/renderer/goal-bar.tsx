@@ -9,7 +9,7 @@
 // 恢复语义属于暂停,编辑已完成的客观没有意义)。
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Target, Play, Pause, Trash2, Check, Pencil, CheckCircle2 } from "lucide-react";
+import { Target, Play, Pause, Trash2, Check, Pencil, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useGoalController } from "./goal-controller";
 
 function phaseColor(phase: string): string {
@@ -23,7 +23,7 @@ function phaseColor(phase: string): string {
 
 export function GoalBar(): React.ReactNode {
   const { t } = useTranslation();
-  const { goal, pause, resume, edit, clear } = useGoalController();
+  const { goal, sendError, pause, resume, edit, clear } = useGoalController();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
 
@@ -72,6 +72,18 @@ export function GoalBar(): React.ReactNode {
             <span className="mr-1.5 font-medium" style={{ color: accent }}>{t("goal.bar.achieved")}</span>
           )}
           {goal.objective}
+        </span>
+      )}
+      {/* 失败显形态(§6.4):阶段色之外叠加错误标记,摘要保留到人处置(resume/clear)——
+          绝不允许「目标条亮着 active、实际已停摆」。 */}
+      {sendError !== null && (
+        <span
+          data-goal-send-error
+          className="flex items-center gap-1 min-w-0 shrink text-[var(--color-accent-error)]"
+          title={sendError}
+        >
+          <AlertTriangle className="size-3.5 shrink-0" />
+          <span className="truncate max-w-60">{sendError}</span>
         </span>
       )}
       {editing ? (

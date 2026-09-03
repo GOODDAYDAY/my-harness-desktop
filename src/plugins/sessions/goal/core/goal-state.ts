@@ -25,8 +25,8 @@ export interface SetGoalRequest {
   maxRounds?: number;
 }
 
-/** 未显式指定时的续跑轮数上限(对齐 DSH 的 defaultMaxGoalRounds)。 */
-export const DEFAULT_MAX_GOAL_ROUNDS = 256;
+/** 未显式指定时的续跑轮数上限(代码兜底;通用配置 goal.maxRounds 可覆盖,默认 1000)。 */
+export const DEFAULT_MAX_GOAL_ROUNDS = 1000;
 
 function isPositiveInt(n: unknown): n is number {
   return typeof n === "number" && Number.isSafeInteger(n) && n >= 1;
@@ -76,6 +76,13 @@ export function editGoal(state: GoalState, objective: string): GoalState {
   return { ...state, objective: next };
 }
 
+/** 用户改轮数上限:只换 maxRounds(正整数),其余字段不动。到顶停摆的目标提高上限后
+ *  shouldContinue 重新成立,由调用方装弹续跑。 */
+export function setGoalMaxRounds(state: GoalState, maxRounds: number): GoalState {
+  if (!isPositiveInt(maxRounds)) throw new Error("goal maxRounds must be a positive safe integer");
+  return { ...state, maxRounds };
+}
+
 /** 是否还应续跑:active 且未达轮数上限(paused/achieved 都不续)。 */
 export function shouldContinue(state: GoalState): boolean {
   return state.phase === "active" && state.round < state.maxRounds;
@@ -99,10 +106,16 @@ export type GoalCommand =
   | { kind: "resume" }
   | { kind: "clear" }
   | { kind: "edit"; objective: string }
+  | { kind: "limit"; maxRounds: number }
   | { kind: "status" };
 
 /** 注册的命令名(不带前导 /)。 */
 export const GOAL_COMMAND_NAME = "goal";
+
+/** 控制动作留痕卡的消息 role(中立层会话注解的 customType;messageRenderers 槽按它认领)。
+ *  注解内容 = 机读 JSON({ action: "pause"|"resume"|"edit"|"limit"|"clear"|"auto_pause_error"|
+ *  "auto_pause_interrupt"|"send_failed", detail? }),卡片渲染时按当前语言翻译。 */
+export const GOAL_NOTE_ROLE = "goal_note";
 
 const PAUSE_WORDS = new Set(["stop", "pause"]);
 const RESUME_WORDS = new Set(["resume", "start", "continue"]);
@@ -125,6 +138,13 @@ export function parseGoalCommand(input: string): GoalCommand | null {
     const objective = rest.slice("edit".length).trim();
     if (objective === "") return { kind: "status" }; // 裸 edit 无文本:不给"edit"当目标的歧义,降级提示
     return { kind: "edit", objective };
+  }
+  if (lower === "limit" || /^limit\s/.test(lower)) {
+    const arg = rest.slice("limit".length).trim();
+    const n = Number(arg);
+    // 裸 limit / limit abc / limit -3 / limit 1.5:降级状态提示,不把 "limit abc" 误设成目标
+    if (!isPositiveInt(n)) return { kind: "status" };
+    return { kind: "limit", maxRounds: n };
   }
   return { kind: "set", request: { objective: rest } };
 }

@@ -6,7 +6,7 @@
 > - **壳**（shell）：my-harness-desktop 的薄壳，提供机制的部分——加载器、槽位契约、适配器装配、配置读写、权限沙箱。物理上对应 `packages/shared`（圆心）+ `src/server`（壳后端）+ `src/web`（前端）的机制代码。壳不拥有任何内核的存储格式、事件形状、插件树、fork 语义。
 > - **壳插件**：挂壳槽位的 UI 插件，只 import `@my-harness-desktop/shared` 和 `@my-harness-desktop/react`。内置壳插件在 `src/plugins/`，第三方壳插件在用户目录。出 UI 的是壳插件，出能力（会话/工具/模型）的是内核。
 > - **内核插件**：内核自己的插件——pi 侧是装进进程的 TypeScript 扩展（统一为 `my-harness-fit-pi-extension`，内含 toolgate / context-probe / bus / subagent / skills 五能力），dsh 侧是 Cordis 插件树（llm-deepseek / dsh-subagent / dsh-compaction-basic 等）。这是"内核的能力来源"，和壳插件是两回事。
-> - **中立契约**（contract）：壳需要内核提供的"最小意图"集合，落成 `packages/shared/src/domain/backend.ts` 的 `BaseBackend` 接口（14 必实现 + 4 缺面默认 + 3 默认成员；`resume?` 为接口可选、不在基类）。六条核心意图：消息 / 中断 / 模型 / 分支 / 会话标识（getTree·getEntries·bookmark·resume）/ 流式事件；之上再叠命名（`setSessionName`，第七意图）、续跑（`continue`，第八意图）、`seed`（跨内核切换投影）、工具发现（`listTools?`）、提问（`answerQuestion?`）与能力探测（`capabilities`）；另有每内核跨会话目录/CRUD 的 `SessionCatalog` 与模型清单的 `KernelModelSource`（§9.4）。
+> - **中立契约**（contract）：壳需要内核提供的"最小意图"集合，落成 `packages/shared/src/domain/backend.ts` 的 `BaseBackend` 接口（14 必实现 + 3 缺面默认 + 3 默认成员；`resume?` 为接口可选、不在基类）。六条核心意图：消息 / 中断 / 模型 / 分支 / 会话标识（getTree·getEntries·bookmark·resume）/ 流式事件；之上再叠命名（`setSessionName`，第七意图）、`seed`（跨内核切换投影）、工具发现（`listTools?`）、提问（`answerQuestion?`）与能力探测（`capabilities`）；另有每内核跨会话目录/CRUD 的 `SessionCatalog` 与模型清单的 `KernelModelSource`（§9.4）。续跑不是独立意图——续跑就是发消息（`sendMessage`），见 `docs/design/goal.md` §3.2。
 > - **适配器**（adapter）：内核专属形状 ↔ 中立契约之间的翻译层，每个内核一个（`PiBackend` / `DshBackend`）。它做三种事：直接映射、需翻译、缺面（降级或补面）。
 > - **圆心**：壳最里面的一层，`packages/shared/src/domain/` 目录。只有类型定义和纯函数，零依赖。换掉 Electron、React、任何内核，它都不动。中立契约（`BaseBackend` / `KernelId` / `LineageTree`）定义在这里。
 > - **中性**：不依赖任何框架、任何库、任何运行时、任何内核。中性类型是纯 TypeScript 类型，中性事件是去掉了内核细节的结构化数据。所有内核的事件都往中性域投，壳只认中性域。
@@ -266,7 +266,7 @@
 
 2. **DOM 交互 test（组件/用户交互）**——vitest + jsdom + `@testing-library/react`，文件首行 `// @vitest-environment jsdom`。
    - 测什么：插件 UI 组件的真实 DOM 交互——渲染出的元素、点击/键入/提交、状态翻转、DOM 锚点（`data-*`）。
-   - 怎么写：`render(<Comp/>)` → `screen.getByRole/getByTitle/getByText` 查元素（**按角色/文案查，不按 class 查**）→ `fireEvent.click/change/keyDown` 真实交互 → 断言 DOM 结果。`usePluginContext` 用 `vi.mock("@my-harness-desktop/react")` 给机制面（onEvent/continue/updateHeader），`useTranslation` 用 `vi.mock("react-i18next")` 给真字典（断言跑真文案，不断言 key）。i18n 文案改动时测试跟文案一起改，不许为过测试而软化断言。
+   - 怎么写：`render(<Comp/>)` → `screen.getByRole/getByTitle/getByText` 查元素（**按角色/文案查，不按 class 查**）→ `fireEvent.click/change/keyDown` 真实交互 → 断言 DOM 结果。`usePluginContext` 用 `vi.mock("@my-harness-desktop/react")` 给机制面（onEvent/prompt/updateHeader），`useTranslation` 用 `vi.mock("react-i18next")` 给真字典（断言跑真文案，不断言 key）。i18n 文案改动时测试跟文案一起改，不许为过测试而软化断言。
    - 范例：`src/plugins/sessions/goal/renderer/goal-bar.test.tsx`（删改停全链路 DOM 对账）、`src/plugins/sessions/ask/renderer/ask-question-card.test.tsx`（提问点选/多选/自定义输入）。
 
 3. **e2etest（真实 app 端到端）**——`scripts/demo/*.e2e.mjs` / `scripts/verify-e2e.mjs`，puppeteer-core + CDP 驱动**真实构建产物**（`out/`）+ 隔离 HOME。
@@ -543,7 +543,7 @@ src/server/kernel/pi/backend/pi-backend.ts     PiBackend（override pi 的能力
 src/server/kernel/dsh/backend/dsh-backend.ts   DshBackend（继承缺面默认 + override dsh 能力）
 ```
 
-`AbstractBackend` 精确形状：14 条 abstract（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`）+ 4 条缺面默认（`listTools` 返回 null、`answerQuestion`/`continue`/`setThinkingLevel` 抛错）+ 3 个默认成员（`capabilities={}`/`configDepPaths=[]`/`sessionId`）。`fork` 不在基类——分叉归壳（§7 内核是单线执行器），fork 是壳的 `SessionTreeApi`；`resume?` 不在基类——dsh 覆盖、pi 不实现，属可选意图；`PiBackend` 另显式 `implements PiBackendExtensions`（pi 扩展面）。
+`AbstractBackend` 精确形状：14 条 abstract（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`）+ 3 条缺面默认（`listTools` 返回 null、`answerQuestion`/`setThinkingLevel` 抛错）+ 3 个默认成员（`capabilities={}`/`configDepPaths=[]`/`sessionId`）。`fork` 不在基类——分叉归壳（§7 内核是单线执行器），fork 是壳的 `SessionTreeApi`；`resume?` 不在基类——dsh 覆盖、pi 不实现，属可选意图；`PiBackend` 另显式 `implements PiBackendExtensions`（pi 扩展面）。
 
 以及已经落地的内核版本管理：
 

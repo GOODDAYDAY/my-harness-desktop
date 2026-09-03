@@ -5,9 +5,9 @@
  * 只有 execute 内部把 DSH 的 ctx.userQuestions.ask 换成 pi 的 ctx.ui.select/input
  * （RPC 安全原语，走 extension_ui_request/extension_ui_response 帧）。
  *
- * 决策 1A：DSH 的 multi_select 本期降级为单选——每题一次 ctx.ui.select，
- * 自定义答案经"Type something."哨兵选项转入 ctx.ui.input。multi_select 字段仍进 schema（对齐契约），
- * 但渲染层不呈现复选框。
+ * 多选升级(ask-design §7,原决策 1A 的退役):multi_select 题桌面端把 {selected,custom?}
+ * JSON 编码进单值 value(内核不校验、原样透传),本扩展 JSON.parse 解码;
+ * TUI 终端用户返回纯 label → parse 失败 → 单选 fallback,向后兼容。
  *
  * 类型不 import 官方 @earendil-works/pi-coding-agent（内核 node_modules 里的类型仓库 tsconfig
  * 够不到）——手写窄结构，与 toolgate/subagent-extension/llm-recorder 同纪律。
@@ -148,7 +148,23 @@ export default function ask(pi: AskApi): void {
             if (picked === undefined) {
               return { content: [{ type: "text", text: "User cancelled the question" }], details: { answers } };
             }
-            if (picked === CUSTOM_SENTINEL) {
+            // 多选解码(ask-design §7):桌面端对 multi_select 题把 {selected,custom?} JSON 编码进
+            // 单值 value(内核不校验、原样透传);parse 失败 = TUI 纯 label,单选 fallback。
+            let multi: { selected?: unknown; custom?: unknown } | null = null;
+            if (q.multi_select === true) {
+              try {
+                const p: unknown = JSON.parse(picked);
+                if (p && typeof p === "object" && Array.isArray((p as { selected?: unknown }).selected)) {
+                  multi = p as { selected?: unknown; custom?: unknown };
+                }
+              } catch { /* 非 JSON:单选 label */ }
+            }
+            if (multi) {
+              for (const s of multi.selected as unknown[]) {
+                if (typeof s === "string" && labels.includes(s)) selected.push(s);
+              }
+              if (typeof multi.custom === "string" && multi.custom.trim() !== "") custom = multi.custom;
+            } else if (picked === CUSTOM_SENTINEL) {
               custom = await ctx.ui.input(`${q.question} (custom answer)`);
             } else {
               selected.push(picked);

@@ -57,6 +57,30 @@ describe("Composer 斜杠弹窗(含壳插件命令)", () => {
     // 插入命令而非提交:onChange 收到 "/goal"
     expect(onValueChange).toHaveBeenCalledWith("/goal");
   });
+
+  it("命令生效高亮:输入以已注册命令名整词开头 → 药丸挂类 + chip;参数输入后高亮仍在(§7.2)", () => {
+    const { container } = render(
+      <Composer value="/goal 写 README" onValueChange={() => {}} onSubmit={() => {}} commands={commands} />,
+    );
+    const pill = container.querySelector("[data-command-active]");
+    expect(pill).not.toBeNull();
+    expect(pill!.classList.contains("pi-composer-command")).toBe(true);
+    // chip 显示命令名 + 来源徽标
+    const chip = container.querySelector("[data-command-chip]");
+    expect(chip?.textContent).toContain("/goal");
+    expect(chip?.textContent).toContain("cmd"); // plugin 来源徽标
+  });
+
+  it("不命中不高亮:未注册命令名/非命令输入/空输入都无 chip 无类", () => {
+    for (const v of ["/unknown x", "普通消息", "", "/goalx 假命令"]) {
+      const { container, unmount } = render(
+        <Composer value={v} onValueChange={() => {}} onSubmit={() => {}} commands={commands} />,
+      );
+      expect(container.querySelector("[data-command-active]")).toBeNull();
+      expect(container.querySelector("[data-command-chip]")).toBeNull();
+      unmount();
+    }
+  });
 });
 
 describe("Composer 发送拦截接线(与 timeline sendText 同款顺序)", () => {

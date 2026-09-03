@@ -33,6 +33,29 @@
         "order": 40
       }
     ],
+    "settingsGroups": [
+      {
+        "id": "goal",
+        "titleKey": "goal.settings.group",
+        "order": 50,
+        "fields": [
+          {
+            "key": "goal.maxRounds",
+            "type": "int",
+            "default": 1000,
+            "titleKey": "goal.settings.maxRounds",
+            "descKey": "goal.settings.maxRoundsDesc",
+            "options": [100, 500, 1000, 5000]
+          }
+        ]
+      }
+    ],
+    "messageRenderers": [
+      {
+        "role": "goal_note",
+        "component": "GoalNoteCard"
+      }
+    ],
     "languages": [
       { "id": "goal.zh-CN", "locale": "zh-CN", "resources": "./locales/zh-CN/goal.json" },
       { "id": "goal.en", "locale": "en", "resources": "./locales/en/goal.json" },

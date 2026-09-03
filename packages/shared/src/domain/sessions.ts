@@ -22,7 +22,7 @@
 // 同一个激活会话——这是继承关系,不是组合关系。
 // 新内核命令加进来时,新建子接口 extends RpcOps,已有接口不改(开闭原则)。
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
-import type { KernelEvent, QuestionAnswer, QuestionRequestEvent } from "./events/kernel-event";
+import type { KernelEvent, QuestionAnswer, QuestionRequestEvent, PendingQuestionRecord } from "./events/kernel-event";
 import type { LineageTree } from "./backend";
 import type { KernelId } from "./kernel";
 import type { DisplayMeta } from "./session-neutral";
@@ -248,12 +248,6 @@ export interface MessagingApi extends RpcOps {
   prompt(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs): Promise<void>;
   /** 中断当前生成(内核 abort;pi 未启动时静默)。 */
   abort(): Promise<void>;
-  /** 继续执行（第八意图）：异常停机后原地续跑，不 fork、不重发旧消息。
-   *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核抛错。
-   *  text 可选：要注入的续跑提示（goal 续跑用）；缺省用内核自带的通用「继续」。
-   *  prefs 可选：renderer 三级解析(pending>头>兜底)的模型偏好——全新会话的首轮续跑
-   *  也需要模型归属,空偏好且从未发送的会话服务端无从起进程。 */
-  continue(text?: string, prefs?: SessionModelPrefs): Promise<void>;
 }
 
 /** 模型连通性测试结果:ok 即通,不通带错误原因。 */
@@ -351,6 +345,8 @@ export interface SessionsApi {
   onQuestion(cb: (req: QuestionRequestEvent) => void): () => void;
   /** 回答一次提问:把用户答案回填给当前内核。 */
   answerQuestion(requestId: string, answers: QuestionAnswer[]): Promise<void>;
+  /** 读激活会话的挂起提问记录(重启水合后卡片据此恢复交互态;docs/design/ask-design.md §3.2)。 */
+  getPendingQuestions(): Promise<PendingQuestionRecord[]>;
   /** 工具清单(可缺面):返回当前内核可用工具;null = 内核不支持工具发现(壳走降级)。 */
   listTools(): Promise<KnownToolInfo[] | null>;
   /** 订阅投影基线(start/switch/new 后每次推送一次)。 */
@@ -366,6 +362,11 @@ export interface SessionsApi {
   renameSession(sessionPath: string, name: string): Promise<void>;
   /** 改写会话元字段;name 语义同 renameSession,pinned/archived/toolConfig 落 custom-my-harness-desktop 保留键。同一把锁,一处写头。 */
   updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void>;
+  /** 追加一条会话注解(中立层会话注解机制,设计 docs/design/goal.md §8.3):
+   *  只写中立层、不写内核会话文件——不进模型上下文,刷新/重开仍在;
+   *  渲染由 messageRenderers 槽按 role(=customType)认领。激活会话即时进视图流,
+   *  后台会话静默落盘、切过去即见。goal 控制动作留痕是首个消费方。 */
+  annotate(sessionPath: string, customType: string, content: string): Promise<void>;
   /** 删除会话文件(真删 JSONL,不可恢复);批量=同目录一把锁内逐个删,不存在的跳过;活跃会话由实现侧跳过(删了也会被进程 append 复活)。 */
   deleteSessions(paths: string[]): Promise<void>;
   /** 记录发送路径上下文(cwd + 会话文件,null=新会话);只记,不动进程。 */

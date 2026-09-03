@@ -34,6 +34,7 @@ function makeBackend(): { t: FakeTransport; b: DshBackend } {
   return { t, b };
 }
 
+
 const session: NeutralSession = {
   neutralSessionId: "ns",
   header: { kernel: "pi", cwd: "/proj", createdAt: new Date().toISOString() },
@@ -67,6 +68,15 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     expect(onMissing).toHaveBeenCalledWith("session/setModel");
   });
 
+  it("supportsRuntimeSetModel 能力位:未探测过为 true(乐观),记缺面后翻 false", async () => {
+    const { t, b } = makeBackend();
+    expect(b.supportsRuntimeSetModel).toBe(true);
+    t.errors.set("session/setModel", unknownMethod("session/setModel"));
+    await b.setModel("p", "m2");
+    expect(b.capabilities.dsh.missing.has("session/setModel")).toBe(true);
+    expect(b.supportsRuntimeSetModel).toBe(false); // 壳据此把模型失配回落成停旧起新
+  });
+
   it("非缺面错误(参数错)照常外抛,不记缺面", async () => {
     const { t, b } = makeBackend();
     t.errors.set("session/getTree", new DshRpcError("bad boundary", -1, "session/getTree"));
@@ -81,30 +91,6 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     expect(t.requests.some((r) => r.method === "session/rename")).toBe(true);
   });
 
-  it("continue 走 session/continue RPC(第八意图)", async () => {
-    const { t, b } = makeBackend();
-    t.results.set("session/continue", {});
-    await b.continue();
-    expect(t.requests.some((r) => r.method === "session/continue")).toBe(true);
-  });
-
-  it("continue 带文本 → 真发 session/prompt(桌面 goal 续跑不在 dsh 空转)", async () => {
-    const { t, b } = makeBackend();
-    t.results.set("session/prompt", {});
-    await b.continue('<goal_round>Objective: "x"</goal_round>');
-    const prompts = t.requests.filter((r) => r.method === "session/prompt");
-    expect(prompts).toHaveLength(1);
-    expect(JSON.stringify(prompts[0].params)).toContain("goal_round");
-    // 不走 session/continue(那是 dsh 原生 goal 的重挂面,桌面 goal 是壳层状态机)
-    expect(t.requests.some((r) => r.method === "session/continue")).toBe(false);
-  });
-
-  it("continue 未知方法(旧 dsh 内核):记缺面 + 抛清晰错误", async () => {
-    const { t, b } = makeBackend();
-    t.errors.set("session/continue", unknownMethod("session/continue"));
-    await expect(b.continue()).rejects.toThrow(/缺少 session\/continue/);
-    expect(b.capabilities.dsh.missing.has("session/continue")).toBe(true);
-  });
 });
 
 describe("dsh seed 转录(wire 形状对齐 session/seed 的 NeutralSessionWire 树)", () => {
@@ -137,6 +123,16 @@ describe("dsh seed 转录(wire 形状对齐 session/seed 的 NeutralSessionWire 
       kernelEntryId: "k1",
       message: { role: "assistant", content: [{ type: "text", text: "hello" }] },
     });
+  });
+
+  it("buildDshSeedSession 只投影对话角色:user/assistant/toolResult 之外的条目(分隔线/注解卡)不进内核", () => {
+    const mixed: NeutralEntry[] = [
+      ...entries,
+      { neutralEntryId: "root:2", message: { role: "divider", content: "" } },
+      { neutralEntryId: "root:3", message: { role: "goal_note", content: '{"action":"pause"}' } },
+    ];
+    const s = buildDshSeedSession(mixed, { neutralSessionId: "ns", lineageId: "root", header });
+    expect(s.lineages[0].entries.map((e) => e.message.role)).toEqual(["user", "assistant"]);
   });
 
   it("seed 发给 session/seed 的 session 参数是树,不是线性数组(回归护栏)", async () => {

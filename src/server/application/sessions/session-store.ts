@@ -20,9 +20,10 @@ import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, Neutra
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, neutralMessagesOfSession } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
+import { PendingQuestionStore } from "./pending-question-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage } from "@my-harness-desktop/shared";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage, sessionEntryToNeutral, shellSessionStats } from "@my-harness-desktop/shared";
-import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities } from "@my-harness-desktop/shared";
+import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities, PendingQuestionRecord, Question, ToolResultWriteback } from "@my-harness-desktop/shared";
 import type { SessionStoreForRestart } from "@my-harness-desktop/shared";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
@@ -89,6 +90,13 @@ interface SessionProc {
   backend: BaseBackend;
   /** 会话当前内核(pi/dsh)。跨内核切换(§3.6)时改写;路由 factory + asPi 类型守卫依据。 */
   kernel: KernelId;
+  /** 进程出生证(ask-design §4.3):每次创建/换绑(materialize/switchKernel)重新生成。
+   *  提问落账时记录;answer 时比对——匹配且活着 = 活路,不匹配 = 续路。 */
+  nonce: string;
+  /** 最近一次 ask_user_question 的 toolCallStart 对账(dispatch 捕获):提问落账的
+   *  toolCallId + 模型原始 questions(真实 q.id 来源;帧/文件里的是合成 id)。 */
+  lastAskToolCallId?: string;
+  lastAskQuestions?: Question[];
   /** 中立会话主键(壳生成、跨内核稳定)。映射表记录各内核私有 id 绑定,回切找回原会话
    *  (session-neutral-layer.md §5/§16)。 */
   neutralSessionId: string;
@@ -129,8 +137,9 @@ interface SessionProc {
   /** 最近一次 setModel 的中立模型引用(档位分类)。跨切换模型中立化的持久载体,
    *  不读 latestSnapshot(dsh 无快照面恒 null,§9.3/§11)。 */
   lastModelRef: NeutralModelRef | null;
-  /** 本进程创建时绑定的模型(provider/modelId)。dsh 无 session/setModel,模型只能在
-   *  initialize 握手时定;ensureForSend 复用时比对,变了 → 停旧起新(§7.6 适配器翻译)。 */
+  /** 本进程创建时绑定的模型(provider/modelId;spawn 握手值)。热切内核(pi、补面后的 dsh)
+   *  运行时切模后它不再代表生效值(生效值看 effectiveModel,docs/model-switching.md §11.3)——
+   *  它只剩两个用途:ensureForSend 的失配比对输入、未热切过时的账本兜底。 */
   model?: { provider: string; modelId: string };
   /** 当前「生效模型」(provider/modelId/kernel)。与 model 不同:setModel 运行时切模后 model 仍
    *  是 spawn 时定死值(pi 切模不重启),effectiveModel 则随 setModel 更新——它是「本条消息
@@ -207,6 +216,10 @@ export class SessionStore implements
   private bookmarkStores = new Map<string, BookmarkSnapshotStore>();
   /** 模型清单(可选;缺省不降级)。session-neutral-layer.md ④ 的落地载体:切内核模型显式降级。 */
   private modelCatalog: ModelCatalog | null;
+  /** 挂起提问存储(ask 续问,ask-design §4.3;可选,缺省退回瞬态行为)。 */
+  private questionStore: PendingQuestionStore | null;
+  /** 续路补投在飞去重(水合补投与作答竞态护栏)。 */
+  private resumingQuestions = new Set<string>();
   constructor(
     factory: BackendFactory,
     catalogFactory: SessionCatalogFactory,
@@ -215,6 +228,7 @@ export class SessionStore implements
     neutralStore?: NeutralSessionStore,
     modelCatalog?: ModelCatalog,
     bookmarkDir?: (cwd: string) => string,
+    questionStore?: PendingQuestionStore,
   ) {
     this.factory = factory;
     this.catalogFactory = catalogFactory;
@@ -223,6 +237,7 @@ export class SessionStore implements
     this.neutralStore = neutralStore ?? null;
     this.modelCatalog = modelCatalog ?? null;
     this.bookmarkDir = bookmarkDir ?? null;
+    this.questionStore = questionStore ?? null;
   }
 
   /** 目录/CRUD 按内核懒缓存(§1.5 多内核默认):统一经 Map<KernelId, SessionCatalog> 查,
@@ -339,6 +354,8 @@ export class SessionStore implements
     if (sessionPath) {
       this.dispatch(key, { type: "sessionStart", sessionFile: sessionPath });
     }
+    // 提问水合(ask-design §8.1):重投 pending(卡片复活)+ 补投 answered 未 delivered(答案必达)。
+    this.rehydrateQuestions();
   }
 
   /** fs:project IPC 圈禁的锚点(当前激活项目根;shell 的 IPC 边界从这里取)。 */
@@ -435,7 +452,7 @@ export class SessionStore implements
       ephemeral,
     });
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
-    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, effectiveModel: provider && model ? { provider, modelId: model, kernel } : undefined, activeLineageId: ns,
+    const proc: SessionProc = { backend, kernel, neutralSessionId: ns, nonce: randomUUID(), cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, effectiveModel: provider && model ? { provider, modelId: model, kernel } : undefined, activeLineageId: ns,
       // 物化标记(session-single-source §4.4):文件型内核(有预 seed 面=pi)spawn 即经
       // --session 读文件,内容已在;RPC seed 面内核(dsh)新进程空空,标记置空——
       // 首发时 materializeActiveLineage 用中立层 seed 回填(替代旧的 continue 重放补面)。
@@ -469,6 +486,7 @@ export class SessionStore implements
       }
     });
     pi.onQuestion((req) => {
+      this.mintQuestionRecord(proc, req); // 先落账(准入失败的帧只投不落,ask-design §4.3)
       const questionEvent: QuestionRequestEvent = {
         kind: "question",
         requestId: req.requestId,
@@ -573,7 +591,19 @@ export class SessionStore implements
     const existing = this.procs.get(this.activeProcKey)?.get(kernel);
     const modelMismatch = !!(provider && model && (!existing?.model
       || existing.model.provider !== provider || existing.model.modelId !== model));
-    const needsRestart = modelMismatch && !!existing && !existing.backend.capabilities.pi;
+    // 模型失配的重启判据(docs/model-switching.md §11.2:两根正交的轴,勿回退为读
+    // capabilities.pi——那是「pi 扩展面」的桶探测,不是「能不能热切」的轴):
+    // ① 运行时切模轴缺面(后端自报 supportsRuntimeSetModel=false,如 dsh 旧运行时缺
+    //    session/setModel)→ 只能停旧起新;
+    // ② 未物化的惰性内核会话(从没发过消息,服务端还没有会话可热切)→ 握手是唯一
+    //    定模点,重建零代价。惰性判据复用 catalog.newSessionId==null(文件型内核
+    //    预生成路径返非 null,惰性内核返 null)。
+    const lazyKernel = existing != null
+      && this.catalogFor(kernel).newSessionId(this.activeCwd) == null;
+    const needsRestart = modelMismatch && !!existing && (
+      !existing.backend.supportsRuntimeSetModel
+      || (!existing.touched && lazyKernel)
+    );
     if (existing && existing.backend.alive && !this.isConfigStale(existing) && !needsRestart) return;
     // 配置过期 / 模型失配需重启:只停该内核旧进程,重起一个带新模型。
     if (existing && existing.backend.alive) {
@@ -764,6 +794,42 @@ export class SessionStore implements
   async copySession(srcPath: string, targetPath: string): Promise<void> {
     this.catalog.copy(srcPath, targetPath);
   }
+
+  /** 中立层会话注解(设计 docs/design/goal.md §8.3):只写中立层、不写内核会话文件——
+   *  不进模型上下文,刷新/重开仍在;激活会话即时进视图流(custom_message 形状的
+   *  entryAppended,web 侧非消息分支自然 append),后台会话静默落盘、切过去即见。
+   *  渲染由 messageRenderers 槽按 role(=customType)认领。goal 控制动作留痕是首个消费方。
+   *  已知边界:中立层缺失时的兜底快照重建(snapshotNeutralSession)从内核重读,注解不重建——
+   *  注解是壳自有的展示数据,不参与内核投影,可接受。 */
+  async annotate(sessionPath: string, customType: string, content: string): Promise<void> {
+    if (!this.neutralStore) return;
+    const ns = this.neutralSessionIdFromPath(sessionPath);
+    if (!ns) return;
+    const session = this.neutralStore.get(ns);
+    if (!session) return;
+    // 活跃 lineage:激活会话取 proc 的活跃 lineage,否则落根 lineage(注解挂当前可见线);
+    // 中立树还没有任何 lineage 时以 ns 为根(appendNeutralEntry 缺 lineage 会自动建根)。
+    const key = this.resolveProcKey(sessionPath);
+    const proc = key === this.activeProcKey ? this.activeProc() : null;
+    const lineageId = proc?.activeLineageId ?? session.lineages[0]?.lineageId ?? ns;
+    const entry: NeutralEntry = { neutralEntryId: "", message: { role: customType, content, timestamp: Date.now() } };
+    const next = appendNeutralEntryWithHeader(session, lineageId, entry, new Date().toISOString());
+    // 中立层唯一写口(§session-single-source 写穿收口):持久化 + 变更通知焊死,
+    // 渲染端中立镜像经 session:neutralChange 增量归约。
+    const appended = next.lineages.find((l) => l.lineageId === lineageId)?.entries.at(-1);
+    this.putNeutral(next, appended
+      ? { ns, kind: "entry", lineageId, entry: appended, header: next.header }
+      : { ns, kind: "header", header: next.header });
+    // 激活会话即时进当前显示读口(双跑期:applyEvent 仍是显示源,中立镜像并行验证);
+    // entry 带唯一 id(web 侧非消息分支按 id 判重优先于文本判重——同文案的两次注解
+    // (如同轮两次暂停)不互相吞掉)。
+    if (key === this.activeProcKey) {
+      this.dispatch(key, {
+        type: "entryAppended",
+        entry: { type: "custom_message", customType, content, id: `note-${randomUUID()}`, timestamp: new Date().toISOString() },
+      });
+    }
+  }
   async deleteSessions(paths: string[]): Promise<void> {
     // 活跃会话禁止删除:进程 append 会让文件复活,删了也白删(机制兜底,UI 侧另有 deletable 过滤)
     const targets = paths.filter((p) => p !== this.activeSessionPath);
@@ -772,6 +838,8 @@ export class SessionStore implements
     for (const p of targets) {
       const ns = this.neutralSessionIdFromPath(p);
       if (ns) this.neutralStore?.delete(ns);
+      // 级联删提问请求单(ask-design §5.3):会话没了,它的提问单不孤儿留存。
+      if (ns) this.questionStore?.deleteBySession(ns);
     }
   }
   async readToolConfig(sessionPath: string): Promise<SessionToolConfig | null> {
@@ -1145,6 +1213,7 @@ export class SessionStore implements
       // 6. 重绑
       proc.backend = newBackend;
       proc.kernel = target;
+      proc.nonce = randomUUID(); // 换绑即换出生证:旧进程的提问永不误入新进程(ask-design §4.3)
       proc.boundSessionPath = newBackend.capabilities.pi ? newSessionId : null;
       proc.configSnapshot = this.captureConfigSnapshot(proc.backend.configDepPaths ?? []);
       this.bindProcEvents(proc);
@@ -1290,24 +1359,211 @@ export class SessionStore implements
     return () => this.kernelListeners.delete(cb);
   }
 
+  // ============ ask 提问:持久请求单(ask-design §4/§5/§6) ============
+
   onQuestion(cb: (req: QuestionRequestEvent) => void): () => void {
     this.questionListeners.add(cb);
     return () => this.questionListeners.delete(cb);
   }
 
+  /** 提问落账(先落账再投递,ask-design §4.3):准入 = 能对账到 ask_user_question 的
+   *  toolCallStart(其他扩展的 select/input 帧只投不落,防误持久化/误铸造 toolResult)。
+   *  真实 q.id 经 lastAskQuestions 按问句文本对账(pi 帧里的 id 是合成物)。 */
+  private mintQuestionRecord(proc: SessionProc, req: { requestId: string; questions: Question[] }): void {
+    if (!this.questionStore) return;
+    if (this.questionStore.has(req.requestId)) return; // 幂等:重投/桥重扫不重复落账
+    const toolCallId = proc.lastAskToolCallId ?? null;
+    if (!toolCallId) return; // 准入:对不上 ask toolCallStart 的帧不落账(维持瞬态)
+    const argsQuestions = proc.lastAskQuestions;
+    const questions = req.questions.map((q) => {
+      const hit = argsQuestions?.find((aq) => aq.question === q.question);
+      return hit ? { ...q, id: hit.id } : q;
+    });
+    this.questionStore.put({
+      requestId: req.requestId, kernel: proc.kernel, neutralSessionId: proc.neutralSessionId,
+      cwd: proc.cwd, sessionKey: proc.key, procNonce: proc.nonce, toolCallId,
+      model: proc.effectiveModel ? { provider: proc.effectiveModel.provider, modelId: proc.effectiveModel.modelId } : undefined,
+      questions, status: "pending", createdAt: new Date().toISOString(),
+    });
+  }
+
+  /** toolCallEnd 对账(§5.3):命中 pending 记录 → 结算。覆盖 abort 等不经卡片的收尾。 */
+  private settleQuestionByToolCallEnd(toolCallId: string, event: SessionEvent): void {
+    const rec = this.questionStore?.findPendingByToolCallId(toolCallId);
+    if (!rec) return;
+    const result = (event as { result?: unknown }).result;
+    const answers = (result as { answers?: QuestionAnswer[] } | undefined)?.answers;
+    const cancelled = JSON.stringify(result ?? "").includes("User cancelled");
+    this.questionStore!.settle(rec.requestId, cancelled ? "cancelled" : "answered", answers);
+  }
+
+  /** 按记录找进程:先按 sessionKey 直查(rekey 后兜底全扫 neutralSessionId+kernel)。 */
+  private procForRecord(record: PendingQuestionRecord): SessionProc | null {
+    const byKey = this.procs.get(record.sessionKey)?.get(record.kernel);
+    if (byKey) return byKey;
+    return this.allProcs().find((p) => p.kernel === record.kernel && p.neutralSessionId === record.neutralSessionId) ?? null;
+  }
+
   async answerQuestion(requestId: string, answers: QuestionAnswer[]): Promise<void> {
-    // 路由按「激活会话里有 answerQuestion 能力的槽位」找后端,不读全局 activeKernel 偶然态
-    // (activeKernel 是「最后用过的内核」,多内核并存时不可靠——dsh 问句撞上 activeKernel=pi
-    // 时 activeProc() 落空,误报「内核未启动」的根因)。
-    const kernels = this.procs.get(this.activeProcKey);
-    const candidates = kernels ? [...kernels.values()] : [];
-    const proc = candidates.find((p) => p.backend.answerQuestion && p.backend.alive)
-      ?? candidates.find((p) => p.backend.answerQuestion)
-      ?? null;
-    // 诚实文案(勿回退为「内核未启动」):能走到这的提问都已投递成功(投递点拦了死问句),
-    // 此处无可用后端 = 提问后进程没了(应用重启/内核崩)——问题本身已死,照实说。
-    if (!proc) throw new Error("提问已失效：会话进程已不在（应用可能重启过），请让模型重新发起提问");
-    await proc.backend.answerQuestion!(requestId, answers);
+    const record = this.questionStore?.get(requestId) ?? null;
+    if (!record) {
+      // 未落账的提问(非 ask 工具的瞬态帧 / store 未装配):旧活路路由,不读全局
+      // activeKernel 偶然态(dsh 问句撞 pi 内核误报「内核未启动」的根因)。
+      const kernels = this.procs.get(this.activeProcKey);
+      const candidates = kernels ? [...kernels.values()] : [];
+      const proc = candidates.find((p) => p.backend.answerQuestion && p.backend.alive)
+        ?? candidates.find((p) => p.backend.answerQuestion)
+        ?? null;
+      if (!proc) throw new Error("提问已失效：会话进程已不在（应用可能重启过），请让模型重新发起提问");
+      await proc.backend.answerQuestion!(requestId, answers);
+      return;
+    }
+    // 防重(幂等防线:多窗口/重投竞态)
+    if (record.status !== "pending") throw new Error("该提问已作答，请勿重复提交");
+    // 落账先于分发——答案接收与内核死活无关(答案永不丢)
+    const cancelled = answers.every((a) => a.selected.length === 0 && !(a.custom ?? "").trim());
+    this.questionStore!.settle(requestId, cancelled ? "cancelled" : "answered", answers);
+    // 分发:按 record.kernel 找槽位,nonce 匹配 + alive → 活路;否则续路(迟到 toolResult 补写)
+    const proc = this.procForRecord(record);
+    if (proc && proc.nonce === record.procNonce && proc.backend.alive && proc.backend.answerQuestion) {
+      await proc.backend.answerQuestion(requestId, answers);
+      this.questionStore!.markDelivered(requestId);
+      return;
+    }
+    await this.resumeAnswer({ ...record, answers }, cancelled); // 续路读落账后的新鲜答案(record 是 settle 前的旧引用)
+  }
+
+  /** 续路(ask-design §5/§6):内核无法再铸造时,壳把迟到的 tool_result 按同构形状补上。
+   *  步骤:停同槽位活进程(运行中的内核不重读存储)→ catalog.appendToolResult 落盘 →
+   *  中立层双写 → 合成 toolCallEnd(卡片免刷新结算)→ 回填消息触发新回合(cancelled 不发)。 */
+  private async resumeAnswer(record: PendingQuestionRecord, cancelled: boolean): Promise<void> {
+    if (this.resumingQuestions.has(record.requestId)) return; // 在飞去重(水合补投竞态)
+    this.resumingQuestions.add(record.requestId);
+    try {
+      // 重读最新记录(根因:answerQuestion 先落账再调这里,入参是落账前的旧快照,
+      // 不带 answers——旧快照直接落盘会把 {"answers":[]} 写进会话文件,真答案丢失)。
+      const rec = this.questionStore!.get(record.requestId) ?? record;
+      const catalog = this.catalogFor(rec.kernel);
+      const outcome: ToolResultWriteback = cancelled ? { cancelled: true } : { answers: rec.answers ?? [] };
+      let wrote = false;
+      if (rec.toolCallId && catalog.appendToolResult) {
+        const proc = this.procForRecord(rec);
+        if (proc?.backend.alive) await proc.backend.stop().catch(() => {}); // H5:活进程不重读存储,先停
+        try {
+          await catalog.appendToolResult(rec.sessionKey, rec.toolCallId, outcome, rec.cwd);
+          wrote = true;
+        } catch (err) {
+          // 锚点校验失败(fork 走远)/格式不识(dsh 压缩存量)→ 降级为用户消息通道,不伪造落盘
+          console.warn("[session-store] 续路落盘失败,降级为回填消息:", err instanceof Error ? err.message : String(err));
+        }
+      }
+      if (wrote && rec.toolCallId) {
+        this.appendToolResultNeutral(rec, outcome);
+        // 视图流即时结算(renderer applyEvent 按 toolCallId 回填 result 进内容块)
+        this.dispatch(rec.sessionKey, {
+          type: "toolCallEnd", toolCallId: rec.toolCallId,
+          result: { answers: rec.answers ?? [] }, isError: cancelled,
+        });
+      }
+      if (!cancelled) {
+        // 回填消息触发新回合(中立标记 + 答案 JSON;toolResult 不自己触发回合,消息是触发器)。
+        // prefs 带记录时的模型归属,路由到提问的归宿内核,不读全局偶然态;
+        // thinkingLevel 空串 = 未知,prompt 的强度对齐对 falsy 跳过(不伪造档位)。
+        const payload = `[ask-answer] ${JSON.stringify({ answers: rec.answers ?? [] })}`;
+        const prefs: SessionModelPrefs | undefined = rec.model
+          ? { provider: rec.model.provider, modelId: rec.model.modelId, kernel: rec.kernel, thinkingLevel: "" }
+          : undefined;
+        await this.prompt(payload, undefined, undefined, prefs).catch((e) => {
+          console.error("[session-store] 续路回填消息发送失败:", e);
+          throw e; // 交付失败 → delivered 不置位,水合补投兜底
+        });
+      }
+      this.questionStore!.markDelivered(rec.requestId);
+    } finally {
+      this.resumingQuestions.delete(record.requestId);
+    }
+  }
+
+  /** 中立层双写 toolResult(壳的读真相源;与内核存储同一条目,refresh/冷开一致)。 */
+  private appendToolResultNeutral(record: PendingQuestionRecord, outcome: ToolResultWriteback): void {
+    if (!this.neutralStore) return;
+    const cancelled = "cancelled" in outcome && outcome.cancelled;
+    const answers = cancelled ? [] : outcome.answers;
+    // NeutralMessage 是开放形状([key: string]: unknown),toolCallId/toolName/details 透传。
+    const msg = {
+      role: "toolResult",
+      content: [{ type: "text", text: cancelled ? "User cancelled the question" : JSON.stringify({ answers }) }],
+      toolCallId: record.toolCallId ?? undefined,
+      toolName: "ask_user_question",
+      details: { answers },
+      isError: cancelled,
+    } as NeutralMessage;
+    const cur = this.neutralStore.get(record.neutralSessionId);
+    if (!cur) return;
+    // 追加到提问所在 lineage:dsh 的 sessionKey 是裸 lineageId 直接命中;pi 的 sessionKey
+    // 是文件路径,派生文件名 = lineageId,经 neutralSessionIdFromPath 反查命中分支;
+    // 都不中回落根 lineage。
+    const sessionLineageId = this.neutralSessionIdFromPath(record.sessionKey);
+    const lineageId = cur.lineages.find((l) => l.lineageId === record.sessionKey)?.lineageId
+      ?? (sessionLineageId ? cur.lineages.find((l) => l.lineageId === sessionLineageId)?.lineageId : undefined)
+      ?? cur.lineages.find((l) => l.fork === null)?.lineageId ?? record.neutralSessionId;
+    this.neutralStore.put(appendNeutralEntryWithHeader(cur, lineageId, { neutralEntryId: "", message: msg }, new Date().toISOString()));
+  }
+
+  async getPendingQuestions(): Promise<PendingQuestionRecord[]> {
+    if (!this.questionStore || !this.activeSessionPath) return [];
+    const ns = this.neutralSessionIdFromPath(this.activeSessionPath);
+    if (!ns) return [];
+    return this.questionStore.listBySession(ns).filter((r) => r.status === "pending");
+  }
+
+  /** 会话激活时的提问水合(ask-design §8.1):重投 pending(卡片复活)+
+   *  补投 answered 而未 delivered(落账成功但分发中断——答案永不丢是闭环)。 */
+  private rehydrateQuestions(): void {
+    if (!this.questionStore || !this.activeSessionPath) return;
+    const ns = this.neutralSessionIdFromPath(this.activeSessionPath);
+    if (!ns) return;
+    for (const rec of this.questionStore.listBySession(ns)) {
+      if (rec.status === "pending") {
+        const evt: QuestionRequestEvent = { kind: "question", requestId: rec.requestId, sessionKey: rec.sessionKey, questions: rec.questions };
+        for (const cb of this.questionListeners) {
+          try { cb(evt); } catch (err) { console.error("[session-store] 提问监听器抛错已隔离:", err); }
+        }
+      } else if (rec.status === "answered" && !rec.delivered) {
+        void this.resumeAnswer(rec, false).catch((e) => console.warn("[session-store] 提问补投失败:", e));
+      }
+    }
+  }
+
+  /** prompt 发送前对账(ask-design §6.6):任何新请求发出前配对必须闭合——
+   *  悬着 nonce 不匹配的 ask 记录直接发,pi 会被 provider 400。先补 cancelled toolResult。
+   *  纯文件/catalog 操作,不依赖进程(prompt 顶部调用,先于一切 spawn)——
+   *  pi 在 spawn 时把会话文件读进内存且不重读,闭合必须赶在进程读到旧文件之前。
+   *  同槽位有 nonce 不匹配的旧活进程 → 先停(它内存里还是悬空态,留着必读不出闭合)。 */
+  private async reconcilePendingQuestionsBeforeSend(): Promise<void> {
+    if (!this.questionStore || !this.activeSessionPath) return;
+    const ns = this.neutralSessionIdFromPath(this.activeSessionPath);
+    if (!ns) return;
+    const liveProc = this.activeProc();
+    const pendings = this.questionStore.listBySession(ns)
+      .filter((r) => r.status === "pending" && r.procNonce !== liveProc?.nonce && r.toolCallId);
+    for (const rec of pendings) {
+      const catalog = this.catalogFor(rec.kernel);
+      if (!catalog.appendToolResult) {
+        throw new Error("存在未作答的提问，请先在会话流中回答或放弃后再发送");
+      }
+      if (liveProc?.backend.alive) {
+        await liveProc.backend.stop().catch(() => {});
+        this.procs.get(this.activeProcKey)?.delete(rec.kernel);
+      }
+      try {
+        await catalog.appendToolResult(rec.sessionKey, rec.toolCallId!, { cancelled: true }, rec.cwd);
+      } catch (e) {
+        console.warn("[session-store] 发送前对账落盘失败(降级仅标记):", e);
+      }
+      this.questionStore.settle(rec.requestId, "cancelled");
+      this.dispatch(rec.sessionKey, { type: "toolCallEnd", toolCallId: rec.toolCallId!, result: { answers: [] }, isError: true });
+    }
   }
 
   /** 工具清单(可缺面):读当前内核可用工具;无活跃进程或不支持工具发现 → null(壳走降级)。 */
@@ -1323,17 +1579,25 @@ export class SessionStore implements
    *  不读全局 activeKernel(它是「最后用过的内核」的偶然态:先开过 pi 会话再开 dsh 会话时
    *  activeKernel 仍停在 pi,dsh 问句按 activeProc(activeKernel) 查找会落空误丢——
    *  「问问题不展示」的根因之一)。空串(旧桥/归属未知)不拦,保持向后兼容。
-   *  无可答进程(激活会话没有任何内核进程)直接丢弃:无人能答的问题不呈现(死问句)。 */
+   *  照存不投(ask-design §4.2):无可答进程不再丢单——先落账(待水合重投),只是不投当前视图。 */
   injectQuestion(req: QuestionRequestEvent): void {
+    // 查重:已结算的重复投递直接跳过(dsh 桥重启全量重扫会重投旧问句文件,含 abort 孤儿)
+    const existing = this.questionStore?.get(req.requestId);
+    if (existing && existing.status !== "pending") return;
+    // 归属 proc 全扫(不只激活会话):拿 nonce/toolCallId 落账;dsh 问句可能来自非激活会话
+    const ownerProc = req.sessionKey !== ""
+      ? this.allProcs().find((p) => p.backend.sessionId && p.backend.sessionId === req.sessionKey) ?? null
+      : null;
+    if (!existing && ownerProc) this.mintQuestionRecord(ownerProc, req);
     const kernels = this.procs.get(this.activeProcKey);
     const candidates = kernels ? [...kernels.values()].filter((p) => p.backend.alive) : [];
     if (candidates.length === 0) {
-      console.warn(`[session-store] 提问到达时无可答会话进程,丢弃(陈旧/外来问句): ${req.requestId}`);
+      console.warn(`[session-store] 提问到达时无可答会话进程,照存不投(待水合): ${req.requestId}`);
       return;
     }
     if (req.sessionKey !== "") {
       const hit = candidates.some((p) => p.backend.sessionId && p.backend.sessionId === req.sessionKey);
-      if (!hit) return; // 别的会话的提问,不投给当前视图
+      if (!hit) return; // 别的会话的提问,不投给当前视图(已落账,不丢)
     }
     for (const cb of this.questionListeners) {
       try { cb(req); } catch (err) { console.error("[session-store] 提问监听器抛错已隔离:", err); }
@@ -1346,6 +1610,11 @@ export class SessionStore implements
    *  renderer 拼一个 SessionModelPrefs 传下来,这里一次编排「模型对齐→强度对齐→发消息」,
    *  不再由 renderer 逐条 setModel/setThinkingLevel/sync。 */
   async prompt(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs): Promise<void> {
+    // 发送前对账(ask-design §6.6)必须先于一切 spawn:setModel→ensureForSend 会起进程,
+    // pi 在 spawn 时把会话文件读进内存且不重读——对账若排在其后,闭合的 cancelled
+    // toolResult 落盘了但进程内存里仍是悬空 tool_use,下一请求照样被 provider 400。
+    // 所以这里先闭合悬空记录(纯文件/catalog 操作,不依赖进程),再走模型对齐与发送。
+    await this.reconcilePendingQuestionsBeforeSend();
     // 无显式偏好时的服务端兜底:读中立层会话头已持久化的模型域(setModel 落)。
     // 覆盖「重开历史 dsh 会话再发」——renderer 对已开会话不传偏好,此前这种发送
     // 拿不到模型/内核归属,要么落空要么撞全局 activeKernel 的偶然态;现在按头读回,
@@ -1528,11 +1797,13 @@ export class SessionStore implements
     const currentKernel = this.activeKernel;
     this.activeKernel = targetKernel;
     await this.ensureForSend(targetKernel, provider, modelId);
-    const proc = this.activeProc();
+    let proc = this.activeProc();
     if (!proc) throw new Error("内核未启动");
     // 新会话壳:spawn 时内核已在会话文件落 model_change 条目,但基线 sync 的「全元数据不冲掉
     // 乐观消息」守卫让它永不进 live 视图流(只在刷新后补现)——补一条合成分隔线直投视图流。
     const freshSpawn = !proc.touched;
+    // 先留旧账本再等差量判读:effectiveModel 在下方即被写成目标值,判「已生效」要用旧值。
+    const prevEffectiveModel = proc.effectiveModel ?? proc.model;
     // 记中立模型引用(§9.3/§11):跨切换模型中立化的持久载体,setModel 成功即更新。
     // 不依赖 latestSnapshot(dsh 无快照面恒 null),经受得住完整 pi→dsh→pi 往返。
     proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target.reasoning }) };
@@ -1548,18 +1819,26 @@ export class SessionStore implements
     // 若 pi/dsh 有同名模型(同 provider+id),「已生效」判据会误命中旧内核快照、跳过 set_model,
     // 新内核后端停在握手默认值——内核切换必须强制重发,不参与差量跳过。
     let alreadyEffective = targetKernel === currentKernel && !!cur && cur.provider === provider && cur.id === modelId;
-    // 无运行时切模能力的内核(能力探测,非内核身份分支):模型在起进程握手时定死,
-    // 「已生效」的真相源是起进程模型 proc.model,不是快照——dsh 无快照面,latestSnapshot
-    // 恒 null,旧判据恒「未生效」→ 每次发送都重发 session/setModel;该方法在部分 dsh
-    // 运行时是坏面(报 "cannot get property sessions without inject"),第二发起每次发送
-    // 都被它打断(「dsh 不能发送第二条语句」的根因)。模型失配已由 ensureForSend
-    // 停旧起新处理,走到这里进程模型必然 = 目标模型,判「已生效」跳过坏面调用。
-    if (!alreadyEffective && !proc.backend.capabilities.pi && proc.model
-      && proc.model.provider === provider && proc.model.modelId === modelId) {
-      alreadyEffective = true;
+    // 无快照面内核(dsh)的「已生效」真相源是壳侧账本 effectiveModel 的旧值
+    // (prevEffectiveModel,setModel 成功才更新;spawn 时 createProc 已按握手值初始化),
+    // 不是快照(dsh 恒 null)。热切落地后 proc.model 是 spawn 定死值、不再代表生效值——
+    // 勿回退读它(旧判据恒「未生效」→ 每次发送都重发 session/setModel,该方法在旧运行时
+    // 是坏面,第二发起每次发送都被打断,即「dsh 不能发送第二条语句」的根因;
+    // docs/model-switching.md §11.3)。
+    if (!alreadyEffective && !proc.backend.capabilities.pi) {
+      if (prevEffectiveModel && prevEffectiveModel.provider === provider && prevEffectiveModel.modelId === modelId) alreadyEffective = true;
     }
     if (!alreadyEffective) {
       await proc.backend.setModel(provider, modelId);
+      if (!proc.backend.supportsRuntimeSetModel) {
+        // 本次调用刚发现缺面(懒探测同步记进 missing):热切无路,现场回落停旧起新——
+        // ensureForSend 的 needsRestart 此刻按能力位判 true,带目标模型重建;新 proc 的
+        // model/effectiveModel 由 createProc 按握手参数初始化,补记中立引用与生效值即可。
+        await this.ensureForSend(targetKernel, provider, modelId);
+        proc = this.activeProc() ?? proc;
+        proc.lastModelRef = { ref: classifyModel({ id: modelId, reasoning: target.reasoning }) };
+        proc.effectiveModel = { provider, modelId, kernel: targetKernel };
+      }
     }
     // 模型分隔线直投视图流:值变化(!alreadyEffective)或新会话壳(spawn 已落但基线守卫挡住 live)。
     if (!alreadyEffective || freshSpawn) {
@@ -1640,7 +1919,7 @@ export class SessionStore implements
       cwd, agentDir: this.agentDir, kernel, neutralSessionId: key, provider, model: modelId, ephemeral: true,
     });
     const proc: SessionProc = {
-      backend, kernel, neutralSessionId: key, cwd, key, boundSessionPath: null,
+      backend, kernel, neutralSessionId: key, nonce: randomUUID(), cwd, key, boundSessionPath: null,
       genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0,
       turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false,
       configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), lastModelRef: null,
@@ -1755,39 +2034,6 @@ export class SessionStore implements
     await this.asPi(proc).abortRetry();
   }
 
-  /** 继续执行（第八意图）：异常停机后原地续跑，不 fork、不重发旧消息。
-   *  经中立 backend.continue?（pi=followUp 翻译，dsh=session/continue RPC），缺面内核显式抛错。
-   *  text 可选：要注入的续跑提示（goal 续跑用），不落 user 消息（followUp/session/continue 语义）。
-   *  prefs 可选:renderer 三级解析的模型偏好(全新会话首轮续跑也有归属)。
-   *  进程未起兜底(根因修复):模型走「点选=pending、发送=落盘」时,从未发送的会话没有活进程,
-   *  continue 曾直接抛错被 goal 引擎吞掉(首轮永卡 1/256)。此处 prefs 优先、中立头行兜底,
-   *  ensureForSend 懒起进程(与 prompt 的未启动路径同源),查无实据才显式报错。 */
-  async continue(text?: string, prefs?: SessionModelPrefs): Promise<void> {
-    let proc = this.activeProc();
-    if (!proc || !proc.backend.alive) {
-      // 进程未起:renderer 三级解析的 prefs 优先(全新会话首轮续跑也有模型归属),
-      // 否则读中立头行(重开历史会话续聊)——两路都没有才显式报错。
-      const fromPrefs = prefs?.provider && prefs?.modelId && prefs.kernel
-        ? { provider: prefs.provider, modelId: prefs.modelId, kernel: prefs.kernel }
-        : null;
-      const resolved = fromPrefs ?? (() => {
-        const ns = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
-        const headerPrefs = ns ? parseSessionModelPrefs(this.neutralStore?.get(ns)?.header.custom ?? undefined) : null;
-        return headerPrefs?.provider && headerPrefs?.modelId && headerPrefs.kernel
-          ? { provider: headerPrefs.provider, modelId: headerPrefs.modelId, kernel: headerPrefs.kernel }
-          : null;
-      })();
-      if (resolved) {
-        await this.setModel(resolved.provider, resolved.modelId, resolved.kernel); // 内部 ensureForSend 起进程
-        proc = this.activeProc();
-      }
-    }
-    if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
-    if (!proc.backend.continue) throw new Error("当前内核不支持继续执行");
-    await proc.backend.continue(text);
-    proc.touched = true;
-  }
-
   // ============ ModelApi ============
 
   async cycleModel(): Promise<void> {
@@ -1884,6 +2130,7 @@ export class SessionStore implements
       }
     }
     proc.backend = newBackend;
+    proc.nonce = randomUUID(); // 换绑即换出生证(materialize 重建进程,旧提问走续路)
     proc.boundSessionPath = newBackend.capabilities.pi ? newSessionId : null;
     proc.configSnapshot = this.captureConfigSnapshot(newBackend.configDepPaths ?? []);
     this.bindProcEvents(proc);
@@ -2107,6 +2354,22 @@ export class SessionStore implements
       if (typeof name === "string" && name && this.activeSessionPath) {
         void this.writeNeutralHeader(this.activeSessionPath, { name }).catch(() => {});
       }
+    }
+    // ask 落账对账(ask-design §4.3):ask_user_question 的 toolCallStart 捕获 toolCallId +
+    // 模型原始 questions(真实 q.id 的唯一来源,帧/文件里的 id 是合成物)。
+    if (event.type === "toolCallStart" && proc) {
+      const toolName = (event as { toolName?: unknown }).toolName;
+      if (toolName === "ask_user_question") {
+        const tcId = (event as { toolCallId?: unknown }).toolCallId;
+        proc.lastAskToolCallId = typeof tcId === "string" && tcId ? tcId : undefined;
+        const args = (event as { args?: unknown }).args as { questions?: unknown } | undefined;
+        proc.lastAskQuestions = Array.isArray(args?.questions) ? (args.questions as Question[]) : undefined;
+      }
+    }
+    // ask 对账(§5.3):toolCallEnd 命中 pending 记录 → 结算(覆盖 abort 等不经卡片的收尾)。
+    if (event.type === "toolCallEnd") {
+      const tcId = (event as { toolCallId?: unknown }).toolCallId;
+      if (typeof tcId === "string" && tcId) this.settleQuestionByToolCallEnd(tcId, event);
     }
     if (event.type === "agentStart") {
       this.busyStates.set(key, true);

@@ -7,5 +7,16 @@
   "goal.roundCard.title": "Goal round",
   "goal.roundCard.roundOf": "Round {{round}}/{{max}}",
   "goal.roundCard.toggle": "Toggle continuation prompt text",
-  "goal.bar.achieved": "Goal achieved"
+  "goal.bar.achieved": "Goal achieved",
+  "goal.settings.group": "Goal",
+  "goal.settings.maxRounds": "Continuation round limit",
+  "goal.settings.maxRoundsDesc": "Default when a goal does not set its own limit; applies to new goals only. Use /goal limit <n> for a running goal.",
+  "goal.note.pause": "Goal continuation paused",
+  "goal.note.resume": "Goal continuation resumed",
+  "goal.note.edit": "Objective edited: {{detail}}",
+  "goal.note.limit": "Round limit set to {{detail}}",
+  "goal.note.clear": "Goal cleared",
+  "goal.note.auto_pause_error": "Turn ended with an error; goal auto-paused",
+  "goal.note.auto_pause_interrupt": "Turn interrupted; goal auto-paused",
+  "goal.note.send_failed": "Continuation send failed; goal auto-paused: {{detail}}"
 }

@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
-  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo, SessionRawFilePaths,
+  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo, SessionRawFilePaths, PendingQuestionRecord,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage, ConnectionInfo,
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
@@ -121,6 +121,8 @@ export interface KernelApi {
     readToolConfig: (sessionPath: string) => Promise<SessionToolConfig | null>;
     renameSession: (sessionPath: string, name: string) => Promise<{ ok: boolean }>;
     updateHeader: (sessionPath: string, patch: HeaderPatch) => Promise<{ ok: boolean }>;
+    /** 中立层会话注解(docs/design/goal.md §8.3):只写中立层不进内核,渲染由 messageRenderers 槽认领。 */
+    annotate: (sessionPath: string, customType: string, content: string) => Promise<void>;
     deleteSessions: (paths: string[]) => Promise<{ ok: boolean }>;
     list: (cwd: string) => Promise<SessionInfo[]>;
     /** 解析会话可打开的原始文件地址(中立层文件 + 内核原始文件;不存在返回 null 项)。 */
@@ -138,6 +140,8 @@ export interface KernelApi {
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
     onQuestion: (cb: (req: QuestionRequestEvent) => void) => () => void;
     answerQuestion: (requestId: string, answers: QuestionAnswer[]) => Promise<void>;
+    /** 读激活会话的挂起提问记录(ask 续问;卡片复活用,docs/design/ask-design.md §3.2)。 */
+    getPendingQuestions: () => Promise<PendingQuestionRecord[]>;
     listTools: () => Promise<KnownToolInfo[] | null>;
     onSnapshot: (cb: (snapshot: SyncSnapshot) => void) => () => void;
     /** 中立层基线读 + 写穿回执订阅(session-single-source §3.2,镜像数据源)。 */
@@ -145,7 +149,6 @@ export interface KernelApi {
     onNeutralChange: (cb: (change: unknown) => void) => () => void;
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: SessionModelPrefs) => Promise<void>;
     abort: () => Promise<void>;
-    continue: (text?: string, prefs?: SessionModelPrefs) => Promise<void>;
     getModels: () => Promise<unknown[]>;
     setModel: (provider: string, modelId: string, kernel: KernelId) => Promise<void>;
     /** 模型连通性测试(内核隔离临时会话 ping;对应 domain ModelApi.test) */
@@ -326,7 +329,7 @@ export type {
 } from "@my-harness-desktop/shared";
 
 export { RECOMMENDED_PLUGIN_TAGS, toolCallsOf, thinkingBlocksOf } from "@my-harness-desktop/shared";
-export { DEFAULT_GROUP_IDS } from "@my-harness-desktop/shared";
+export { DEFAULT_GROUP_IDS, matchComposerCommandName } from "@my-harness-desktop/shared";
 export {
   GENERAL_CONFIG_PATH,
   SIDEBAR_STYLE_PRESETS, SIDEBAR_STYLE_PRESET_MAP, type SidebarStyle,

@@ -30,6 +30,7 @@ import {
 import { SessionStore } from "../application/sessions/session-store";
 
 import { NeutralSessionStore } from "../application/sessions/neutral-session-store";
+import { PendingQuestionStore } from "../application/sessions/pending-question-store";
 import type { BackendFactory, SessionCatalogFactory } from "@my-harness-desktop/shared";
 import type { PiSettingsApi, KernelModelsRegistry, KernelConfigApi } from "@my-harness-desktop/shared";
 import type { KernelId } from "@my-harness-desktop/shared";
@@ -170,6 +171,9 @@ dshConfigSource.ensureAgentCoreSkillForkBase();
 // 凭证服务:llm-pi-ai 的 resolveApiKey 经 ctx.credentials 读 ~/.dsh/.credentials.yaml——
 // 缺了 credentials-local 插件,桌面端写进凭证库的 key 永远读不到(实测 MISSING_CREDENTIAL)。
 dshConfigSource.ensureCredentialsPlugin();
+// ask 续问前提(docs/design/ask-design.md §5.2):sessions 持久化插件跑明文诊断模式
+// (compression:'none' + packChunks:false),壳才能在进程死亡窗口往会话日志追加 tool/result。
+dshConfigSource.ensurePlainSessionLog();
 // 清理悬空默认:agent-default-model 可能指向已删路由(如废弃的 deepseek-official 官方路由)
 // → 清掉指针,回落首个 provider/模型。fire-and-forget,不阻断启动(与 dshDefaultProviderModel 的
 // 运行时校验双保险:即便这里没清掉,spawn 兜底也不会再落到死路由)。
@@ -281,7 +285,9 @@ const dshCliPath = (): string | undefined => {
 };
 // dsh 默认 provider/模型(纯自定义):agent-default-model → 首个 provider/模型 → 空串。
 // baseBackendFactory(spawn 会话进程)与 sessionCatalogFactory(目录 transport)共用同源兜底,
-// 不再写死 deepseek-official。dsh 无 session/setModel,模型只能在 initialize 握手时定。
+// 不再写死 deepseek-official。dsh 模型在 initialize 握手定;运行时热切由内核插件补丁提供
+// (installModelSelection 原地热切,docs/model-switching.md §11.1),补丁缺席的旧运行时
+// 缺 session/setModel → 壳按 supportsRuntimeSetModel 回落停旧起新。
 // 校验:agent-default-model 可能指向已删路由(如旧 deepseek-official 官方路由已废弃),此时回落首个 provider。
 const dshDefaultProviderModel = (): { provider: string; model: string } => {
   const providers = dshConfigSource.listProviders();
@@ -310,6 +316,8 @@ const sessionStore = new SessionStore(
   modelCatalog,
   // 收藏快照目录(项目级,跟随 cwd):快照是中立物化前缀,存 <cwd>/.my-harness-desktop/bookmarks/。
   (cwd) => join(cwd, ".my-harness-desktop", "bookmarks"),
+  // 挂起提问请求单(ask-design §4.3):壳持有的持久存储,进程生死不影响其存续。
+  new PendingQuestionStore(join(MY_HARNESS_DESKTOP_DIR, "pending-questions")),
 );
 sessionStore.onEvent((event) => {
   gateway.broadcast("session:event", event);

@@ -65,11 +65,15 @@ export function buildDshSeedSession(lineage: NeutralEntry[], opts: SeedOptions):
     lineages: [{
       lineageId: opts.lineageId,
       fork: null,
-      entries: lineage.map(({ neutralEntryId, kernelEntryId, message }) => ({
-        neutralEntryId,
-        ...(kernelEntryId !== undefined ? { kernelEntryId } : {}),
-        message,
-      })),
+      // 只投影对话内容条目(user/assistant/toolResult):divider/注解(中立层会话注解,
+      // 自定义 role)是壳的展示数据,不进内核投影——与 piSeedSession 的过滤同口径。
+      entries: lineage
+        .filter((e) => ["user", "assistant", "toolResult"].includes(e.message.role))
+        .map(({ neutralEntryId, kernelEntryId, message }) => ({
+          neutralEntryId,
+          ...(kernelEntryId !== undefined ? { kernelEntryId } : {}),
+          message,
+        })),
     }],
   };
 }
@@ -85,6 +89,13 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   override readonly capabilities: { dsh: DshCapabilities } = {
     dsh: { missing: this.missingMethods, onMissing: null },
   };
+
+  /** 能力轴(docs/model-switching.md §11.2):运行时切模型 = session/setModel 不缺面。
+   *  未探测过按乐观 true(第一次调用见真章);懒探测记缺面后翻 false,壳据此把
+   *  模型失配回落成停旧起新。 */
+  override get supportsRuntimeSetModel(): boolean {
+    return !this.missingMethods.has(DSH_METHODS.sessionSetModel);
+  }
 
   /** 带流式状态的翻译器(每会话进程一个):assistant/chunk 增量组装成 messageStart/Update。
    *  初值带 spawn 握手的 provider/model:request/header 派生分隔线只在「实际生效配置 ≠
@@ -210,24 +221,6 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
 
   async abort(): Promise<void> {
     await this.requestSession(DSH_METHODS.sessionAbort, { sessionId: this.sessionId });
-  }
-
-  /** 继续执行（第八意图）：dsh 走 session/continue RPC，服务端按 turn/end reason 语义分发
-   *  （重挂 goal 或注入续跑提示）。懒探测缺面：旧 dsh 内核无此方法 → 记缺面 + 抛清晰错误。
-   *
-   *  带 text 时(根因修复,勿回退):改用 session/prompt 真发文本。dsh 的 session/continue
-   *  「重挂 goal」只对 dsh **原生** goal 有效——桌面的 goal 是壳层状态机(dsh 服务端无此
-   *  goal),continue 重挂落空:turn/end reason=completed 时服务端什么都不起,续跑提示
-   *  又被静默丢弃,桌面 goal 在 dsh 下首轮即空转(「只发两轮就停」的 dsh 侧根因)。
-   *  真发文本后:内核落 user/message,时间线由 goal 插件的 auxParser 把 <goal_round>
-   *  包装渲成目标续跑卡(另一种展示,不冒充用户气泡);无文本(异常停机原地续跑)仍走
-   *  session/continue 原语义。 */
-  async continue(text?: string): Promise<void> {
-    if (text !== undefined && text !== "") {
-      await this.sendMessage(text);
-      return;
-    }
-    await this.requestSession(DSH_METHODS.sessionContinue, { sessionId: this.sessionId });
   }
 
   /** 回答一次提问:写答案文件(dsh ask 扩展轮询读取;文件侧车桥封装进适配器)。 */

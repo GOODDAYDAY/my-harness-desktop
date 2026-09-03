@@ -342,6 +342,9 @@ const kernel = {
       transport.invoke(IPC.session.rename, sessionPath, name),
     updateHeader: (sessionPath: string, patch: HeaderPatch): Promise<{ ok: boolean }> =>
       transport.invoke(IPC.session.updateHeader, sessionPath, patch),
+    // 中立层会话注解(机制面):只写中立层不进内核,渲染由 messageRenderers 槽按 role 认领
+    annotate: (sessionPath: string, customType: string, content: string): Promise<void> =>
+      transport.invoke(IPC.session.annotate, sessionPath, customType, content),
     deleteSessions: (paths: string[]): Promise<{ ok: boolean }> =>
       transport.invoke(IPC.session.delete, paths),
     list: (cwd: string): Promise<unknown[]> => transport.invoke(IPC.sessions.list, cwd),
@@ -375,6 +378,8 @@ const kernel = {
     },
     answerQuestion: (requestId: string, answers: unknown): Promise<void> =>
       transport.invoke(IPC.session.answerQuestion, requestId, answers),
+    getPendingQuestions: (): Promise<unknown> =>
+      transport.invoke(IPC.session.pendingQuestions),
     listTools: (): Promise<unknown> =>
       transport.invoke(IPC.session.listTools),
     onSnapshot: (cb: (snapshot: unknown) => void): (() => void) => {
@@ -393,7 +398,6 @@ const kernel = {
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: unknown): Promise<void> =>
       transport.invoke(IPC.session.prompt, text, images, display, prefs),
     abort: (): Promise<void> => transport.invoke(IPC.session.abort),
-    continue: (text?: string, prefs?: unknown): Promise<void> => transport.invoke(IPC.session.continue, text, prefs),
     // ModelApi
     getModels: (): Promise<unknown[]> => transport.invoke(IPC.session.getModels),
     setModel: (provider: string, modelId: string, kernel: KernelId): Promise<void> =>

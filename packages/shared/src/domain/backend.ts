@@ -100,12 +100,6 @@ export interface BaseBackend {
    *  pi 无此面（现场 fork 由 session-store 编排），壳经 `backend.resume?` 探测。 */
   resume?(anchor: Anchor): Promise<string>;
 
-  /** 继续当前会话执行（第八意图，§2.4 之外的会话级意图）：异常停机（工具失败/LLM 失败/
-   *  max-tokens/崩溃/取消）后原地续跑，不 fork、不重发旧消息。可缺面：内核不支持则壳显式降级。
-   *  dsh=session/continue RPC（服务端按 turn/end reason 语义分发）；pi=followUp 一条「继续」提示（适配器翻译）。
-   *  text 可选：要注入的续跑提示（goal 续跑用「继续目标」的具体文案）；缺省用内核自带的通用「继续」。 */
-  continue?(text?: string): Promise<void>;
-
   /** 删除一个书签锚点(回收后端自留的副本)。非 pi 后端若不支持可抛错。 */
   deleteBookmark(anchor: Anchor): Promise<void>;
 
@@ -117,6 +111,12 @@ export interface BaseBackend {
 
   /** 切模型。 */
   setModel(provider: string, modelId: string): Promise<void>;
+
+  /** 能力轴:运行时切模型对本后端已物化的会话是否生效(docs/model-switching.md §11.2)。
+   *  乐观默认 true——setModel 本是必实现契约;内核/运行时无热切能力时置 false(如 dsh
+   *  旧运行时缺 session/setModel,懒探测记缺面后翻转),壳据此让「模型失配」回落停旧
+   *  起新,而不是盲目 RPC。 */
+  readonly supportsRuntimeSetModel: boolean;
 
   /** 设置思考强度档位(会话级状态,与 setModel 同级)。可缺面:pi=set_thinking_level RPC;
    *  dsh 无运行时切换(reasoningEffort 只在 initialize/settings.yaml 定)→ 显式降级抛错。
@@ -319,7 +319,22 @@ export interface SessionCatalog {
 
   /** 删除书签锚点(回收副本)。同步:pi 是 rmSync。 */
   deleteBookmark(anchor: Anchor): void;
+
+  /**
+   * 迟到的工具结果补写(ask 续问的续路面,docs/design/ask-design.md §5):
+   * 把 toolResult 直接追加进内核会话存储——pi=会话 JSONL 追加 message 条目;
+   * dsh=明文会话日志追加 tool/result 事件。仅在「提问发起进程已死」的续路调用
+   * (活路由内核自己铸造);调用前调用方已停掉同槽位存活进程。
+   * cwd 仅供需要按桶定位存储的内核(dsh)使用;pi 的 sessionId 即文件路径,忽略之。
+   * 可缺面:内核无此写面则缺省不存在,壳显式降级(用户消息通道),不静默不伪造。
+   */
+  appendToolResult?(sessionId: string, toolCallId: string, outcome: ToolResultWriteback, cwd?: string): Promise<void>;
 }
+
+/** 补写的工具结果内容:正常答案(cancelled 缺省/false)或取消标记(cancelled=true → isError 落盘)。 */
+export type ToolResultWriteback =
+  | { answers: QuestionAnswer[]; cancelled?: false }
+  | { cancelled: true };
 
 /**
  * 目录/CRUD 工厂:产出某内核的 SessionCatalog。依赖倒置——application 只依赖本接口,

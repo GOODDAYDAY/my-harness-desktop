@@ -8,10 +8,33 @@ import {
   parseSetGoalArgs,
   pauseGoal,
   resumeGoal,
+  setGoalMaxRounds,
   shouldContinue,
 } from "./goal-state";
 
 describe("goal 状态机(圆心纯函数)", () => {
+  it("代码兜底上限是 1000(通用配置 goal.maxRounds 可覆盖,见 docs/design/goal.md §5.3)", () => {
+    expect(DEFAULT_MAX_GOAL_ROUNDS).toBe(1000);
+  });
+
+  it("setGoalMaxRounds 只换上限:轮次/阶段/目标不动,到顶目标提高后 shouldContinue 重新成立", () => {
+    const topped = { ...createGoal({ objective: "x", maxRounds: 2 }), round: 2 };
+    expect(shouldContinue(topped)).toBe(false); // 到顶停摆
+    const raised = setGoalMaxRounds(topped, 5);
+    expect(raised.maxRounds).toBe(5);
+    expect(raised.round).toBe(2); // 轮次不回滚
+    expect(raised.phase).toBe("active"); // 阶段不动
+    expect(raised.objective).toBe("x");
+    expect(shouldContinue(raised)).toBe(true); // 提高上限 → 恢复续跑资格
+  });
+
+  it("setGoalMaxRounds 拒绝非正整数", () => {
+    const g = createGoal({ objective: "x" });
+    expect(() => setGoalMaxRounds(g, 0)).toThrow();
+    expect(() => setGoalMaxRounds(g, -3)).toThrow();
+    expect(() => setGoalMaxRounds(g, 1.5)).toThrow();
+  });
+
   it("create 产出 active + round=0 + 默认 maxRounds", () => {
     const g = createGoal({ objective: "重构 auth 模块" });
     expect(g.phase).toBe("active");
@@ -47,8 +70,7 @@ describe("goal 状态机(圆心纯函数)", () => {
   });
 
   it("shouldContinue:active 且未达上限才续跑", () => {
-    const active = createGoal({ objective: "x", maxRounds: 2 });
-    expect(shouldContinue(active)).toBe(true);
+    const active = createGoal({ objective: "x", maxRounds: 2 });    expect(shouldContinue(active)).toBe(true);
     expect(shouldContinue({ ...active, round: 1 })).toBe(true);
     expect(shouldContinue({ ...active, round: 2 })).toBe(false); // 达上限
     expect(shouldContinue(achieveGoal(active))).toBe(false); // 已达成

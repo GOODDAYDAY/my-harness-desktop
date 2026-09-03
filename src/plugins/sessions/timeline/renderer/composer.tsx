@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
-import { PluginIcon, type ModelInfo, type CommandItem } from "@my-harness-desktop/react";
+import { PluginIcon, type ModelInfo, type CommandItem, matchComposerCommandName } from "@my-harness-desktop/react";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 
 /** 思考强度 level 值 → i18n key 后缀。 */
@@ -89,7 +89,7 @@ function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
     }
   }, [selectedIndex]);
   return createPortal(
-    <div ref={containerRef} style={{ position: "fixed", top: position.top, left: position.left, transform: "translateY(-100%)", ...menuStyle, maxHeight: `${MAX_VISIBLE * 32 + 8}px`, overflowY: "auto" }}>
+    <div ref={containerRef} data-slash-popup style={{ position: "fixed", top: position.top, left: position.left, transform: "translateY(-100%)", ...menuStyle, maxHeight: `${MAX_VISIBLE * 32 + 8}px`, overflowY: "auto" }}>
       {matches.map((cmd, i) => {
         const badge = SOURCE_BADGE[cmd.source] ?? SOURCE_BADGE.extension;
         return (
@@ -239,6 +239,15 @@ export function Composer({
     return firstLine.slice(1);
   }, [value]);
 
+  // 命令生效高亮(设计 docs/design/goal.md §7.2):输入以已注册命令名整词开头 → 药丸主色边框
+  // + 命令 chip。判定与发送前拦截同圆心纯函数(matchComposerCommandName),看着生效=实际生效;
+  // 内核命令与插件命令同享,goal 零感知。
+  const matchedCommand = useMemo((): CommandItem | null => {
+    if (!commands?.length) return null;
+    const name = matchComposerCommandName(value, commands.map((c) => c.name));
+    return name ? (commands.find((c) => c.name.toLowerCase() === name.toLowerCase()) ?? null) : null;
+  }, [value, commands]);
+
   const slashMatches = useMemo((): CommandItem[] => {
     if (slashQuery === null || !commands?.length) return [];
     const q = slashQuery.toLowerCase();
@@ -294,8 +303,16 @@ export function Composer({
       )}
       <div
         data-goal-active={goalActive ? "true" : undefined}
-        className={`flex flex-col w-full rounded-[16px] px-2 py-2 bg-[var(--color-surface)] shadow-[var(--shadow-md)] border border-[var(--color-border)]${glowOn ? " pi-composer-thinking" : ""}${glowFading ? " pi-composer-fadeout" : ""}${goalActive ? " pi-composer-goal" : ""}`}
+        data-command-active={matchedCommand ? "true" : undefined}
+        className={`flex flex-col w-full rounded-[16px] px-2 py-2 bg-[var(--color-surface)] shadow-[var(--shadow-md)] border border-[var(--color-border)]${glowOn ? " pi-composer-thinking" : ""}${glowFading ? " pi-composer-fadeout" : ""}${goalActive ? " pi-composer-goal" : ""}${matchedCommand ? " pi-composer-command" : ""}`}
       >
+        {matchedCommand && (
+          <div className="pi-composer-command-chip" data-command-chip>
+            /{matchedCommand.name}
+            <span style={{ color: "var(--color-muted)" }}>·</span>
+            <span style={{ color: "var(--color-muted)" }}>{(SOURCE_BADGE[matchedCommand.source] ?? SOURCE_BADGE.extension).label}</span>
+          </div>
+        )}
         <textarea
           {...rest}
           ref={textareaRef}

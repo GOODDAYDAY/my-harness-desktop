@@ -20,15 +20,27 @@
 // 否则没有任何东西会触发 agentSettled,active 目标会静默停摆;忙时交给在飞回合的 agentSettled。
 // (/goal set 不装弹:目标正文消息本身就是 kickoff 回合,它的 agentSettled 自然接第一轮。)
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePluginContext, useUiStore } from "@my-harness-desktop/react";
-import type { ComposerCommandResult } from "@my-harness-desktop/shared";
+import { usePluginContext, useUiStore, useSessionStore } from "@my-harness-desktop/react";
+import type { ComposerCommandResult, NeutralMessage } from "@my-harness-desktop/shared";
 import type { GoalState } from "../core/goal-state";
-import { createGoal, editGoal, parseGoal, parseGoalCommand, pauseGoal, resumeGoal, shouldContinue } from "../core/goal-state";
+import { createGoal, editGoal, GOAL_NOTE_ROLE, parseGoal, parseGoalCommand, pauseGoal, resumeGoal, setGoalMaxRounds, shouldContinue } from "../core/goal-state";
 import { applyGoalEvent, renderContinuationPrompt } from "./goal-reduce";
 
 export const GOAL_USAGE =
   "/goal <目标> 设置目标并开始续跑\n"
-  + "/goal stop 暂停 · /goal resume 恢复 · /goal edit <新目标> 改 · /goal clear 删除 · /goal 查看状态";
+  + "/goal stop 暂停 · /goal resume 恢复 · /goal edit <新目标> 改 · /goal limit <n> 改上限 · /goal clear 删除 · /goal 查看状态";
+
+/** 续跑发送的有界重试(§6.4):首发 + 2 次退避重试,耗尽转 paused 显形。 */
+const MAX_SEND_ATTEMPTS = 3;
+const SEND_RETRY_DELAYS_MS = [1000, 2000];
+
+/** 通用配置(goal.maxRounds,settingsGroups 槽落 general.json)提供的默认轮数上限。
+ *  只在创建目标时读取(配置管默认、状态管存量,设计 §5.3/§11);非正整数回退代码兜底。
+ *  只读框架 store(§8.2 允许),非渲染闭包——创建动作发生时读最新值。 */
+function configuredMaxRounds(): number | undefined {
+  const v = useUiStore.getState().generalConfig["goal.maxRounds"];
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= 1 ? v : undefined;
+}
 
 /** 模块级桥:composerCommands.handle 是 plugins-host 收集的静态函数,控制器活在 React hook 里。
  *  GoalBar(composerStats 槽)与 composer 同时挂载,命令到来时控制器必在;无控制器(插件被禁)→ 放行。 */
@@ -41,17 +53,29 @@ let activeCommandHandler: ((input: string) => Promise<ComposerCommandResult>) | 
  *  后者按新会话头行换档。 */
 let currentGoal: GoalState | null = null;
 let goalBirthPath: string | null = null;
+/** 最近一次续跑发送的失败原因(引擎态,不落 GoalState——状态机纯数据不含瞬态)。
+ *  与目标态同级模块级(抗重挂载);成功发送/恢复/清除时清掉。 */
+let lastSendError: string | null = null;
 const goalListeners = new Set<() => void>();
+function notifyGoalListeners(): void {
+  for (const l of goalListeners) l();
+}
 function setCurrentGoal(next: GoalState | null, birthPath?: string | null): void {
   currentGoal = next;
   if (birthPath !== undefined) goalBirthPath = birthPath;
-  for (const l of goalListeners) l();
+  notifyGoalListeners();
+}
+function setLastSendError(msg: string | null): void {
+  if (lastSendError === msg) return;
+  lastSendError = msg;
+  notifyGoalListeners();
 }
 /** 测试专用:清空模块级目标态(测试间隔离)。 */
 export function __resetGoalStoreForTests(): void {
   currentGoal = null;
   goalBirthPath = null;
-  for (const l of goalListeners) l();
+  lastSendError = null;
+  notifyGoalListeners();
 }
 
 /** 是否有排队中的用户发送(timeline 流式期入队的待发消息)。只读框架 store(§8.2 允许)。
@@ -62,31 +86,48 @@ function userSendPending(): boolean {
   return Object.values(queues).some((list) => list.length > 0);
 }
 
+/** 异常收敛检测(设计 §5.2):回合收敛时看最后一条 assistant 消息的终结标记。
+ *  error=生成/工具失败、stopped=用户中断;两者都视为「异常收敛」——goal 不续跑、转 paused。
+ *  时序依据:messageEnd 先于 agentSettled 派发,终结标记在收敛事件前已落 store。
+ *  只读框架 store(§8.2 允许)。 */
+function lastAssistantTerminal(): "error" | "stopped" | null {
+  const messages = useSessionStore.getState().messages;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as NeutralMessage & { error?: boolean; stopped?: boolean };
+    if (m.role !== "assistant") continue;
+    if (m.error === true) return "error";
+    if (m.stopped === true) return "stopped";
+    return null; // 最近一条 assistant 是正常终结
+  }
+  return null;
+}
+
 /** 供 renderer 入口的 composerCommands 导出调用:转发给当前挂载的控制器。 */
 export function runGoalCommand(input: string): Promise<ComposerCommandResult> {
   const fn = activeCommandHandler;
   return fn ? fn(input) : Promise.resolve(false);
 }
 
-/** goal 续跑 hook:返回当前目标 + 用户控制操作(停止/恢复/编辑/关闭)。 */
+/** goal 续跑 hook:返回当前目标 + 发送失败态 + 用户控制操作(停止/恢复/编辑/关闭)。 */
 export function useGoalController() {
   const { sessions, messaging, notify, events } = usePluginContext();
   const sessionPath = useUiStore((s) => s.currentSessionPath);
   // 初始化读模块级单例(重挂载存活),而不是固定 null。
   const [goal, setGoalState] = useState<GoalState | null>(currentGoal);
+  const [sendError, setSendErrorState] = useState<string | null>(lastSendError);
   const goalRef = useRef<GoalState | null>(currentGoal);
   const inflightRef = useRef(false);
   /** 回合在飞:agentStart 置真 / agentSettled 置假。决定设置/恢复/恢复持久化时是否立即发首轮续跑。 */
   const busyRef = useRef(false);
 
-  /** 单一状态写入口:更新模块级单例(抗重挂载)+ 广播 goal:state(消费方着色用)+ 持久化到会话头行
-   *  custom.goal(clear 时 goal=null 删键)。广播在写入口收口,任何路径变更不漏发。
+  /** 单一状态写入口:更新模块级单例(抗重挂载)+ 广播 goal:state(全量快照,消费方着色用)
+   *  + 持久化到会话头行 custom.goal(clear 时 goal=null 删键)。广播在写入口收口,任何路径变更不漏发。
    *  持久化对「new:」前缀的未物化路径静默失败属预期——物化瞬间由恢复 effect 补写(见下)。 */
   const setGoal = useCallback((next: GoalState | null) => {
     goalRef.current = next;
     setGoalState(next);
     setCurrentGoal(next, sessionPath);
-    events.emit("goal:state", { active: next !== null && next.phase === "active" });
+    events.emit("goal:state", { goal: next });
     if (sessionPath && !sessionPath.startsWith("new:")) {
       void sessions.updateHeader(sessionPath, { custom: { goal: next } }).catch(() => {
         // 持久化失败不阻断续跑(内存态照常),下次变更再写。
@@ -99,20 +140,60 @@ export function useGoalController() {
   const setGoalRef = useRef(setGoal);
   setGoalRef.current = setGoal;
 
-  /** 发一轮续跑提示:经 continue(text) 注入续跑文案(pi=空闲起回合/忙时 followUp、dsh=session/continue),
-   *  不落 user 消息、不在会话框展示——goal 是 desktop 自驱动,不伪造用户输入(用户要求 #4/#5)。
-   *  失败不风暴重试——目标保持 active,下次 agentSettled 自然再续;但失败须显形(不静默),
-   *  此前 catch 全吞导致「首轮进程未起」类失败完全不可见(实测卡死 1/256 无任何线索)。
+  /** 控制动作留痕(设计 §8.3):中立层会话注解,不写内核、不进模型上下文。
+   *  内容是机读 JSON({action, detail?}),卡片渲染时按当前语言翻译——存储与语言解耦。
+   *  未物化(new:)会话没有中立层可写,静默跳过。 */
+  const markNote = useCallback((note: { action: string; detail?: string }) => {
+    const p = sessionPath;
+    if (!p || p.startsWith("new:")) return;
+    void sessions.annotate(p, GOAL_NOTE_ROLE, JSON.stringify(note)).catch(() => {});
+  }, [sessions, sessionPath]);
+
+  /** 发一轮续跑提示:经 messaging.prompt 把续跑文案作为一条普通消息发出（续跑=发消息,
+   *  设计 docs/design/goal.md §3.2——契约无独立 continue 意图;忙态由内核发消息面吸收）。
+   *
+   *  失败显形 + 有界重驱动(§6.4):发送失败做有界退避重试;耗尽后转入 paused + 显形
+   *  (notify + GoalBar 失败态)——发送失败意味着没起新回合,「下次 agentSettled 自然再续」
+   *  是不成立的假设(那个事件不会来),绝不允许目标条亮着 active 实际停摆。
    *
    *  在飞收口时补发欠账(根因修复,勿回退):回合收敛撞上在飞续跑时,此前实现「推进了 round
    *  却丢了 prompt」——轮数空转、目标停摆(「让跑三轮只发两轮」的根因)。现在欠账挂起
-   *  (deferredRef),inflight 落定那一刻按**当时最新状态**重算补发——轮数推进与发送永远成对。 */
+   *  (deferredRef),inflight 落定那一刻按**当时最新状态**重算补发(已暂停/已达成就丢弃)——
+   *  轮数推进与发送永远成对。 */
   const deferredRef = useRef(false);
   const firePrompt = useCallback((prompt: string): void => {
     inflightRef.current = true;
-    void messaging.continue(prompt)
-      .catch((err) => { console.warn(`[goal] 续跑发送失败(目标保持 active,下次收敛再续):`, err); })
-      .finally(() => {
+    void (async () => {
+      try {
+        for (let attempt = 0; attempt < MAX_SEND_ATTEMPTS; attempt++) {
+          if (attempt > 0) {
+            await new Promise((r) => setTimeout(r, SEND_RETRY_DELAYS_MS[attempt - 1]));
+            // 重试前按最新状态确认仍应发:暂停/清除/到顶/用户插队都让重试失效。
+            // (首发不查:调用方已按当时状态判定,且 goalRef 可能还没轮到 setGoal 落定——
+            //  armIfIdle 是先发后写,首发读旧态会把自己否掉。)
+            const g = goalRef.current;
+            if (!g || !shouldContinue(g) || userSendPending()) return;
+          }
+          try {
+            await messaging.prompt(prompt);
+            setLastSendError(null); // 成功清失败态
+            setSendErrorState(null);
+            return;
+          } catch (err) {
+            if (attempt === MAX_SEND_ATTEMPTS - 1) {
+              const msg = err instanceof Error ? err.message : String(err);
+              // 有界重试耗尽 → 转 paused + 显形,把处置权交还给人(resume 即重新驱动)
+              const cur = goalRef.current;
+              if (cur && cur.phase === "active") setGoalRef.current(pauseGoal(cur));
+              setLastSendError(msg);
+              setSendErrorState(msg);
+              void notify.show({ title: "Goal", body: `续跑发送失败,目标已暂停:${msg}` });
+              markNote({ action: "send_failed", detail: msg });
+              return;
+            }
+          }
+        }
+      } finally {
         inflightRef.current = false;
         if (!deferredRef.current) return;
         deferredRef.current = false;
@@ -122,8 +203,9 @@ export function useGoalController() {
         const round = g.round + 1;
         setGoalRef.current({ ...g, round });
         firePrompt(renderContinuationPrompt(g.objective, round, g.maxRounds));
-      });
-  }, [messaging]);
+      }
+    })();
+  }, [messaging, notify, markNote]);
 
   const sendRound = useCallback((g: GoalState, round: number) => {
     firePrompt(renderContinuationPrompt(g.objective, round, g.maxRounds));
@@ -139,11 +221,13 @@ export function useGoalController() {
     return next;
   }, [sendRound]);
 
-  // 模块级单例同步:别处的 setGoal(其它实例/命令桥)变化时本实例跟上(重挂载后读回单例)。
+  // 模块级单例同步:别处的 setGoal(其它实例/命令桥)变化时本实例跟上(重挂载后读回单例);
+  // 失败态同级同步。
   useEffect(() => {
     const l = (): void => {
       goalRef.current = currentGoal;
       setGoalState(currentGoal);
+      setSendErrorState(lastSendError);
     };
     goalListeners.add(l);
     return () => { goalListeners.delete(l); };
@@ -189,7 +273,25 @@ export function useGoalController() {
       // 用户输入插队(#5):回合收敛时若有排队的用户待发消息,本次收敛不续跑也不进轮次——
       // 让 timeline 先把用户消息发出去,等用户消息的回合收敛(队列已清)再续。
       if (event.type === "agentSettled" && userSendPending()) return;
-      const { goal: next, prompt } = applyGoalEvent(goalRef.current, event);
+      // 异常收敛不续跑(设计 §5.2):模型报错/人为中断的回合收敛 → 转 paused,不拿轮次硬烧。
+      if (event.type === "agentSettled" && goalRef.current?.phase === "active") {
+        const terminal = lastAssistantTerminal();
+        if (terminal !== null) {
+          const cur = goalRef.current;
+          if (cur) setGoal(pauseGoal(cur));
+          if (terminal === "error") {
+            const msg = "回合异常结束,目标已暂停(/goal resume 恢复)";
+            setLastSendError(msg);
+            setSendErrorState(msg);
+            void notify.show({ title: "Goal", body: msg });
+            markNote({ action: "auto_pause_error" });
+          } else {
+            markNote({ action: "auto_pause_interrupt" });
+          }
+          return;
+        }
+      }
+      const { goal: next, prompt } = applyGoalEvent(goalRef.current, event, { defaultMaxRounds: configuredMaxRounds() });
       if (prompt !== undefined) {
         // 续跑发送撞上在飞:不丢轮次也不推进空轮——欠账挂起,由 firePrompt 的 inflight
         // 收口按当时最新状态补发(根因修复:旧实现推进 round 却丢 prompt,轮数空转)。
@@ -205,22 +307,77 @@ export function useGoalController() {
     });
   }, [sessions, messaging, setGoal, firePrompt]);
 
-  const pause = useCallback(() => { const g = goalRef.current; if (g) setGoal(pauseGoal(g)); }, [setGoal]);
+  // 后台归账(设计 §9.1):视图流只含激活会话,而 onKernelEvent 带 sessionKey、后台会话也派发。
+  // 后台会话里模型调 set_goal/achieve_goal 时,按来源会话归账写进那个会话自己的头行——
+  // 不丢、不串台、不续跑(驱动只服务激活会话);切回时由恢复 effect 读回。引擎不持后台
+  // 内存态:读头行 → 套状态机迁移 → 写回头行(头行是跨会话唯一真相源)。
+  useEffect(() => {
+    return sessions.onKernelEvent((ke) => {
+      if (ke.kind !== "session") return;
+      const key = ke.sessionKey;
+      if (!key || key === useUiStore.getState().currentSessionPath) return; // 激活会话走视图流
+      if (key.startsWith("new:") || key.startsWith("bus:") || key.startsWith("test:")) return; // 未物化/运维键
+      const ev = ke.event;
+      if (ev.type !== "toolCallStart") return;
+      const toolName = (ev as { toolName?: unknown }).toolName;
+      if (toolName !== "set_goal" && toolName !== "achieve_goal") return;
+      void (async () => {
+        const detail = await sessions.openSession(key).catch(() => null);
+        const custom = (detail as { info?: { custom?: Record<string, unknown> } } | null)?.info?.custom;
+        const cur = parseGoal(custom?.goal);
+        const { goal: next } = applyGoalEvent(cur, ev, { defaultMaxRounds: configuredMaxRounds() });
+        if (next !== cur) await sessions.updateHeader(key, { custom: { goal: next } }).catch(() => {});
+      })();
+    });
+  }, [sessions]);
+
+  const pause = useCallback(() => {
+    const g = goalRef.current;
+    if (!g || g.phase !== "active") return;
+    setGoal(pauseGoal(g));
+    markNote({ action: "pause" });
+  }, [setGoal, markNote]);
   // 恢复即「继续干活」:空闲时立即装下一轮,不等下一次回合收敛(否则 active 但无人触发,停摆)。
-  const resume = useCallback(() => { const g = goalRef.current; if (g) setGoal(armIfIdle(resumeGoal(g))); }, [setGoal, armIfIdle]);
+  // 恢复同时清失败态(上次失败已被处置)。
+  const resume = useCallback(() => {
+    const g = goalRef.current;
+    if (!g || g.phase !== "paused") return;
+    setLastSendError(null);
+    setSendErrorState(null);
+    setGoal(armIfIdle(resumeGoal(g)));
+    markNote({ action: "resume" });
+  }, [setGoal, armIfIdle, markNote]);
   const edit = useCallback((objective: string) => {
     const g = goalRef.current;
+    if (!g || g.phase === "achieved") return;
+    try {
+      setGoal(editGoal(g, objective));
+      markNote({ action: "edit", detail: objective });
+    } catch { /* 空 objective 忽略 */ }
+  }, [setGoal, markNote]);
+  const limit = useCallback((maxRounds: number) => {
+    const g = goalRef.current;
     if (!g) return;
-    try { setGoal(editGoal(g, objective)); } catch { /* 空 objective 忽略 */ }
-  }, [setGoal]);
-  const clear = useCallback(() => setGoal(null), [setGoal]);
+    try {
+      // 到顶停摆(active 但 round 到顶)且空闲时 armIfIdle 立即装弹续跑(§5.3)。
+      setGoal(armIfIdle(setGoalMaxRounds(g, maxRounds)));
+      markNote({ action: "limit", detail: String(maxRounds) });
+    } catch { /* 非正整数忽略 */ }
+  }, [setGoal, armIfIdle, markNote]);
+  const clear = useCallback(() => {
+    if (!goalRef.current) return;
+    setLastSendError(null);
+    setSendErrorState(null);
+    setGoal(null);
+    markNote({ action: "clear" });
+  }, [setGoal, markNote]);
 
   /** 用户 /goal 命令的唯一实现:解析 → 套状态机 → 通知反馈。
    *  返回值语义(ComposerCommandResult):
    *  - set:创建目标(round=0 不装弹)并返回 { send: 目标正文 }——目标正文作为真实用户
    *    消息由 timeline 正常发送(所见即所得:输入框敲什么,会话里就是什么)。kickoff
    *    回合的 agentSettled 自然接第一轮续跑,不再由插件伪造一条包装过的"用户消息"。
-   *  - stop/resume/edit/clear/status:纯命令,吞掉发送(true)。
+   *  - stop/resume/edit/limit/clear/status:纯命令,吞掉发送(true)。
    *  与模型工具同状态机同持久化:人敲 /goal 和模型调 set_goal 落到同一个 GoalState。 */
   const handleCommand = useCallback(async (input: string): Promise<ComposerCommandResult> => {
     const cmd = parseGoalCommand(input);
@@ -232,9 +389,12 @@ export function useGoalController() {
     switch (cmd.kind) {
       case "set": {
         try {
-          // 只建状态,不装弹:kickoff 就是返回 { send } 发出去的那条目标正文,
+          // 只建状态,不装弹:首轮就是返回 { send } 发出去的那条目标正文,
           // 它的回合收敛(agentSettled)自然接第一轮续跑。
-          setGoal(createGoal(cmd.request));
+          // 上限:命令不带 max_rounds → 取通用配置(只在创建时读取,见 configuredMaxRounds)。
+          setLastSendError(null);
+          setSendErrorState(null);
+          setGoal(createGoal({ ...cmd.request, maxRounds: configuredMaxRounds() }));
         } catch {
           void notify.show({ title: "Goal", body: GOAL_USAGE, silent: true });
           return true;
@@ -242,18 +402,25 @@ export function useGoalController() {
         return { send: cmd.request.objective };
       }
       case "pause":
-        if (g) setGoal(pauseGoal(g)); else notifyNoGoal();
+        if (g) pause(); else notifyNoGoal();
         return true;
       case "resume":
-        if (g) setGoal(armIfIdle(resumeGoal(g))); else notifyNoGoal();
+        if (g) resume(); else notifyNoGoal();
         return true;
       case "edit":
         if (!g) { notifyNoGoal(); return true; }
-        try { setGoal(editGoal(g, cmd.objective)); }
-        catch { void notify.show({ title: "Goal", body: GOAL_USAGE, silent: true }); }
+        if (g.phase === "achieved") {
+          void notify.show({ title: "Goal", body: "目标已达成,不可编辑(/goal clear 删除后可设新目标)", silent: true });
+          return true;
+        }
+        edit(cmd.objective);
+        return true;
+      case "limit":
+        if (!g) { notifyNoGoal(); return true; }
+        limit(cmd.maxRounds);
         return true;
       case "clear":
-        setGoal(null);
+        clear();
         return true;
       case "status":
         void notify.show({
@@ -263,7 +430,7 @@ export function useGoalController() {
         });
         return true;
     }
-  }, [notify, setGoal, armIfIdle]);
+  }, [notify, setGoal, armIfIdle, pause, resume, edit, limit, clear]);
 
   // 桥接:把当前控制器挂到模块级入口(静态导出侧)。卸载时只清自己,不误伤后续挂载者。
   const handleCommandRef = useRef(handleCommand);
@@ -274,5 +441,5 @@ export function useGoalController() {
     return () => { if (activeCommandHandler === fn) activeCommandHandler = null; };
   }, []);
 
-  return { goal, pause, resume, edit, clear };
+  return { goal, sendError, pause, resume, edit, clear };
 }

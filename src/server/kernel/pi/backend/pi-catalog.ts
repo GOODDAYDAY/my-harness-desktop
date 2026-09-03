@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import type { SessionInfo, SessionDetail, SessionToolConfig, HeaderPatch } from "@my-harness-desktop/shared";
 import { cwdToBucketName, messageContentText } from "@my-harness-desktop/shared";
 import { sessionEntryToNeutral, deduplicateAdjacent, messageUsageOf, contextSeqItemOf, estimateContextUsageFromSeq, type ContextSeqItem, type NeutralMessage, type SessionStats, type TokenUsage, type ProjectStats, type TreeNode } from "@my-harness-desktop/shared";
-import { projectLineageTree, type LineageTree, type Anchor, type SessionCatalog } from "@my-harness-desktop/shared";
+import { projectLineageTree, type LineageTree, type Anchor, type SessionCatalog, type ToolResultWriteback } from "@my-harness-desktop/shared";
 import { withDirLock, appendJsonlLine } from "../../../application/config/config-file";
 import { removePath, copyFileWithDir } from "../../../client/fs/fs-sync";
 
@@ -589,6 +589,79 @@ export function piGetProjectStats(agentDir: string, cwd: string): ProjectStats {
   return total;
 }
 
+// ============ 迟到的 toolResult 补写(ask 续路面)============
+
+/** 铸造 toolResult 条目(ask-design.md §6.3 Step 2):形状逐字段对齐 pi 的 ToolResultMessage。
+ *  content[0].text = JSON.stringify({answers}) —— 与扩展 ok() 的输出逐字节同构,
+ *  模型看到的工具返回与活路返回无任何形状差别。cancelled 形状与扩展活路取消时逐字对齐。
+ *  toolName 恒为 ask_user_question:本面今天只有 ask 续问一个消费方,第二个工具要用时
+ *  再把 toolName 提进 ToolResultWriteback(契约单源,不提前泛化)。 */
+function buildToolResultEntry(toolCallId: string, outcome: ToolResultWriteback, parentId: string | null): Record<string, unknown> {
+  const cancelled = outcome.cancelled === true;
+  const answers = cancelled ? [] : outcome.answers;
+  return {
+    type: "message",
+    id: randomUUID().slice(0, 8),
+    parentId,
+    timestamp: new Date().toISOString(),
+    message: {
+      role: "toolResult",
+      toolCallId,
+      toolName: "ask_user_question",
+      content: [{ type: "text", text: cancelled ? "User cancelled the question" : JSON.stringify({ answers }) }],
+      details: { answers },
+      isError: cancelled,
+      timestamp: Date.now(),
+    },
+  };
+}
+
+/** pi 续路(ask-design.md §6.3):把迟到的真 toolResult 追加进会话 JSONL。
+ *  前提:调用方已确认发起进程死亡/停掉(运行中的 pi 不会重读会话文件)。
+ *  锚点校验在文件级做真:toolCallId 必须在**活跃路径**(叶子沿 parentId 上溯)上、
+ *  且尚无配对 toolResult——已配对幂等跳过;不在活跃路径抛错,调用方降级用户消息通道。 */
+export async function piAppendToolResult(path: string, toolCallId: string, outcome: ToolResultWriteback): Promise<void> {
+  if (!existsSync(path)) throw new Error(`会话文件不存在: ${path}`);
+  const content = readFileSync(path, "utf-8");
+  const leaf = lastEntryId(content);
+  if (!leaf) throw new Error("会话文件无条目,无法追加 toolResult");
+  // 活跃路径 id 集:从叶子沿 parentId 链上溯(pi JSONL 含全部分支,全文扫会命中旧分支同名 toolCall)。
+  const parentOf = new Map<string, string | null>();
+  const entriesById = new Map<string, Record<string, unknown>>();
+  for (const line of content.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    try {
+      const j = JSON.parse(t) as { id?: unknown; parentId?: unknown };
+      if (typeof j.id === "string") {
+        entriesById.set(j.id, j as Record<string, unknown>);
+        parentOf.set(j.id, typeof j.parentId === "string" ? j.parentId : null);
+      }
+    } catch { /* 损坏行跳过 */ }
+  }
+  const activeIds = new Set<string>();
+  let cur: string | null = leaf;
+  while (cur) {
+    activeIds.add(cur);
+    cur = parentOf.get(cur) ?? null;
+  }
+  let hasCall = false;
+  let hasResult = false;
+  for (const id of activeIds) {
+    const raw = entriesById.get(id);
+    if (!raw || raw.type !== "message" || typeof raw.message !== "object" || !raw.message) continue;
+    const msg = raw.message as Record<string, unknown>;
+    if (msg.role === "toolResult" && msg.toolCallId === toolCallId) hasResult = true;
+    const blocks = Array.isArray(msg.content) ? msg.content : [];
+    for (const b of blocks) {
+      if (b && typeof b === "object" && (b as Record<string, unknown>).type === "toolCall" && (b as Record<string, unknown>).id === toolCallId) hasCall = true;
+    }
+  }
+  if (hasResult) return; // 幂等:已配对,不重复追加
+  if (!hasCall) throw new Error(`锚点不在活跃路径(或不存在): ${toolCallId}`);
+  await appendJsonlLine(path, buildToolResultEntry(toolCallId, outcome, leaf));
+}
+
 // ============ SessionCatalog 实现 ============
 
 /** pi 的 SessionCatalog:目录/CRUD 的 pi 实现,读 pi 的 JSONL 存储。 */
@@ -648,6 +721,11 @@ export class PiSessionCatalog implements SessionCatalog {
 
   async getTree(sessionId: string): Promise<LineageTree> {
     return piReadSessionTree(sessionId);
+  }
+
+  /** 迟到的 toolResult 补写(ask 续路;sessionId = pi 会话文件路径)。 */
+  async appendToolResult(sessionId: string, toolCallId: string, outcome: ToolResultWriteback): Promise<void> {
+    await piAppendToolResult(sessionId, toolCallId, outcome);
   }
 
   bookmark(_cwd: string, lineageId: string, entryId: string): Anchor {

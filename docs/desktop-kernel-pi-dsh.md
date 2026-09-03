@@ -97,7 +97,7 @@
 
 **意图二：中断（`abort`）**。pi = `buildAbortCommand`（`{type:"abort"}`），带 `ABORT_TIMEOUT_MS = 8_000` 快速失败超时——工具不响应 agent signal 时强制放弃不阻塞；dsh = `requestSession(DSH_METHODS.sessionAbort, {sessionId})`，懒探测缺面。`SessionStore.abort` 对 pi 还有"先 `abortBash` 再 `abort`"的双保险（`executeBash` 路径持独立 abortController，`agent.abort` 不覆盖）。
 
-**意图三：模型（`setModel`）**。⚠ 两个内核定模型的时机不对称（`AbstractBackend.setModel` 注释点明）：pi 在 `setModel` 时定（`set_model` RPC），start 时不定；dsh 在 `start` 的 `initialize` 握手时定，`setModel` 因旧运行时缺 `session/setModel` 是 no-op。所以"发起 LLM 前必须先定模型"——dsh 侧要换模型只能停旧进程、带新 provider/model 重启（由 `session-store` 的 `ensureForSend` 编排），不能指望 `setModel` 生效。
+**意图三：模型（`setModel`）**。⚠ 两个内核定模型的时机不对称（`AbstractBackend.setModel` 注释点明）：pi 在 `setModel` 时定（`set_model` RPC），start 时不定；dsh 在 `start` 的 `initialize` 握手时定，运行时热切由内核插件补丁提供（`installModelSelection` 原地热切，见 docs/model-switching.md §11.1）。壳的判据是能力轴 `supportsRuntimeSetModel`：补丁/新运行时在位 → 热切不重启；补丁缺席的旧运行时 → `session/setModel` 懒探测记缺面 + no-op，轴翻 false，`ensureForSend` 回落停旧起新。
 
 **意图四：分支**。`getTree`（拿全部 lineage 及父子/分叉点关系）+ `getEntries`（拿一条 lineage 的线性消息序列）+ `bookmark`（把分叉点持久化成可重启锚点）+ `resume?`（从锚点重启）。分叉点引用 `BoundaryRef = string` 是不透明字符串——pi 把它当 `entryId`，dsh 把它当 `seq` 的字符串化；语义上总指向"父 lineage 里一个完整回合之后的位置"，壳不解析其内容，只当 token 在 fork/bookmark/resume 间回传。
 
@@ -135,7 +135,7 @@
 | 删书签 | `deleteBookmark` | no-op（坐标书签无副本回收） | `session/deleteBookmark` RPC |
 | 发消息 | `sendMessage` | `buildPromptCommand`（`prompt` 命令） | `session/prompt` RPC（`contentBlocks` + `images`） |
 | 中断 | `abort` | `buildAbortCommand`（8s 超时） | `session/abort` RPC（懒探测） |
-| 切模型 | `setModel` | `buildSetModelCommand`（`set_model`，start 时不定） | `session/setModel` RPC（懒探测；旧运行时缺方法 → warn + no-op，模型停在握手值） |
+| 切模型 | `setModel` | `buildSetModelCommand`（`set_model`，start 时不定） | `session/setModel` RPC（内核插件补丁给原地热切；旧运行时缺方法 → 懒探测记缺面 + no-op，壳按 `supportsRuntimeSetModel` 翻转回落停旧起新） |
 | 思考强度 | `setThinkingLevel` | `override` → `{type:"set_thinking_level", level}` RPC | 继承缺面默认抛错（reasoningEffort 只在 initialize/settings.yaml 定） |
 | 命名 | `setSessionName` | `buildSetSessionNameCommand` | `session/rename` RPC（懒探测缺面 → no-op） |
 | seed | `seed` | `piSeedSession` 写 JSONL 文件（返回派生路径，幂等） | `buildDshSeedSession` 包树 + `session/seed` RPC（**重绑 `this.sessionId`**） |
@@ -358,7 +358,7 @@ dsh 内核插件是 Cordis 插件，两条挂载路径（`dsh-extension-installe
 | **目录/CRUD** | 纯文件读（同步 fs） | 懒 spawn JSON-RPC transport 走 RPC |
 | **fork** | 内核 `fork` RPC（`forkCommand`）+ 文件复制 `clone` | `ctx.sessions.fork`（自带前缀拷贝，`session/fork`） |
 | **seed** | 纯文件写（`piSeedSession`，spawn 前） | `session/seed` RPC（`buildDshSeedSession` 树，spawn 后） |
-| **切模型时机** | `set_model` 时定（start 不定） | `initialize` 握手定（运行时切模缺面 no-op） |
+| **切模型时机** | `set_model` 时定（start 不定） | `initialize` 握手定 + 运行时热切（插件补丁 installModelSelection；缺面旧运行时回落重启） |
 | **思考强度** | `set_thinking_level` 运行时切换 | reasoningEffort 只在 initialize/settings.yaml，运行时切抛错 |
 | **中断** | `abort` + `abort_bash` 双保险 | `session/abort`（懒探测） |
 | **续跑** | 适配器翻译 `followUp("继续…")` | `session/continue` RPC（语义分发） |
@@ -372,7 +372,7 @@ dsh 内核插件是 Cordis 插件，两条挂载路径（`dsh-extension-installe
 
 ### 5.2 最关键的四处行为级差异
 
-**（1）定模型时机不对称**（§2.2 意图三）：这是"切模型"在两个内核上语义根本不同的根因。pi 支持运行时 `set_model`；dsh 的模型在 `initialize` 握手定死，`session/setModel` 在旧运行时是坏面（报 "cannot get property sessions without inject"）。`session-store.setModel` 因此有两套"已生效"判据：pi 走 `latestSnapshot.state.model` 比对，dsh 走 `proc.model`（起进程模型）比对——dsh 无快照面恒 null，旧判据恒"未生效"每次发送都重发 `session/setModel` 坏面调用（"dsh 不能发送第二条语句"的根因）。
+**（1）定模型时机不对称**（§2.2 意图三）：这是"切模型"在两个内核上语义差异的根因。pi 支持运行时 `set_model`；dsh 的模型在 `initialize` 握手定死，运行时热切由内核插件补丁提供（`installModelSelection` 原地热切）。`session-store.setModel` 的"已生效"判据分内核：pi 走 `latestSnapshot.state.model` 比对，dsh 走 `proc.effectiveModel`（壳侧账本，setModel 成功即更新）比对——dsh 无快照面恒 null，旧判据恒"未生效"每次发送都重发 `session/setModel` 坏面调用（"dsh 不能发送第二条语句"的根因）。热切缺面（旧运行时且无补丁）时回落停旧起新。
 
 **（2）seed 生命周期不对称**（§2.5）：pi seed 纯文件写、spawn 前；dsh seed RPC、spawn 后。`switchKernel` 和 `materializeActiveLineage` 都按 `factory.seed` 返回 null 与否分支。
 
@@ -430,7 +430,7 @@ dsh 内核插件是 Cordis 插件，两条挂载路径（`dsh-extension-installe
 
 ### 7.2 进程复用判据：`ensureForSend`
 
-`ensureForSend(kernel, provider, model)` 的复用判据：该内核进程已活 + 配置未过期（`isConfigStale` 比对 `configDepPaths` 的 mtime）+ 模型未失配。模型失配处理分内核：pi 支持运行时切模（`setModel` 差量执行，不重启）；**dsh 的模型在 initialize 握手定死——失配必须停旧起新**，否则用户选的模型被旧进程的握手模型截胡。新会话时：文件型内核（pi）预生成路径（`--session <path>`）；惰性内核（dsh）壳派生投影地址（新 ns 即投影地址）。
+`ensureForSend(kernel, provider, model)` 的复用判据：该内核进程已活 + 配置未过期（`isConfigStale` 比对 `configDepPaths` 的 mtime）+ 模型未失配。模型失配的重启判据读两根正交的轴（docs/model-switching.md §11.2）：① 运行时切模轴缺面（`supportsRuntimeSetModel === false`，如 dsh 旧运行时缺 `session/setModel`）→ 停旧起新；② 未物化的惰性内核会话（`touched === false` 且 `catalog.newSessionId(cwd) == null`）→ 握手是唯一定模点，重建零代价。两根都不沾 → 热切（pi 走 `set_model` 差量执行，dsh 走补丁的 `session/setModel` 原地热切），不重启。新会话时：文件型内核（pi）预生成路径（`--session <path>`）；惰性内核（dsh）壳派生投影地址（新 ns 即投影地址）。
 
 ### 7.3 内核切换：`switchKernel` 七步
 
@@ -565,9 +565,9 @@ src/server/kernel/dsh/manager/dsh-kernel.ts     DshKernelManager extends（DSH_S
 
 ## QA
 
-**Q1：为什么 dsh 的 `setModel` 在运行时切模型是 no-op，壳怎么兜住"用户选了 A 模型却用 B 模型跑"？**
+**Q1：dsh 的运行时切模型是怎么兑现的，壳怎么兜住"用户选了 A 模型却用 B 模型跑"？**
 
-因为 dsh 的模型在 `initialize` 握手时定死（`DshBackend.start` 传 `provider/model/maxTokens`），运行时 `session/setModel` 在旧运行时是坏面。壳的兜法在 `session-store.ensureForSend`：模型失配（`existing.model.provider/modelId !== 目标`）且该内核无 `capabilities.pi`（即 dsh）时，**停旧进程、带新 provider/model 重启**，而不是指望 `setModel` 生效。`setModel` 里的"已生效"判据对 dsh 改走 `proc.model`（起进程模型）而非 `latestSnapshot`（dsh 恒 null）。
+dsh 的模型在 `initialize` 握手时定死（`DshBackend.start` 传 `provider/model/maxTokens`），运行时热切由内核插件补丁提供（`installModelSelection` 原地热切，`dsh-extension/index.mjs` 拦截 `session/setModel` 改 agent 的 `ModelSelectionRef`，不 dispose、不重启）。壳的兜法在 `session-store.ensureForSend` + `setModel`：能力轴 `supportsRuntimeSetModel` 在位（补丁/新运行时）→ 热切 RPC 原地生效；缺面（旧运行时且无补丁，`session/setModel` 撞 unknown method 记缺面、轴翻 false）→ 现场回落停旧进程、带新 provider/model 重启。`setModel` 里的"已生效"判据对 dsh 走 `proc.effectiveModel` 旧值（壳侧账本）而非 `latestSnapshot`（dsh 恒 null）。
 
 **Q2：`BackendFactory.seed` 为什么要分"预 seed"和"start 后 seed"两条路，不能统一吗？**
 

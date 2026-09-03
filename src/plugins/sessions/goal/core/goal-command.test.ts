@@ -63,6 +63,15 @@ describe("parseGoalCommand(人类 /goal 命令解析)", () => {
     expect(parseGoalCommand("/goal edit    ")).toEqual({ kind: "status" });
   });
 
+  it("limit <正整数> → limit;裸 limit/非数字/非正数降级 status(不把 'limit abc' 误设成目标)", () => {
+    expect(parseGoalCommand("/goal limit 500")).toEqual({ kind: "limit", maxRounds: 500 });
+    expect(parseGoalCommand("/goal LIMIT 2000")).toEqual({ kind: "limit", maxRounds: 2000 });
+    expect(parseGoalCommand("/goal limit")).toEqual({ kind: "status" });
+    expect(parseGoalCommand("/goal limit abc")).toEqual({ kind: "status" });
+    expect(parseGoalCommand("/goal limit -3")).toEqual({ kind: "status" });
+    expect(parseGoalCommand("/goal limit 1.5")).toEqual({ kind: "status" });
+  });
+
   it("子命令必须是独立单词:以子命令开头的长短语按目标处理", () => {
     // "stop the server 优化" 是目标文案,不是暂停指令——单词精确命中才算子命令。
     expect(parseGoalCommand("/goal stop the server 优化")).toEqual({

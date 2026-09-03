@@ -7,12 +7,12 @@
 //
 // 覆盖(与 jsdom e2e 同语义的实机版;每次交互都是真实鼠标/键盘事件):
 //   ① 敲 / → 斜杠弹窗列出 /goal + cmd 徽标(插件命令进弹窗的证明帧)
-//   ② /goal <目标> 回车 → 目标条出现 + 轮次 0/256 + 目标正文交 timeline 真发(所见即所得,
+//   ② /goal <目标> 回车 → 目标条出现 + 轮次 0/1000 + 目标正文交 timeline 真发(所见即所得,
 //     沙箱无模型 → 发送快速失败、输入框原文保留不丢)——不再是旧语义的「吞掉文本」
 //   ③ 点「停止」→ paused(恢复按钮 + 警告色边框)
 //   ④ 点铅笔按钮 → 编辑输入框 → 键入新目标回车 → 目标条更新(删改停之「改」;编辑入口
 //     是显式铅笔,不再伪装成轮次数字)
-//   ⑤ /goal resume 回车 → 恢复 + 即时装弹(轮次 1/256)
+//   ⑤ /goal resume 回车 → 恢复 + 即时装弹(轮次 1/1000)
 //   ⑥ /goal stop 回车 → 再暂停
 //   ⑦ 点垃圾桶 → 目标条从 DOM 消失(删改停之「删」)
 //   ⑧ 裸 /goal 回车 → 发送被吞(输入框清空、无目标条;系统通知是 OS 级不进 DOM)
@@ -56,7 +56,7 @@ function ok(cond, label) {
 }
 
 /** 页面可见文本断言走 innerText(视觉真相):注意 JSX 的 {a}/{b} 会拆成多个文本节点,
- *  按单节点 textContent 匹配 "1/256" 必漏——innerText 拼接才是用户看到的样子。 */
+ *  按单节点 textContent 匹配 "1/1000" 必漏——innerText 拼接才是用户看到的样子。 */
 async function visibleText(page, text) {
   return page.evaluate((t) => document.body.innerText.includes(t), text);
 }
@@ -189,7 +189,7 @@ try {
   );
   await shot("slash-popup");
 
-  // ② 补全命令并回车 → 目标条出现 + 0/256(不装弹,kickoff=目标正文真发) + 弹窗关闭
+  // ② 补全命令并回车 → 目标条出现 + 0/1000(不装弹,kickoff=目标正文真发) + 弹窗关闭
   await page.keyboard.type(`goal ${OBJECTIVE}`, { delay: 12 });
   await page.keyboard.press("Enter");
   await waitFor(
@@ -201,12 +201,15 @@ try {
   );
   await waitFor(
     page,
-    () => document.body.innerText.includes("0/256"),
-    "② 轮次显示 0/256(set 不装弹:kickoff 是目标正文消息本身,它的收敛才接第 1 轮)",
+    () => document.body.innerText.includes("0/1000"),
+    "② 轮次显示 0/1000(set 不装弹:kickoff 是目标正文消息本身,它的收敛才接第 1 轮)",
   );
   // 所见即所得 + 失败诚实:沙箱无模型,kickoff 发送快速失败 → 输入框原文保留(用户文本不丢)
   ok((await inputValue(page, "[data-timeline-composer]")) === `/goal ${OBJECTIVE}`, "② 发送失败时输入框原文保留(用户文本不丢)");
-  ok(!(await visibleText(page, "/goal")), "② 弹窗已关闭(命令前缀不进会话流)");
+  // 弹窗关闭断言走精确锚点(data-slash-popup):命令高亮 chip 常驻显示 "/goal" 文本,
+  // 不能再拿文本匹配当弹窗代理。输入框还留着命令全文 → chip 仍在(命令仍生效,所见即所得)。
+  ok((await selCount(page, "[data-slash-popup]")) === 0, "② 弹窗已关闭(命令前缀不进会话流)");
+  ok((await selCount(page, "[data-command-chip]")) === 1, "② 命令生效高亮 chip 在位(输入仍命中 /goal)");
   ok((await selCount(page, '[title="停止"]')) >= 1, "② active 态:停止按钮在位");
   ok((await selCount(page, "[data-goal-bar]")) === 1, "② 目标横幅在位(composerTop 槽)");
   ok(await goalBarAboveComposer(page), "② 目标横幅位于输入框上方");
@@ -242,8 +245,8 @@ try {
   await waitFor(page, () => !!document.querySelector('[title="停止"]'), "⑤ /goal resume → 停止按钮回归(active)");
   await waitFor(
     page,
-    () => document.body.innerText.includes("1/256"),
-    "⑤ 恢复即装弹:轮次 1/256(0 → 1;续跑发送在沙箱快速失败,轮次推进可见)",
+    () => document.body.innerText.includes("1/1000"),
+    "⑤ 恢复即装弹:轮次 1/1000(0 → 1;续跑发送在沙箱快速失败,轮次推进可见)",
   );
   ok(await composerGoalAccent(page), "⑤ 恢复生效:输入框绿晕回归");
   await shot("goal-resumed");

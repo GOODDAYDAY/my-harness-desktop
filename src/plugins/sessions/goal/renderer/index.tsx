@@ -2,9 +2,11 @@
 export { GoalCard } from "./goal-card";
 export { GoalBar } from "./goal-bar";
 export { GoalRoundCard } from "./goal-round-card";
+export { GoalNoteCard } from "./goal-note-card";
 
-// goal:state —— 目标状态广播(内容层事件,机制 = 事件总线):payload { active: boolean }。
-// 消费方 timeline 订阅后给输入框着色(生效绿晕),不直读本插件内部状态(插件间只走事件,§8.2)。
+// goal:state —— 目标状态广播(内容层事件,机制 = 事件总线):payload { goal: GoalState | null }
+// (全量快照)。消费方 timeline 订阅后按 phase 给输入框着色(生效绿晕),不直读本插件内部状态
+// (插件间只走事件,§8.2)。
 export const channels = ["goal:state"] as const;
 
 // 续跑提示(<goal_round> 包装)从用户消息里剥出渲染成「目标续跑卡」(所见即所得,

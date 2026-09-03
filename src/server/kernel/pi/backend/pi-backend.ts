@@ -174,24 +174,6 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     await this.adapter.send(buildAbortCommand(), { timeoutMs: ABORT_TIMEOUT_MS });
   }
 
-  /** 继续执行（第八意图）：pi 无语义化 continue，适配器按在飞状态分流——
-   *  有在飞回合 → followUp 排队(回合末消费);空闲 → prompt 直接起回合。
-   *  根因:pi 的 followUp 只入队(pi-agent-core: "run only after the agent would otherwise stop"),
-   *  空闲时无条件 followUp = 消息挂进队列永不被消费(goal 首轮续跑曾因此卡死在 1/256)。
-   *  text 缺省用通用「继续」提示;goal 续跑传入具体 objective 文案。 */
-  async continue(text?: string): Promise<void> {
-    const content = text ?? "继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。";
-    let busy = false;
-    try {
-      const res = await this.adapter.send({ type: "get_state" } as RpcCommand);
-      busy = !!(res.success && (res.data as { isStreaming?: boolean } | undefined)?.isStreaming);
-    } catch {
-      busy = false; // 状态探测失败按空闲处理(prompt 直发,忙了还有 sendMessage 的 followUp 兜底)
-    }
-    if (busy) await this.followUp(content);
-    else await this.sendMessage(content);
-  }
-
   async setModel(provider: string, modelId: string): Promise<void> {
     await this.adapter.send(buildSetModelCommand({ provider, modelId }));
   }
@@ -363,10 +345,19 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     });
   }
 
-  /** 回答一次提问:QuestionAnswer[] 翻译成 pi extension_ui_response 帧(单值,取首个答案)。 */
+  /** 回答一次提问:QuestionAnswer[] 翻译成 pi extension_ui_response 帧。
+   *  单值帧的多选编码(ask-design §7):帧的 value 是单个 string,但内核不校验、原样透传
+   *  (rpc-mode.ts 的 parseResponse 实证)——selected 多选/选项+自定义共存时 JSON 编码进
+   *  value,扩展侧 multi_select 题 JSON.parse 解码;TUI 纯 label 天然 fallback 单选。 */
   async answerQuestion(questionId: string, answers: QuestionAnswer[]): Promise<void> {
     const first = answers[0];
-    const value = first?.custom ?? first?.selected[0];
+    const custom = first?.custom?.trim() ? first!.custom : undefined;
+    const selected = first?.selected ?? [];
+    const value = custom !== undefined && selected.length > 0
+      ? JSON.stringify({ selected, custom })
+      : selected.length > 1
+        ? JSON.stringify({ selected })
+        : custom ?? selected[0];
     const response: RpcExtensionUIResponse = value === undefined || value === ""
       ? { type: "extension_ui_response", id: questionId, cancelled: true }
       : { type: "extension_ui_response", id: questionId, value };
