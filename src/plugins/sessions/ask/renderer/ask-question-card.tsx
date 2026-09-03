@@ -29,6 +29,28 @@ interface Draft {
   skipped: boolean;
 }
 
+/** 模型的原始出题入参(toolCall.args.questions):帧/文件装不下的字段从这里补。 */
+function argsQuestionsOf(toolCall: ToolCallBlock): Question[] {
+  const args = toolCall.args as { questions?: unknown } | undefined;
+  return Array.isArray(args?.questions) ? (args.questions as Question[]) : [];
+}
+
+/** 按问句文本匹配,从工具入参补回 multi_select/description(pi 帧装不下这些字段;
+ *  扩展把 q.question 原样作帧 title,匹配可靠)。匹配不到按原样(现状兜底)。 */
+function enrichQuestions(questions: Question[], toolCall: ToolCallBlock): Question[] {
+  const argsQuestions = argsQuestionsOf(toolCall);
+  if (argsQuestions.length === 0) return questions;
+  return questions.map((q) => {
+    const hit = argsQuestions.find((aq) => aq && typeof aq === "object" && aq.question === q.question);
+    if (!hit) return q;
+    const options = (q.options ?? []).map((opt) => {
+      const hitOpt = (hit.options ?? []).find((ao) => ao.label === opt.label);
+      return hitOpt?.description && !opt.description ? { ...opt, description: hitOpt.description } : opt;
+    });
+    return { ...q, multi_select: hit.multi_select ?? q.multi_select, options };
+  });
+}
+
 /** DSH parseRecommendedLabel：拆掉「(推荐)/(Recommended)」后缀，不改变回传的答案值。 */
 function parseRecommendedLabel(label: string): { label: string; recommended: boolean } {
   const suffix = /\s*(?:\((?:recommended|推荐)\)|（(?:recommended|推荐)）)\s*$/i;
@@ -42,17 +64,37 @@ function isComposing(event: { nativeEvent?: { isComposing?: boolean; keyCode?: n
 }
 
 export function AskQuestionCard({ toolCall, collapseDefault = true }: { toolCall: ToolCallBlock; collapseDefault?: boolean }): ReactNode {
+  const ctx = usePluginContext();
   const isStreaming = toolCall.state === "pending" || toolCall.state === "running";
-  if (isStreaming) return <RunningQuestion />;
+  const [revived, setRevived] = useState<PendingRequest | null>(null);
+
+  // 复活(ask-design §8.2):重启/重开后 toolCall.state 不再是 running——查挂起记录,
+  // 命中(优先 toolCallId 精确锚定,fallback 会话唯一 pending)且块无 result → 恢复交互态。
+  useEffect(() => {
+    if (isStreaming || toolCall.result !== undefined) return;
+    let alive = true;
+    void ctx.sessions.getPendingQuestions().then((records) => {
+      if (!alive) return;
+      const hit = records.find((r) => r.toolCallId !== null && r.toolCallId === toolCall.id)
+        ?? (records.length === 1 ? records[0] : undefined);
+      // 同 requestId 返回旧引用(React 跳过重渲)——否则每轮 render 的新对象会把 effect 拖进死循环
+      if (hit) setRevived((cur) => (cur?.requestId === hit.requestId ? cur : { requestId: hit.requestId, questions: hit.questions }));
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [ctx, isStreaming, toolCall.id, toolCall.result]);
+
+  if (isStreaming) return <RunningQuestion toolCall={toolCall} />;
+  if (revived) return <RunningQuestion toolCall={toolCall} initialRequest={revived} onDone={() => setRevived(null)} />;
   return <SettledSummary toolCall={toolCall} collapseDefault={collapseDefault} />;
 }
 
-/** 运行中：订阅提问事件，在时间线内联渲染问题 + 选项 + 输入。 */
-function RunningQuestion(): ReactNode {
+/** 运行中：订阅提问事件，在时间线内联渲染问题 + 选项 + 输入。
+ *  initialRequest = 复活的挂起记录(重启后无新事件,从 store 直接起)。 */
+function RunningQuestion({ toolCall, initialRequest, onDone }: { toolCall: ToolCallBlock; initialRequest?: PendingRequest; onDone?: () => void }): ReactNode {
   const ctx = usePluginContext();
-  const [pending, setPending] = useState<PendingRequest | null>(null);
+  const [pending, setPending] = useState<PendingRequest | null>(initialRequest ?? null);
   const [index, setIndex] = useState(0);
-  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [drafts, setDrafts] = useState<Draft[]>(() => initialRequest ? initialRequest.questions.map(() => ({ selected: [], custom: "", skipped: false })) : []);
   const [busy, setBusy] = useState<"answer" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
@@ -66,10 +108,11 @@ function RunningQuestion(): ReactNode {
       setBusy(null);
       setError(null);
       setMinimized(false);
-      setPending({ requestId: req.requestId, questions });
+      // 帧/文件装不下的字段从工具入参补回(pi 的 multi_select/description)
+      setPending({ requestId: req.requestId, questions: enrichQuestions(questions, toolCall) });
     });
     return off;
-  }, [ctx]);
+  }, [ctx, toolCall]);
 
   const question = pending?.questions[index];
   const draft = drafts[index];
@@ -80,6 +123,7 @@ function RunningQuestion(): ReactNode {
     setDrafts([]);
     setBusy(null);
     setError(null);
+    onDone?.(); // 复活态卡片作答后退场(记录已结算,不再命中 pending)
   };
 
   const cancelFlow = (): void => {
@@ -316,7 +360,8 @@ function RunningQuestion(): ReactNode {
   );
 }
 
-/** 结算后：摘要展示交互结果。 */
+/** 结算后：摘要展示交互结果；展开体逐题渲染「问句 + 选项（选中高亮）+ 答案」
+ *  （ask-design §9：问句/选项来自 toolCall.args.questions——模型入参一直在场）。 */
 function SettledSummary({ toolCall, collapseDefault }: { toolCall: ToolCallBlock; collapseDefault: boolean }): ReactNode {
   const [collapsed, setCollapsed] = useState(collapseDefault);
   useEffect(() => { setCollapsed(collapseDefault); }, [collapseDefault]);
@@ -333,6 +378,15 @@ function SettledSummary({ toolCall, collapseDefault }: { toolCall: ToolCallBlock
   const borderColor = toolCall.isError
     ? "var(--color-accent-error)"
     : "var(--color-primary)";
+
+  // 问句与答案按 id 连接:args.questions 是模型出题原文(含选项),answers 里 id 回显
+  const argsQuestions = argsQuestionsOf(toolCall);
+  const answerOf = (id: string) => result?.find((a) => a.id === id);
+  // 展开条目:优先出题原文顺序;args 缺失(异常)时退化为答案列表
+  const rows: { key: string; question?: Question; answer?: { id: string; selected?: string[]; custom?: string } }[] =
+    argsQuestions.length > 0
+      ? argsQuestions.map((q) => ({ key: q.id, question: q, answer: answerOf(q.id) }))
+      : (result ?? []).map((a) => ({ key: a.id, answer: a }));
 
   return (
     <div className="mb-1.5">
@@ -351,17 +405,39 @@ function SettledSummary({ toolCall, collapseDefault }: { toolCall: ToolCallBlock
           {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
         </span>
       </div>
-      {!collapsed && result && (
-        <div className="mt-1 rounded-[var(--radius-md)] p-2.5 text-[length:var(--font-size-sm)] space-y-1.5"
+      {!collapsed && rows.length > 0 && (
+        <div className="mt-1 rounded-[var(--radius-md)] p-2.5 text-[length:var(--font-size-sm)] space-y-2.5"
           style={{ background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))" }}>
-          {result.map((a) => (
-            <div key={a.id} className="flex gap-2">
-              <span className="text-[var(--color-muted)] shrink-0">{a.id}</span>
-              <span className="text-[var(--color-fg)] break-all">
-                {a.custom ? `(wrote) ${a.custom}` : (a.selected?.join(", ") || "(skipped)")}
-              </span>
-            </div>
-          ))}
+          {rows.map(({ key, question, answer }) => {
+            const selected = answer?.selected ?? [];
+            const custom = answer?.custom ?? "";
+            return (
+              <div key={key} className="space-y-1">
+                {/* 问句正文(有出题原文)或 id 兜底 */}
+                <div className="text-[var(--color-fg)] break-words leading-snug">
+                  {question ? question.question : key}
+                </div>
+                {/* 选项列表:选中高亮 */}
+                {(question?.options ?? []).map((opt) => {
+                  const hit = selected.includes(opt.label);
+                  return (
+                    <div key={opt.label} className="flex items-start gap-1.5 pl-2"
+                      style={{ color: hit ? "var(--color-primary)" : "var(--color-muted)" }}>
+                      <span aria-hidden className="mt-0.5 shrink-0">{hit ? "☑" : "☐"}</span>
+                      <span className="min-w-0 break-words">{opt.label}</span>
+                    </div>
+                  );
+                })}
+                {/* 自定义答案 / 跳过标记 */}
+                {custom !== "" && (
+                  <div className="pl-2 text-[var(--color-fg)] break-all">(wrote) {custom}</div>
+                )}
+                {selected.length === 0 && custom === "" && (
+                  <div className="pl-2 text-[var(--color-muted)]">(skipped)</div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
