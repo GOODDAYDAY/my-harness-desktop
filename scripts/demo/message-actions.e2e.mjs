@@ -75,17 +75,23 @@ try {
   await page.waitForSelector("[data-timeline-composer]", { timeout: 30000 });
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 25000 });
 
-  // 从会话列表打开种子会话
-  const clicked = await page.evaluate(() => {
-    const els = [...document.querySelectorAll("*")].filter((e) => (e.textContent || "").trim() === "种子会话" && e.children.length < 6);
-    const el = els[els.length - 1];
-    if (!el) return false;
-    el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    return true;
-  });
-  ok(clicked, "会话列表里点开了种子会话");
-  await page.waitForFunction(() => document.body.innerText.includes("看完了，没问题。"), { timeout: 15000, polling: 300 });
-  ok(true, "种子会话内容渲染(assistant 消息在)");
+  // 从会话列表打开种子会话(列表渲染是异步的:等列表项出现再点,点完等内容渲染;
+  // 一次点击可能落空(竞态),最多重试 3 次——事件驱动,不赌固定时序)
+  let opened = false;
+  for (let attempt = 0; attempt < 3 && !opened; attempt++) {
+    await page.waitForFunction(
+      () => [...document.querySelectorAll("*")].some((e) => (e.textContent || "").trim() === "种子会话" && e.children.length < 6),
+      { timeout: 15000, polling: 300 },
+    );
+    await page.evaluate(() => {
+      const els = [...document.querySelectorAll("*")].filter((e) => (e.textContent || "").trim() === "种子会话" && e.children.length < 6);
+      els[els.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    opened = await page.waitForFunction(() => document.body.innerText.includes("看完了，没问题。"), { timeout: 8000, polling: 300 })
+      .then(() => true)
+      .catch(() => false);
+  }
+  ok(opened, "会话列表里点开种子会话 + 内容渲染(assistant 消息在)");
   await waitForDomIdle(page, { quietMs: 500, timeoutMs: 8000 }).catch(() => {});
 
   // 问题8:assistant 消息行有「收藏」「分叉」入口
