@@ -7,5 +7,8 @@
   "goal.roundCard.title": "Goal round",
   "goal.roundCard.roundOf": "Round {{round}}/{{max}}",
   "goal.roundCard.toggle": "Toggle continuation prompt text",
-  "goal.bar.achieved": "Goal achieved"
+  "goal.bar.achieved": "Goal achieved",
+  "goal.settings.group": "Goal",
+  "goal.settings.maxRounds": "Continuation round limit",
+  "goal.settings.maxRoundsDesc": "Default when a goal does not set its own limit; applies to new goals only. Use /goal limit <n> for a running goal."
 }

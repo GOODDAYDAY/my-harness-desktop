@@ -7,5 +7,8 @@
   "goal.roundCard.title": "目標續跑",
   "goal.roundCard.roundOf": "第 {{round}}/{{max}} 輪",
   "goal.roundCard.toggle": "展開/收起續跑提示原文",
-  "goal.bar.achieved": "目標已完成"
+  "goal.bar.achieved": "目標已完成",
+  "goal.settings.group": "目標（Goal）",
+  "goal.settings.maxRounds": "續跑輪數上限",
+  "goal.settings.maxRoundsDesc": "目標未指定上限時的預設值，只對新建目標生效；進行中的目標用 /goal limit <n> 改"
 }

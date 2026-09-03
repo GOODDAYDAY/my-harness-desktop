@@ -7,5 +7,8 @@
   "goal.roundCard.title": "Ziel-Runde",
   "goal.roundCard.roundOf": "Runde {{round}}/{{max}}",
   "goal.roundCard.toggle": "Fortsetzungstext ein-/ausblenden",
-  "goal.bar.achieved": "Ziel erreicht"
+  "goal.bar.achieved": "Ziel erreicht",
+  "goal.settings.group": "Ziel",
+  "goal.settings.maxRounds": "Fortsetzungsrunden-Limit",
+  "goal.settings.maxRoundsDesc": "Standard, wenn ein Ziel kein eigenes Limit setzt; gilt nur für neue Ziele. Für laufende Ziele: /goal limit <n>."
 }

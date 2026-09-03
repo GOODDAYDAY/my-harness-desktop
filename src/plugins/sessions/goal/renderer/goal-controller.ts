@@ -23,12 +23,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePluginContext, useUiStore } from "@my-harness-desktop/react";
 import type { ComposerCommandResult } from "@my-harness-desktop/shared";
 import type { GoalState } from "../core/goal-state";
-import { createGoal, editGoal, parseGoal, parseGoalCommand, pauseGoal, resumeGoal, shouldContinue } from "../core/goal-state";
+import { createGoal, editGoal, parseGoal, parseGoalCommand, pauseGoal, resumeGoal, setGoalMaxRounds, shouldContinue } from "../core/goal-state";
 import { applyGoalEvent, renderContinuationPrompt } from "./goal-reduce";
 
 export const GOAL_USAGE =
   "/goal <目标> 设置目标并开始续跑\n"
-  + "/goal stop 暂停 · /goal resume 恢复 · /goal edit <新目标> 改 · /goal clear 删除 · /goal 查看状态";
+  + "/goal stop 暂停 · /goal resume 恢复 · /goal edit <新目标> 改 · /goal limit <n> 改上限 · /goal clear 删除 · /goal 查看状态";
+
+/** 通用配置(goal.maxRounds,settingsGroups 槽落 general.json)提供的默认轮数上限。
+ *  只在创建目标时读取(配置管默认、状态管存量,设计 §5.3/§11);非正整数回退代码兜底。
+ *  只读框架 store(§8.2 允许),非渲染闭包——创建动作发生时读最新值。 */
+function configuredMaxRounds(): number | undefined {
+  const v = useUiStore.getState().generalConfig["goal.maxRounds"];
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= 1 ? v : undefined;
+}
 
 /** 模块级桥:composerCommands.handle 是 plugins-host 收集的静态函数,控制器活在 React hook 里。
  *  GoalBar(composerStats 槽)与 composer 同时挂载,命令到来时控制器必在;无控制器(插件被禁)→ 放行。 */
@@ -187,7 +195,7 @@ export function useGoalController() {
       // 用户输入插队(#5):回合收敛时若有排队的用户待发消息,本次收敛不续跑也不进轮次——
       // 让 timeline 先把用户消息发出去,等用户消息的回合收敛(队列已清)再续。
       if (event.type === "agentSettled" && userSendPending()) return;
-      const { goal: next, prompt } = applyGoalEvent(goalRef.current, event);
+      const { goal: next, prompt } = applyGoalEvent(goalRef.current, event, { defaultMaxRounds: configuredMaxRounds() });
       if (prompt !== undefined) {
         // 续跑发送撞上在飞:不丢轮次也不推进空轮——欠账挂起,由 firePrompt 的 inflight
         // 收口按当时最新状态补发(根因修复:旧实现推进 round 却丢 prompt,轮数空转)。
@@ -218,7 +226,7 @@ export function useGoalController() {
    *  - set:创建目标(round=0 不装弹)并返回 { send: 目标正文 }——目标正文作为真实用户
    *    消息由 timeline 正常发送(所见即所得:输入框敲什么,会话里就是什么)。kickoff
    *    回合的 agentSettled 自然接第一轮续跑,不再由插件伪造一条包装过的"用户消息"。
-   *  - stop/resume/edit/clear/status:纯命令,吞掉发送(true)。
+   *  - stop/resume/edit/limit/clear/status:纯命令,吞掉发送(true)。
    *  与模型工具同状态机同持久化:人敲 /goal 和模型调 set_goal 落到同一个 GoalState。 */
   const handleCommand = useCallback(async (input: string): Promise<ComposerCommandResult> => {
     const cmd = parseGoalCommand(input);
@@ -230,9 +238,10 @@ export function useGoalController() {
     switch (cmd.kind) {
       case "set": {
         try {
-          // 只建状态,不装弹:kickoff 就是返回 { send } 发出去的那条目标正文,
+          // 只建状态,不装弹:首轮就是返回 { send } 发出去的那条目标正文,
           // 它的回合收敛(agentSettled)自然接第一轮续跑。
-          setGoal(createGoal(cmd.request));
+          // 上限:命令不带 max_rounds → 取通用配置(只在创建时读取,见 configuredMaxRounds)。
+          setGoal(createGoal({ ...cmd.request, maxRounds: configuredMaxRounds() }));
         } catch {
           void notify.show({ title: "Goal", body: GOAL_USAGE, silent: true });
           return true;
@@ -248,6 +257,12 @@ export function useGoalController() {
       case "edit":
         if (!g) { notifyNoGoal(); return true; }
         try { setGoal(editGoal(g, cmd.objective)); }
+        catch { void notify.show({ title: "Goal", body: GOAL_USAGE, silent: true }); }
+        return true;
+      case "limit":
+        // 只换上限;到顶停摆(active 但 round 到顶)且空闲时 armIfIdle 立即装弹续跑(§5.3)。
+        if (!g) { notifyNoGoal(); return true; }
+        try { setGoal(armIfIdle(setGoalMaxRounds(g, cmd.maxRounds))); }
         catch { void notify.show({ title: "Goal", body: GOAL_USAGE, silent: true }); }
         return true;
       case "clear":

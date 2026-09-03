@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   eventsEmit: vi.fn(),
   onEventCb: null as ((e: SessionEvent) => void) | null,
   pendingQueue: {} as Record<string, { id: string }[]>,
+  generalConfig: {} as Record<string, unknown>,
 }));
 
 vi.mock("@my-harness-desktop/react", () => {
@@ -31,8 +32,8 @@ vi.mock("@my-harness-desktop/react", () => {
   const messaging = { prompt: mocks.prompt };
   const notify = { show: mocks.notify };
   const events = { emit: mocks.eventsEmit, on: vi.fn(() => () => {}) };
-  const stateOf = (): { currentSessionPath: string; pendingQueue: Record<string, { id: string }[]> } =>
-    ({ currentSessionPath: "/p/s.jsonl", pendingQueue: mocks.pendingQueue });
+  const stateOf = (): { currentSessionPath: string; pendingQueue: Record<string, { id: string }[]>; generalConfig: Record<string, unknown> } =>
+    ({ currentSessionPath: "/p/s.jsonl", pendingQueue: mocks.pendingQueue, generalConfig: mocks.generalConfig });
   const useUiStore = Object.assign(
     (selector?: (s: ReturnType<typeof stateOf>) => unknown) => (selector ? selector(stateOf()) : stateOf()),
     { getState: stateOf },
@@ -62,6 +63,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.eventsEmit.mockReset();
     mocks.onEventCb = null;
     mocks.pendingQueue = {};
+    mocks.generalConfig = {}; // 通用配置默认空(代码兜底 1000)
     __resetGoalStoreForTests(); // 模块级目标态(抗重挂载单例)测试间隔离
   });
 
@@ -180,14 +182,14 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     emit({ type: "agentSettled" });
     expect(mocks.prompt).toHaveBeenCalledTimes(1);
     expect(mocks.prompt.mock.calls[0][0]).toContain("把测试全跑绿");
-    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/256");
+    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/1000");
 
     // 第 1 轮收敛 → 第 2 轮自然接续(先 flush continue 的落定微任务——在飞窗口
     // 是真实互斥:上一轮还没发完时收敛只挂欠账,落定才补发,见「三轮只发两轮」回归)
     await act(async () => { await Promise.resolve(); });
     emit({ type: "agentSettled" });
     expect(mocks.prompt).toHaveBeenCalledTimes(2);
-    expect(mocks.prompt.mock.calls[1][0]).toContain("Round: 2/256");
+    expect(mocks.prompt.mock.calls[1][0]).toContain("Round: 2/1000");
   });
 
   it("/goal <目标>:忙时(回合在飞)不立即发,由在飞回合的 agentSettled 触发首轮", async () => {
@@ -201,7 +203,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
 
     emit({ type: "agentSettled" }); // 在飞回合收敛 → 首轮
     expect(mocks.prompt).toHaveBeenCalledTimes(1);
-    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/256");
+    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/1000");
   });
 
   it("/goal stop·resume·edit·clear 子命令走同一状态机", async () => {
@@ -225,6 +227,53 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     await act(async () => { await runGoalCommand("/goal clear"); });
     expect(result.current.goal).toBeNull();
     expect(mocks.updateHeader).toHaveBeenLastCalledWith("/p/s.jsonl", { custom: { goal: null } });
+  });
+
+  it("/goal limit <n>:只换上限——到顶停摆的目标提高后空闲即装弹续跑", async () => {
+    mocks.generalConfig = {};
+    const { result } = renderHook(() => useGoalController());
+
+    // 建一个上限 2 的目标并跑到到顶(round=2,active 但 shouldContinue 不成立)
+    await act(async () => { await runGoalCommand("/goal 短上限目标"); });
+    await act(async () => { await runGoalCommand("/goal limit 2"); });
+    expect(result.current.goal?.maxRounds).toBe(2);
+    emit({ type: "agentSettled" }); // round 1
+    await act(async () => { await Promise.resolve(); });
+    emit({ type: "agentSettled" }); // round 2
+    await act(async () => { await Promise.resolve(); });
+    emit({ type: "agentSettled" }); // 到顶:不再续跑
+    const callsAtTop = mocks.prompt.mock.calls.length;
+    expect(result.current.goal?.round).toBe(2);
+
+    // 提高上限 → 空闲装弹:立即补发一轮,轮次 3
+    await act(async () => { await runGoalCommand("/goal limit 5"); });
+    expect(result.current.goal?.maxRounds).toBe(5);
+    expect(result.current.goal?.phase).toBe("active");
+    expect(result.current.goal?.round).toBe(3);
+    expect(mocks.prompt.mock.calls.length).toBe(callsAtTop + 1);
+    expect(mocks.prompt.mock.calls.at(-1)?.[0]).toContain("Round: 3/5");
+  });
+
+  it("/goal limit:畸形参数降级状态提示,不动目标;无目标时提示而非崩溃", async () => {
+    const { result } = renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 原目标"); });
+    const before = result.current.goal;
+    await act(async () => { await runGoalCommand("/goal limit abc"); });
+    expect(result.current.goal).toEqual(before); // 目标原样
+    expect(mocks.notify).toHaveBeenCalled(); // 降级状态提示
+  });
+
+  it("创建目标时读取通用配置 goal.maxRounds 作为默认上限(进行中目标不受后续配置变更影响)", async () => {
+    mocks.generalConfig = { "goal.maxRounds": 500 };
+    const { result } = renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 配置上限目标"); });
+    expect(result.current.goal?.maxRounds).toBe(500);
+    emit({ type: "agentSettled" });
+    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/500");
+
+    // 配置后改不动存量目标(固化在状态里,设计 §11 QA)
+    mocks.generalConfig = { "goal.maxRounds": 5000 };
+    expect(result.current.goal?.maxRounds).toBe(500);
   });
 
   it("裸 /goal 查看状态(通知);无目标时子命令提示而非崩溃(仍吞发送)", async () => {
@@ -347,7 +396,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     await act(async () => { await runGoalCommand("/goal 三轮目标"); });
     emit({ type: "agentSettled" }); // 第 1 轮发出(在飞中)
     expect(mocks.prompt).toHaveBeenCalledTimes(1);
-    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/256");
+    expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/1000");
 
     // 第 1 轮的 continue 还没落定,回合收敛就到了 → 欠账挂起:不推进 round、不丢 prompt
     emit({ type: "agentSettled" });
@@ -357,7 +406,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     // inflight 落定 → 欠账按最新状态补发第 2 轮
     await act(async () => { release!(); });
     expect(mocks.prompt).toHaveBeenCalledTimes(2);
-    expect(mocks.prompt.mock.calls[1][0]).toContain("Round: 2/256");
+    expect(mocks.prompt.mock.calls[1][0]).toContain("Round: 2/1000");
     expect(result.current.goal?.round).toBe(2);
   });
 
