@@ -6,7 +6,7 @@
   "bookmarks.retry": "重試",
   "bookmarks.dismiss": "關閉",
   "bookmarks.noMatch": "無符合收藏",
-  "bookmarks.empty": "暫無收藏。右鍵訊息或點擊 + 新增。",
+  "bookmarks.empty": "暫無收藏。懸停訊息點「收藏」鈕,或點擊 + 新增。",
   "bookmarks.forkTooltip": "點擊 fork",
   "bookmarks.rename": "重新命名",
   "bookmarks.delete": "刪除",

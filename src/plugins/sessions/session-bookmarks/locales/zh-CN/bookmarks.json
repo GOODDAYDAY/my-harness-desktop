@@ -6,7 +6,7 @@
   "bookmarks.retry": "重试",
   "bookmarks.dismiss": "关闭",
   "bookmarks.noMatch": "无匹配收藏",
-  "bookmarks.empty": "暂无收藏。右键消息或点击 + 添加。",
+  "bookmarks.empty": "暂无收藏。悬停消息点「收藏」钮,或点击 + 添加。",
   "bookmarks.forkTooltip": "点击 fork",
   "bookmarks.rename": "重命名",
   "bookmarks.delete": "删除",

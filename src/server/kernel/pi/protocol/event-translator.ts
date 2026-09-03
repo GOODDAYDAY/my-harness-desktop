@@ -5,7 +5,7 @@
 // SessionEvent(type: "toolCallStart" 等)。敏感字段过滤留后续(需要权限信息)。
 import type { AgentSessionEvent } from "./rpc-types";
 import type { SessionEvent } from "@my-harness-desktop/shared";
-import { withErrorState, withNormalizedToolCalls } from "@my-harness-desktop/shared";
+import { withNormalizedToolCalls, withTerminalState } from "@my-harness-desktop/shared";
 
 /** pi 事件 type → 圆心事件 type 的映射表。 */
 const TYPE_MAP: Record<string, string> = {
@@ -42,13 +42,13 @@ const TYPE_MAP: Record<string, string> = {
  */
 export function translateEvent(piEvent: AgentSessionEvent): SessionEvent {
   const neutralType = TYPE_MAP[piEvent.type] ?? piEvent.type;
-  // 消息载体事件:失败消息(stopReason/errorMessage)归一为 error 标记,与文件读路径同规则
+  // 消息载体事件:终结态(stopReason error/aborted、errorMessage)归一为 error/stopped 标记,与文件读路径同规则
   const msg = (piEvent as { message?: unknown }).message;
   if (
     msg && typeof msg === "object" &&
     (neutralType === "messageStart" || neutralType === "messageUpdate" || neutralType === "messageEnd")
   ) {
-    return { ...piEvent, type: neutralType, message: withNormalizedToolCalls(withErrorState(msg as Record<string, unknown>)) } as SessionEvent;
+    return { ...piEvent, type: neutralType, message: withNormalizedToolCalls(withTerminalState(msg as Record<string, unknown>)) } as SessionEvent;
   }
   // session_info_changed:内核字段是 name,圆心契约是 sessionName——协议翻译归 gateway,
   // 字段映射在此完成(此前原样透传 name,与 domain 契约 sessionName 漂移:消费方永远读到 undefined)。

@@ -544,7 +544,7 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
     // startedAt:内核 message.timestamp = LLM 调用开始时间(仅 assistant 有);
     // timestamp 仍是 entry 级落盘/完成时间。两字段差 = 一轮调用真实耗时(思考+生成)。
     const startedAt = entryTimestampMs(m.timestamp);
-    return withNormalizedToolCalls(withErrorState({ ...m, id, timestamp: ts, startedAt, ...(e.model ? { model: e.model as NeutralMessage["model"] } : {}) })) as NeutralMessage;
+    return withNormalizedToolCalls(withTerminalState({ ...m, id, timestamp: ts, startedAt, ...(e.model ? { model: e.model as NeutralMessage["model"] } : {}) })) as NeutralMessage;
   }
   if (e.type === "custom_message") {
     return {
@@ -583,10 +583,25 @@ export function sessionEntryToNeutral(j: unknown): NeutralMessage | null {
   return divider("entry", "timeline.unknownEntry", { type: String(e.type ?? "unknown") }, ts, safeJson(j), entryId);
 }
 
-/** 失败消息归一化:内核把 API 失败(如 502/连接重置)写成 content 为空的 assistant 消息,
- *  失败信号在 stopReason:"error" + errorMessage 里。契约层在此归一为 error 标记,
- *  渲染层据此显错误红条而非误导性的"(空消息)"。文件读与事件流两路共用(契约单源)。 */
-export function withErrorState<T extends Record<string, unknown>>(msg: T): T {
+/** 终结态消息归一化:内核把 API 失败(如 502/连接重置)写成 content 为空的 assistant 消息,
+ *  失败信号在 stopReason:"error" + errorMessage 里;用户中断写 stopReason:"aborted"。
+ *  契约层在此归一:
+ *  - stopReason:"error"(或带 errorMessage 且非 aborted)→ error 标记,渲染层显错误红条
+ *    而非误导性的"(空消息)";
+ *  - stopReason:"aborted" → stopped 标记(用户点停止不是错误,§NeutralMessage.stopped
+ *    契约:"用户点停止或生成失败后=true")——不再错标 error(此前 aborted 因 errorMessage
+ *    字段存在被标成 error:「已停止」渲染成「生成失败」红条,goal 引擎的
+ *    人为中断(auto_pause_interrupt)被误报成模型报错(auto_pause_error))。
+ *  文件读与事件流两路共用同一入口(契约单源)。 */
+export function withTerminalState<T extends Record<string, unknown>>(msg: T): T {
+  if (msg.stopReason === "aborted") {
+    // 用户中断:stopped 为唯一终结标记,不叠 error(见函数头注)。旧数据在误标期已把
+    // error:true 写进持久层,读路径顺手修(不改文件):aborted 语义上没有合法 error。
+    if (msg.stopped === true && msg.error !== true) return msg;
+    const next = { ...msg, stopped: true };
+    delete next["error"];
+    return next;
+  }
   const failed = msg.stopReason === "error" || typeof msg.errorMessage === "string";
   return failed && msg.error !== true ? { ...msg, error: true } : msg;
 }
@@ -594,7 +609,7 @@ export function withErrorState<T extends Record<string, unknown>>(msg: T): T {
 /** 工具调用参数归一化:内核 assistant 内容块里 toolCall 的参数字段叫 arguments,
  *  中性契约叫 args(见 ToolCallStart 事件 + 渲染层 toolCallsOf 只读 args)。
  *  不归一就整块丢参数(bash 卡片剩个空 `$`、read 卡片空 pre)。
- *  与 withErrorState 同一手法:文件读与事件流两路在各自入口统一调用(契约单源)。
+ *  与 withTerminalState 同一手法:文件读与事件流两路在各自入口统一调用(契约单源)。
  *  保留原 arguments 字段不删(透传原则),只补 args 别名。 */
 export function withNormalizedToolCalls<T extends Record<string, unknown>>(msg: T): T {
   const content = msg.content;

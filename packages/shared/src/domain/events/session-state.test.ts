@@ -4,7 +4,7 @@
 //   model_change 与 thinking_level_change entry 相邻写入,经 sessionEntryToNeutral
 //   后两条 divider 相邻——修复前第二条必被吞。
 import { describe, it, expect } from "vitest";
-import { sessionEntryToNeutral, deduplicateAdjacent, type NeutralMessage } from "./session-state";
+import { sessionEntryToNeutral, deduplicateAdjacent, withTerminalState, type NeutralMessage } from "./session-state";
 
 /** 按真实 JSONL 形状构造 entry → NeutralMessage(与 resync/文件读同一条映射路径)。 */
 function n(entry: Record<string, unknown>): NeutralMessage {
@@ -293,5 +293,40 @@ describe("sessionEntryToNeutral: 消息计时契约(startedAt=调用开始,times
     const m = n(modelEntry("m1"));
     expect(m.startedAt).toBeUndefined();
     expect(m.timestamp).toBe(Date.parse("2026-08-03T15:12:42.516Z"));
+  });
+});
+
+describe("withTerminalState: 终结态归一(aborted→stopped,不错标 error)", () => {
+  // 根因回归守卫:误标期 withErrorState 把 stopReason:"aborted" 经 errorMessage 标成 error——
+  // pi 用户点停止,时间线渲染「生成失败」红条而非「已停止」,goal 引擎把人为中断误报成
+  // 模型报错(auto_pause_error 而非 auto_pause_interrupt)。
+  it("stopReason:aborted → stopped:true,不标 error(即携带 errorMessage 也不)", () => {
+    const out = withTerminalState({ role: "assistant", content: [], stopReason: "aborted", errorMessage: "Request aborted" } as Record<string, unknown>);
+    expect(out.stopped).toBe(true);
+    expect(out.error).toBeUndefined();
+  });
+
+  it("stopReason:error → error:true(失败红条语义不变)", () => {
+    const out = withTerminalState({ role: "assistant", content: [], stopReason: "error", errorMessage: "Connection error." } as Record<string, unknown>);
+    expect(out.error).toBe(true);
+    expect(out.stopped).toBeUndefined();
+  });
+
+  it("正常完成(stopReason:stop)→ 两个标记都不加", () => {
+    const out = withTerminalState({ role: "assistant", content: "ok", stopReason: "stop" } as Record<string, unknown>);
+    expect(out.error).toBeUndefined();
+    expect(out.stopped).toBeUndefined();
+  });
+
+  it("旧数据读路径修复:误标期写入的 error:true 在 aborted 上被摘除", () => {
+    const legacy = { role: "assistant", content: [], stopReason: "aborted", errorMessage: "Request aborted", error: true } as Record<string, unknown>;
+    const out = withTerminalState(legacy);
+    expect(out.stopped).toBe(true);
+    expect(out.error).toBeUndefined();
+  });
+
+  it("幂等:已归一的 stopped 消息再过一遍不变", () => {
+    const clean = { role: "assistant", content: [], stopReason: "aborted", stopped: true };
+    expect(withTerminalState(clean)).toBe(clean); // 同一引用,无新对象
   });
 });

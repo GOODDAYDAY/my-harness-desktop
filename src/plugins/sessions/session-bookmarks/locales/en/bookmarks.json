@@ -6,7 +6,7 @@
   "bookmarks.retry": "Retry",
   "bookmarks.dismiss": "Dismiss",
   "bookmarks.noMatch": "No matching bookmarks",
-  "bookmarks.empty": "No bookmarks yet. Right-click a message or click + to add.",
+  "bookmarks.empty": "No bookmarks yet. Hover a message and click the bookmark action, or click + to add.",
   "bookmarks.forkTooltip": "Click to fork",
   "bookmarks.rename": "Rename",
   "bookmarks.delete": "Delete",

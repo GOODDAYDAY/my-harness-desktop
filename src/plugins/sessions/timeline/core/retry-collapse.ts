@@ -11,7 +11,8 @@ import type { NeutralMessage } from "@my-harness-desktop/shared";
 import { messageContentText } from "@my-harness-desktop/shared";
 
 /** 是否内核重试序列中的失败消息:assistant + stopReason:"error" + 无任何实质内容。
- *  不看 error 标记——aborted(用户停止)也被 withErrorState 标 error,但它不是重试,不折。 */
+ *  不看 error 标记——历史误标期(withTerminalState 修复前)aborted 曾被标 error;
+ *  按 stopReason 判,两个版本的数据都折不进去。 */
 function isRetryFailure(m: NeutralMessage): boolean {
   if (m.role !== "assistant" || m.stopReason !== "error") return false;
   if (messageContentText(m.content)) return false;

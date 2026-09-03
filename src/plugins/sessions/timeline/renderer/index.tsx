@@ -1395,7 +1395,9 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
         {blocks.length === 0 && message.pending === true && (
           <PendingTimer startedAt={message.startedAt} />
         )}
-        {blocks.length === 0 && message.pending !== true && !message.error && (
+        {/* 空占位只在「无内容且无终结解释」时显:error/stopped 各自的终结提示
+            (红条/已停止)已经解释了为什么空,不再叠一条「(空消息)」。 */}
+        {blocks.length === 0 && message.pending !== true && !message.error && !message.stopped && (
           <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>
         )}
         {message.stopped && (
