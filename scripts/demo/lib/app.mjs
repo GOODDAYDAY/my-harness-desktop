@@ -69,6 +69,10 @@ export async function launchApp({ appDir, port = 9222, timeoutMs = 40000, env: e
   const browser = await puppeteer.connect({
     browserURL: `http://127.0.0.1:${port}`,
     defaultViewport: null, // 保持窗口原生尺寸(1280×840),不注入虚拟 viewport
+    // 长回合/慢端点下,单个 waitForFunction/evaluate 的轮询可能超 180s 的 CDP 默认
+    // protocolTimeout——拉到 10 分钟,让「等收敛」类等待由调用方的 timeout 主导,
+    // 不被协议层截断成「Runtime.callFunctionOn timed out」假失败(多次实踩)。
+    protocolTimeout: 600000,
   });
 
   // renderer 页:旧架构是 file://…renderer/index.html;web-service 架构改为本地
