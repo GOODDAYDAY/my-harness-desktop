@@ -89,7 +89,7 @@ function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
     }
   }, [selectedIndex]);
   return createPortal(
-    <div ref={containerRef} style={{ position: "fixed", top: position.top, left: position.left, transform: "translateY(-100%)", ...menuStyle, maxHeight: `${MAX_VISIBLE * 32 + 8}px`, overflowY: "auto" }}>
+    <div ref={containerRef} data-slash-popup style={{ position: "fixed", top: position.top, left: position.left, transform: "translateY(-100%)", ...menuStyle, maxHeight: `${MAX_VISIBLE * 32 + 8}px`, overflowY: "auto" }}>
       {matches.map((cmd, i) => {
         const badge = SOURCE_BADGE[cmd.source] ?? SOURCE_BADGE.extension;
         return (

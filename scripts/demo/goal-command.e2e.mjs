@@ -206,7 +206,10 @@ try {
   );
   // 所见即所得 + 失败诚实:沙箱无模型,kickoff 发送快速失败 → 输入框原文保留(用户文本不丢)
   ok((await inputValue(page, "[data-timeline-composer]")) === `/goal ${OBJECTIVE}`, "② 发送失败时输入框原文保留(用户文本不丢)");
-  ok(!(await visibleText(page, "/goal")), "② 弹窗已关闭(命令前缀不进会话流)");
+  // 弹窗关闭断言走精确锚点(data-slash-popup):命令高亮 chip 常驻显示 "/goal" 文本,
+  // 不能再拿文本匹配当弹窗代理。输入框还留着命令全文 → chip 仍在(命令仍生效,所见即所得)。
+  ok((await selCount(page, "[data-slash-popup]")) === 0, "② 弹窗已关闭(命令前缀不进会话流)");
+  ok((await selCount(page, "[data-command-chip]")) === 1, "② 命令生效高亮 chip 在位(输入仍命中 /goal)");
   ok((await selCount(page, '[title="停止"]')) >= 1, "② active 态:停止按钮在位");
   ok((await selCount(page, "[data-goal-bar]")) === 1, "② 目标横幅在位(composerTop 槽)");
   ok(await goalBarAboveComposer(page), "② 目标横幅位于输入框上方");
