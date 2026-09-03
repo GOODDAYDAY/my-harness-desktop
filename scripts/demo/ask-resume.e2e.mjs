@@ -229,7 +229,12 @@ try {
     "④ 模型读到答案继续生成(回填之后有新内容)",
     180000,
   );
-  ok(!(await page.evaluate(() => document.body.innerText.includes("内核未启动") || document.body.innerText.includes("提问已失效") || document.body.innerText.includes("400"))), "④ 全程无内核类错误/400");
+  // 全程无内核类错误/provider 400(400 的判定要认错误签名,不认裸子串——时间线里
+  // 时间戳/token 计数都含 "400" 字样,裸 includes("400") 必误报)
+  const pageText = await page.evaluate(() => document.body.innerText);
+  ok(!pageText.includes("内核未启动") && !pageText.includes("提问已失效")
+    && !pageText.includes("400 Bad Request") && !pageText.includes("tool_use ids") && !pageText.includes("without a `tool_result`"),
+    "④ 全程无内核类错误/provider 400");
   await shot("04-resumed");
 
   await killApp(app);
