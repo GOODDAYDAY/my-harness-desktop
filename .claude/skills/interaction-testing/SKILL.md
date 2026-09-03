@@ -48,6 +48,8 @@ writeFileSync(prefsFile, JSON.stringify({ ...JSON.parse(readFileSync(prefsFile, 
 
 **会话列表首行是「新对话」乐观占位行**,不是会话——点行重开要按内容找(`rows.find(r => r.innerText.includes(会话名))`),`rows[0]` 会点到空壳(刷新后点击「重开」探针踩过)。
 
+**设置页改配置要过「保存浮层」**:settingsGroups/设置字段改值后只进 dirty,不落盘——页面底部弹「未保存改动」浮层,**点「确定改动」(t shell.confirmChanges)才写回 configFile**,再经 `system:configFileSaved` 广播让消费方(如 timeline)重读生效。探针改了值不点保存 = 行为不变(r85b 踩过)。找钮按文案「确定改动」,不是「保存」。
+
 ## 3 七条实踩陷阱(每条都是根因,别再踩)
 
 ### 3.1 「刷新会话列表」包含子串「新会话」
