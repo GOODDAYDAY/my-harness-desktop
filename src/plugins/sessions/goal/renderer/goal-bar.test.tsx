@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   onEventCb: null as ((e: SessionEvent) => void) | null,
   pendingQueue: {} as Record<string, { id: string }[]>,
   generalConfig: {} as Record<string, unknown>,
+  messages: [] as unknown[],
 }));
 
 vi.mock("@my-harness-desktop/react", () => {
@@ -60,9 +61,16 @@ vi.mock("@my-harness-desktop/react", () => {
     (selector?: (s: ReturnType<typeof stateOf>) => unknown) => (selector ? selector(stateOf()) : stateOf()),
     { getState: stateOf },
   );
+  // useSessionStore:异常收敛检测读 messages(error/stopped 终结标记)。默认空历史=正常收敛。
+  const useSessionStore = Object.assign(
+    (selector?: (s: { messages: unknown[] }) => unknown) =>
+      (selector ? selector({ messages: mocks.messages }) : { messages: mocks.messages }),
+    { getState: () => ({ messages: mocks.messages }) },
+  );
   return {
     usePluginContext: () => ({ sessions, messaging, notify, events }),
     useUiStore,
+    useSessionStore,
   };
 });
 
@@ -86,6 +94,7 @@ describe("GoalBar DOM e2e(设置 + 删改停)", () => {
     mocks.eventsEmit.mockReset();
     mocks.onEventCb = null;
     mocks.pendingQueue = {};
+    mocks.messages = [];
     __resetGoalStoreForTests(); // 模块级目标态测试间隔离
   });
 

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   onEventCb: null as ((e: SessionEvent) => void) | null,
   pendingQueue: {} as Record<string, { id: string }[]>,
   generalConfig: {} as Record<string, unknown>,
+  messages: [] as unknown[],
 }));
 
 vi.mock("@my-harness-desktop/react", () => {
@@ -38,9 +39,16 @@ vi.mock("@my-harness-desktop/react", () => {
     (selector?: (s: ReturnType<typeof stateOf>) => unknown) => (selector ? selector(stateOf()) : stateOf()),
     { getState: stateOf },
   );
+  // useSessionStore:异常收敛检测读 messages(error/stopped 终结标记)。默认空历史=正常收敛。
+  const useSessionStore = Object.assign(
+    (selector?: (s: { messages: unknown[] }) => unknown) =>
+      (selector ? selector({ messages: mocks.messages }) : { messages: mocks.messages }),
+    { getState: () => ({ messages: mocks.messages }) },
+  );
   return {
     usePluginContext: () => ({ sessions, messaging, notify, events }),
     useUiStore,
+    useSessionStore,
   };
 });
 
@@ -64,6 +72,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.onEventCb = null;
     mocks.pendingQueue = {};
     mocks.generalConfig = {}; // 通用配置默认空(代码兜底 1000)
+    mocks.messages = []; // 默认无历史=正常收敛(异常收敛检测)
     __resetGoalStoreForTests(); // 模块级目标态(抗重挂载单例)测试间隔离
   });
 
@@ -276,6 +285,69 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     expect(result.current.goal?.maxRounds).toBe(500);
   });
 
+  it("续跑发送失败:有界重试耗尽 → 转 paused + 失败显形;resume 清失败态并装弹(§6.4)", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.prompt.mockReset();
+      mocks.prompt.mockRejectedValue(new Error("会话未启动，请先选择模型"));
+      const { result } = renderHook(() => useGoalController());
+
+      await act(async () => { await runGoalCommand("/goal 会失败的目标"); });
+      emit({ type: "agentSettled" }); // 第 1 轮触发发送(将失败)
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); }); // 跑完 2 次退避重试
+
+      expect(mocks.prompt).toHaveBeenCalledTimes(3); // 首发 + 2 次重试
+      expect(result.current.goal?.phase).toBe("paused"); // 耗尽 → paused(不空等不会来的 agentSettled)
+      expect(result.current.sendError).toContain("会话未启动");
+      expect(mocks.notify).toHaveBeenCalled();
+
+      // resume 清失败态并重新装弹
+      mocks.prompt.mockReset();
+      mocks.prompt.mockResolvedValue(undefined);
+      await act(async () => { await runGoalCommand("/goal resume"); });
+      expect(result.current.goal?.phase).toBe("active");
+      expect(result.current.sendError).toBeNull();
+      expect(mocks.prompt).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("异常收敛不续跑:报错回合转 paused 并显形;人为中断转 paused(§5.2)", async () => {
+    const { result } = renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 异常收敛目标"); });
+
+    // 报错收敛:最后一条 assistant 消息 error=true(messageEnd 已先于 agentSettled 落 store)
+    mocks.messages = [{ role: "assistant", content: "x", error: true }];
+    emit({ type: "agentSettled" });
+    expect(result.current.goal?.phase).toBe("paused");
+    expect(result.current.sendError).toBeTruthy();
+    expect(mocks.prompt).toHaveBeenCalledTimes(0); // 不续跑
+    expect(mocks.notify).toHaveBeenCalled();
+
+    // 恢复后正常装弹
+    await act(async () => { await runGoalCommand("/goal resume"); });
+    expect(result.current.goal?.phase).toBe("active");
+    expect(mocks.prompt).toHaveBeenCalledTimes(1);
+
+    // 人为中断:stopped=true → 转 paused,不发错误通知(人在场,不是故障)
+    mocks.notify.mockClear();
+    mocks.messages = [{ role: "assistant", content: "x", stopped: true }];
+    emit({ type: "agentSettled" });
+    expect(result.current.goal?.phase).toBe("paused");
+    expect(mocks.notify).not.toHaveBeenCalled();
+  });
+
+  it("正常收敛不受终结检测影响:最后一条 assistant 无标记 → 照常续跑", async () => {
+    const { result } = renderHook(() => useGoalController());
+    await act(async () => { await runGoalCommand("/goal 正常目标"); });
+    mocks.messages = [{ role: "assistant", content: "活干完了" }];
+    emit({ type: "agentSettled" });
+    expect(result.current.goal?.phase).toBe("active");
+    expect(result.current.goal?.round).toBe(1);
+    expect(mocks.prompt).toHaveBeenCalledTimes(1);
+  });
+
   it("裸 /goal 查看状态(通知);无目标时子命令提示而非崩溃(仍吞发送)", async () => {
     const { result } = renderHook(() => useGoalController());
     void result;
@@ -313,37 +385,37 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     expect(mocks.prompt).toHaveBeenCalledTimes(0);
   });
 
-  it("goal:state 状态广播:生效=绿、暂停/清除=灭(消费方 timeline 着色依据)", async () => {
+  it("goal:state 状态广播:全量快照(消费方取 phase 着色,paused/achieved/无目标可区分)", async () => {
     renderHook(() => useGoalController());
 
-    const states = (): ({ active: boolean } | undefined)[] =>
-      mocks.eventsEmit.mock.calls.map((c) => c[1] as { active: boolean });
+    const phases = (): (string | null)[] =>
+      mocks.eventsEmit.mock.calls.map((c) => (c[1] as { goal: { phase: string } | null }).goal?.phase ?? null);
 
     await act(async () => { await runGoalCommand("/goal 广播目标"); });
-    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: true });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: expect.objectContaining({ phase: "active", objective: "广播目标" }) });
 
     await act(async () => { await runGoalCommand("/goal stop"); });
-    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: false });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: expect.objectContaining({ phase: "paused" }) });
 
     await act(async () => { await runGoalCommand("/goal resume"); });
-    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: true });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: expect.objectContaining({ phase: "active" }) });
 
     await act(async () => { await runGoalCommand("/goal clear"); });
-    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: false });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: null });
 
-    // 全程通道名不变,只翻 active 位
+    // 全程通道名不变,payload 是全量快照
     expect(mocks.eventsEmit.mock.calls.every((c) => c[0] === "goal:state")).toBe(true);
-    expect(states().length).toBe(4);
+    expect(phases()).toEqual(["active", "paused", "active", null]);
   });
 
   it("模型 set_goal / achieve_goal 也广播(工具路径与命令路径同收口)", () => {
     renderHook(() => useGoalController());
 
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "工具设的目标" } });
-    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: true });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: expect.objectContaining({ phase: "active" }) });
 
     emit({ type: "toolCallStart", toolName: "achieve_goal" });
-    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { active: false });
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: expect.objectContaining({ phase: "achieved" }) });
   });
 
   it("用户输入插队:收敛时有排队用户消息 → 本次不续跑不进轮次,队列清空后的收敛再续", async () => {

@@ -787,15 +787,17 @@ export function TimelineView(): React.ReactNode {
   }, [composerVoiceContribs, setInput]);
 
   // goal 生效着色:订阅 goal 插件的 goal:state 状态广播(replayLast 回放当前态),
-  // active → 输入框换绿晕(.pi-composer-goal)。pluginsNonce 键控重订:插件并行加载,
-  // timeline 可能先挂载而 goal 的 channel 尚未注册(on 会抛错)——每次插件集合变化
-  // 重试订阅,goal 后到也能接上;replayLast 补回订阅前已发出的状态。goal 插件始终
-  // 缺席(被禁)则每次重试都落 catch,保持无晕,绝不影响 timeline 自身。
+  //  active → 输入框换绿晕(.pi-composer-goal)。payload 是目标状态全量快照
+  //  ({ objective, phase, round, maxRounds } | null),本消费方只用其中 phase==="active"。
+  //  pluginsNonce 键控重订:插件并行加载,timeline 可能先挂载而 goal 的 channel 尚未注册
+  //  (on 会抛错)——每次插件集合变化重试订阅,goal 后到也能接上;replayLast 补回订阅前
+  //  已发出的状态。goal 插件始终缺席(被禁)则每次重试都落 catch,保持无晕,绝不影响 timeline 自身。
   const [goalActive, setGoalActive] = useState(false);
   useEffect(() => {
     try {
       return ctx.events.on("goal:state", (payload) => {
-        setGoalActive((payload as { active?: boolean } | null)?.active === true);
+        const goal = (payload as { goal?: { phase?: string } | null } | null)?.goal;
+        setGoalActive(goal?.phase === "active");
       }, { replayLast: true });
     } catch {
       return;
