@@ -114,6 +114,8 @@ DOM 只断「呈现对不对」(右对齐/徽章/按钮在不在),数据正确�
 
 **跨内核切会话(真 bug 已修 554c42c3)**:`setModel` 的「会话固定内核」真相源用错了——`fixedKernel = activeKernel ?? activeSessionKernel()` 让全局 activeKernel(只记「最后一次选的内核」,跨会话残留)优先,而非会话自身上下文 header.kernel(会话内容属于哪个内核的唯一真相)。从 dsh 会话切回有历史的 pi 会话时 fixedKernel 取到残留的 dsh,误判「当前会话已固定内核」挡发(停止钮不出、回合不起,不对称:dsh 续发正常)。修复:`activeSessionKernel() ?? activeKernel`(会话上下文优先)。复现:pi 发一条 → 新会话选 dsh 发一条 → 切回 pi 会话 → pi 续发(观察 `[aria-label*=停止]` 是否出现)。探针注意:切会话后视图断言用 `[data-message-id]` 行文本,别用 `body.innerText`(混侧栏预览);多会话切换要多切几轮(pi→dsh→pi→dsh)才能暴露「最后一次内核」这类残留。
 
+**多会话建会话的模型选择器时序(探针,非 bug)**:建第 3 个会话时,模型选择器的内核 tab 切换(PI↔DSH)后模型列表要重渲染——`pickModel` 每步 sleep 要给足(≥800ms),否则第 3 次选模会落在旧列表/选错内核;会话 needle 用完整首条消息文本(如「ping sA」),别用单字母「A」(多会话时 `includes("A")` 会误匹配)。r303 实证:3 会话(pi/dsh/pi)切换发送全绿(停止钮出+收敛+隔离),此前 r300 用 500ms sleep + 单字母 needle 全挂是探针问题,不是产品 bug。
+
 **goal 引擎**:`/goal limit N`(须先有别目标时无效,limit 只改现存目标;要限速先在设置里改 goal.maxRounds 再设目标)→ `/goal <目标>`(正文作为真实用户消息发出,所见即所得)→ `[data-goal-phase]` 观察 active→(暂停)→paused→(恢复)→active;留痕卡 role=`goal_note` 落中立层。
 
 **ask 提问**:指令模型「调用 ask_user_question 问我…」→ 等 `[data-ask-question]` → 选项整行(单选点选即答;多选勾选+提交)。
