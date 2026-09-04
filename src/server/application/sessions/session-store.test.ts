@@ -1140,3 +1140,63 @@ describe("resume 根 lineage 不变量(root lineageId ≡ neutralSessionId,unify
     expect(anchorId).toBe(`${ns}:0`); // 单条快照前缀,边界=第 0 条
   });
 });
+
+describe("三会话跨内核切换(pi/dsh/pi,会话对应进程不串)", () => {
+  class TriBackend {
+    alive = false;
+    capabilities: { pi?: unknown } = {}; // 无 pi 扩展面(避免 bindProcEvents 走 onBusFrame 假面)
+    calls: string[] = [];
+    constructor(public kernel: "pi" | "dsh") {}
+    async start(): Promise<void> { this.alive = true; this.calls.push("start"); }
+    async stop(): Promise<void> { this.alive = false; this.calls.push("stop"); }
+    onEvent(): () => void { return () => {}; }
+    async sendMessage(): Promise<void> { this.calls.push("sendMessage"); }
+    async setModel(): Promise<void> {}
+    async setSessionName(): Promise<void> {}
+    async seed(): Promise<string> { this.calls.push("seed"); return "seeded"; }
+    async fork(): Promise<unknown> { return { lineageId: "f", sessionReplaced: false }; }
+    async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+    async getEntries(): Promise<NeutralMessage[]> { return []; }
+    async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
+    async deleteBookmark(): Promise<void> {}
+    async abort(): Promise<void> {}
+  }
+  const dshSource: KernelModelSource = {
+    listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
+  };
+
+  it("pi-A/dsh-B/pi-C 三会话来回切换,各自发送不串、不撞「已固定内核」", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "tri-neutral-")));
+    // 三会话:pi-A、dsh-B、pi-C,各带历史(有 entry)
+    const make = (ns: string, kernel: "pi" | "dsh") => neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel, cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }),
+      lineages: [{ lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: `hi-${ns}` } }] }],
+    });
+    make("ns-A", "pi"); make("ns-B", "dsh"); make("ns-C", "pi");
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const created: string[] = [];
+    const factory: BackendFactory = {
+      seed: async () => null,
+      create: (opts) => { created.push(opts.kernel); return new TriBackend(opts.kernel as "pi" | "dsh") as unknown as BaseBackend; },
+    };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    // 逐个会话发一轮,再回来切换重发
+    const send = async (ns: string, kernel: "pi" | "dsh", text: string) => {
+      s.setContext(CWD, ns);
+      const model = kernel === "pi" ? { provider: "p", modelId: "a", kernel: "pi" as const, thinkingLevel: "" } : { provider: "us-new", modelId: "dsh-model", kernel: "dsh" as const, thinkingLevel: "" };
+      await s.setModel(model.provider, model.modelId, kernel);
+      await s.prompt(text, undefined, undefined, model);
+    };
+    await send("ns-A", "pi", "A1");
+    await send("ns-B", "dsh", "B1");
+    await send("ns-C", "pi", "C1");
+    // 切回 A/B/C 重发(第二轮)——修前第三会话后切回撞「已固定内核」
+    await send("ns-A", "pi", "A2");
+    await send("ns-B", "dsh", "B2");
+    await send("ns-C", "pi", "C2");
+    // 三会话各自有进程(pi×2 + dsh×1),不串
+    expect(created.filter((k) => k === "pi")).toHaveLength(2);
+    expect(created.filter((k) => k === "dsh")).toHaveLength(1);
+    // 无异常即通过(核心:第二轮 setModel 不撞跨内核闸)
+  });
+});
