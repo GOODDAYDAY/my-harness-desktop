@@ -389,11 +389,6 @@ export class SessionStore implements
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
     kernels.set(resolvedKernel, proc);
     await proc.backend.start();
-    // 物化标记随能力面落定(根因修复,勿回退):createProc 恒置空=惰性物化;start 后能力探测
-    // 到位,按「预 seed 面」归位——pi 有预 seed(spawn 即经 --session 读文件,内容已在)标
-    // 已物化(ns);dsh 无预 seed(进程空空)保持空串,首发 materializeActiveLineage 再 seed 回填。
-    // 不能用 `factory.seed 有无`(生产恒有,dsh 返 null),故用能力面 capabilities.pi(§1.5)。
-    proc.materializedLineageId = proc.backend.capabilities.pi ? proc.activeLineageId : "";
     // 并发护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,tsx dev pi 1~2s)
     // 内可能插入并发 setContext(⌘N/切目录/第二次 sendText 的 startNewChat)把
     // activeProcKey 切走。此后 sync 用 activeProc() 回查会落空抛误导性的"pi 未启动"。
@@ -469,13 +464,13 @@ export class SessionStore implements
     });
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
     const proc: SessionProc = { backend, kernel, neutralSessionId: ns, nonce: randomUUID(), cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, effectiveModel: provider && model ? { provider, modelId: model, kernel } : undefined, activeLineageId: ns,
-      // 物化标记(session-single-source §4.4):一律置空=惰性物化——新进程尚未把活跃 lineage 灌进内核。
-      // 此前用 `this.factory.seed ? ns : ""` 判「有无预 seed 面」,但生产 factory.seed 恒定义
-      // (dsh 返回 null 表示走 RPC seed),`factory.seed` 恒真 → dsh 也标 ns=已物化 → 重开历史
-      // dsh 会话的 seed 回填被 materializeActiveLineage 提前 return 跳过,历史丢失(实弹/测试
-      // 都用无 seed 工厂掩盖了)。改惰性后由 materializeActiveLineage 按能力面区分:
-      // RPC-seed 内核(dsh)在现进程 seed;预 seed 内核(pi)先写文件再 spawn。
-      materializedLineageId: "" };
+      // 物化标记(session-single-source §4.4):按能力面探测「预 seed 面」归位——pi 有预 seed
+      // (spawn 即经 --session 读文件,内容已在)标 ns=已物化;dsh 无预 seed(进程空空)标空串,
+      // 首发 materializeActiveLineage 再 seed 回填。此前用 `factory.seed 有无` 判,但生产
+      // factory.seed 恒定义(dsh 返 null 表 RPC seed),恒真 → dsh 也标 ns=已物化 → 重开历史
+      // dsh 会话 seed 回填被提前 return 跳过、历史丢失。capabilities 在 backend 构造时即定
+      // (PiBackend/DshBackend 字段初始化),createProc 时可用,不必等到 start 后(能力面 §1.5)。
+      materializedLineageId: backend.capabilities.pi ? ns : "" };
     this.bindProcEvents(proc);
     return proc;
   }
