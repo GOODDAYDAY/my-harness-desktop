@@ -17,8 +17,6 @@ interface BookmarkMeta {
   cwd: string;
   entryId: string;
   originalSessionPath: string;
-  /** 后端书签副本路径(anchor.opaque)。旧书签无此字段,resume 回退 bookmarkSessionFile 推导。 */
-  bookmarkPath?: string;
   /** 运行时标记:收藏目录是否仍存在(非持久,加载时计算)。 */
   exists?: boolean;
 }
@@ -35,16 +33,6 @@ function joinPath(base: string, ...parts: string[]): string {
   return [base.replace(/\/$/, ""), ...parts].join("/");
 }
 
-/** 书签会话副本(fork 用)的项目级数据目录:<cwd>/.my-harness-desktop/session-bookmarks/<id>.jsonl。
- *  元数据走统一通道 ctx.config 的 "bookmarks" key(项目级 <cwd>/.my-harness-desktop/config/session-bookmarks.json,
- *  跟随项目、git 可追踪);副本是数据不是配置,住项目级数据目录。 */
-function bookmarkDataDir(cwd: string): string {
-  return joinPath(cwd, ".my-harness-desktop", "session-bookmarks");
-}
-function bookmarkSessionFile(cwd: string, id: string): string {
-  return joinPath(bookmarkDataDir(cwd), `${id}.jsonl`);
-}
-
 /** 收藏快照目录(新快照模型 §bookmark-snapshot-fork-unify):<cwd>/.my-harness-desktop/bookmarks/<id>.json。
  *  快照由 session-store 物化写入(中立 NeutralEntry[] 自包含拷贝),渲染层只做 exists 判定 + 孤儿对账。 */
 function snapshotDir(cwd: string): string {
@@ -52,11 +40,12 @@ function snapshotDir(cwd: string): string {
 }
 
 /** 一次性懒迁移:旧全局桶 ~/.my-harness-desktop/plugins-data/session-bookmarks/<cwd-hash>/ 迁回项目级。
- *  cwdToBucketName 不可逆(横线歧义),但正向可算——打开项目时算自己的旧桶名检查,
- *  有就把 index/meta 读进统一通道、jsonl 经 copySession 搬到项目级数据目录。
- *  旧桶搬迁后残留(删除需写白名单外路径,通道不开放;残留只读无危害)。
- *  评估 P1-D1 当年把书签逼出项目目录(无门控 configFile 通道绕过 fs:project 沙箱);
- *  现由统一通道回家——路径框架推导,插件不碰路径。
+ *  只迁元数据(index/meta 进统一通道 "bookmarks")。旧 .jsonl 副本不再 copySession 到
+ *  session-bookmarks/ 旧目录——快照模型(§bookmark-snapshot-fork-unify)的 exists 判定与
+ *  resume 只读 <cwd>/.my-harness-desktop/bookmarks/<id>.json,旧 .jsonl 副本目录无任何读取方
+ *  (createBookmark 走 ctx.sessions.bookmark 写快照、forkFromBookmark 走 ctx.sessions.resume
+ *  读快照),搬过去是死数据。旧书签在快照模型下无法发起(无快照文件),exists=false 显式呈现,
+ *  不伪造——这是「旧格式 → 新快照」迁移缺失的诚实降级(§7.6),非静默吞。
  *  哨兵纪律:读到非空旧 index 立刻落 "legacyMigrated" 标记——旧桶残留永不删,
  *  无标记时「删光全部收藏」会在下次加载重新迁移、收藏复活(根因:迁移无完成态)。 */
 async function migrateLegacyBucket(ctx: ReturnType<typeof usePluginContext>, cwd: string): Promise<BookmarkMeta[] | null> {
@@ -70,16 +59,6 @@ async function migrateLegacyBucket(ctx: ReturnType<typeof usePluginContext>, cwd
   if (!Array.isArray(indexRaw) || indexRaw.length === 0) return null;
   await ctx.config.set("legacyMigrated", true);
   const metas = (indexRaw as BookmarkMeta[]).filter((b) => b && typeof b.id === "string");
-  for (const bm of metas) {
-    try {
-      await ctx.sessions.copySession(
-        joinPath(legacyDir, bm.id, "session.jsonl"),
-        bookmarkSessionFile(cwd, bm.id),
-      );
-    } catch (err) {
-      console.warn(`[session-bookmarks] 旧书签副本搬迁失败,标不存在:${bm.id}`, err);
-    }
-  }
   await ctx.config.set("bookmarks", metas);
   return metas;
 }
@@ -106,7 +85,7 @@ export function BookmarksTab(): React.ReactNode {
   const [bookmarks, setBookmarks] = useState<BookmarkMeta[]>([]);
   const [order, setOrder] = useState<string[]>([]);
   const orderRef = useRef<string[]>([]);
-  /** 在途创建的副本 id(创建窗口豁免):copySession 落盘到 config.set 之间,孤儿对账不删。 */
+  /** 在途创建的快照 id(创建窗口豁免):bookmark 落盘到 config.set 之间,孤儿对账不删。 */
   const pendingCreateRef = useRef(new Set<string>());
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -235,7 +214,7 @@ export function BookmarksTab(): React.ReactNode {
   };
 
   // 删除流程(设计 bookmark-copy-lifecycle.md §2.2):① 元数据必成(取消收藏本体),
-  // ② 副本 best-effort(清理失败残留由孤儿对账兜底),③ bookmarkOrder 内存同步 + void 写回,
+  // ② 快照 best-effort(清理失败残留由孤儿对账兜底),③ bookmarkOrder 内存同步 + void 写回,
   // ④ UI 刷新。① 失败弹提示直接返回——唯一对用户可见的失败;②③ 成败不影响 ④。
   const deleteBookmark = async (bm: BookmarkMeta): Promise<void> => {
     try {
@@ -250,7 +229,7 @@ export function BookmarksTab(): React.ReactNode {
       // 快照文件住项目级 bookmarks 目录,删除走内核 deleteBookmark 回收。
       await ctx.sessions.deleteBookmark(bm.id);
     } catch (err) {
-      console.warn("[session-bookmarks] 副本清理失败,残留由对账兜底", err);
+      console.warn("[session-bookmarks] 快照清理失败,残留由对账兜底", err);
     }
     const nextOrder = orderRef.current.filter((id) => id !== bm.id);
     if (nextOrder.length !== orderRef.current.length) {
