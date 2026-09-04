@@ -572,6 +572,39 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     expect(reopened.seedLineageLength).toBeGreaterThan(0); // 中立层历史灌进内核
   });
 
+  it("重开历史 dsh 会话续发:生产 factory.seed 恒定义(返 null)也照常 seed 回填(materializedLineageId 惰性化守卫)", async () => {
+    // 根因守卫:createProc 的 materializedLineageId 曾用 `this.factory.seed ? ns : ""`(函数存在
+    // 判「有无预 seed 面」),但生产 factory.seed 恒定义(dsh 返 null 表 RPC seed)→ 恒真 →
+    // dsh 也标 ns=已物化 → materializeActiveLineage 提前 return、seed 跳过、历史丢失。而
+    // 旧测试用 makeDshFactory(无 seed 函数)掩盖了它(走了 seedFn==null 的 in-place 分支)。
+    // 本测试用「生产形态」工厂(seed 定义但返 null),钉死重开仍 seed。
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "matlineage-neutral-")));
+    const ns = "ns-matlineage";
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "dsh", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }),
+      lineages: [{ lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "hi" } }] }],
+    });
+    const created: string[] = [];
+    const backends: { calls: string[]; seedLineageLength: number | null }[] = [];
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const factory: BackendFactory = {
+      // 生产形态:seed 定义,对 dsh 返 null(走 create → start → backend.seed)
+      seed: async () => null,
+      create: (opts) => {
+        created.push(opts.kernel);
+        const b = new FakeDshRoutingBackend();
+        backends.push(b as unknown as { calls: string[]; seedLineageLength: number | null });
+        return b as unknown as BaseBackend;
+      },
+    };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    s.setContext(CWD, ns);
+    await s.prompt("重开后续聊", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    const b = backends[0];
+    expect(b.calls).toContain("seed"); // 惰性物化后重开仍 seed 回填历史
+    expect(b.seedLineageLength).toBeGreaterThan(0);
+  });
+
   it("dsh 第二发:进程模型未变 → 不重发 session/setModel(无快照面内核的已生效真相源 = 起进程模型)", async () => {
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "route-neutral-")));
     const created: string[] = [];

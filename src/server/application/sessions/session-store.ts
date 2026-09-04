@@ -389,6 +389,11 @@ export class SessionStore implements
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
     kernels.set(resolvedKernel, proc);
     await proc.backend.start();
+    // 物化标记随能力面落定(根因修复,勿回退):createProc 恒置空=惰性物化;start 后能力探测
+    // 到位,按「预 seed 面」归位——pi 有预 seed(spawn 即经 --session 读文件,内容已在)标
+    // 已物化(ns);dsh 无预 seed(进程空空)保持空串,首发 materializeActiveLineage 再 seed 回填。
+    // 不能用 `factory.seed 有无`(生产恒有,dsh 返 null),故用能力面 capabilities.pi(§1.5)。
+    proc.materializedLineageId = proc.backend.capabilities.pi ? proc.activeLineageId : "";
     // 并发护栏(根因修复,勿回退):start 的 await 窗口(spawn+waitReady,tsx dev pi 1~2s)
     // 内可能插入并发 setContext(⌘N/切目录/第二次 sendText 的 startNewChat)把
     // activeProcKey 切走。此后 sync 用 activeProc() 回查会落空抛误导性的"pi 未启动"。
@@ -464,11 +469,13 @@ export class SessionStore implements
     });
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
     const proc: SessionProc = { backend, kernel, neutralSessionId: ns, nonce: randomUUID(), cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, effectiveModel: provider && model ? { provider, modelId: model, kernel } : undefined, activeLineageId: ns,
-      // 物化标记(session-single-source §4.4):文件型内核(有预 seed 面=pi)spawn 即经
-      // --session 读文件,内容已在;RPC seed 面内核(dsh)新进程空空,标记置空——
-      // 首发时 materializeActiveLineage 用中立层 seed 回填(替代旧的 continue 重放补面)。
-      // 能力探测(factory.seed 有无),不写内核身份分支(§1.5)。
-      materializedLineageId: this.factory.seed ? ns : "" };
+      // 物化标记(session-single-source §4.4):一律置空=惰性物化——新进程尚未把活跃 lineage 灌进内核。
+      // 此前用 `this.factory.seed ? ns : ""` 判「有无预 seed 面」,但生产 factory.seed 恒定义
+      // (dsh 返回 null 表示走 RPC seed),`factory.seed` 恒真 → dsh 也标 ns=已物化 → 重开历史
+      // dsh 会话的 seed 回填被 materializeActiveLineage 提前 return 跳过,历史丢失(实弹/测试
+      // 都用无 seed 工厂掩盖了)。改惰性后由 materializeActiveLineage 按能力面区分:
+      // RPC-seed 内核(dsh)在现进程 seed;预 seed 内核(pi)先写文件再 spawn。
+      materializedLineageId: "" };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -2121,47 +2128,62 @@ export class SessionStore implements
     if (proc.materializedLineageId === proc.activeLineageId) return;
     const session = this.readNeutral(proc);
     const lineage = session ? assembleSeedProjection(session, proc.activeLineageId) : [];
+    // 空投影(新会话首条/无历史):无内容可 seed,直接标记物化——避免 pi 首条为「空 seed」
+    // 白走一遍 stop+spawn 双进程(惰性物化后 materializedLineageId 恒空,须在此短路)。
+    if (lineage.length === 0) {
+      proc.materializedLineageId = proc.activeLineageId;
+      return;
+    }
     const seedOpts = {
       kernel: proc.kernel, cwd: proc.cwd, agentDir: this.agentDir,
       neutralSessionId: proc.neutralSessionId, lineageId: proc.activeLineageId,
       header: session?.header ?? { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
     };
     const seedFn = this.factory.seed;
-    // RPC seed 面(无预 seed 能力的内核,如 dsh):进程活着就在现进程上 seed,不重建——
-    // 重建是双 spawn 浪费;seed 是按 lineageId 幂等的会话级投影,现进程直接灌即可。
-    if (seedFn == null && proc.backend.alive) {
-      if (lineage.length > 0) await proc.backend.seed(lineage, seedOpts);
+    // RPC seed 面(现进程直接 seed,不 stop+重建=双 spawn 浪费;seed 按 lineageId 幂等):
+    // ① factory 无预 seed 函数(测试简化工厂 / 无预 seed 内核)→ 恒现进程 seed;
+    // ② factory.seed 对本内核返 null(生产 dsh,能力面探测 !capabilities.pi)→ 现进程 seed。
+    // 预 seed 内核(生产 pi,factory.seed 返路径 + capabilities.pi)才走下方 stop+预 seed+spawn。
+    if (proc.backend.alive && (seedFn == null || !proc.backend.capabilities.pi)) {
+      await proc.backend.seed(lineage, seedOpts);
       proc.materializedLineageId = proc.activeLineageId;
       return;
     }
     await proc.backend.stop();
     const seeded = seedFn ? await seedFn(lineage, seedOpts) : null;
-    let newBackend: BaseBackend;
+    let newBackend: BaseBackend | null = null;
     let newSessionId: string;
-    if (seeded != null) {
-      newSessionId = seeded;
-      newBackend = this.factory.create({
-        cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
-        systemPromptPaths: this.getSystemPromptPaths(),
-        systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
-        neutralSessionId: proc.neutralSessionId,
-      });
-      await newBackend.start();
-    } else {
-      newBackend = this.factory.create({
-        cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
-        neutralSessionId: proc.neutralSessionId,
-        systemPromptPaths: this.getSystemPromptPaths(),
-      });
-      await newBackend.start();
-      if (lineage.length === 0) {
-        // 身份不变量(§4.3):空投影时内核标识必须已在(构造注入),不为空会话拼兜底名。
-        const sid = newBackend.sessionId;
-        if (!sid) throw new Error("内核未返回会话标识(身份不变量)");
-        newSessionId = sid;
+    try {
+      if (seeded != null) {
+        newSessionId = seeded;
+        newBackend = this.factory.create({
+          cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
+          systemPromptPaths: this.getSystemPromptPaths(),
+          systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
+          neutralSessionId: proc.neutralSessionId,
+        });
+        await newBackend.start();
       } else {
-        newSessionId = await newBackend.seed(lineage, seedOpts);
+        newBackend = this.factory.create({
+          cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
+          neutralSessionId: proc.neutralSessionId,
+          systemPromptPaths: this.getSystemPromptPaths(),
+        });
+        await newBackend.start();
+        if (lineage.length === 0) {
+          // 身份不变量(§4.3):空投影时内核标识必须已在(构造注入),不为空会话拼兜底名。
+          const sid = newBackend.sessionId;
+          if (!sid) throw new Error("内核未返回会话标识(身份不变量)");
+          newSessionId = sid;
+        } else {
+          newSessionId = await newBackend.seed(lineage, seedOpts);
+        }
       }
+    } catch (err) {
+      // 投影失败收尾(kernel-switch-projection §4.4):新进程已 start 而未挂到 proc.backend,
+      // 不 stop 就成孤儿进程(实弹:dsh seed 抛错时旧进程已停、新进程泄漏)。stop 兜底再外抛。
+      if (newBackend) await newBackend.stop().catch(() => {});
+      throw err;
     }
     proc.backend = newBackend;
     proc.nonce = randomUUID(); // 换绑即换出生证(materialize 重建进程,旧提问走续路)
