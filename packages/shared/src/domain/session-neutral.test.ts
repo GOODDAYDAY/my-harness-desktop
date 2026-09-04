@@ -5,7 +5,7 @@ import {
   sortLineagesTopologically, resolveForkBoundaries, neutralEntryId, lineageContent,
   emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, backfillUserAuthority,
   derivedHeaderFromEntry, derivedHeaderFromSession, appendNeutralEntryWithHeader,
-  resolveForkBoundary,
+  resolveForkBoundary, assembleSeedProjection,
   type NeutralLineage, type NeutralEntry, type NeutralSession,
 } from "./session-neutral";
 import { sessionMessagePreview, SESSION_PREVIEW_MAX } from "./text";
@@ -428,5 +428,27 @@ describe("lineageContent 完整线性内容(§kernel-forkless §11)", () => {
     };
     const out = lineageContent(s, "a");
     expect(out.length).toBeGreaterThan(0);
+  });
+});
+
+describe("assembleSeedProjection 保留 kernelEntryId(分支种子须带内核原 id 保 fork 边界链)", () => {
+  it("fork 分支的 seed 投影含父前缀的 kernelEntryId", () => {
+    const session: NeutralSession = {
+      neutralSessionId: "ns1",
+      header: { kernel: "pi", cwd: "/tmp/x", createdAt: "2026-09-04T00:00:00.000Z" },
+      lineages: [
+        { lineageId: "ns1", fork: null, entries: [
+          { neutralEntryId: "ns1:0", kernelEntryId: "k-user", message: { role: "user", content: "base" } },
+          { neutralEntryId: "ns1:1", kernelEntryId: "k-assist", message: { role: "assistant", content: "reply" } },
+        ]},
+        { lineageId: "branch1", fork: { parentLineageId: "ns1", boundaryEntryId: "ns1:1" }, entries: [
+          { neutralEntryId: "branch1:0", message: { role: "user", content: "branch" } },
+        ]},
+      ],
+    };
+    const proj = assembleSeedProjection(session, "branch1");
+    // 父前缀(截到 boundary ns1:1 含)的 kernelEntryId 必须保留——种子用它当 pi 消息 id,
+    // fork 边界(parentId)才能连回父条目的原 id,分支文件不断链。
+    expect(proj.map((e) => e.kernelEntryId)).toEqual(["k-user", "k-assist", undefined]);
   });
 });
