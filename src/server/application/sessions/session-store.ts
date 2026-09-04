@@ -943,7 +943,10 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc) throw new Error("发起收藏后未拿到会话进程");
     // 重投影:neutralEntryId 重派生到新 lineage,清 kernelEntryId/message.id(目标内核重分配)。
-    const newLineageId = randomUUID();
+    // 根 lineage 必须取会话主键(proc.neutralSessionId)——根 lineageId ≡ neutralSessionId 不变量
+    // (bookmark-snapshot-fork-unify §5.2/§11.2),违者内核 id 派生自随机 UUID 而非 ns,「内核会话
+    // 标识反查中立 id」断链。此前另开 randomUUID() 作根 lineage,正是文档点名的偏离。
+    const newLineageId = proc.neutralSessionId;
     const entries = snap.lineage.entries.map((e, i) => ({
       ...e,
       neutralEntryId: neutralEntryId(newLineageId, i),

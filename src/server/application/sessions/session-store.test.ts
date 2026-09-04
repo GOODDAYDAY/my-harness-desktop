@@ -1094,3 +1094,47 @@ describe("提问投递/作答(ask)的诚实性", () => {
     expect(got).toHaveLength(1);
   });
 });
+
+describe("resume 根 lineage 不变量(root lineageId ≡ neutralSessionId,unify §5.2)", () => {
+  class ResumeBackend {
+    alive = false;
+    capabilities = { pi: false };
+    calls: string[] = [];
+    async start(): Promise<void> { this.alive = true; this.calls.push("start"); }
+    async stop(): Promise<void> { this.alive = false; this.calls.push("stop"); }
+    onEvent(): () => void { return () => {}; }
+    async sendMessage(): Promise<void> { this.calls.push("sendMessage"); }
+    async setModel(): Promise<void> {}
+    async setSessionName(): Promise<void> {}
+    async seed(): Promise<string> { this.calls.push("seed"); return "seeded"; }
+    async fork(): Promise<unknown> { return { lineageId: "f", sessionReplaced: false }; }
+    async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+    async getEntries(): Promise<NeutralMessage[]> { return []; }
+    async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
+    async deleteBookmark(): Promise<void> {}
+    async abort(): Promise<void> {}
+  }
+
+  it("发起收藏后新会话根 lineage 取会话主键(不另开随机 UUID)", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "resume-neutral-")));
+    const bookmarkDir = mkdtempSync(join(tmpdir(), "resume-bookmark-"));
+    // 预置快照文件(自包含:source 字段仅供溯源,不读源会话)
+    const snapId = "bm-1";
+    writeFileSync(join(bookmarkDir, `${snapId}.json`), JSON.stringify({
+      version: 1, id: snapId, label: "收藏", preview: "hi", createdAt: "now",
+      sourceKernel: "dsh", sourceNeutralSessionId: "src-ns",
+      boundaryEntryId: "src:0",
+      lineage: { lineageId: "src", entries: [{ neutralEntryId: "src:0", message: { role: "user", content: "hi" } }] },
+    }));
+    const factory: BackendFactory = { create: () => new ResumeBackend() as unknown as BaseBackend };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, undefined, () => bookmarkDir);
+    s.setContext(CWD, null);
+    await s.resume(snapId);
+    // 新会话:根 lineage 必须 == neutralSessionId(不变量)
+    const sessions = neutralStore.listByCwd(CWD);
+    expect(sessions).toHaveLength(1);
+    const ns = sessions[0].neutralSessionId;
+    const rootLineage = neutralStore.get(ns)!.lineages.find((l) => l.fork === null)!;
+    expect(rootLineage.lineageId).toBe(ns); // 根 lineageId ≡ neutralSessionId
+  });
+});
