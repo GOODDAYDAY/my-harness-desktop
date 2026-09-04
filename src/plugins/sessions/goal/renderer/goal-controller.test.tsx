@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   onKernelEventCb: null as ((e: { kind: string; sessionKey: string; event: SessionEvent }) => void) | null,
   pendingQueue: {} as Record<string, { id: string }[]>,
   generalConfig: {} as Record<string, unknown>,
+  neutralSessionId: null as string | null,
   messages: [] as unknown[],
 }));
 
@@ -40,8 +41,8 @@ vi.mock("@my-harness-desktop/react", () => {
   const messaging = { prompt: mocks.prompt };
   const notify = { show: mocks.notify };
   const events = { emit: mocks.eventsEmit, on: vi.fn(() => () => {}) };
-  const stateOf = (): { currentSessionPath: string; pendingQueue: Record<string, { id: string }[]>; generalConfig: Record<string, unknown> } =>
-    ({ currentSessionPath: "/p/s.jsonl", pendingQueue: mocks.pendingQueue, generalConfig: mocks.generalConfig });
+  const stateOf = (): { currentSessionPath: string; currentNeutralSessionId: string | null; pendingQueue: Record<string, { id: string }[]>; generalConfig: Record<string, unknown> } =>
+    ({ currentSessionPath: "/p/s.jsonl", currentNeutralSessionId: mocks.neutralSessionId, pendingQueue: mocks.pendingQueue, generalConfig: mocks.generalConfig });
   const useUiStore = Object.assign(
     (selector?: (s: ReturnType<typeof stateOf>) => unknown) => (selector ? selector(stateOf()) : stateOf()),
     { getState: stateOf },
@@ -81,6 +82,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.onEventCb = null;
     mocks.pendingQueue = {};
     mocks.generalConfig = {}; // 通用配置默认空(代码兜底 1000)
+    mocks.neutralSessionId = null;
     mocks.messages = []; // 默认无历史=正常收敛(异常收敛检测)
     __resetGoalStoreForTests(); // 模块级目标态(抗重挂载单例)测试间隔离
   });
@@ -167,6 +169,22 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
       "/p/s.jsonl",
       { custom: { goal: expect.objectContaining({ objective: "新目标", phase: "active", round: 3 }) } },
     );
+  });
+
+  it("水合经中立 ns 调 openSession,不是投影 sessionPath(根因守卫:投影路径查不到中立层)", async () => {
+    // 生产里 currentSessionPath 是投影文件路径(<cwd>/…/<rootLineageId>.jsonl),openSession 只认中立 ns——
+    // 用 path 调 → neutralStore.get(path) 查不到 → goal 重启/切会话不水合。守卫:ns 在时按 ns 调。
+    mocks.neutralSessionId = "ns-real-uuid";
+    mocks.openSession.mockResolvedValue({
+      info: { custom: { goal: { objective: "按 ns 恢复", phase: "paused", round: 0, maxRounds: 5 } } },
+    });
+    const { result } = renderHook(() => useGoalController());
+    await act(async () => { await Promise.resolve(); });
+    // openSession 必须拿中立 ns,不是投影路径
+    expect(mocks.openSession).toHaveBeenCalledWith("ns-real-uuid");
+    // 且目标从 custom.goal 水合回(paused 不装弹)
+    expect(result.current.goal?.objective).toBe("按 ns 恢复");
+    expect(result.current.goal?.phase).toBe("paused");
   });
 
   it("关闭(clear)落盘 goal=null 删键", () => {

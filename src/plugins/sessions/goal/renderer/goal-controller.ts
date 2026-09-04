@@ -112,6 +112,9 @@ export function runGoalCommand(input: string): Promise<ComposerCommandResult> {
 export function useGoalController() {
   const { sessions, messaging, notify, events } = usePluginContext();
   const sessionPath = useUiStore((s) => s.currentSessionPath);
+  // 中立 ns:openSession 的入参是中立会话 id,不是投影 sessionPath(currentSessionPath 是
+  // 目录里的投影文件路径,经 neutralStore.get(ns) 查不到——此前 goal 重启/切会话不水合的根因)。
+  const neutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
   // 初始化读模块级单例(重挂载存活),而不是固定 null。
   const [goal, setGoalState] = useState<GoalState | null>(currentGoal);
   const [sendError, setSendErrorState] = useState<string | null>(lastSendError);
@@ -251,7 +254,9 @@ export function useGoalController() {
     }
     // 真切换/冷启动:读头行换档——头行有目标恢复;没有且目标本就属于别的会话(诞生路径不同)→ 清掉;
     // 没有且目标诞生于本会话(含未物化的 new: 壳)→ 保留内存态。
-    void sessions.openSession(sessionPath)
+    // openSession 入参是中立 ns(currentNeutralSessionId),不是投影 sessionPath;ns 缺(未物化)时跳过,靠下次切换。
+    const openKey = neutralSessionId ?? sessionPath;
+    void sessions.openSession(openKey)
       .then((detail) => {
         if (!alive) return;
         const custom = (detail as { info?: { custom?: Record<string, unknown> } } | null)?.info?.custom;
@@ -265,7 +270,7 @@ export function useGoalController() {
       })
       .catch(() => { /* 会话未就绪/读失败:保持无目标,下次切换再读 */ });
     return () => { alive = false; };
-  }, [sessions, sessionPath, setGoal, armIfIdle]);
+  }, [sessions, sessionPath, neutralSessionId, setGoal, armIfIdle]);
 
   // 续跑事件订阅:toolCallStart 捕获 set_goal/achieve_goal,agentSettled 判定续跑;
   // agentStart/agentSettled 同时维护 busy(用户命令的即时装弹判据)。
