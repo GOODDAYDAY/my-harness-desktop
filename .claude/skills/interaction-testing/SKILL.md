@@ -120,6 +120,14 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **ask 提问**:指令模型「调用 ask_user_question 问我…」→ 等 `[data-ask-question]` → 选项整行(单选点选即答;多选勾选+提交)。
 
+**[data-message-id] 只数带锚点的行——丢 id 的行在锚点查询里不存在(r309 踩过)**:服务端 openSession 曾漏 id 提升(已修 946fbd2e),无 message.id 的存量条目整行渲染但无 data-message-id——锚点计数比 div.group 少。断行数时「全行」用 div.group 数、「锚点行」用 [data-message-id] 数,二者不等 = 有行丢了锚点(真 bug);旧代码上跑探针,别把少行当视口陷阱。
+
+**「+ 新会话」才是新建入口(r309 踩过)**:「新对话」占位行只在壳态渲染——已有活会话时侧栏根本没有这行,点它=无效点击,发送全落当前会话。新建会话点工具栏「+」钮(title 全等「新会话 (⌘N)」;includes 会先命中「刷新会话列表」,§3.1)。点完验壳态(消息行=0)再选模发送。
+
+**默认模型随 dsh 配置漂移,别赌(r309 踩过)**:装了 dsh 三件后默认模型=dsh;隔离区没装 dsh 时默认=pi。多内核探针每站都显式选模(内核 TAB 在下拉底部,button 文本是小写 "pi"/"dsh,不是 DSH 大写页签);pi 侧选已验证的 qwen3.8(Glm 5.2 实测产生零条 assistant 的空回合——空回合照样 agentSettled?不,空回合无 agentSettled,用「等 agentSettled 事件」当收敛判据,别用「停止钮消失」(空回合不发停止钮,两阶段等待会假通过)。
+
+**跨内核轮换的行定位(r303/r309 同坑扩展)**:fork 派生会话与源会话侧栏预览同文(前缀继承),按 needle 找行会撞——用派生名 "(copy)" 后缀区分;needle 用带句号的全文("ping sA。")防子串撞("ping sA" 也命中 "sAprime-two")。
+
 **bus 乒乓污染探针(r307 踩过,非产品 bug)**:基础回合若发"ping alpha"这类开放 prompt,模型会读 bus skill 文档(chatroom-collab/delegate-task)并自发 `channel_member` 进 channel;fork/重试产生第二个会话后,两会话在房间互发 `[bus chat]` 帧、每帧触发对方新回合,乒乓到 `bus_throttled`(20 条/分钟令牌桶熔断)——settle 永不收敛、双方会话被注入帧刷爆。这是 session-bus.md §3.4 Q6 文档化的双保险场景(防回声 looksLikeBusFrame + 节流熔断,行为符合设计),不是 fork 的 bug。探针避法:基础回合用明确指令「不要使用任何工具/不要加入任何 channel,只回一个词」;断言别数文本出现次数(模型回复会回显 prompt 文本)。
 
 ## 6 诊断现场留存(失败时可复现)
