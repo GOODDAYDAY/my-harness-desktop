@@ -348,6 +348,44 @@ describe("setModel 跨内核路由(中间转换层)", () => {
     expect(adapter.alive).toBe(true);
     expect(mock.calls).toEqual([]);
   });
+
+  it("切会话换绑 activeKernel:从 dsh 会话切回有历史的 pi 会话,pi 再发不被「已固定内核」误拦(根因守卫)", async () => {
+    // 根因:activeKernel 是「当前激活会话的内核」,但 setContext(切会话)只换 activeProcKey 不换
+    // activeKernel——从 dsh 会话切回 pi 会话时它仍指 dsh,pi 会话 setModel(pi) 撞「当前会话已
+    // 固定内核,跨内核切换后续支持」闸,发送静默失败(实弹:pi→dsh→pi 切回后 pi 续发停止钮不出)。
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "xkern-switch-neutral-")));
+    const piNs = "ns-pi";
+    const dshNs = "ns-dsh";
+    // 有历史的 pi 会话(header.kernel=pi + 一条 user entry)
+    neutralStore.put({
+      ...emptyNeutralSession(piNs, { kernel: "pi", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }),
+      lineages: [{ lineageId: piNs, fork: null, entries: [{ neutralEntryId: `${piNs}:0`, message: { role: "user", content: "hi" } }] }],
+    });
+    // dsh 会话(header.kernel=dsh,空历史)
+    neutralStore.put(emptyNeutralSession(dshNs, { kernel: "dsh", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }));
+    const dshSource: KernelModelSource = {
+      listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
+    };
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
+    const mock = new MockBackend();
+    const factory: BackendFactory = {
+      create: (opts) => opts.kernel === "dsh"
+        ? mock as unknown as BaseBackend
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+    };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const piPath = join(dir, "sessions", cwdToBucketName(CWD), `${piNs}.jsonl`);
+    const dshPath = dshNs; // dsh 投影路径 = 根 lineageId(= ns)
+
+    // ① 先到 dsh 会话:setContext(dsh) + setModel(dsh) + 发一条(dsh 会话变 touched,有历史)
+    s.setContext(CWD, dshPath);
+    await s.setModel("us-new", "dsh-model", "dsh");
+    await s.prompt("dsh msg"); // touched → 切走不回收(忠实于实弹:dsh 会话有内容)
+    // ② 切回有历史的 pi 会话:setContext(pi) → activeKernel 应换绑回 pi
+    s.setContext(CWD, piPath);
+    // ③ pi 会话再选 pi 模型:修复前 activeKernel 仍 dsh → hasHistory(pi 有历史)=true → 撞闸抛错
+    await expect(s.setModel("p", "a", "pi")).resolves.toBeUndefined();
+  });
 });
 
 

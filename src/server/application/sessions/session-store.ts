@@ -328,6 +328,12 @@ export class SessionStore implements
     // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
     const key = sessionPath ? this.resolveProcKey(sessionPath) : (cwd ? `new:${cwd}` : "");
     this.activeProcKey = key;
+    // 内核归属随会话(根因修复,勿回退):activeKernel 是「当前激活会话的内核」,切会话必须
+    // 换绑——此前只换 activeProcKey 不换 activeKernel,从 dsh 会话切回 pi 会话时 activeKernel
+    // 仍指 dsh,pi 会话再发消息撞「会话已固定内核」闸静默失败(实弹复现:pi→dsh→pi 切回后
+    // pi 续发停止钮不出、回合不起)。有持久会话读其 header.kernel,新会话/无 header 归 null
+    // (setModel 选模型时再定)。注意须先设 activeSessionPath 再读(activeSessionKernel 依赖它)。
+    this.activeKernel = sessionPath ? this.activeSessionKernel() : null;
     if (prevKey && prevKey !== key) {
       const prevKernels = this.procs.get(prevKey);
       if (prevKernels) {
