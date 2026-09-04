@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**组合场景的威力(r317 实钉,真 bug 猎场)**:「派生 × goal × 跨内核切换」这种**组合探针**是单功能探针探不到的 bug 的猎场——r317 靠它揪出 writeNeutralHeader 的 custom 整域赋值(goal 分片写抹掉 custom.model → 续跑「会话未启动」→ auto_pause 停摆)。方法论:组合探针失败时**先读会话头的 custom 全键**(不只读你关心的键)——键凭空消失=有调用方在做整域覆盖;再反查该键的所有写方。探针侧教训:① A 显式选 pi(装 dsh 后默认=dsh,别赌默认);② 长组合(≥4 次回合收敛)跑 **后台任务+日志文件**,bash 前台 10min 超时掐断 probe 收尾;③ 端口残留(kill 后未清)让下一次 assertPortFree 拒跑——起前 `lsof -ti :PORT | xargs kill -9`;④ (copy) 行定位:侧栏列宽会截掉后缀,兜底取「含前缀文本的最后一行」。
+
 **删会话/快照自包含探针口径(r316 实钉)**:① 删会话入口 = 侧栏行**右键** → ContextMenu「删除」→ 整行内联确认(行内容被替换成确认条);确认按钮是 **Check 图标钮,title=「确认删除」(无文本)**——按 title 找,别 textContent;取消 = X 图标钮 title=「取消」。② 活会话不可删(deletable=false 右键菜单项直接不渲染)——先「+ 新会话」切壳再删;删除级联 = 中立层文件 + pi 文件 + 侧栏行全消失。③ 快照自包含断言:删源后 `<cwd>/.my-harness-desktop/bookmarks/` 快照仍在,resume 照常发起、新会话含全量快照内容——「源删了也能发起」的实弹验收法。
 
 **整重启(崩溃安全)探针口径(r315 实钉)**:pendingSeed 是**会话头行字段**(中立层文件),不随进程消失——「派生 → killApp 整退 → 同 HOME 重新 launchApp → 冷启动首发」的断言序列:① 派生后 pi 文件不存在;② 重启后读盘 pendingSeed 仍 true;③ 冷启动侧栏点开 (copy) 行,前缀可见;④ 首发 → pi 文件出现且**前缀+新回合都在**(内容零丢失);⑤ pendingSeed 清除。launch/kill 两次要用同一 runRoot+HOME(killApp 后 sleep 3s + assertPortFree 再起,端口残留会静默起不来)。这是 §6.5「持久标记,崩溃重启后下次首发自动重试」的实弹验收法。
