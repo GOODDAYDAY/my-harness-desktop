@@ -409,7 +409,10 @@ const kernel = {
       transport.invoke(IPC.session.setThinkingLevel, level),
     // SessionTreeApi
     fork: (parentLineageId: string, boundary?: string, position?: "before" | "at"): Promise<string> => transport.invoke(IPC.session.fork, parentLineageId, boundary, position),
-    // 中性树面(session-single-source §4.2):壳的实现,与内核无关
+    // 中性树面(session-single-source §4.2 + unify §7.1):壳的实现,与内核无关。
+    // forkFromSession 已从 pi 扩展面收编(同一 deriveSession 派生核,dsh 也可分叉)。
+    forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at"): Promise<string> =>
+      transport.invoke(IPC.session.forkFromSession, cwd, srcNs, entryId, position) as Promise<string>,
     clone: (): Promise<void> => transport.invoke(IPC.session.clone),
     getForkMessages: (entryId: string): Promise<unknown[]> => transport.invoke(IPC.session.getForkMessages, entryId),
     // SessionMaintenanceApi
@@ -429,8 +432,6 @@ const kernel = {
       cycleModel: (): Promise<void> => transport.invoke(IPC.session.cycleModel),
       getThinkingLevels: (): Promise<string[]> => transport.invoke(IPC.session.getThinkingLevels),
       cycleThinkingLevel: (): Promise<void> => transport.invoke(IPC.session.cycleThinkingLevel),
-      forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at"): Promise<void> =>
-        transport.invoke(IPC.session.forkFromSession, cwd, srcNs, entryId, position),
       compact: (customInstructions?: string): Promise<void> => transport.invoke(IPC.session.compact, customInstructions),
       setAutoCompaction: (enabled: boolean): Promise<void> => transport.invoke(IPC.session.setAutoCompaction, enabled),
       setAutoRetry: (enabled: boolean): Promise<void> => transport.invoke(IPC.session.setAutoRetry, enabled),

@@ -16,7 +16,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@my-harness-desktop/react", () => ({
   usePluginContext: () => ({
     events: { invoke: mocks.invoke },
-    pi: { forkFromSession: mocks.forkFromSession },
+    // fork 走中性树面(unify §7.1,不再是 pi 扩展面——dsh 会话也可分叉)
+    tree: { forkFromSession: mocks.forkFromSession },
   }),
   useUiStore: () => ({ currentCwd: "/p", currentSessionPath: "/p/s.jsonl", currentNeutralSessionId: "ns" }),
   useSessionStore: (selector?: (s: unknown) => unknown) => {

@@ -17,7 +17,7 @@ import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnaps
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader, NeutralChange } from "@my-harness-desktop/shared";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, resolveForkBoundary, neutralMessagesOfSession, neutralSessionToTree } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, resolveForkBoundary, reprojectEntries, neutralMessagesOfSession, neutralSessionToTree } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import { PendingQuestionStore } from "./pending-question-store";
@@ -373,11 +373,11 @@ export class SessionStore implements
     // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
     const key = sessionPath ? this.resolveProcKey(sessionPath) : `new:${cwd}`;
     this.activeProcKey = key;
-    // skipResolve:forkFromSession 的中间副本是临时新文件,不需读回;resolve 的 await 会破坏
-    // 「setContext+createProc 同步段」竞态护栏(见 forkFromSession)。
+    // skipResolve:resume(收藏发起)的新会话尚无投影文件,不需读回;resolve 的 await
+    // 会破坏「setContext+createProc 同步段」竞态护栏(resume 内部接连 setContext)。
     const ns = !skipResolve && sessionPath ? this.neutralSessionIdFromPath(sessionPath) : undefined;
     // 内核读回(§2.4):调用方显式传的优先;否则从会话归属读回——读不到即报错,不回落 pi。
-    // skipResolve(fork 中间副本)不读回,调用方必须显式传 kernel(中间副本必是 pi 文件)。
+    // skipResolve(resume 新会话)不读回,调用方必须显式传 kernel(目标内核由发起方定)。
     if (skipResolve && !kernel) throw new Error("无法确定会话内核：内部调用必须显式指定内核");
     const resolvedKernel = kernel ?? await this.resolveSessionKernel(sessionPath, ns);
     // 起进程即隐含「要用这个内核」:activeKernel 未定时设它(warmup 走 warmupKernel 不经此,不设)。
@@ -417,7 +417,7 @@ export class SessionStore implements
 
   /** 读回会话内核(§2.4):中立 header.kernel > model 域 kernel > 会话头 custom.kernel。
    *  目标是「重开历史 dsh 会话不起成 pi」,不建完整的会话内核恢复系统。
-   *  ns 由调用方 resolve 后传入(避免重复读);skipResolve 场景(fork 中间副本)ns 为 undefined。
+   *  ns 由调用方 resolve 后传入(避免重复读);skipResolve 场景(resume 新会话)ns 为 undefined。
    *  读不到即报错——内核 = 模型的派生量,查无实据时不静默落 pi(§kernel-follows-model)。 */
   private async resolveSessionKernel(sessionPath: string | null | undefined, ns?: string): Promise<KernelId> {
     if (ns) {
@@ -464,15 +464,30 @@ export class SessionStore implements
     });
     // 内核侧会话标识归 backend.sessionId(pi=路径,dsh=中立主键 ns,seed 后重绑);壳不自拼内核会话 id。
     const proc: SessionProc = { backend, kernel, neutralSessionId: ns, nonce: randomUUID(), cwd, key, boundSessionPath: sessionPath, genStartMs: null, lastTps: null, roundOut: 0, roundGenSec: 0, turn: zeroTurnUsage(), lastTurn: null, turns: 0, steps: 0, lastPromptAnchorReal: false, touched: false, configSnapshot: this.captureConfigSnapshot(backend.configDepPaths ?? []), role, lastModelRef: null, model: provider && model ? { provider, modelId: model } : undefined, effectiveModel: provider && model ? { provider, modelId: model, kernel } : undefined, activeLineageId: ns,
-      // 物化标记(session-single-source §4.4):按能力面探测「预 seed 面」归位——pi 有预 seed
-      // (spawn 即经 --session 读文件,内容已在)标 ns=已物化;dsh 无预 seed(进程空空)标空串,
-      // 首发 materializeActiveLineage 再 seed 回填。此前用 `factory.seed 有无` 判,但生产
-      // factory.seed 恒定义(dsh 返 null 表 RPC seed),恒真 → dsh 也标 ns=已物化 → 重开历史
-      // dsh 会话 seed 回填被提前 return 跳过、历史丢失。capabilities 在 backend 构造时即定
-      // (PiBackend/DshBackend 字段初始化),createProc 时可用,不必等到 start 后(能力面 §1.5)。
-      materializedLineageId: backend.capabilities.pi ? ns : "" };
+      // 物化标记(session-single-source §4.4 + bookmark-snapshot-fork-unify §6.5),三级判定:
+      // ① 派生会话(header.pendingSeed=true):中立层有内容、内核侧未物化 → 空串
+      //   (必不相等 → 首发强制物化)——否则 fork/clone 派生的 pi 会话标 ns=已物化,
+      //   物化被跳过,内核拿空文件起进程,派生内容永不进内核(实弹级根因);
+      // ② pi(预 seed 面):spawn 即经 --session 读文件,内容已在 → 标 ns=已物化;
+      // ③ dsh(无预 seed):进程空空 → 空串,首发 materializeActiveLineage 再 seed 回填。
+      // 此前用 `factory.seed 有无` 判,但生产 factory.seed 恒定义(dsh 返 null 表 RPC seed),
+      // 恒真 → dsh 也标 ns=已物化 → 重开历史 dsh 会话 seed 回填被提前 return 跳过、历史丢失。
+      // capabilities 在 backend 构造时即定(PiBackend/DshBackend 字段初始化),createProc 时可用。
+      materializedLineageId: this.neutralStore?.get(ns)?.header.pendingSeed === true
+        ? ""
+        : (backend.capabilities.pi ? ns : "") };
     this.bindProcEvents(proc);
     return proc;
+  }
+
+  /** 清派生会话的 pendingSeed 标记(§6.5「内核认同」后):物化成功才调——
+   *  失败路径不调(标记保持,下次首发自动重试;持久标记天然崩溃恢复)。 */
+  private clearPendingSeed(proc: SessionProc): void {
+    const cur = this.readNeutral(proc);
+    if (!cur?.header.pendingSeed) return;
+    const header = { ...cur.header };
+    delete header.pendingSeed;
+    this.putNeutral({ ...cur, header }, { ns: proc.neutralSessionId, kind: "header", header });
   }
 
   /** 绑定进程条目的事件通道(createProc 与跨内核切换重绑共用)。
@@ -920,9 +935,10 @@ export class SessionStore implements
     return snapshot;
   }
 
-  /** 发起收藏(§bookmark-snapshot-fork-unify):读快照 → seed 到目标内核 → fork 新 lineage。
-   *  快照自包含(物化前缀),源会话删/压缩后仍可发起。能力探测分流(§1.5 多内核默认):
-   *  目标内核经 seed 投影(pi 文件 seed / dsh RPC seed),不写 if (kernel === "pi")。 */
+  /** 发起收藏(§bookmark-snapshot-fork-unify §8.3):发起 = 从快照派生新会话——内部改道
+   *  统一通道(deriveSession,与 fork 同一派生核),外部签名不变(Promise<string>)。
+   *  快照自包含(sourceNeutralSessionId/boundaryEntryId 取自快照本身,源会话删了也能发起)。
+   *  纯中立写、零内核交互;物化走惰性通道(pendingSeed §6.5,首发才 seed)。 */
   async resume(snapshotId: string): Promise<string> {
     const cwd = this.activeCwd;
     if (!cwd) throw new Error("无激活 cwd,无法发起收藏");
@@ -931,33 +947,24 @@ export class SessionStore implements
     if (!store) throw new Error("快照存储未启用,无法发起收藏");
     const snap = store.get(snapshotId);
     if (!snap) throw new Error("快照不存在或已损坏");
-    // 目标内核:当前激活内核优先;无激活内核(仅浏览历史)回退快照来源内核。
+    // 目标内核:当前激活内核优先;无激活内核(仅浏览历史)回退快照来源内核(§8.3/§9.3)。
     const kernel = this.activeKernel ?? snap.sourceKernel;
-    // 起一个空的新会话(新 neutralSessionId),再灌快照内容 + 惰性 seed 投影。
-    await this.start(cwd, undefined, undefined, true, kernel, undefined, undefined);
-    const proc = this.activeProc();
-    if (!proc) throw new Error("发起收藏后未拿到会话进程");
-    // 重投影:neutralEntryId 重派生到新 lineage,清 kernelEntryId/message.id(目标内核重分配)。
-    // 根 lineage 必须取会话主键(proc.neutralSessionId)——根 lineageId ≡ neutralSessionId 不变量
-    // (bookmark-snapshot-fork-unify §5.2/§11.2),违者内核 id 派生自随机 UUID 而非 ns,「内核会话
-    // 标识反查中立 id」断链。此前另开 randomUUID() 作根 lineage,正是文档点名的偏离。
-    const newLineageId = proc.neutralSessionId;
-    const entries = snap.lineage.entries.map((e, i) => ({
-      ...e,
-      neutralEntryId: neutralEntryId(newLineageId, i),
-      kernelEntryId: undefined,
-      message: { ...e.message, id: undefined },
-    }));
-    const cur = this.readNeutral(proc) ?? emptyNeutralSession(proc.neutralSessionId, { kernel, cwd, createdAt: new Date().toISOString() });
-    const next = { ...cur, lineages: [{ lineageId: newLineageId, fork: null, entries }] };
-    this.putNeutral(next, { ns: proc.neutralSessionId, kind: "session", session: next });
-    proc.activeLineageId = newLineageId;
-    proc.materializedLineageId = ""; // 强制 seed 快照内容
-    await this.materializeActiveLineage(proc);
-    // 返回快照锚点在**新会话**的中立坐标(边界=前缀最后一条,seq=len-1)。渲染层 forkFromBookmark
-    // 拿它 scrollTo 定位——此前返回投影路径,渲染层却拿源会话 bm.entryId 去定位,重投影后 id
-    // 变了、永不命中(DRIFT-12 scrollTo 静默落空)。
-    return neutralEntryId(newLineageId, entries.length - 1);
+    // 模型域:源会话还在就继承它的模型归属(派生会话首发/续发的偏好解析依赖中立 custom);
+    // 源已删则略过,首发经渲染层三级偏好解析兜底——不伪造归属。
+    const srcPrefs = parseSessionModelPrefs(this.neutralStore.get(snap.sourceNeutralSessionId)?.header.custom ?? undefined);
+    const newNs = this.deriveSession({
+      entries: snap.lineage.entries,
+      kernel,
+      derivedFrom: { kind: "bookmark", sourceNeutralSessionId: snap.sourceNeutralSessionId, boundaryEntryId: snap.boundaryEntryId },
+      name: snap.label,
+      ...(srcPrefs ? { custom: { [SESSION_MODEL_PREFS_KEY]: srcPrefs } } : {}),
+    });
+    // 派生 → 跳转(§6.1):切激活 + 即时基线(无活进程,基线从中立层出)。
+    this.activateDerived(newNs, kernel);
+    // 返回快照锚点在**新会话**的中立坐标(重投影后:边界=前缀最后一条,seq=len-1)。
+    // 渲染层 forkFromBookmark 拿它 scrollTo 定位——此前返回投影路径,渲染层却拿源会话
+    // bm.entryId 去定位,重投影后 id 变了、永不命中(DRIFT-12 scrollTo 静默落空)。
+    return neutralEntryId(newNs, snap.lineage.entries.length - 1);
   }
 
   /** 取消收藏:删快照文件(元数据删除由渲染层负责)。 */
@@ -2092,32 +2099,80 @@ export class SessionStore implements
   // ============ SessionTreeApi ============
 
   async fork(parentLineageId: string, boundary?: string, position: "before" | "at" = "at"): Promise<string> {
-    const proc = this.activeProc();
-    if (!proc || !proc.backend.alive) throw new Error("内核未启动");
-    // fork = 壳切中立树(§kernel-forkless §14):分叉是壳的纯操作,内核不 fork、不物化。
-    // 惰性物化:分支只在下次 send 时经 materializeActiveLineage seed 投影。
-    //
-    // 父 lineage 用调用方指定的 parentLineageId(根因修复,勿回退):此前硬取
-    // proc.activeLineageId,会话树面板里点「非活跃分支」的节点分叉会静默挂到活跃分支上
-    // ——分叉关系整个错掉。传入值须存在于中立树,否则显式报错(不静默换父)。
-    const cur = this.readNeutral(proc);
-    let parent = parentLineageId || proc.activeLineageId;
-    if (cur && parentLineageId && !cur.lineages.some((l) => l.lineageId === parentLineageId)) {
-      console.warn(`[session-store] fork:父 lineage ${parentLineageId} 不在中立树,回落活跃 lineage ${proc.activeLineageId}`);
-      parent = proc.activeLineageId;
+    // fork = 派生新会话(bookmark-snapshot-fork-unify §5):分叉在中立层把「锚点所在 lineage 的
+    // 前缀」物化成一个全新的中立会话(新 ns + 新文件),根 lineageId ≡ 新 ns。纯中立操作——
+    // 不需要活进程(推翻「内核未启动」校验:fork 曾是内核 RPC 时代的残留,§6.1 推翻表),
+    // 不立刻发起请求(惰性,pendingSeed 驱动首发物化,§6.5)。
+    const ns = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
+    const cur = ns ? this.neutralStore?.get(ns) : null;
+    if (!cur) throw new Error("当前会话无中立层数据,无法分叉");
+    const fallback = this.activeProc()?.activeLineageId
+      ?? cur.lineages.find((l) => l.fork === null)?.lineageId ?? cur.neutralSessionId;
+    const newNs = this.deriveFromAnchor(cur, parentLineageId, fallback, boundary, position);
+    return this.activateDerived(newNs, cur.header.kernel);
+  }
+
+  /** fork/forkFromSession 共用的派生核(§3.3 收敛 + unify §5):父解析(调用方指定 →
+   *  锚点归属纠偏 → 回落)→ 边界归一 + position 截断 → 前缀物化 → deriveSession(纯中立写)。
+   *  零内核交互、不切激活——激活切换/基线广播归 activateDerived(调用方编排)。 */
+  private deriveFromAnchor(
+    cur: NeutralSession,
+    parentHint: string | undefined,
+    fallbackLineageId: string,
+    boundary: string | undefined,
+    position: "before" | "at",
+  ): string {
+    // 父 lineage 用调用方指定的 parentHint(根因修复,勿回退):此前硬取活跃 lineage,
+    // 会话树面板里点「非活跃分支」的节点分叉会静默挂到活跃分支上——分叉关系整个错掉。
+    let parent = parentHint || fallbackLineageId;
+    if (parentHint && !cur.lineages.some((l) => l.lineageId === parentHint)) {
+      console.warn(`[session-store] fork:父 lineage ${parentHint} 不在中立树,回落 ${fallbackLineageId}`);
+      parent = fallbackLineageId;
     }
-    const newLineageId = randomUUID();
-    if (cur && this.neutralStore) {
-      // 边界归一 + position 截断语义(bookmark-snapshot-fork-unify §4.4):调用方传的 boundary
-      // 可能是内核条目 id(老渲染层路径)——先按中立树解析成中立 entryId;"before" 排除锚点
-      // (retry/rewind 排除待重发 user 消息,避免同一条 user 在前缀 + 重发各出现一次)。
-      const resolvedBoundary = resolveForkBoundary(cur, parent, boundary, position);
-      const lineage = { lineageId: newLineageId, fork: { parentLineageId: parent, boundaryEntryId: resolvedBoundary }, entries: [] };
-      const next = upsertNeutralLineage(cur, lineage);
-      this.putNeutral(next, { ns: proc.neutralSessionId, kind: "lineage", lineage, header: next.header });
+    // 锚点归属纠偏(根因:调用方传的可能不是锚点所在 lineage——会话树面板恒传会话主键=根,
+    // 节点却可能在分支上)。条目属于且只属于一条 lineage:boundary 落在别的 lineage 时,
+    // 归属 lineage 才是语义正确的父(派生前缀 = 该 lineage 物化到锚点的完整线性内容);
+    // 双方一致时无事发生,锚点缺席/解析不出(陈旧内核 id)不动调用方指定。
+    if (boundary) {
+      const owner = cur.lineages.find((l) => l.entries.some((e) => e.neutralEntryId === boundary || e.kernelEntryId === boundary));
+      if (owner && owner.lineageId !== parent) parent = owner.lineageId;
     }
-    proc.activeLineageId = newLineageId;
-    return newLineageId;
+    // 边界归一 + position 截断语义(bookmark-snapshot-fork-unify §4.4):调用方传的 boundary
+    // 可能是内核条目 id(老渲染层路径)——先按中立树解析成中立 entryId;"before" 排除锚点
+    // (retry/rewind 排除待重发 user 消息,避免同一条 user 在前缀 + 重发各出现一次)。
+    const resolvedBoundary = resolveForkBoundary(cur, parent, boundary, position);
+    // 前缀内容(派生的输入):父 lineage 现算 + 边界截断(materializeLineagePrefix 与收藏共用
+    // 插点地基)。空边界 = 零继承前缀(§4.4「锚点是父内容第一条时返回空串,从根分叉」——
+    // retry 首条消息的合法形态,派生空会话再重发),不是「锚点丢失」。锚点非空但不在内容里
+    // (压缩已移除)→ 显式报错,不静默产出半个会话。
+    const prefix = resolvedBoundary === ""
+      ? { entries: [] as NeutralEntry[], boundaryEntryId: "" }
+      : materializeLineagePrefix(cur, parent, resolvedBoundary);
+    if (!prefix) throw new Error("分叉锚点不在会话内容里(可能已被压缩移除)");
+    // 模型域随派生携带:派生会话内核文件未物化前,续发的偏好解析(renderer 三级:
+    // pending > 列表 custom > 兜底)读不到内核头行,中立 custom 里的模型域是唯一归属来源
+    // (retry 的 fork+prompt 重发链路依赖它)。derivedFrom.boundaryEntryId 用
+    // materializeLineagePrefix 返回的归一值(§5.1/§4.4)。
+    const srcPrefs = parseSessionModelPrefs(cur.header.custom ?? undefined);
+    return this.deriveSession({
+      entries: prefix.entries,
+      kernel: cur.header.kernel,
+      derivedFrom: { kind: "fork", sourceNeutralSessionId: cur.neutralSessionId, boundaryEntryId: prefix.boundaryEntryId },
+      name: forkCopyName(cur.header.name),
+      ...(srcPrefs ? { custom: { [SESSION_MODEL_PREFS_KEY]: srcPrefs } } : {}),
+    });
+  }
+
+  /** 派生后的激活切换 + 即时基线(§6.1「派生 → 跳转」):切激活到新会话(投影地址按
+   *  会话内核归属派生),基线直接从中立层出并广播——派生是零内核交互(惰性),无活进程,
+   *  renderer 即时看到派生内容,不等到首发。返回新会话的投影地址。 */
+  private activateDerived(newNs: string, kernel: KernelId): string {
+    const catalog = this.catalogFor(kernel);
+    const newPath = catalog.projectionPath(this.activeCwd!, newNs);
+    this.setContext(this.activeCwd!, newPath);
+    const derived = this.neutralStore?.get(newNs);
+    if (derived) this.broadcastDerivedBaseline(derived, newPath);
+    return newPath;
   }
 
   /** 惰性物化(§kernel-forkless §15 + session-single-source §4.4):换分支 = 换投影;
@@ -2133,6 +2188,7 @@ export class SessionStore implements
     // 白走一遍 stop+spawn 双进程(惰性物化后 materializedLineageId 恒空,须在此短路)。
     if (lineage.length === 0) {
       proc.materializedLineageId = proc.activeLineageId;
+      this.clearPendingSeed(proc); // 空投影也是物化终态(无可 seed 内容),标记清账
       return;
     }
     const seedOpts = {
@@ -2148,6 +2204,7 @@ export class SessionStore implements
     if (proc.backend.alive && (seedFn == null || !proc.backend.capabilities.pi)) {
       await proc.backend.seed(lineage, seedOpts);
       proc.materializedLineageId = proc.activeLineageId;
+      this.clearPendingSeed(proc); // RPC seed 返回即内核认同(§6.5),清标记
       return;
     }
     await proc.backend.stop();
@@ -2196,6 +2253,7 @@ export class SessionStore implements
     proc.configSnapshot = this.captureConfigSnapshot(newBackend.configDepPaths ?? []);
     this.bindProcEvents(proc);
     proc.materializedLineageId = proc.activeLineageId;
+    this.clearPendingSeed(proc); // 预 seed + spawn 对账完成(§6.5),清标记
   }
 
   async clone(): Promise<void> {
@@ -2206,20 +2264,31 @@ export class SessionStore implements
     if (!cur || !this.neutralStore || !this.activeCwd) throw new Error("克隆失败:当前会话无中立层数据");
     const newNs = randomUUID();
     const cloned = cloneNeutralSession(cur, newNs, { name: forkCopyName(cur.header.name), nowIso: new Date().toISOString() });
-    this.putNeutral(cloned, { ns: newNs, kind: "session", session: cloned });
+    // 克隆产物同样「中立层有内容、内核侧未物化」——置 pendingSeed(§6.5),
+    // 首发强制物化(否则 pi 标 ns=已物化,空文件起进程,克隆内容永不进内核)。
+    const clonedWithSeedMark: NeutralSession = { ...cloned, header: { ...cloned.header, pendingSeed: true } };
+    this.putNeutral(clonedWithSeedMark, { ns: newNs, kind: "session", session: clonedWithSeedMark });
     // 切激活到克隆会话:投影地址按源会话内核归属派生(内容型内核=派生路径,惰性内核=裸 id)。
     const catalog = this.catalogFor(cur.header.kernel);
-    const rootLineageId = cloned.lineages.find((l) => l.fork === null)?.lineageId ?? newNs;
+    const rootLineageId = clonedWithSeedMark.lineages.find((l) => l.fork === null)?.lineageId ?? newNs;
     const newPath = catalog.projectionPath(this.activeCwd, rootLineageId);
     this.setContext(this.activeCwd, newPath);
     // 克隆后无活进程(惰性 seed 等下次发送)——基线直接从中立层出并广播,
     // renderer 即时看到克隆内容(内容单源:基线不需要活进程)。
-    const messages = deduplicateAdjacent(lineageContent(cloned, rootLineageId).map((e) =>
+    this.broadcastDerivedBaseline(clonedWithSeedMark, newPath);
+  }
+
+  /** 派生/克隆产物的即时基线(§3.3 收敛:fork 与 clone 同一收口):零内核交互产出的
+   *  新会话没有活进程,基线直接从中立层出并广播——renderer 即时看到内容(消息面本就走
+   *  中立镜像,这里补的是状态面:sessionId/sessionFile/sessionName 不残留旧会话的值)。 */
+  private broadcastDerivedBaseline(session: NeutralSession, newPath: string): void {
+    const rootLineageId = session.lineages.find((l) => l.fork === null)?.lineageId ?? session.neutralSessionId;
+    const messages = deduplicateAdjacent(lineageContent(session, rootLineageId).map((e) =>
       e.display?.image ? ({ ...e.message, __image: e.display.image } as NeutralMessage) : e.message,
     ));
     const snapshot: SyncSnapshot = {
       ...emptySnapshot(),
-      state: { ...emptySnapshot().state, sessionId: newNs, sessionFile: newPath, sessionName: cloned.header.name ?? "" },
+      state: { ...emptySnapshot().state, sessionId: session.neutralSessionId, sessionFile: newPath, sessionName: session.header.name ?? "" },
       messages,
     };
     this.latestSnapshot = snapshot;
@@ -2228,24 +2297,57 @@ export class SessionStore implements
     }
   }
 
-  /** 从任意会话分叉(§kernel-forkless §14/§33):书签 fork = 在源会话中立树切一条新 lineage,
-   *  不复制文件、不调内核 fork、不新增列表条目。惰性物化:分支只在下次 send 时 seed。 */
-  async forkFromSession(cwd: string, srcNs: string, entryId: string, position: "before" | "at" = "at"): Promise<void> {
-    if (!srcNs || !this.neutralStore) return; // 源会话无中立层:迁移过渡期静默 no-op
-    const cur = this.neutralStore.get(srcNs);
-    if (!cur) return;
-    const newLineageId = randomUUID();
-    const rootLineageId = cur.lineages.find((l) => l.fork === null)?.lineageId ?? srcNs;
-    // position 截断语义(bookmark-snapshot-fork-unify §4.4):"before" 排除锚点(排除待重发 user)。
-    const resolvedBoundary = resolveForkBoundary(cur, rootLineageId, entryId, position);
-    const lineage = { lineageId: newLineageId, fork: { parentLineageId: rootLineageId, boundaryEntryId: resolvedBoundary }, entries: [] };
-    const next = upsertNeutralLineage(cur, lineage);
-    this.putNeutral(next, { ns: srcNs, kind: "lineage", lineage, header: next.header });
-    const proc = this.activeProc();
-    if (proc) {
-      proc.neutralSessionId = srcNs;
-      proc.activeLineageId = newLineageId;
-    }
+  /** 派生新会话(bookmark-snapshot-fork-unify §5):fork/收藏发起把「一条 lineage 的前缀」
+   *  物化成一个全新的中立会话——根 lineageId ≡ neutralSessionId(新 ns),内容重投影
+   *  (reprojectEntries:中立 id 重算、内核 id/消息 id 清空),根 lineageId 派生新文件/session id。
+   *  零内核交互(纯中立写):进程/起停一概不碰——惰性,首次发送才经 materializeActiveLineage
+   *  物化(pendingSeed 标记是它的持久驱动,§6.5)。列表立即可见(listByCwd 读得到)。
+   *  derivedFrom 落 header 记来源(永久溯源,§4.3);custom 携带源会话的模型域——
+   *  派生会话的续发(renderer 三级偏好解析读列表 custom)靠它获得模型归属,否则
+   *  内核文件未物化前首发落空「会话未启动」。失败显式抛错:不静默产出半个会话。 */
+  deriveSession(opts: {
+    entries: NeutralEntry[];
+    kernel: KernelId;
+    derivedFrom: { kind: "fork" | "bookmark"; sourceNeutralSessionId: string; boundaryEntryId: string };
+    name?: string;
+    custom?: Record<string, unknown>;
+  }): string {
+    if (!this.neutralStore) throw new Error("中立层未启用,无法派生会话");
+    const cwd = this.activeCwd;
+    if (!cwd) throw new Error("无激活 cwd,无法派生会话");
+    const newNs = randomUUID();
+    const nowIso = new Date().toISOString();
+    const entries = reprojectEntries(opts.entries, newNs);
+    const partial: NeutralSession = {
+      neutralSessionId: newNs,
+      header: {
+        kernel: opts.kernel, cwd, createdAt: nowIso, name: opts.name,
+        derivedFrom: opts.derivedFrom,
+        // §6.5:派生 = 中立层有内容、内核侧未物化 → 置 pendingSeed,首发强制物化。
+        pendingSeed: true,
+        ...(opts.custom ? { custom: opts.custom } : {}),
+      },
+      lineages: [{ lineageId: newNs, fork: null, entries }],
+    };
+    const derived = derivedHeaderFromSession(partial);
+    const session: NeutralSession = { ...partial, header: { ...partial.header, ...derived, updatedAt: nowIso } };
+    this.putNeutral(session, { ns: newNs, kind: "session", session });
+    return newNs;
+  }
+
+  /** 从任意会话分叉(unify §5/§7.1):与 fork 同一个 deriveSession 派生核,源是任意
+   *  中立会话(不只激活)。纯中立操作(不碰内核/不起进程),派生即切激活(§6.1「派生 →
+   *  跳转」),首发才物化(pendingSeed §6.5)。返回新 neutralSessionId(契约 §7.1)。
+   *  父解析的回落 = 源会话根 lineage;中立坐标 entryId 内嵌 lineageId,跨分支锚点由
+   *  锚点归属纠偏覆盖(条目属于且只属于一条 lineage)。 */
+  async forkFromSession(cwd: string, srcNs: string, entryId: string, position: "before" | "at" = "at"): Promise<string> {
+    if (!this.neutralStore) throw new Error("中立层未启用,无法分叉");
+    const cur = this.neutralStore.get(this.resolveNs(srcNs));
+    if (!cur) throw new Error("源会话中立树不存在");
+    const rootLineageId = cur.lineages.find((l) => l.fork === null)?.lineageId ?? cur.neutralSessionId;
+    const newNs = this.deriveFromAnchor(cur, undefined, rootLineageId, entryId, position);
+    this.activateDerived(newNs, cur.header.kernel);
+    return newNs;
   }
 
   /** fork/clone 后的对账:内核切换会话文件不推事件(session_start 是纯扩展事件,RPC stdout
@@ -2316,14 +2418,12 @@ export class SessionStore implements
     await this.piSend((pi) => pi.abortBash());
   }
 
-  /** 原样发 RPC 命令(壳内高级用途;插件不暴露,插件走意图方法)。默认作用于激活会话;
-   *  target 显式钉进程时用 target(forkFromSession 竞态护栏的唯一消费点——跨 await 的
-   *  多步编排不能经环境性 activeProc() 取进程,见该方法注释)。 */
-  /** pi 专属命令发送 + rpcError 上报(语义收编后:pi 专属命令经此助手,中性操作走 proc.backend)。 */
-  private piSend<T>(fn: (pi: PiBackendExtensions) => Promise<T>, target?: SessionProc): Promise<T> {
-    const proc = target ?? this.activeProc();
+  /** pi 专属命令发送 + rpcError 上报(语义收编后:pi 专属命令经此助手,中性操作走 proc.backend)。
+   *  作用于激活会话(activeProc);失败统一上报 rpcError 运维事件后外抛。 */
+  private piSend<T>(fn: (pi: PiBackendExtensions) => Promise<T>): Promise<T> {
+    const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
-    const key = target?.key ?? this.activeKey;
+    const key = this.activeKey;
     const pi = this.asPi(proc);
     return fn(pi).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);

@@ -3,8 +3,9 @@
 // §bookmark-snapshot-fork-unify §5:fork 与收藏统一收敛进 session-bookmarks 插件,
 // 本文件从 timeline 迁入(原 timeline/renderer/message-actions.tsx)。copy/rewind 仍留 timeline。
 //
-// 收藏走 bookmarks:addRequested 事件(invoke);fork 走 ctx.pi.forkFromSession(pi 扩展面,
-// 与收藏发起同源「从某节点开新分支」)。文案 shell.* 是共享命名空间,由 timeline 贡献。
+// 收藏走 bookmarks:addRequested 事件(invoke);fork 走 ctx.tree.forkFromSession(中性面,
+// 非 pi 扩展面——同一 deriveSession 派生核,pi/dsh 平等可用,§7.1),与收藏发起同源
+// 「从某节点开新分支」。文案 shell.* 是共享命名空间,由 timeline 贡献。
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Bookmark, GitFork } from "lucide-react";
@@ -61,7 +62,7 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // 分叉 = 从这条 assistant 回答后开新分支。与收藏发起同源「插点」。
+  // 分叉 = 从这条 assistant 回答后派生新会话(§5:派生 → 跳转)。与收藏发起同源「插点」。
   const handleFork = useCallback(async (): Promise<void> => {
     if (streaming) {
       setToast(t("shell.forkStreamingBlocked"));
@@ -69,7 +70,7 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
     }
     if (!message.id || !currentCwd || !currentNeutralSessionId) return;
     try {
-      await ctx.pi.forkFromSession(currentCwd, currentNeutralSessionId, message.id, "at");
+      await ctx.tree.forkFromSession(currentCwd, currentNeutralSessionId, message.id, "at");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);

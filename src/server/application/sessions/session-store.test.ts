@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { SessionStore, type BackendFactory } from "./session-store";
 import { PiBackend } from "../../kernel/pi/backend/pi-backend";
 import { PiSessionCatalog } from "../../kernel/pi/backend/pi-catalog";
@@ -207,9 +207,10 @@ describe("abort 双保险与强杀兜底", () => {
     expect(dshMock.calls).toContain("abort");
   });
 
-  it("dsh 会话 fork 出第二 lineage + 活跃切换(forkFromSession 内核无关,纯中立层)", async () => {
-    // forkFromSession 只写中立层(不碰后端)——两内核同一条路径。钉死:dsh 会话也能 fork,
-    // 分支 lineage 建出、活跃 lineage 切到新分支(分支发送的写穿锚点)。
+  it("dsh 会话 forkFromSession 派生新会话(中性面,内核无关;unify §7.1——不再是会话内分支)", async () => {
+    // forkFromSession 已收编为「派生新会话」(同一 deriveSession 派生核):源会话不动,
+    // 新会话携物化前缀 + pendingSeed + derivedFrom,激活切到新会话;dsh 会话同一条路径
+    // (不再走 pi 扩展面——doc Q&A:dsh 下点 ForkAction 正常分叉)。
     const dshMock = new MockBackend();
     const dshSource: KernelModelSource = {
       listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
@@ -220,22 +221,34 @@ describe("abort 双保险与强杀兜底", () => {
         ? dshMock as unknown as BaseBackend
         : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
     };
-    const dshStore = new SessionStore(dshFactory, catalogFactory, dir, undefined, new NeutralSessionStore(join(dir, "neutral")), catalog);
+    const neutralStore = new NeutralSessionStore(join(dir, "neutral"));
+    const dshStore = new SessionStore(dshFactory, catalogFactory, dir, undefined, neutralStore, catalog);
     dshStore.setContext(CWD, null);
     await dshStore.setModel("us-new", "dsh-model", "dsh");
     await dshStore.prompt("ping base"); // 建中立层会话 + 一条 user
-    const ns = (dshStore as unknown as { activeSessionPath: string }).activeSessionPath;
-    const readNs = (dshStore as unknown as { neutralSessionIdFromPath: (p: string) => string | undefined }).neutralSessionIdFromPath(ns);
-    expect(readNs).toBeTruthy();
-    const before = (dshStore as unknown as { neutralStore: { get: (id: string) => { lineages: unknown[] } | null } }).neutralStore.get(readNs!);
-    expect(before?.lineages).toHaveLength(1);
-    const anchorEntry = (before as { lineages: { entries: { neutralEntryId: string }[] }[] }).lineages[0].entries[0]?.neutralEntryId;
-    expect(anchorEntry).toBeTruthy();
-    await dshStore.forkFromSession(CWD, readNs!, anchorEntry!, "at");
-    const after = (dshStore as unknown as { neutralStore: { get: (id: string) => { lineages: { fork: unknown; entries: unknown[] }[] } | null } }).neutralStore.get(readNs!);
-    expect(after?.lineages).toHaveLength(2);
-    expect(after?.lineages[1].fork).toBeTruthy();
-    expect(after?.lineages[1].entries).toHaveLength(0); // 分支空,待物化
+    const srcNs = neutralStore.listByCwd(CWD)[0]!.neutralSessionId;
+    const srcBefore = neutralStore.get(srcNs)!;
+    expect(srcBefore.lineages).toHaveLength(1);
+    const userEntry = srcBefore.lineages[0].entries.find((e) => e.message.role === "user")!;
+    const newNs = await dshStore.forkFromSession(CWD, srcNs, userEntry.neutralEntryId, "at");
+    // 返回新 neutralSessionId(契约 §7.1);源会话不动(派生是拷贝不是改源,不插分支)
+    expect(newNs).not.toBe(srcNs);
+    expect(neutralStore.get(srcNs)!.lineages).toHaveLength(1);
+    // 新会话:根 lineageId ≡ 新 ns,内核归属随源(dsh),pendingSeed 置位,derivedFrom 记源
+    const derived = neutralStore.get(newNs)!;
+    expect(derived.lineages).toHaveLength(1);
+    expect(derived.lineages[0].lineageId).toBe(newNs);
+    expect(derived.header.kernel).toBe("dsh");
+    expect(derived.header.pendingSeed).toBe(true);
+    expect(derived.header.derivedFrom).toEqual({ kind: "fork", sourceNeutralSessionId: srcNs, boundaryEntryId: userEntry.neutralEntryId });
+    // 内容 = 源前缀物化到锚点(含锚点 user 消息);中立 id 已重投影到新 ns
+    const contents = derived.lineages[0].entries.map((e) => String(e.message.content));
+    expect(contents).toContain("ping base");
+    expect(derived.lineages[0].entries.every((e) => e.neutralEntryId.startsWith(`${newNs}:`))).toBe(true);
+    // 列表立即可见(§5.4):同 cwd 两个会话
+    expect(neutralStore.listByCwd(CWD)).toHaveLength(2);
+    // 激活切到新会话(派生 → 跳转,§6.1)
+    expect((dshStore as unknown as { activeSessionPath: string | null }).activeSessionPath).toBeTruthy();
   });
 
   it("先发 abort_bash 再发 abort(executeBash 路径兜底)", async () => {
@@ -844,15 +857,18 @@ describe("rawFilePaths(打开原始文件:不拿投影地址硬猜)", () => {
   });
 });
 
-describe("fork:父 lineage 尊重调用方指定(根因修复回归——此前硬取活跃分支)", () => {
+describe("fork:父 lineage 尊重调用方指定 + 派生新会话(根因修复回归——此前硬取活跃分支)", () => {
+  // fork = 派生新会话(bookmark-snapshot-fork-unify §5):分叉把「调用方指定父 lineage 的前缀」
+  // 物化成全新中立会话(新 ns + 根 lineageId ≡ ns),不立刻发起请求(惰性,首发物化)。
   function newForkStore(): { s: SessionStore; neutralStore: NeutralSessionStore; ns: string } {
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "fork-neutral-")));
     const ns = "ns-fork";
     neutralStore.put({
       ...emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-08-27T00:00:00.000Z" }),
       lineages: [
-        { lineageId: ns, fork: null, entries: [] },
-        { lineageId: "branch-B", fork: { parentLineageId: ns, boundaryEntryId: "" }, entries: [] },
+        { lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "root-msg" } }] },
+        // branch-B:从根的 :0 叉出,自己有一条独有条目——物化内容 = 根前缀 + B 独有
+        { lineageId: "branch-B", fork: { parentLineageId: ns, boundaryEntryId: `${ns}:0` }, entries: [{ neutralEntryId: "branch-B:0", message: { role: "user", content: "on-B" } }] },
       ],
     });
     const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
@@ -860,16 +876,33 @@ describe("fork:父 lineage 尊重调用方指定(根因修复回归——此前�
     return { s, neutralStore, ns };
   }
 
-  it("fork(parentLineageId=B):新 lineage 挂到 B,不是活跃分支", async () => {
+  it("fork(parentLineageId=B):派生新会话,内容 = B 的物化前缀(根前缀 + B 独有),不是活跃根分支", async () => {
     const { s, neutralStore, ns } = newForkStore();
     const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
-    const newId = await s.fork("branch-B", "boundary-entry-1");
-    const tree = neutralStore.get(ns);
-    const branch = tree?.lineages.find((l) => l.lineageId === newId);
-    expect(branch?.fork?.parentLineageId).toBe("branch-B");
-    expect(branch?.fork?.boundaryEntryId).toBe("boundary-entry-1");
+    const newPath = await s.fork("branch-B", "branch-B:0");
+    // 返回新会话的投影路径;中立层多出全新会话(列表立即可见)
+    const newNs = basename(newPath, ".jsonl");
+    expect(newNs).not.toBe(ns);
+    const derived = neutralStore.get(newNs)!;
+    expect(derived).toBeTruthy();
+    // 根 lineageId ≡ 新 ns(unify §5.2 不变量),唯一一条根 lineage
+    expect(derived.lineages).toHaveLength(1);
+    expect(derived.lineages[0].lineageId).toBe(newNs);
+    expect(derived.lineages[0].fork).toBeNull();
+    // 内容 = branch-B 的物化前缀(根前缀 root-msg + B 独有 on-B)——硬取活跃根分支只会得 [root-msg]
+    expect(derived.lineages[0].entries.map((e) => e.message.content)).toEqual(["root-msg", "on-B"]);
+    // 内容重投影(§5.3):中立 id 按新 ns 重算,内核坐标 kernelEntryId/message.id 清空
+    expect(derived.lineages[0].entries.map((e) => e.neutralEntryId)).toEqual([`${newNs}:0`, `${newNs}:1`]);
+    expect(derived.lineages[0].entries.every((e) => e.kernelEntryId === undefined && e.message.id === undefined)).toBe(true);
+    // derivedFrom 记源 + 归一后的中立边界坐标(§4.3);pendingSeed 置位(§6.5 首发强制物化)
+    expect(derived.header.derivedFrom).toEqual({ kind: "fork", sourceNeutralSessionId: ns, boundaryEntryId: "branch-B:0" });
+    expect(derived.header.pendingSeed).toBe(true);
+    // 源会话不动(派生是拷贝不是改源)
+    expect(neutralStore.get(ns)!.lineages).toHaveLength(2);
+    // 激活已切到新会话
+    expect((s as unknown as { activeSessionPath: string }).activeSessionPath).toBe(newPath);
   });
 
   it("fork(不存在的父):回落活跃 lineage 并 warn(不静默换父≠抛错打断)", async () => {
@@ -877,10 +910,38 @@ describe("fork:父 lineage 尊重调用方指定(根因修复回归——此前�
     const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
-    const newId = await s.fork("no-such-lineage");
-    const branch = neutralStore.get(ns)?.lineages.find((l) => l.lineageId === newId);
-    // 活跃 lineage = 根(ns,proc 初始化即根)
-    expect(branch?.fork?.parentLineageId).toBe(ns);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const newPath = await s.fork("no-such-lineage", `${ns}:0`);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+    // 回落活跃 lineage(根 ns,proc 初始化即根):派生内容 = 根前缀(不是别条分支的)
+    const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
+    expect(derived.lineages[0].entries.map((e) => e.message.content)).toEqual(["root-msg"]);
+  });
+
+  it("fork(before 首条):空边界 = 零继承前缀(§4.4),派生空会话不抛错(retry 首条消息的合法形态)", async () => {
+    const { s, neutralStore, ns } = newForkStore();
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    // retry 首条 user 消息:position=before 且锚点是父内容第一条 → 边界空串(零继承前缀)
+    const newPath = await s.fork(ns, `${ns}:0`, "before");
+    const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
+    expect(derived.lineages[0].entries).toEqual([]); // 零继承:空前缀,重发时从零开始
+    expect(derived.header.derivedFrom).toEqual({ kind: "fork", sourceNeutralSessionId: ns, boundaryEntryId: "" });
+  });
+
+  it("fork(锚点在分支、调用方传根):按锚点归属纠偏父 lineage(会话树面板恒传根,节点可能在分支上)", async () => {
+    const { s, neutralStore, ns } = newForkStore();
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    // 调用方传根 ns(会话树面板形态),锚点 branch-B:0 却属于 branch-B——
+    // 条目属于且只属于一条 lineage,归属 lineage 是语义正确的父。
+    const newPath = await s.fork(ns, "branch-B:0");
+    const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
+    // 内容 = branch-B 的物化前缀(根前缀 + B 独有),不是「锚点不在根里」抛错、也不是根前缀截断
+    expect(derived.lineages[0].entries.map((e) => e.message.content)).toEqual(["root-msg", "on-B"]);
   });
 });
 
@@ -1201,7 +1262,7 @@ describe("三会话跨内核切换(pi/dsh/pi,会话对应进程不串)", () => {
   });
 });
 
-describe("fork 分支重 spawn 传 lineageId(内核私有 id 派生自活跃 lineageId,§12.2)", () => {
+describe("fork/clone 派生会话首发物化(内核私有 id 派生自新会话根 lineageId,§12.2 + unify §6.5)", () => {
   class LineageBackend {
     alive = false;
     capabilities = { pi: { onBusFrame: () => {}, onQuestion: () => {}, onProcessExit: null, stderr: "", resync: async () => ({ messages: [], state: { isStreaming: false }, tree: { rootId: "", lineages: [] } }) } }; // 有 pi 面 → 走预 seed 重 spawn 路径
@@ -1221,7 +1282,10 @@ describe("fork 分支重 spawn 传 lineageId(内核私有 id 派生自活跃 lin
     async abort(): Promise<void> {}
   }
 
-  it("fork 分支物化时 factory.create 收到 lineageId=分支(不是 neutralSessionId=根)", async () => {
+  function newLineageForkStore(seedImpl?: (calls: number) => Promise<string>): {
+    s: SessionStore; neutralStore: NeutralSessionStore; ns: string; sessionPath: string;
+    createdLineageIds: (string | undefined)[];
+  } {
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "fork-lineageid-")));
     const ns = "ns-lineageid";
     neutralStore.put({
@@ -1231,18 +1295,87 @@ describe("fork 分支重 spawn 传 lineageId(内核私有 id 派生自活跃 lin
       ],
     });
     const createdLineageIds: (string | undefined)[] = [];
+    let seedCalls = 0;
     const factory: BackendFactory = {
-      seed: async () => "seeded-path",
+      seed: async () => { seedCalls++; return seedImpl ? seedImpl(seedCalls) : "seeded-path"; },
+      create: (opts) => { createdLineageIds.push(opts.lineageId); return new LineageBackend() as unknown as BaseBackend; },
+    };
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    return { s, neutralStore, ns, sessionPath, createdLineageIds };
+  }
+
+  it("fork 派生会话首发物化:factory.create 收到 lineageId=新会话根(不写源会话文件),pendingSeed 物化后清除", async () => {
+    const { s, neutralStore, ns, sessionPath, createdLineageIds } = newLineageForkStore();
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath, undefined, false, "pi", "p", "a"); // 带模型起,避免 prompt setModel 重起进程重置活跃 lineage
+    const newPath = await s.fork(ns, `${ns}:0`); // 派生新会话 + 切激活(惰性,不发请求)
+    const newNs = basename(newPath, ".jsonl");
+    // 派生即见:新会话在中立层,根 lineageId ≡ newNs;pendingSeed 置位(内核侧未物化)
+    const derived = neutralStore.get(newNs)!;
+    expect(derived.lineages.find((l) => l.fork === null)?.lineageId).toBe(newNs);
+    expect(derived.header.pendingSeed).toBe(true);
+    await s.prompt("branch-first", undefined, undefined, { provider: "p", modelId: "a", kernel: "pi" as const, thinkingLevel: "" });
+    // 物化重 spawn 的 create 必须带 lineageId=newNs(派生自己的文件,不写源会话的根文件);
+    // 源会话 ns 绝不出现在任何 create 的 lineageId 上(文件对应不漂移)
+    expect(createdLineageIds.some((id) => id === newNs)).toBe(true);
+    expect(createdLineageIds.some((id) => id === ns)).toBe(false);
+    // §6.5:物化成功(拿到内核认同)→ pendingSeed 清除
+    expect(neutralStore.get(newNs)!.header.pendingSeed).toBeUndefined();
+  });
+
+  it("物化失败:错误上抛 + pendingSeed 保持,下次首发自动重试(§6.5 崩溃安全)", async () => {
+    // 第一次 seed 被内核拒绝,第二次成功
+    const { s, neutralStore, ns, sessionPath } = newLineageForkStore(async (calls) => {
+      if (calls === 1) throw new Error("seed 被拒绝");
+      return "seeded-path";
+    });
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath, undefined, false, "pi", "p", "a");
+    const newPath = await s.fork(ns, `${ns}:0`);
+    const newNs = basename(newPath, ".jsonl");
+    // 首发:seed 失败 → 错误原文上抛(用户可见),pendingSeed 保持
+    await expect(s.prompt("branch-first", undefined, undefined, { provider: "p", modelId: "a", kernel: "pi" as const, thinkingLevel: "" }))
+      .rejects.toThrow("seed 被拒绝");
+    expect(neutralStore.get(newNs)!.header.pendingSeed).toBe(true);
+    // 重试:pendingSeed 仍在 → 首发仍强制物化 → 第二次 seed 成功 → 标记清除
+    await s.prompt("branch-first", undefined, undefined, { provider: "p", modelId: "a", kernel: "pi" as const, thinkingLevel: "" });
+    expect(neutralStore.get(newNs)!.header.pendingSeed).toBeUndefined();
+  });
+
+  it("clone 产物同样强制物化(根因守卫:克隆前缀进新内核文件,不拿空文件起进程)", async () => {
+    // 根因:clone 派生的新会话内核文件尚不存在,而 createProc 曾按 capabilities.pi 把
+    // materializedLineageId 标成 ns(已物化)→ materializeActiveLineage 提前 return →
+    // pi 拿不存在的 <newNs>.jsonl 起空会话,克隆内容永不进内核。pendingSeed(§6.5)是修复载体。
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "clone-seed-")));
+    const ns = "ns-clone";
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }),
+      lineages: [{ lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "base" } }] }],
+    });
+    const seededTexts: string[][] = [];
+    const createdLineageIds: (string | undefined)[] = [];
+    const factory: BackendFactory = {
+      seed: async (lineage) => {
+        seededTexts.push((lineage as { message: { content: unknown } }[]).map((e) => String(e.message.content)));
+        return "seeded-path";
+      },
       create: (opts) => { createdLineageIds.push(opts.lineageId); return new LineageBackend() as unknown as BaseBackend; },
     };
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]);
     const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
     const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
     s.setContext(CWD, sessionPath);
-    await s.start(CWD, sessionPath, undefined, false, "pi", "p", "a"); // 带模型起,避免 prompt setModel 重起进程重置活跃 lineage
-    const newId = await s.fork(ns, `${ns}:0`); // fork 出分支 + 切活跃 lineage
-    await s.prompt("branch-first", undefined, undefined, { provider: "p", modelId: "a", kernel: "pi" as const, thinkingLevel: "" });
-    // 物化重 spawn 的 create 必须带 lineageId=newId(派生自己的文件,不写根文件)
-    expect(createdLineageIds.some((id) => id === newId)).toBe(true);
+    await s.start(CWD, sessionPath, undefined, false, "pi", "p", "a");
+    await s.clone(); // 派生整树副本 + 切激活(pendingSeed 置位)
+    const newNs = (s as unknown as { activeSessionPath: string }).activeSessionPath;
+    const cloneNs = basename(newNs, ".jsonl");
+    expect(neutralStore.get(cloneNs)?.header.pendingSeed).toBe(true);
+    await s.prompt("clone-first", undefined, undefined, { provider: "p", modelId: "a", kernel: "pi" as const, thinkingLevel: "" });
+    // 克隆前缀 seed 进新文件(create 带 lineageId=克隆会话根),内容含 base
+    expect(createdLineageIds.some((id) => id === cloneNs)).toBe(true);
+    expect(seededTexts.some((texts) => texts.includes("base"))).toBe(true);
+    expect(neutralStore.get(cloneNs)?.header.pendingSeed).toBeUndefined();
   });
 });

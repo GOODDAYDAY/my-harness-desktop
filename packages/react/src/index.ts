@@ -155,6 +155,8 @@ export interface KernelApi {
     testModel: (cwd: string, provider: string, modelId: string, kernel: KernelId) => Promise<{ ok: boolean; error?: string }>;
     setThinkingLevel: (level: string) => Promise<void>;
     fork: (parentLineageId: string, boundary?: string, position?: "before" | "at") => Promise<string>;
+    /** 从任意会话分叉派生新会话(unify §7.1 中性面,两内核平等):返回新 neutralSessionId。 */
+    forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at") => Promise<string>;
     copySession: (srcPath: string, targetPath: string) => Promise<void>;
     getStats: () => Promise<unknown>;
     /** 克隆当前会话(session-single-source §4.2:壳的中性实现,内核不参与)。 */
@@ -168,7 +170,6 @@ export interface KernelApi {
       cycleModel: () => Promise<void>;
       getThinkingLevels: () => Promise<string[]>;
       cycleThinkingLevel: () => Promise<void>;
-      forkFromSession: (cwd: string, srcPath: string, entryId: string) => Promise<void>;
       compact: (customInstructions?: string) => Promise<void>;
       setAutoCompaction: (enabled: boolean) => Promise<void>;
       setAutoRetry: (enabled: boolean) => Promise<void>;

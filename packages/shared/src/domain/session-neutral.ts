@@ -50,6 +50,13 @@ export interface NeutralSessionHeader {
   archived?: boolean;
   /** desktop 私有域(保留键 pinned/archived/toolConfig 平铺顶层,插件域不得占用)。 */
   custom?: Record<string, unknown>;
+  /** 派生溯源(bookmark-snapshot-fork-unify §4.3):「这个会话从哪来」的永久记录——
+   *  fork/收藏发起派生时落;boundaryEntryId 是归一后的中立坐标(非入参原始值)。 */
+  derivedFrom?: { kind: "fork" | "bookmark"; sourceNeutralSessionId: string; boundaryEntryId: string };
+  /** 「中立层有内容、内核侧未物化」的瞬态标记(§4.3/§6.5):deriveSession 派生时置 true;
+   *  createProc 据此把 materializedLineageId 初始化为空串(必不相等 → 首发强制物化);
+   *  物化成功清除;失败保持(持久标记,崩溃重启后下次首发自动重试)。 */
+  pendingSeed?: boolean;
 }
 
 export interface NeutralLineage {
@@ -604,4 +611,18 @@ export function cloneNeutralSession(session: NeutralSession, newNs: string, opts
     updatedAt: opts.nowIso,
   };
   return { neutralSessionId: newNs, header, lineages };
+}
+
+/**
+ * 派生重投影(bookmark-snapshot-fork-unify §5.3):fork/收藏发起把「一条 lineage 的前缀」
+ * 重投影进新会话——中立 entryId 按新 ns 重算(`{newNs}:{seq}`,seq 从 0 递增),
+ * kernelEntryId 与 message.id 清空(中立坐标跟壳走,内核坐标由目标内核重建)。
+ * 纯函数,零依赖,由 deriveSession 内部调用。
+ */
+export function reprojectEntries(entries: NeutralEntry[], newNs: string): NeutralEntry[] {
+  return entries.map((e, i) => ({
+    neutralEntryId: neutralEntryId(newNs, i),
+    message: { ...e.message, id: undefined },
+    ...(e.display ? { display: e.display } : {}),
+  }));
 }

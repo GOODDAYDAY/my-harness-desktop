@@ -5,7 +5,7 @@ import {
   sortLineagesTopologically, resolveForkBoundaries, neutralEntryId, lineageContent,
   emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, backfillUserAuthority,
   derivedHeaderFromEntry, derivedHeaderFromSession, appendNeutralEntryWithHeader,
-  resolveForkBoundary, assembleSeedProjection,
+  resolveForkBoundary, assembleSeedProjection, reprojectEntries,
   type NeutralLineage, type NeutralEntry, type NeutralSession,
 } from "./session-neutral";
 import { sessionMessagePreview, SESSION_PREVIEW_MAX } from "./text";
@@ -450,5 +450,32 @@ describe("assembleSeedProjection 保留 kernelEntryId(分支种子须带内核�
     // 父前缀(截到 boundary ns1:1 含)的 kernelEntryId 必须保留——种子用它当 pi 消息 id,
     // fork 边界(parentId)才能连回父条目的原 id,分支文件不断链。
     expect(proj.map((e) => e.kernelEntryId)).toEqual(["k-user", "k-assist", undefined]);
+  });
+});
+
+describe("reprojectEntries 派生重投影(bookmark-snapshot-fork-unify §5.3)", () => {
+  // 与 assembleSeedProjection 的「保留 kernelEntryId」相对:跨会话派生要换身份——
+  // 中立坐标跟壳走(按新 ns 重算),内核坐标由目标内核重建(清空,不跨会话携带)。
+  const source: NeutralEntry[] = [
+    { neutralEntryId: "src:0", kernelEntryId: "k0", message: { role: "user", content: "q", id: "m0" }, display: { image: { src: "s.png", title: "t" } } },
+    { neutralEntryId: "src:1", kernelEntryId: "k1", message: { role: "assistant", content: "a", id: "m1" } },
+  ];
+
+  it("中立 entryId 按新 ns 重算({newNs}:{seq},seq 从 0 递增)", () => {
+    const out = reprojectEntries(source, "new-ns");
+    expect(out.map((e) => e.neutralEntryId)).toEqual(["new-ns:0", "new-ns:1"]);
+  });
+
+  it("kernelEntryId 与 message.id 清空(目标内核重分配),内容与 display 保留", () => {
+    const out = reprojectEntries(source, "new-ns");
+    expect(out.every((e) => e.kernelEntryId === undefined && e.message.id === undefined)).toBe(true);
+    expect(out.map((e) => e.message.content)).toEqual(["q", "a"]);
+    expect(out[0].display?.image?.src).toBe("s.png"); // 展示元数据(图)随派生携带
+  });
+
+  it("不 mutate 入参(纯函数)", () => {
+    const before = JSON.parse(JSON.stringify(source));
+    reprojectEntries(source, "new-ns");
+    expect(source).toEqual(before);
   });
 });

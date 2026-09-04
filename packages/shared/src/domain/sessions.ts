@@ -8,12 +8,12 @@
 //   RpcOps(基类:所有对内核 RPC 操作的共享契约)
 //     ├─ MessagingApi(prompt/abort/continue)
 //     ├─ ModelApi(getModels/setModel/test/setThinkingLevel)
-//     ├─ SessionTreeApi(fork)
+//     ├─ SessionTreeApi(fork/forkFromSession/clone/getForkMessages —— 中性分叉面)
 //     └─ BashApi(run/abortBash —— 需声明 rpc:bash 权限)
 //   PiExtensions(pi 内核专属扩展面 §7.6:steer/followUp/abortRetry/cycleModel/
-//     getThinkingLevels/cycleThinkingLevel/clone/forkFromSession/getForkMessages/
-//     compact/setAutoCompaction/setAutoRetry/exportHtml/getLastAssistantText/
-//     setSteeringMode/setFollowUpMode —— 经 capabilities.piExtension 探测,有则用无则降级)
+//     getThinkingLevels/cycleThinkingLevel/compact/setAutoCompaction/setAutoRetry/
+//     exportHtml/getLastAssistantText/setSteeringMode/setFollowUpMode
+//     —— 经 capabilities.piExtension 探测,有则用无则降级)
 //
 // SessionsApi(会话生命周期:start/stop/setContext/list/openSession/rename/updateHeader/onEvent/onSnapshot/getSnapshot/sync/getStats + pi 扩展面)
 //   不继承 RpcOps —— 它管的是进程和文件,不是"发命令到内核"。
@@ -272,11 +272,14 @@ export interface ModelApi extends RpcOps {
 
 /** 会话树操作——继承 RpcOps。分叉、克隆、取分叉点消息。 */
 export interface SessionTreeApi extends RpcOps {
-  /** 回退重跑(§2.4.1 中性 fork):从指定 lineage 的 boundary 分叉出新 lineage。
-   *  pi 后端 = 在 boundary 条目处 fork + 框架对账,返回分叉产物路径。
-   *  position:"at"(默认)父前缀继承到 boundary 含锚点;"before" 继承到锚点前一条
-   *  (retry/rewind 用,排除待重发 user 消息,避免重复)。 */
+  /** 分叉(bookmark-snapshot-fork-unify §5):把锚点所在 lineage 的前缀派生成全新会话
+   *  (新 ns + 根 lineageId ≡ ns),切激活并跳转;纯中立操作,惰性物化(首发 seed)。
+   *  返回新会话的投影地址。position:"at"(默认)父前缀继承到 boundary 含锚点;"before"
+   *  继承到锚点前一条(retry/rewind 用,排除待重发 user 消息,避免重复)。 */
   fork(parentLineageId: string, boundary?: string, position?: "before" | "at"): Promise<string>;
+  /** 从任意会话分叉(unify §7.1):与 fork 同一派生核,源是任意会话(中立主键 ns),
+   *  返回新 neutralSessionId。中性面(非 pi 扩展面)——两内核平等可用。 */
+  forkFromSession(cwd: string, srcNs: string, entryId: string, position?: "before" | "at"): Promise<string>;
   /** 克隆当前会话(session-single-source §4.2:壳纯操作——中立层整树复制 + 新 ns,
    *  内核不参与、离线可克隆;不再经 pi 内核 clone 命令)。 */
   clone(): Promise<void>;
@@ -300,8 +303,6 @@ export interface PiExtensions {
   getThinkingLevels(): Promise<string[]>;
   /** 快捷循环切换思考强度(内核 cycle_thinking_level)。 */
   cycleThinkingLevel(): Promise<void>;
-  /** 从任意会话文件分叉(书签 fork 的原子用例)。 */
-  forkFromSession(cwd: string, srcPath: string, entryId: string, position?: "before" | "at"): Promise<void>;
   /** 压缩上下文(内核 compact)。 */
   compact(customInstructions?: string): Promise<void>;
   /** 设置自动压缩开关(内核 set_auto_compaction)。 */
