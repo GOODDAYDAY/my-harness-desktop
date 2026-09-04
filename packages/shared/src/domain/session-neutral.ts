@@ -539,6 +539,29 @@ export function resolveBoundaryEntryId(session: NeutralSession, parentLineageId:
 }
 
 /**
+ * 归一 fork 边界并应用 position 截断语义(bookmark-snapshot-fork-unify §4.4):
+ *  - "at"(默认):父前缀继承到 boundary 锚点(含)→ 传锚点本身;
+ *  - "before":父前缀继承到锚点**前一条**(不含锚点)→ 传前一条的 neutralEntryId;
+ *    锚点是父内容第一条时返回空串(零继承前缀,从根分叉)。
+ *  这消除 retry/rewind「重复待重发 user 消息」:fork 用 before 排除锚点,再 prompt 重发一次,
+ *  前缀里不再带着原 user 消息(否则同一条 user 出现两次)。
+ */
+export function resolveForkBoundary(
+  session: NeutralSession,
+  parentLineageId: string,
+  boundary: string | undefined,
+  position: "before" | "at",
+): string {
+  if (!boundary) return "";
+  const neutral = resolveBoundaryEntryId(session, parentLineageId, boundary);
+  if (position === "at") return neutral;
+  const content = lineageContent(session, parentLineageId);
+  const idx = content.findIndex((e) => e.neutralEntryId === neutral || e.kernelEntryId === boundary);
+  if (idx <= 0) return "";
+  return content[idx - 1].neutralEntryId;
+}
+
+/**
  * 克隆一个中立会话为全新会话(纯壳操作,内核不参与):
  * 整树复制,根 lineage 取新 ns;分支 lineage 用确定性派生 id(`<newNs>-fork-<序>`),
  * fork 引用与 boundaryEntryId 随 id 映射一并改写;条目的中立 entryId 按新 lineage 重派生,

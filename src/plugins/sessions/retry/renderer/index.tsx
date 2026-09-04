@@ -37,7 +37,7 @@ export function RetryAction({ message }: MessageActionProps): React.ReactNode {
         setToast(t("shell.retryNoUserMessage"));
         return;
       }
-      await ctx.tree.fork(snapshot?.state.sessionFile ?? "", userMsg.id);
+      await ctx.tree.fork(snapshot?.state.sessionFile ?? "", userMsg.id, "before");
       const text = typeof userMsg.content === "string"
         ? userMsg.content
         : Array.isArray(userMsg.content)

@@ -5,6 +5,7 @@ import {
   sortLineagesTopologically, resolveForkBoundaries, neutralEntryId, lineageContent,
   emptyNeutralSession, appendNeutralEntry, upsertNeutralLineage, backfillKernelEntryId, backfillUserAuthority,
   derivedHeaderFromEntry, derivedHeaderFromSession, appendNeutralEntryWithHeader,
+  resolveForkBoundary,
   type NeutralLineage, type NeutralEntry, type NeutralSession,
 } from "./session-neutral";
 import { sessionMessagePreview, SESSION_PREVIEW_MAX } from "./text";
@@ -91,6 +92,66 @@ describe("resolveForkBoundaries 边界归一", () => {
     const before = JSON.parse(JSON.stringify(child));
     resolveForkBoundaries([root, child]);
     expect(child.fork?.boundaryEntryId).toBe(before.fork.boundaryEntryId); // 入参未被改
+  });
+});
+
+describe("resolveForkBoundary position 截断语义(bookmark-snapshot-fork-unify §4.4)", () => {
+  // 父内容:root:0(user)、root:1(assistant)、root:2(user 待重发)
+  const session: NeutralSession = {
+    neutralSessionId: "root",
+    header: { cwd: "/p", kernel: "pi", createdAt: "", updatedAt: "" },
+    lineages: [{
+      lineageId: "root",
+      fork: null,
+      entries: [
+        { neutralEntryId: "root:0", message: { role: "user", content: "q1" } },
+        { neutralEntryId: "root:1", message: { role: "assistant", content: "a1" } },
+        { neutralEntryId: "root:2", message: { role: "user", content: "q2" } },
+      ],
+    }],
+  };
+
+  it("at(默认)含锚点:边界=锚点本身", () => {
+    expect(resolveForkBoundary(session, "root", "root:2", "at")).toBe("root:2");
+  });
+
+  it("before 排除锚点:边界=锚点前一条(父前缀截到前一条,不含待重发 user)", () => {
+    expect(resolveForkBoundary(session, "root", "root:2", "before")).toBe("root:1");
+  });
+
+  it("before 锚点是父内容第一条:空串(零继承前缀,从根分叉)", () => {
+    expect(resolveForkBoundary(session, "root", "root:0", "before")).toBe("");
+  });
+
+  it("before 支持私有 kernelEntryId 反查", () => {
+    const s2: NeutralSession = {
+      ...session,
+      lineages: [{
+        lineageId: "root",
+        fork: null,
+        entries: [
+          { neutralEntryId: "root:0", kernelEntryId: "k0", message: { role: "user", content: "q1" } },
+          { neutralEntryId: "root:1", kernelEntryId: "k1", message: { role: "assistant", content: "a1" } },
+          { neutralEntryId: "root:2", kernelEntryId: "k2", message: { role: "user", content: "q2" } },
+        ],
+      }],
+    };
+    expect(resolveForkBoundary(s2, "root", "k2", "before")).toBe("root:1");
+  });
+
+  it("before 后 lineageContent 不含锚点(不再重复待重发 user)", () => {
+    const boundary = resolveForkBoundary(session, "root", "root:2", "before");
+    const branched: NeutralSession = {
+      ...session,
+      lineages: [
+        ...session.lineages,
+        { lineageId: "branch", fork: { parentLineageId: "root", boundaryEntryId: boundary }, entries: [{ neutralEntryId: "branch:0", message: { role: "user", content: "q2" } }] },
+      ],
+    };
+    const content = lineageContent(branched, "branch");
+    const q2Count = content.filter((e) => e.message.content === "q2").length;
+    expect(q2Count).toBe(1); // 只有重发那一条,不重复
+    expect(content.map((e) => e.neutralEntryId)).toEqual(["root:0", "root:1", "branch:0"]);
   });
 });
 

@@ -154,7 +154,7 @@ export interface KernelApi {
     /** 模型连通性测试(内核隔离临时会话 ping;对应 domain ModelApi.test) */
     testModel: (cwd: string, provider: string, modelId: string, kernel: KernelId) => Promise<{ ok: boolean; error?: string }>;
     setThinkingLevel: (level: string) => Promise<void>;
-    fork: (parentLineageId: string, boundary?: string) => Promise<string>;
+    fork: (parentLineageId: string, boundary?: string, position?: "before" | "at") => Promise<string>;
     copySession: (srcPath: string, targetPath: string) => Promise<void>;
     getStats: () => Promise<unknown>;
     /** 克隆当前会话(session-single-source §4.2:壳的中性实现,内核不参与)。 */

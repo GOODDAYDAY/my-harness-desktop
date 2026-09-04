@@ -408,7 +408,7 @@ const kernel = {
     setThinkingLevel: (level: string): Promise<void> =>
       transport.invoke(IPC.session.setThinkingLevel, level),
     // SessionTreeApi
-    fork: (parentLineageId: string, boundary?: string): Promise<string> => transport.invoke(IPC.session.fork, parentLineageId, boundary),
+    fork: (parentLineageId: string, boundary?: string, position?: "before" | "at"): Promise<string> => transport.invoke(IPC.session.fork, parentLineageId, boundary, position),
     // 中性树面(session-single-source §4.2):壳的实现,与内核无关
     clone: (): Promise<void> => transport.invoke(IPC.session.clone),
     getForkMessages: (entryId: string): Promise<unknown[]> => transport.invoke(IPC.session.getForkMessages, entryId),

@@ -273,8 +273,10 @@ export interface ModelApi extends RpcOps {
 /** 会话树操作——继承 RpcOps。分叉、克隆、取分叉点消息。 */
 export interface SessionTreeApi extends RpcOps {
   /** 回退重跑(§2.4.1 中性 fork):从指定 lineage 的 boundary 分叉出新 lineage。
-   *  pi 后端 = 在 boundary 条目处 fork + 框架对账,返回分叉产物路径;position 语义收进后端(默认 at)。 */
-  fork(parentLineageId: string, boundary?: string): Promise<string>;
+   *  pi 后端 = 在 boundary 条目处 fork + 框架对账,返回分叉产物路径。
+   *  position:"at"(默认)父前缀继承到 boundary 含锚点;"before" 继承到锚点前一条
+   *  (retry/rewind 用,排除待重发 user 消息,避免重复)。 */
+  fork(parentLineageId: string, boundary?: string, position?: "before" | "at"): Promise<string>;
   /** 克隆当前会话(session-single-source §4.2:壳纯操作——中立层整树复制 + 新 ns,
    *  内核不参与、离线可克隆;不再经 pi 内核 clone 命令)。 */
   clone(): Promise<void>;

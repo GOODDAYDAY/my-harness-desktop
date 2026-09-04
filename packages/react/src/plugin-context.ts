@@ -107,7 +107,7 @@ export function usePluginContext(): PluginContext {
   }), []);
 
   const tree: SessionTreeApi = useMemo(() => ({
-    fork: (parentLineageId, boundary) => window.kernel.sessions.fork(parentLineageId, boundary) as Promise<string>,
+    fork: (parentLineageId, boundary, position) => window.kernel.sessions.fork(parentLineageId, boundary, position) as Promise<string>,
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
     // clone/getForkMessages 已是壳的中性实现(session-single-source §4.2),从 pi 扩展面收编到树面
     clone: () => window.kernel.sessions.clone(),

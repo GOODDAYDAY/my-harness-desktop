@@ -134,8 +134,8 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
 
   // ---- SessionTreeApi(会话树操作)----
   // fork/clone 产生新 lineage/副本,同样广播——其他端的会话树/列表消费方按需重拉(第 22 项补漏)。
-  gateway.register(IPC.session.fork, async (_e, parentLineageId: string, boundary?: string) => {
-    const r = await sessionStore.fork(parentLineageId, boundary);
+  gateway.register(IPC.session.fork, async (_e, parentLineageId: string, boundary?: string, position?: "before" | "at") => {
+    const r = await sessionStore.fork(parentLineageId, boundary, position);
     notifyHeaderChanged({ kind: "fork", parentLineageId });
     return r;
   });

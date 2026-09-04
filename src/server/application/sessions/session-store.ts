@@ -17,7 +17,7 @@ import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnaps
 import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader, NeutralChange } from "@my-harness-desktop/shared";
-import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, neutralMessagesOfSession, neutralSessionToTree } from "@my-harness-desktop/shared";
+import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, upsertNeutralLineage, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, resolveForkBoundary, neutralMessagesOfSession, neutralSessionToTree } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
 import { BookmarkSnapshotStore } from "./bookmark-snapshot-store";
 import { PendingQuestionStore } from "./pending-question-store";
@@ -2086,7 +2086,7 @@ export class SessionStore implements
 
   // ============ SessionTreeApi ============
 
-  async fork(parentLineageId: string, boundary?: string): Promise<string> {
+  async fork(parentLineageId: string, boundary?: string, position: "before" | "at" = "at"): Promise<string> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("内核未启动");
     // fork = 壳切中立树(§kernel-forkless §14):分叉是壳的纯操作,内核不 fork、不物化。
@@ -2103,9 +2103,10 @@ export class SessionStore implements
     }
     const newLineageId = randomUUID();
     if (cur && this.neutralStore) {
-      // 边界归一:调用方传的 boundary 可能是内核条目 id(老渲染层路径)——先按中立树
-      // 解析成中立 entryId,解析不到按根处理(不静默挂错)。
-      const resolvedBoundary = boundary ? resolveBoundaryEntryId(cur, parent, boundary) : "";
+      // 边界归一 + position 截断语义(bookmark-snapshot-fork-unify §4.4):调用方传的 boundary
+      // 可能是内核条目 id(老渲染层路径)——先按中立树解析成中立 entryId;"before" 排除锚点
+      // (retry/rewind 排除待重发 user 消息,避免同一条 user 在前缀 + 重发各出现一次)。
+      const resolvedBoundary = resolveForkBoundary(cur, parent, boundary, position);
       const lineage = { lineageId: newLineageId, fork: { parentLineageId: parent, boundaryEntryId: resolvedBoundary }, entries: [] };
       const next = upsertNeutralLineage(cur, lineage);
       this.putNeutral(next, { ns: proc.neutralSessionId, kind: "lineage", lineage, header: next.header });
@@ -2205,13 +2206,14 @@ export class SessionStore implements
 
   /** 从任意会话分叉(§kernel-forkless §14/§33):书签 fork = 在源会话中立树切一条新 lineage,
    *  不复制文件、不调内核 fork、不新增列表条目。惰性物化:分支只在下次 send 时 seed。 */
-  async forkFromSession(cwd: string, srcNs: string, entryId: string, position?: "before" | "at"): Promise<void> {
+  async forkFromSession(cwd: string, srcNs: string, entryId: string, position: "before" | "at" = "at"): Promise<void> {
     if (!srcNs || !this.neutralStore) return; // 源会话无中立层:迁移过渡期静默 no-op
     const cur = this.neutralStore.get(srcNs);
     if (!cur) return;
     const newLineageId = randomUUID();
     const rootLineageId = cur.lineages.find((l) => l.fork === null)?.lineageId ?? srcNs;
-    const resolvedBoundary = resolveBoundaryEntryId(cur, rootLineageId, entryId);
+    // position 截断语义(bookmark-snapshot-fork-unify §4.4):"before" 排除锚点(排除待重发 user)。
+    const resolvedBoundary = resolveForkBoundary(cur, rootLineageId, entryId, position);
     const lineage = { lineageId: newLineageId, fork: { parentLineageId: rootLineageId, boundaryEntryId: resolvedBoundary }, entries: [] };
     const next = upsertNeutralLineage(cur, lineage);
     this.putNeutral(next, { ns: srcNs, kind: "lineage", lineage, header: next.header });
