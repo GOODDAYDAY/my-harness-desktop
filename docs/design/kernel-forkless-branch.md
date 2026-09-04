@@ -315,7 +315,7 @@ export function lineageContent(session: NeutralSession, lineageId: string): Neut
 | 内核 | 内核侧标识 | 派生规则 | 幂等 |
 |---|---|---|---|
 | **dsh** | `SessionId`（值对象，可显式指定） | 直接用 `lineageId` 当 `SessionId` | ✅ 同 lineage → 同 id |
-| **pi** | JSONL 文件路径 | `<agentDir>/sessions/<bucket>/<stamp>_<lineageId>.jsonl` | ✅ 同 lineage → 同路径 |
+| **pi** | JSONL 文件路径 | `<agentDir>/sessions/<bucket>/<lineageId>.jsonl` | ✅ 同 lineage → 同路径 |
 
 两处要点：
 
@@ -356,7 +356,7 @@ seed(lineage: NeutralEntry[], opts: { neutralSessionId, lineageId, header })
 
 ```
 1. sessionId = opts.lineageId（不再 randomUUID，pi-backend.ts:70）
-2. path = <agentDir>/sessions/<bucket>/<stamp>_<lineageId>.jsonl
+2. path = <agentDir>/sessions/<bucket>/<lineageId>.jsonl
 3. 写 session 头（id=lineageId, cwd, custom.kernel）
 4. 逐 entry 写 message 行，parentId 挂前一条的 id（线性链，无分支）
 5. 返回 path
@@ -612,7 +612,7 @@ async seed(lineage: NeutralEntry[], opts: { neutralSessionId; lineageId; header 
 | 边界 | 处置 |
 |---|---|
 | 内核独立创建的会话（不经壳，pi CLI / dsh CLI 直建） | 壳侧不可见——"壳是唯一源"的固有代价。接受；未来可加"从内核存储导入"面。 |
-| pi 文件名从 `<stamp>_<uuid>` 改为 `<stamp>_<lineageId>` | 文件名是 pi 适配器的存储细节，壳不感知；`stamp` 前缀保留目录时间排序可读性。 |
+| pi 文件名从 `<stamp>_<uuid>` 改为 `<lineageId>` | 文件名是 pi 适配器的存储细节，壳不感知；去 stamp 前缀(旧 `<timestamp>_<id>` 迁移后文件名即 lineageId,见 pi-catalog rawFilePath 迁移注释)。 |
 | 切分支频繁（A→B→A→B） | 每次切都重新 seed 目标 lineage；幂等 seed 使"切回已物化分支"只重新打开、不重写，代价是 stop/start 一次。 |
 | 分支 lineage 的完整内容随父 lineage 增长 | `lineageContent` 每次发起现算，是纯函数；父 lineage 追加不改变子分支的历史前缀。 |
 | 中立层损坏 | 以 `getTree`/`getEntries` 兜底从内核侧反投影重建（§22）；展示元数据不可恢复则显式"图已丢失"。 |
@@ -732,17 +732,17 @@ async seed(lineage: NeutralEntry[], opts: { neutralSessionId; lineageId; header 
 
 把完整链路串起来，看"内核无 fork"下每个用户动作发生了什么。
 
-**1. 开新会话，聊 A、B**：壳生成 `neutralSessionId = "ns-1"`，root lineage `L0`（`lineageId = ns-1`），entries `[A, B]`。发起时 `seed(L0 内容, lineageId: ns-1)` → pi 写 `<bucket>/<stamp>_ns-1.jsonl`、dsh 建 `SessionId(ns-1)`。内核只看到线性 `[A, B]`。
+**1. 开新会话，聊 A、B**：壳生成 `neutralSessionId = "ns-1"`，root lineage `L0`（`lineageId = ns-1`），entries `[A, B]`。发起时 `seed(L0 内容, lineageId: ns-1)` → pi 写 `<bucket>/ns-1.jsonl`、dsh 建 `SessionId(ns-1)`。内核只看到线性 `[A, B]`。
 
 **2. 在 B 之后 fork**：壳 `fork` 纯操作 → 中立树切出新 lineage `L1`（`lineageId = uuid-1`，`fork = {L0, B}`），`activeLineageId = L1`。**内核没有任何动作**——pi 还停在 `ns-1.jsonl`，dsh 还停在 `SessionId(ns-1)`。左侧列表**不新增条目**。
 
-**3. 在 L1 上发 C**：`lineageContent(ns-1, L1)` = `[A, B]`（父前缀截到 B）+ `[C 待追加]` → `seed(L1 内容, lineageId: uuid-1)` → pi 写新文件 `<stamp>_uuid-1.jsonl`、dsh 建 `SessionId(uuid-1)` → `sendMessage(C)`。内核跑的是 `[A, B, C]`。
+**3. 在 L1 上发 C**：`lineageContent(ns-1, L1)` = `[A, B]`（父前缀截到 B）+ `[C 待追加]` → `seed(L1 内容, lineageId: uuid-1)` → pi 写新文件 `uuid-1.jsonl`、dsh 建 `SessionId(uuid-1)` → `sendMessage(C)`。内核跑的是 `[A, B, C]`。
 
 **4. 切回 L0 发 D**：`activeLineageId = L0`，`lineageContent = [A, B]` → `seed(L0, lineageId: ns-1)` 幂等 → 得到**同一个** `ns-1.jsonl` / `SessionId(ns-1)`（重开，不重写内容）→ `sendMessage(D)`。内核跑 `[A, B, D]`。
 
 **5. 切到 dsh**：`switchKernel("dsh")` 读中立层活跃 lineage（假设 L1）→ `seed(L1 内容, lineageId: uuid-1)` → dsh 建 `SessionId(uuid-1)`。**只 seed 活跃 lineage，L0 留在中立层**。
 
-**6. 切回 pi**：`switchKernel("pi")` → 派生 `derive(uuid-1)` = `<stamp>_uuid-1.jsonl` → 幂等重开同文件，**不重新 seed、不查表**。全程 `ns-1` / `uuid-1` 不变，变的只是投影到哪个内核。
+**6. 切回 pi**：`switchKernel("pi")` → 派生 `derive(uuid-1)` = `uuid-1.jsonl` → 幂等重开同文件，**不重新 seed、不查表**。全程 `ns-1` / `uuid-1` 不变，变的只是投影到哪个内核。
 
 关键不变量贯穿全程：**`lineageId` 是唯一身份，内核 id 是它的派生；分叉结构从头到尾只活在中立层，内核永远只持有当前活跃那条线性 lineage。**
 
