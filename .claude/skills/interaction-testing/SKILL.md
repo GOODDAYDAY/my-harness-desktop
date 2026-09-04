@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**整重启(崩溃安全)探针口径(r315 实钉)**:pendingSeed 是**会话头行字段**(中立层文件),不随进程消失——「派生 → killApp 整退 → 同 HOME 重新 launchApp → 冷启动首发」的断言序列:① 派生后 pi 文件不存在;② 重启后读盘 pendingSeed 仍 true;③ 冷启动侧栏点开 (copy) 行,前缀可见;④ 首发 → pi 文件出现且**前缀+新回合都在**(内容零丢失);⑤ pendingSeed 清除。launch/kill 两次要用同一 runRoot+HOME(killApp 后 sleep 3s + assertPortFree 再起,端口残留会静默起不来)。这是 §6.5「持久标记,崩溃重启后下次首发自动重试」的实弹验收法。
+
 **派生链探针口径(r314 实钉)**:① 链式语义——A 分叉出 A' 再分叉出 A'' 时,A'' 的 `derivedFrom.source = A'`(记直接父,不是根 A),内容隔代全继承(A 原轮 + A' 新轮都在 A'' 前缀);名字 = forkCopyName 递归叠 **(copy) (copy)** 双层。② 分叉钮点击后 hover 淡入有时序竞态(回合刚收敛动作钮未及挂)——fork 点击包一层重试(至多 2 次,间隔 1.5s),比调大 sleep 便宜。③ 刷新持久断言:reload 后启动停新会话壳,主动点行再断言两轮 needle 同现(中立层单源,派生会话与普通会话同等待遇);④ 从派生会话一击收藏,快照自包含隔代内容(快照只看锚点前缀,不看 derivedFrom)。
 
 **rewind 探针口径(r313 实钉)**:「回退」钮在 **user 行**(assistant 行没有——它只有复制/分叉/收藏/重试);点击 = 原位内联 Composer(`[data-rewind-inline]` 内的 textarea)且**预填原文**——写入用原生 setter + input 事件,提交点框内 aria-label^=发送 的钮。改写提交 = fork("before")+sendMessage:派生会话的 user 条目**只含改写文本**(原文被 before 排除);boundary = 原会话里锚点的**前一条**(首条前有 model divider 时是 :0,不是空串——空串只当锚点真是第一条);断言 boundary 用「源条目[userIdx-1]」现算,别写死空串。
