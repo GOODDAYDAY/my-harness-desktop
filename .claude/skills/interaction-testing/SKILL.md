@@ -122,6 +122,10 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**「当前激活内核」= activeKernel 的语义(r311 实钉,易误解)**:resume(收藏发起)的目标内核缺省取 `activeKernel`——它是**全局最后一次 setModel 选定的内核**,openSession/setContext(切会话/点行)不改写它。想「在 dsh 下发起」必须先在 dsh 会话里**真发一条**(setModel 使 activeKernel=dsh),仅切视图不够;否则 resume 按残留内核派生(行为符合 §8.3 文档,不是 bug)。跨内核收藏发起的探针序列:pi 会话建收藏 → dsh 会话续发一条(激活)→ 面板点「点击 fork」→ 断言派生 header.kernel=dsh。
+
+**dsh 派生会话的惰性物化断言(r311)**:forkFromSession 对 dsh 同路径(曾是 pi 扩展面,dsh 下显式降级抛错;unify §7.1 已收编中性面)。派生后 `~/.dsh/sessions/<桶>/<newNs>/session.jsonl` **不存在**(惰性,首发才物化);首发后文件出现且内容=前缀+新回合。dsh 会话文件路径:`<DSH_SESSION_ROOT>/sessions/<cwd 桶>/<lineageId>/session.jsonl`。
+
 **收藏搜索/preview 语义(r310 实钉)**:面板搜索按 **label+preview** 匹配(不搜消息全文)。label 默认=会话名(自动命名),preview=被收藏 assistant 的回复文本;同一会话连续三条收藏的 label 全同名,搜索要按 label 前缀断言全量,按"未出现过的词"断言空态。
 
 **[data-message-id] 只数带锚点的行——丢 id 的行在锚点查询里不存在(r309 踩过)**:服务端 openSession 曾漏 id 提升(已修 946fbd2e),无 message.id 的存量条目整行渲染但无 data-message-id——锚点计数比 div.group 少。断行数时「全行」用 div.group 数、「锚点行」用 [data-message-id] 数,二者不等 = 有行丢了锚点(真 bug);旧代码上跑探针,别把少行当视口陷阱。
