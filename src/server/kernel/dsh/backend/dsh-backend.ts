@@ -60,7 +60,12 @@ const UNKNOWN_METHOD_PREFIX = "unknown DeepSeek Harness SDK runtime method";
  */
 export function buildDshSeedSession(lineage: NeutralEntry[], opts: SeedOptions): NeutralSession {
   return {
-    neutralSessionId: opts.neutralSessionId,
+    // 根 lineageId ≡ neutralSessionId 不变量(§kernel-forkless §12.2/§5.2):seed 投影把
+    // 「活跃 lineage」单线重包成新会话,该 lineage 在新会话里是根(fork=null)——neutralSessionId
+    // 必须 = lineageId(= dsh 会话 id)。此前用 opts.neutralSessionId(壳会话 ns=根 lineage id),
+    // 对 fork 分支 seed 时 ns 仍是根、lineageId 是分支,两者不一致 → dsh 内核 seed 出 id 与
+    // 投影不符、分支回合挂起不收敛(实弹复现:fork 分支发送停止钮不出、回合永不 settle)。
+    neutralSessionId: opts.lineageId,
     header: opts.header,
     lineages: [{
       lineageId: opts.lineageId,

@@ -107,7 +107,9 @@ describe("dsh seed 转录(wire 形状对齐 session/seed 的 NeutralSessionWire 
 
   it("buildDshSeedSession 把线性 NeutralEntry[] 包回单 lineage 树(fork=null)", () => {
     const s = buildDshSeedSession(entries, { neutralSessionId: "ns", lineageId: "root", header });
-    expect(s.neutralSessionId).toBe("ns");
+    // 根 lineageId ≡ neutralSessionId 不变量:seed 投影把活跃 lineage 重包成新会话的根,
+    // neutralSessionId 必须 = lineageId(= dsh 会话 id),不是壳会话 ns(opts.neutralSessionId)
+    expect(s.neutralSessionId).toBe("root");
     expect(s.header).toEqual(header);
     expect(s.lineages).toHaveLength(1);
     expect(s.lineages[0].lineageId).toBe("root");

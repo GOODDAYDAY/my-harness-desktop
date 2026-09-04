@@ -75,7 +75,9 @@ describe("一套壳协议 → pi/dsh 各自转录(seed 投影契约一致性)", 
   it("dsh 转录:线性 NeutralEntry[] → 单 lineage 树(fork=null),剥离 display,sessionId 派生自 lineageId", () => {
     const s = buildDshSeedSession(canonical, { neutralSessionId: "ns-1", lineageId: "root", header });
 
-    expect(s.neutralSessionId).toBe("ns-1");
+    // 根 lineageId ≡ neutralSessionId 不变量:投影把活跃 lineage 重包成新会话的根,
+    // neutralSessionId 必须 = lineageId(= dsh 会话 id),不是壳会话 ns
+    expect(s.neutralSessionId).toBe("root");
     expect(s.header).toEqual(header);
     expect(s.lineages).toHaveLength(1);
     expect(s.lineages[0]).toMatchObject({ lineageId: "root", fork: null });
