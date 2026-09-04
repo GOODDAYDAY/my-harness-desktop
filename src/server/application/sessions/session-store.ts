@@ -328,12 +328,6 @@ export class SessionStore implements
     // 路径→key 经 resolveProcKey(fork/clone 对账已 rekey,正常态 key === 路径)
     const key = sessionPath ? this.resolveProcKey(sessionPath) : (cwd ? `new:${cwd}` : "");
     this.activeProcKey = key;
-    // 内核归属随会话(根因修复,勿回退):activeKernel 是「当前激活会话的内核」,切会话必须
-    // 换绑——此前只换 activeProcKey 不换 activeKernel,从 dsh 会话切回 pi 会话时 activeKernel
-    // 仍指 dsh,pi 会话再发消息撞「会话已固定内核」闸静默失败(实弹复现:pi→dsh→pi 切回后
-    // pi 续发停止钮不出、回合不起)。有持久会话读其 header.kernel,新会话/无 header 归 null
-    // (setModel 选模型时再定)。注意须先设 activeSessionPath 再读(activeSessionKernel 依赖它)。
-    this.activeKernel = sessionPath ? this.activeSessionKernel() : null;
     if (prevKey && prevKey !== key) {
       const prevKernels = this.procs.get(prevKey);
       if (prevKernels) {
@@ -1825,7 +1819,10 @@ export class SessionStore implements
     // 刷新后进程未起、touched 恒 false,但中立层 entry 仍在——补持久历史判据堵「刷新后换内核」的口。
     const hasHistory = this.allProcs().some((p) => p.key === this.activeProcKey && p.touched)
       || this.activeSessionHasHistory();
-    const fixedKernel = this.activeKernel ?? this.activeSessionKernel();
+    // 会话的「固定内核」真相源是会话自身上下文(header.kernel = 会话内容属于哪个内核),
+    // 不是全局 activeKernel(它跨会话残留、只记「最后一次选的内核」)。此前用 activeKernel 优先,
+    // 从 dsh 会话切回有历史的 pi 会话时 fixedKernel 取到残留的 dsh,误判「跨内核切换」挡发。
+    const fixedKernel = this.activeSessionKernel() ?? this.activeKernel;
     if (hasHistory && fixedKernel && targetKernel !== fixedKernel) {
       throw new Error("当前会话已固定内核，跨内核切换后续支持");
     }

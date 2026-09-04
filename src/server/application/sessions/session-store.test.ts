@@ -349,10 +349,11 @@ describe("setModel 跨内核路由(中间转换层)", () => {
     expect(mock.calls).toEqual([]);
   });
 
-  it("切会话换绑 activeKernel:从 dsh 会话切回有历史的 pi 会话,pi 再发不被「已固定内核」误拦(根因守卫)", async () => {
-    // 根因:activeKernel 是「当前激活会话的内核」,但 setContext(切会话)只换 activeProcKey 不换
-    // activeKernel——从 dsh 会话切回 pi 会话时它仍指 dsh,pi 会话 setModel(pi) 撞「当前会话已
-    // 固定内核,跨内核切换后续支持」闸,发送静默失败(实弹:pi→dsh→pi 切回后 pi 续发停止钮不出)。
+  it("setModel 固定内核取会话自身 header.kernel 而非全局 activeKernel:切回有历史的 pi 会话不被误拦(根因守卫)", async () => {
+    // 根因:setModel 的 fixedKernel 用 activeKernel(全局「最后一次选的内核」,跨会话残留)优先,
+    // 而非会话自身上下文 header.kernel。从 dsh 会话切回有历史的 pi 会话时 activeKernel 残留 dsh,
+    // fixedKernel 取到 dsh → 误判「当前会话已固定内核,跨内核切换后续支持」挡发(实弹:
+    // pi→dsh→pi 切回后 pi 续发停止钮不出、回合不起)。真相源应是会话自身的 header.kernel。
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "xkern-switch-neutral-")));
     const piNs = "ns-pi";
     const dshNs = "ns-dsh";
