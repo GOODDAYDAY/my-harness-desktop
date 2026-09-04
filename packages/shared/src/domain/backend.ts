@@ -230,6 +230,11 @@ export interface BackendCreateOptions {
   /** 中立会话主键(§kernel-forkless §12.2):壳只传 ns,内核私有会话 id 由各内核 adapter
    *  派生(pi=piDerivedSessionPath(agentDir,cwd,ns),dsh=ns)。 */
   neutralSessionId: string;
+  /** 要物化的活跃 lineage id(§kernel-forkless §12.2):内核私有会话 id 派生自 **lineageId**
+   *  而非 ns——root lineageId ≡ ns,分支 lineageId ≠ ns,fork 分支重 spawn 时必须按分支
+   *  lineageId 派生自己的文件/session,否则分支回合写回根文件(根 lineageId 派生路径),
+   *  文件对应漂移。缺省 = neutralSessionId(root lineage,幂等)。 */
+  lineageId?: string;
   /** 要注入的 system prompt 文件路径(pi 翻译成 --append-system-prompt <path>;dsh 忽略)。 */
   systemPromptPaths?: string[];
   /** 内联 system prompt 文本(角色卡;pi 翻译成 --append-system-prompt <text>;dsh 忽略)。 */

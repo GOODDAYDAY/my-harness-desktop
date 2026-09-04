@@ -1200,3 +1200,49 @@ describe("三会话跨内核切换(pi/dsh/pi,会话对应进程不串)", () => {
     // 无异常即通过(核心:第二轮 setModel 不撞跨内核闸)
   });
 });
+
+describe("fork 分支重 spawn 传 lineageId(内核私有 id 派生自活跃 lineageId,§12.2)", () => {
+  class LineageBackend {
+    alive = false;
+    capabilities = { pi: { onBusFrame: () => {}, onQuestion: () => {}, onProcessExit: null, stderr: "", resync: async () => ({ messages: [], state: { isStreaming: false }, tree: { rootId: "", lineages: [] } }) } }; // 有 pi 面 → 走预 seed 重 spawn 路径
+    calls: string[] = [];
+    async start(): Promise<void> { this.alive = true; }
+    async stop(): Promise<void> { this.alive = false; }
+    onEvent(): () => void { return () => {}; }
+    async sendMessage(): Promise<void> { this.calls.push("sendMessage"); }
+    async setModel(): Promise<void> {}
+    async setSessionName(): Promise<void> {}
+    async seed(): Promise<string> { this.calls.push("seed"); return "seeded"; }
+    async fork(): Promise<unknown> { return { lineageId: "f", sessionReplaced: false }; }
+    async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+    async getEntries(): Promise<NeutralMessage[]> { return []; }
+    async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
+    async deleteBookmark(): Promise<void> {}
+    async abort(): Promise<void> {}
+  }
+
+  it("fork 分支物化时 factory.create 收到 lineageId=分支(不是 neutralSessionId=根)", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "fork-lineageid-")));
+    const ns = "ns-lineageid";
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }),
+      lineages: [
+        { lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "base" } }] },
+      ],
+    });
+    const createdLineageIds: (string | undefined)[] = [];
+    const factory: BackendFactory = {
+      seed: async () => "seeded-path",
+      create: (opts) => { createdLineageIds.push(opts.lineageId); return new LineageBackend() as unknown as BaseBackend; },
+    };
+    const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath, undefined, false, "pi", "p", "a"); // 带模型起,避免 prompt setModel 重起进程重置活跃 lineage
+    const newId = await s.fork(ns, `${ns}:0`); // fork 出分支 + 切活跃 lineage
+    await s.prompt("branch-first", undefined, undefined, { provider: "p", modelId: "a", kernel: "pi" as const, thinkingLevel: "" });
+    // 物化重 spawn 的 create 必须带 lineageId=newId(派生自己的文件,不写根文件)
+    expect(createdLineageIds.some((id) => id === newId)).toBe(true);
+  });
+});

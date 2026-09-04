@@ -1205,6 +1205,7 @@ export class SessionStore implements
           systemPromptPaths: this.getSystemPromptPaths(),
           systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
           neutralSessionId: proc.neutralSessionId,
+          lineageId: activeLineageId,
         });
         await newBackend.start();
       } else {
@@ -1212,6 +1213,7 @@ export class SessionStore implements
         newBackend = this.factory.create({
           cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
           neutralSessionId: proc.neutralSessionId,
+          lineageId: activeLineageId,
           systemPromptPaths: this.getSystemPromptPaths(),
         });
         await newBackend.start();
@@ -2160,12 +2162,16 @@ export class SessionStore implements
           systemPromptPaths: this.getSystemPromptPaths(),
           systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
           neutralSessionId: proc.neutralSessionId,
+          // 内核私有会话 id 派生自活跃 lineageId(§12.2):fork 分支 ≠ ns,须按分支派生
+          // 自己的文件/session,否则分支回合写回根文件(文件对应漂移,实弹复现)。
+          lineageId: proc.activeLineageId,
         });
         await newBackend.start();
       } else {
         newBackend = this.factory.create({
           cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
           neutralSessionId: proc.neutralSessionId,
+          lineageId: proc.activeLineageId,
           systemPromptPaths: this.getSystemPromptPaths(),
         });
         await newBackend.start();

@@ -37,8 +37,9 @@ export interface PiFactoryOptions extends BackendCreateOptions {
 /** pi 工厂:把中性字段翻译成 pi 的 spawn 参数(--session/--append-system-prompt/--no-session)。 */
 export function createPiBackend(opts: PiFactoryOptions): BaseBackend {
   const args: string[] = [];
-  // 会话标识下沉 adapter(§12.2):pi 的私有 id = 派生文件路径(由 ns 定,幂等)。
-  const sessionId = piDerivedSessionPath(opts.agentDir, opts.cwd, opts.neutralSessionId);
+  // 会话标识下沉 adapter(§12.2):pi 的私有 id = 派生文件路径(由 **lineageId** 定,幂等)。
+  // 分支重 spawn 传 lineageId(分支),root 传 ns(lineageId 缺省 = neutralSessionId)。
+  const sessionId = piDerivedSessionPath(opts.agentDir, opts.cwd, opts.lineageId ?? opts.neutralSessionId);
   if (!opts.ephemeral) args.push("--session", sessionId);
   for (const p of opts.systemPromptPaths ?? []) args.push("--append-system-prompt", p);
   for (const t of opts.systemPromptTexts ?? []) args.push("--append-system-prompt", t);
@@ -80,7 +81,7 @@ export function createDshBackend(opts: DshFactoryOptions): BaseBackend {
     provider: opts.provider ?? "",
     model: opts.model ?? "",
     maxTokens: opts.maxTokens,
-    sessionId: opts.neutralSessionId,
+    sessionId: opts.lineageId ?? opts.neutralSessionId,
     tempDir,
     cordisConfig: opts.cordisConfig,
     settingsPath: opts.cordisConfig ? join(dirname(opts.cordisConfig), "settings.yaml") : undefined,
