@@ -96,7 +96,7 @@ await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']
 - divider 条目:`{role:"divider", kind:"model"|"info"|..., i18nKey, i18nArgs}`
 - assistant 条目:`usage`(token)、`timestamp`(写穿时刻)、`startedAt`(调用开始)、`stopReason`/`stopped`/`error` 终结标记、 `model`(执行时模型)
 
-DOM 只断「呈现对不对」(右对齐/徽章/按钮在不在),数据正确性全走文件。文件名即 ns;fork 是同会话加 lineage(`fork:{parentLineageId,boundaryEntryId}`),不是新文件。
+DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确性全走文件。文件名即 ns。**fork 已改产新会话**(bookmark-snapshot-fork-unify §5,commit 4ea26727):fork/retry/rewind/收藏发起统一派生**全新中立会话**——新 ns、根 lineageId ≡ ns、`header.derivedFrom` 记源、`header.pendingSeed` 置位(首发强制物化、成功清除);pi 侧内核文件在**首发后**才物化为 `<bucket>/<newNs>.jsonl`(内容=前缀+新消息),源会话文件不动。探针断言:派生后读 neutralStore 验 `derivedFrom.kind` + pendingSeed;首发后验 pi 文件存在 + pendingSeed 清除;重试用**结构断言**(boundaryEntryId = 待重发 user 前一条;重发条目恰 1 条),别数字符串出现次数(模型回复会回显,次数虚高)。
 
 ## 5 按内核的最小验证路径
 
@@ -106,7 +106,7 @@ DOM 只断「呈现对不对」(右对齐/徽章/按钮在不在),数据正确�
 
 **dsh**:先按 §1 备齐三件 → 模型下拉(`button[id^=radix]` 开 menu → 点 `DSH` 页签 → 选 `qwen3.8-max`)→ 发送。注意 dsh 无 thinking 档、事件形状不同(回合收敛 = turn/end 合成的 agentSettled)。
 
-**消息动作全是「arm-confirm 两段式」**(收藏/分叉/重试/删除):第一次点 = armed(钮文案变「确认X?」),第二次点才执行。探针只点一次 = 没执行(r61 踩过)。重试的「重发」语义 = fork 当前 lineage + messaging.prompt 重发——重试后视图切到新分支,消息行数可能变少(旧分支的后续不在视图),不是丢消息。
+**消息动作全是「arm-confirm 两段式」**(收藏/分叉/重试/删除):第一次点 = armed(钮文案变「确认X?」),第二次点才执行。探针只点一次 = 没执行(r61 踩过)。重试的「重发」语义 = fork 派生新会话(position=before,前缀排除待重发 user)+ messaging.prompt 重发——重试后视图切到**新会话**,消息行数变少(只含前缀+重发)是设计语义,不是丢消息。
 
 **dsh fork/重开(已修复,根因在 deepseek-harness 仓)**:fork 本身三层皆证;但 fork 分支发送 + 重开历史 dsh 会话续发,两条路径曾死在「seed → prompt 不产回合」——实弹 r305/r307/r308:分支发送 25s 零事件(无 agentStart)、停止钮不出;dsh 会话文件只有 seed 的 8 行(`session→turn/start→user→assistant→turn/end→session/end-seed`),无后续 prompt 的 turn。**根因在 dsh SDK**(`@deepseek-ai/dsh-sdk-jsonrpc-server`):`seed` handler 用 `ctx.sessions.create(SessionId,{seed})` 建会话但**从不写 server 的 `this.sessions` map**;`prompt` 的 `getOrCreateSession` 读 `this.sessions` 落空 → `createSession` 再 `ctx.agents.create` 对已存在会话重复 prepare → `followup` 不产回合。**修复(已在 deepseek-harness 仓提交 bff174fa77)**:seed 改 async、用 `ctx.agents.create({sessionId,seed,meta,agentOptions})`(照抄 `createSession`/`setModel` 的 create+`this.sessions.set` 范式,多传 seed)+ 注册。**实弹复核通过**:r305 fork 分支物化含 assistant ✓、r308 重开续发产回合(agentStart/agentSettled/messageEnd)✓。复核手法:fork/重开 → 分支发 → 插桩 `window.kernel.sessions.onEvent` 看有无 agentStart + 读 dsh `session.jsonl` 有无 turn 2。
 
@@ -119,6 +119,8 @@ DOM 只断「呈现对不对」(右对齐/徽章/按钮在不在),数据正确�
 **goal 引擎**:`/goal limit N`(须先有别目标时无效,limit 只改现存目标;要限速先在设置里改 goal.maxRounds 再设目标)→ `/goal <目标>`(正文作为真实用户消息发出,所见即所得)→ `[data-goal-phase]` 观察 active→(暂停)→paused→(恢复)→active;留痕卡 role=`goal_note` 落中立层。
 
 **ask 提问**:指令模型「调用 ask_user_question 问我…」→ 等 `[data-ask-question]` → 选项整行(单选点选即答;多选勾选+提交)。
+
+**bus 乒乓污染探针(r307 踩过,非产品 bug)**:基础回合若发"ping alpha"这类开放 prompt,模型会读 bus skill 文档(chatroom-collab/delegate-task)并自发 `channel_member` 进 channel;fork/重试产生第二个会话后,两会话在房间互发 `[bus chat]` 帧、每帧触发对方新回合,乒乓到 `bus_throttled`(20 条/分钟令牌桶熔断)——settle 永不收敛、双方会话被注入帧刷爆。这是 session-bus.md §3.4 Q6 文档化的双保险场景(防回声 looksLikeBusFrame + 节流熔断,行为符合设计),不是 fork 的 bug。探针避法:基础回合用明确指令「不要使用任何工具/不要加入任何 channel,只回一个词」;断言别数文本出现次数(模型回复会回显 prompt 文本)。
 
 ## 6 诊断现场留存(失败时可复现)
 
