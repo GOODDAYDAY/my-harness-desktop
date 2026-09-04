@@ -126,7 +126,8 @@ export function SessionColorsPanel(): React.ReactNode {
       const info = sessionInfos[path];
       useUiStore.getState().setCurrentSessionPath(path);
       useUiStore.getState().setSessionTitle(info ? deriveSessionTitle(info) : null);
-      const ok = await useSessionStore.getState().openSession(path);
+      // openSession 只认中立 ns(服务端 neutralStore.get(ns)),投影 path 查空——优先传 ns。
+      const ok = await useSessionStore.getState().openSession(info?.neutralSessionId ?? path);
       // 文件已删/不可读:回滚选中态,不留指向失效会话的残局(此前缺失,仅此处无回滚)
       if (!ok) {
         useUiStore.getState().setCurrentSessionPath(prevPath);

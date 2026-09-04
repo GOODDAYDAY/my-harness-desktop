@@ -705,6 +705,15 @@ describe("归档/置顶:中立层真相源不被内核投影失败阻断", () =>
     expect(h?.custom).toEqual({ subagent: { parent_id: "main" } });
   });
 
+  it("openSession 只认中立 ns,不认投影 sessionPath(契约钉死——调用方传投影路径会查空)", async () => {
+    // 根因守卫:openSession(id) 直接 neutralStore.get(id),无 path→ns 转换。投影 sessionPath
+    // (<cwd>/…/<rootLineageId>.jsonl) 不是 ns 键 → 查不到 → null。调用方(session-colors 钉选、
+    // 书签)若传投影路径会静默打不开会话——该契约让「传 ns」成为硬要求(goal 水合修复同款)。
+    const { s, sessionPath, ns } = newNeutralStore();
+    expect(await s.openSession(ns)).not.toBeNull(); // ns → 查得到
+    expect(await s.openSession(sessionPath)).toBeNull(); // 投影路径 → 查不到(契约:只认 ns)
+  });
+
   it("会话注解:落中立层条目(自定义 role,不进对话角色),openSession 消息流可读回", async () => {
     const { s, neutralStore, ns, sessionPath } = newNeutralStore();
     await s.annotate(sessionPath, "goal_note", '{"action":"pause"}');
