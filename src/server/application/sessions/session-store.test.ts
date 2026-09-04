@@ -790,6 +790,36 @@ describe("归档/置顶:中立层真相源不被内核投影失败阻断", () =>
     expect(h?.custom).toEqual({ subagent: { parent_id: "main" } });
   });
 
+  it("custom 按键合并(根因守卫,r317 实弹):分片写不抹同域他键——goal 写 {custom:{goal}} 后 custom.model 必须仍在", async () => {
+    // 根因:writeNeutralHeader 曾把 custom 整域赋值。goal 控制器每次 updateHeader({custom:{goal}})
+    // 都会把 setModel 落的 custom.model(模型域,续发/重开的偏好解析真相源)抹掉——
+    // 实弹 r317:派生会话设目标后下一轮续跑 promptSession 读不到模型域 →
+    // 「会话未启动,请先选择模型」→ goal auto_pause_send_failed 停摆。
+    // 修复:custom 按键合并(patch 键覆盖,未提及键保留;显式 null=删键)。
+    const { s, neutralStore, ns, sessionPath } = newNeutralStore();
+    // 预置模型域(模拟 setModel 已写)+ 工具配置键
+    const cur = neutralStore.get(ns)!;
+    neutralStore.put({
+      ...cur,
+      header: { ...cur.header, custom: { ...(cur.header.custom ?? {}), model: { provider: "p", modelId: "a", thinkingLevel: "high", kernel: "pi" }, toolConfig: { enabledToolIds: ["bash"] } } },
+    });
+    // goal 分片写(控制器实弹形态)
+    await s.updateHeader(sessionPath, { custom: { goal: { objective: "x", phase: "active", round: 1, maxRounds: 3 } } });
+    const h = neutralStore.get(ns)?.header;
+    const cust = h?.custom as Record<string, unknown>;
+    expect(cust.model).toEqual({ provider: "p", modelId: "a", thinkingLevel: "high", kernel: "pi" }); // 模型域幸存
+    expect((cust.goal as { phase: string }).phase).toBe("active"); // 分片键写入
+    expect(cust.toolConfig).toEqual({ enabledToolIds: ["bash"] }); // 他键幸存
+    expect(cust.subagent).toEqual({ parent_id: "main" }); // 预置键也幸存
+    // 二次分片写:goal 清档(null=删键)也不动 model
+    await s.updateHeader(sessionPath, { custom: { goal: null } });
+    const h2 = neutralStore.get(ns)?.header;
+    const cust2 = h2?.custom as Record<string, unknown>;
+    expect(cust2.goal).toBeUndefined(); // 显式 null = 删键
+    expect(cust2.model).toBeTruthy(); // 模型域仍幸存
+    expect(cust2.subagent).toEqual({ parent_id: "main" });
+  });
+
   it("openSession 双形态归一:中立 ns 与投影路径都能开(入参不对称收口,不再静默查空)", async () => {
     // 根因守卫:openSession 经 resolveNs 归一——裸 ns 与投影路径(<cwd>/…/<rootLineageId>.jsonl)
     // 都命中同一中立会话。此前裸 get 传投影路径静默返回 null(调用方「点了没反应」零信号),

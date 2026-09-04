@@ -739,7 +739,14 @@ export class SessionStore implements
   /** 双写中立 header(§kernel-forkless §27 阶段 D):rename/updateHeader/命名下沉内核的同时,
    *  把列表行字段(name/pinned/archived/custom)写进中立层——中立层是唯一真相源。
    *  只应用显式定义的字段:undefined 字段不覆盖——此前 {name: undefined, pinned: undefined}
-   *  直接 spread 会把已有 name/pinned/custom 抹成 undefined,JSON.stringify 再丢键,归档/置顶一次就丢名。 */
+   *  直接 spread 会把已有 name/pinned/custom 抹成 undefined,JSON.stringify 再丢键,归档/置顶一次就丢名。
+   *  custom 是**按键合并**不是整域替换(根因修复,勿回退):全部插件侧调用方(goal 的
+   *  {custom:{goal}}、sub-agent 的 {custom:{subagent}}、设置页的工具配置)都只传**自己那片**;
+   *  此前整域赋值会把同域其它键抹掉——实弹 r317:goal 写 {custom:{goal}} 一次,
+   *  会话头里 setModel 落的 custom.model(模型域,续发/重开的偏好解析真相源)即被抹,
+   *  下一次 goal 续跑 promptSession 按 header 读不到模型域 →「会话未启动,请先选择模型」
+   *  → 目标 auto_pause_send_failed 停摆。合并语义:patch 键覆盖,未提及键保留;显式
+   *  null 值是「删这个键」的合法表达(goal 切会话清档写 goal:null)。 */
   private async writeNeutralHeader(sessionPath: string, patch: Partial<NeutralSessionHeader>): Promise<void> {
     if (!this.neutralStore) return;
     const ns = this.neutralSessionIdFromPath(sessionPath);
@@ -748,7 +755,18 @@ export class SessionStore implements
     if (!session) return;
     const header: NeutralSessionHeader = { ...session.header };
     for (const [k, v] of Object.entries(patch)) {
-      if (v !== undefined) (header as unknown as Record<string, unknown>)[k] = v;
+      if (v === undefined) continue;
+      if (k === "custom" && v && typeof v === "object" && !Array.isArray(v)) {
+        // 按键合并:显式 null = 删键;对象值 = 覆盖该键
+        const merged: Record<string, unknown> = { ...(session.header.custom ?? {}) };
+        for (const [ck, cv] of Object.entries(v as Record<string, unknown>)) {
+          if (cv === null) delete merged[ck];
+          else merged[ck] = cv;
+        }
+        header.custom = merged;
+        continue;
+      }
+      (header as unknown as Record<string, unknown>)[k] = v;
     }
     this.putNeutral({ ...session, header }, { ns, kind: "header", header });
   }
