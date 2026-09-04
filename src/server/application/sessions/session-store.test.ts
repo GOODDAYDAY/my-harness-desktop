@@ -802,6 +802,40 @@ describe("归档/置顶:中立层真相源不被内核投影失败阻断", () =>
     expect(byPath?.info?.neutralSessionId).toBe(ns); // 双形态落到同一会话
   });
 
+  it("openSession 锚点契约:每条消息必带 id(中立 entryId 提升;存量 message.id 缺失不得丢行)", async () => {
+    // 根因守卫(r309f 实弹):openSession 曾手抄一份「e.message 直返」的内联映射,漏了
+    // id 提升——写穿路径未回填 message.id 的存量条目(实测 dsh/部分 pi 条目),openSession
+    // 后 id=undefined → 渲染层 MessageRow 的 data-message-id={message.id ?? undefined}
+    // 整个属性丢失 → 该行从 [data-message-id] 锚点查询消失(悬停动作/rewind/评论锚全断),
+    // 且文件 5 条、RPC 5 条、DOM 锚点只见 4 行的「凭空少一行」。修复=openSession 走
+    // 圆心单源投影 neutralMessagesOfSession(id 恒为 {neutralEntryId}),本测试钉死契约。
+    const { s, neutralStore, ns } = newNeutralStore();
+    // 构造实弹形态:条目的 message.id 缺失(写穿未回填的存量数据),neutralEntryId 在
+    neutralStore.put({
+      ...neutralStore.get(ns)!,
+      lineages: [{
+        lineageId: ns,
+        fork: null,
+        entries: [
+          { neutralEntryId: `${ns}:0`, message: { role: "divider", kind: "model", content: "" } },
+          { neutralEntryId: `${ns}:1`, message: { role: "user", content: "ping sA" } },
+          { neutralEntryId: `${ns}:2`, message: { role: "assistant", content: "pong" } }, // 无 message.id
+        ],
+      }],
+    });
+    const detail = await s.openSession(ns);
+    expect(detail).not.toBeNull();
+    // 锚点契约:全部消息 id 非空,且等于条目的中立 entryId(跨内核稳定坐标)
+    for (const m of detail!.messages) {
+      expect(typeof m.id).toBe("string");
+      expect(m.id).toBeTruthy();
+    }
+    const userMsg = detail!.messages.find((m) => m.role === "user")!;
+    const asstMsg = detail!.messages.find((m) => m.role === "assistant")!;
+    expect(userMsg.id).toBe(`${ns}:1`);
+    expect(asstMsg.id).toBe(`${ns}:2`);
+  });
+
   it("会话注解:落中立层条目(自定义 role,不进对话角色),openSession 消息流可读回", async () => {
     const { s, neutralStore, ns, sessionPath } = newNeutralStore();
     await s.annotate(sessionPath, "goal_note", '{"action":"pause"}');

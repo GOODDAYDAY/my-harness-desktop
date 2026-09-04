@@ -722,11 +722,15 @@ export class SessionStore implements
     const session = this.neutralStore?.get(this.resolveNs(id));
     if (!session) return null;
     const info = this.neutralToSessionInfo(session, session.header.cwd);
-    // 展示元数据(图)随 entry.display 在中立层,合到 message.__image(neutral-first §4)。
-    // 去重(resync 同款 deduplicateAdjacent):内核偶发重复写入时 refresh 与快照口径一致,不多一条。
-    const messages = deduplicateAdjacent(lineageContent(session, session.neutralSessionId).map((e) =>
-      e.display?.image ? ({ ...e.message, __image: e.display.image } as NeutralMessage) : e.message,
-    ));
+    // 内容读口走圆心单源投影(neutralMessagesOfSession,与渲染层镜像/快照同一份推导):
+    // 锚点 id 提升为中立 entryId、展示图合回 __image、相邻去重,一处实现不写两遍。
+    // 根因修复(勿回退):此前这里手抄一份「e.message 直返」的内联映射,漏了 id 提升——
+    // 存量条目(写穿时内核未回填 message.id)openSession 后 id 为 undefined,渲染层
+    // MessageRow 按 message.id 落 data-message-id(undefined → 属性整个丢失),该行从
+    // [data-message-id] 锚点里消失:悬停动作(分叉/收藏/重试/回退)、rewind、评论锚
+    // 全部找不到行(实弹 r309f:文件 5 条/RPC 5 条,锚点查询只见 4 行)。
+    // 圆心投影恒带 id:{neutralEntryId} 是稳定坐标,渲染锚点不再依赖内核是否回填过 id。
+    const messages = neutralMessagesOfSession(session, session.neutralSessionId);
     // stats/modelEvidence 是文件扫描基线(pi 专属),中立层无此口径 → null/缺省,
     // 活会话 RPC 真值到达后覆盖(与「文件读即基线」同一语义,只是基线现在空)。
     return { info, messages, stats: null };
