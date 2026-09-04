@@ -43,10 +43,10 @@ describe("PiBackend", () => {
     expect(sent[0]).toMatchObject({ type: "prompt", message: "hello" });
   });
 
-  it("abort 发 abort 命令", async () => {
+  it("abort 两段中断:abort_bash 先行、abort 收尾(pi 专属顺序收进适配器)", async () => {
     const { adapter, sent } = fakeAdapter();
     await new PiBackend(adapter, { cwd: "/proj", agentDir: "/tmp/agent" }).abort();
-    expect(sent[0]).toMatchObject({ type: "abort" });
+    expect(sent.map((c) => c.type)).toEqual(["abort_bash", "abort"]);
   });
 
   it("setModel 发 set_model 命令", async () => {

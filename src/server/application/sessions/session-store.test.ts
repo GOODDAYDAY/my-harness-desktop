@@ -185,11 +185,11 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
 });
 
 describe("abort 双保险与强杀兜底", () => {
-  it("dsh 后端(无 pi 扩展面)abort 不崩、真中断到底——asPi 同步抛错不拦主中断", async () => {
-    // 根因回归守卫:abort 里 `await this.asPi(proc).abortBash().catch(...)` —— asPi 在 dsh
-    // 同步抛错(.catch 只兜 promise 拒绝、兜不住同步抛),整个 abort 崩在中断前,dsh 会话
-    // 停止按钮完全失效(实弹复现:停止钮不消失、无 stopped 落盘)。修复:能力面门控,
-    // 无 pi 面就跳过 abortBash。
+  it("dsh 后端(无 pi 扩展面)abort 不崩、真中断到底——abort 内核无关,不再经 asPi", async () => {
+    // 根因守卫:abort 曾手写 pi 专属 abortBash 顺序(经 asPi,dsh 上同步抛崩中断),dsh 会话
+    // 停止按钮完全失效(实弹复现:停止钮不消失、无 stopped 落盘)。修复:两段中断收进
+    // PiBackend.abort(§6.4),壳的 SessionStore.abort 只调 backend.abort——dsh 走
+    // DshBackend.abort 各自干净,壳不再引用 asPi。
     const dshMock = new MockBackend();
     const dshSource: KernelModelSource = {
       listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
@@ -705,13 +705,16 @@ describe("归档/置顶:中立层真相源不被内核投影失败阻断", () =>
     expect(h?.custom).toEqual({ subagent: { parent_id: "main" } });
   });
 
-  it("openSession 只认中立 ns,不认投影 sessionPath(契约钉死——调用方传投影路径会查空)", async () => {
-    // 根因守卫:openSession(id) 直接 neutralStore.get(id),无 path→ns 转换。投影 sessionPath
-    // (<cwd>/…/<rootLineageId>.jsonl) 不是 ns 键 → 查不到 → null。调用方(session-colors 钉选、
-    // 书签)若传投影路径会静默打不开会话——该契约让「传 ns」成为硬要求(goal 水合修复同款)。
+  it("openSession 双形态归一:中立 ns 与投影路径都能开(入参不对称收口,不再静默查空)", async () => {
+    // 根因守卫:openSession 经 resolveNs 归一——裸 ns 与投影路径(<cwd>/…/<rootLineageId>.jsonl)
+    // 都命中同一中立会话。此前裸 get 传投影路径静默返回 null(调用方「点了没反应」零信号),
+    // 是 §1.5 静默缺面式设计。现在把「双形态都收」钉成契约,而不是把「只认 ns」钉成契约。
     const { s, sessionPath, ns } = newNeutralStore();
-    expect(await s.openSession(ns)).not.toBeNull(); // ns → 查得到
-    expect(await s.openSession(sessionPath)).toBeNull(); // 投影路径 → 查不到(契约:只认 ns)
+    const byNs = await s.openSession(ns);
+    const byPath = await s.openSession(sessionPath);
+    expect(byNs).not.toBeNull();
+    expect(byPath).not.toBeNull();
+    expect(byPath?.info?.neutralSessionId).toBe(ns); // 双形态落到同一会话
   });
 
   it("会话注解:落中立层条目(自定义 role,不进对话角色),openSession 消息流可读回", async () => {

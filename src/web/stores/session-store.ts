@@ -412,9 +412,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       }
       // 文件读即基线(秒开);同时记录发送上下文(cwd 取文件 header 的,最准)
       await window.kernel.sessions.setContext(detail.info.cwd, detail.info.path);
-      // 刷新后主侧 getCapabilities 读持久中立层(header.kernel + 历史),此处拉一次让 renderer
-      // 锁态(locked/kernel)即时生效——否则只在 init/kernelChanged 刷新,刷新后锁态停留初始值。
-      refreshCapabilities();
+      // 能力面经 capabilitiesChanged 事件推送(setContext→proc.start 就绪即广播),此处不散拉。
       // 显式设置 currentSessionPath(不依赖 sessionStart 事件的异步水合)
       useUiStore.getState().setCurrentSessionPath(detail.info.path);
       useUiStore.getState().setCurrentNeutralSessionId(detail.info.neutralSessionId ?? null);
@@ -452,7 +450,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   startNewChat: async (cwd) => {
     sessionGen++;
     await window.kernel.sessions.setContext(cwd, null);
-    refreshCapabilities();
+    // 能力面经 capabilitiesChanged 事件推送,此处不散拉。
     // 中立主键随会话上下文一并清(根因修复):不清则新会话残留上一会话的 ns,
     // 收藏/分叉会把新会话的消息锚到旧会话树上(静默错会话,比按钮不亮更糟)。
     useUiStore.getState().setCurrentNeutralSessionId(null);
@@ -637,12 +635,18 @@ export function initSessionStore(): void {
     }
   });
   loadForCwd(); // 初始拉一次(挂载晚于 ui-store 初始化)
-  refreshCapabilities(); // 初始能力面(main 启动即 pi,后续 kernelChanged 刷新)
+  refreshCapabilities(); // 冷启动基线一次;此后能力面经 capabilitiesChanged/kernelChanged 事件 push,不散拉
   const offKernel = window.kernel.sessions.onKernelEvent((raw) => {
     const evt = raw as KernelEvent;
+    if (evt.kind === "capabilitiesChanged") {
+      // 能力面 push 收口:main 在能力变化点广播完整快照,renderer 直接采信,不再重拉。
+      useSessionStore.setState({ capabilities: evt.capabilities });
+      return;
+    }
     if (evt.kind === "kernelChanged") {
-      // 跨内核切换完成:刷新能力面 + 快照基线 + 会话列表,驱动三处内核标跟着切(§9.3)。
-      refreshCapabilities();
+      // 跨内核切换完成:能力面直接采信推来的快照(不重拉),再刷快照基线 + 会话列表,
+      // 驱动三处内核标跟着切(§9.3)。
+      useSessionStore.setState({ capabilities: evt.capabilities });
       void window.kernel.sessions.sync().catch(() => {});
       loadForCwd();
       return;
@@ -671,10 +675,8 @@ export function initSessionStore(): void {
     const event = eventRaw as SessionEvent;
     if (event.type === "sessionStart") {
       hydrateSessionStart(event);
-      // 能力面随首发刷新(根因修复):新会话壳初始化时无进程,piExtension=false;
-      // 首发 sessionStart 时进程已注册(piExtension 转真)——不刷则思考档位的 levels
-      // 恒空、开关永久 disabled,直到切会话/换内核才自愈(实测复现)。
-      refreshCapabilities();
+      // 能力面随 capabilitiesChanged 事件推送(setContext→proc.start 就绪即广播),
+      // 首发时 piExtension 转真由该事件带到,此处不散拉 refreshCapabilities。
     }
     if (event.type === "compactionEnd") {
       void window.kernel.sessions.sync();

@@ -395,6 +395,9 @@ export class SessionStore implements
     // 上下文已切或内核已切换则跳过视图同步(进程保留给多会话/多槽位并存),由调用方校验激活态。
     if (this.activeProcKey !== key || this.activeKernel !== resolvedKernel) return;
     await this.sync();
+    // 能力面就绪(§7.6 push 收口):backend.start 落定后 piExtension/dshExtension 已探测,
+    // 广播一次 capabilitiesChanged——renderer 订阅即到位,不再散拉式 refreshCapabilities。
+    this.broadcastCapabilities(proc);
   }
 
   /** 由 pi 派生路径反查 neutralSessionId(§kernel-forkless §12.2):派生路径的文件名就是 ns
@@ -402,6 +405,14 @@ export class SessionStore implements
    *  (迁移前文件,list 读中立层已不可见)。同步:不再读/写内核头(§6 去反向 smell)。 */
   private neutralSessionIdFromPath(sessionPath: string): string | undefined {
     return basename(sessionPath, ".jsonl") || undefined;
+  }
+
+  /** 归一会话标识(§kernel-forkless §32 契约单源):中立 ns 与投影路径双形态都收。
+   *  basename 对裸 ns 是恒等,对投影路径(<bucket>/<rootLineageId>.jsonl)提出 rootLineageId(=ns)。
+   *  凡「按标识查中立层」的公开方法统一经此入参——调用方传哪个形态都对,
+   *  不再有「只能传 ns」的隐性契约(此前 openSession 裸 get 传投影路径静默查空)。 */
+  private resolveNs(sessionId: string): string {
+    return this.neutralSessionIdFromPath(sessionId) ?? sessionId;
   }
 
   /** 读回会话内核(§2.4):中立 header.kernel > model 域 kernel > 会话头 custom.kernel。
@@ -653,7 +664,7 @@ export class SessionStore implements
    *  - kernel = 内核原始文件(投影文件存在才返回;临时会话/迁移前旧文件 → null)。
    *  会话不存在 / 无中立层时两项皆 null,调用方显式降级,不静默。 */
   async rawFilePaths(sessionId: string): Promise<SessionRawFilePaths> {
-    const session = this.neutralStore?.get(sessionId);
+    const session = this.neutralStore?.get(this.resolveNs(sessionId));
     if (!session) return { desktop: null, kernel: null };
     const ns = session.neutralSessionId;
     const desktop = this.neutralStore!.filePathOf(ns);
@@ -690,7 +701,8 @@ export class SessionStore implements
   }
   async openSession(id: string): Promise<SessionDetail | null> {
     // §kernel-forkless §27 阶段 D:打开会话读中立层(按 neutralSessionId),不读内核存储。
-    const session = this.neutralStore?.get(id);
+    // 入参经 resolveNs 归一——中立 ns 与投影路径双形态都收(调用方不再依赖「只能传 ns」)。
+    const session = this.neutralStore?.get(this.resolveNs(id));
     if (!session) return null;
     const info = this.neutralToSessionInfo(session, session.header.cwd);
     // 展示元数据(图)随 entry.display 在中立层,合到 message.__image(neutral-first §4)。
@@ -851,7 +863,8 @@ export class SessionStore implements
 
   /** 会话 lineage 树(§kernel-forkless §22):中立层是唯一读源,内核目录降级为兜底。 */
   async getTree(sessionId: string): Promise<LineageTree> {
-    const neutral = this.neutralStore?.get(sessionId);
+    // 中立层查读走 resolveNs(双形态收);兜底的 catalog.getTree 仍吃内核专属标识(原样透传)。
+    const neutral = this.neutralStore?.get(this.resolveNs(sessionId));
     if (neutral) {
       return {
         rootId: neutral.lineages.find((l) => l.fork === null)?.lineageId ?? neutral.neutralSessionId,
@@ -1717,14 +1730,9 @@ export class SessionStore implements
   async abort(): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) return;
-    // 双保险(根因修复):agent.abort 只中断 agent loop 内的工具(经 signal);
-    // executeBash 路径(type:"bash" 直接命令)持独立 abortController,agent.abort 不覆盖,
-    // 需 abort_bash 单独中断。顺序不能反:abort 会等 waitForIdle,工具不响应时阻塞,
-    // abort_bash 排在后面永远执行不到——先发 abort_bash 快速中断 bash,再发 abort 收尾 agent。
-    // abortBash 是 pi 扩展面(§7.6 能力探测):dsh 无此面。asPi 在 dsh 上**同步抛错**
-    // (.catch 只兜 promise 拒绝、兜不住同步抛)——不拦则整个 abort 在 dsh 上崩在
-    // 中断前,停止按钮完全失效(实弹复现:dsh 流式点停止,停止钮不消失、无 stopped 落盘)。
-    if (proc.backend.capabilities.pi) await this.asPi(proc).abortBash().catch(() => {});
+    // 内核无关:中断顺序(pi 的 abortBash 先行 / dsh 的单次 sessionAbort)各自归适配器
+    // (§6.4),壳只调 backend.abort()。此前壳在这里手写 pi 专属 abortBash 顺序,把
+    // 内核身份漏进了中立方法(§1.5 判别气味)。
     try {
       await proc.backend.abort();
     } catch {
@@ -2613,6 +2621,17 @@ export class SessionStore implements
       piExtension: proc?.backend.capabilities.pi != null,
       dshExtension: proc?.backend.capabilities.dsh != null,
     };
+  }
+
+  /** 能力面变化广播(§7.6 push 收口):renderer 订阅 capabilitiesChanged 一次到位,
+   *  不再在每个生命周期转变处散拉式 refreshCapabilities(拉式缓存失同步的根因)。
+   *  在会改变 SessionCapabilities 的转变后调用:会话打开/新建、模型切换、内核就绪、首发送锁定。 */
+  private broadcastCapabilities(proc: SessionProc | undefined): void {
+    this.dispatchKernel({
+      kind: "capabilitiesChanged",
+      sessionKey: proc?.key ?? this.activeProcKey ?? "",
+      capabilities: this.sessionCapabilitiesOf(proc),
+    });
   }
 
   /** 激活会话持久记录的内核归属(中立层 header.kernel);无记录/无中立层返回 null。 */

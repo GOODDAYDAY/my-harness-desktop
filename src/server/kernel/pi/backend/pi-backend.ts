@@ -171,6 +171,13 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
   }
 
   async abort(): Promise<void> {
+    // pi 两段中断(顺序不能反):agent.abort 只中断 agent loop 内的工具(经 signal);
+    // executeBash 路径(type:"bash" 直接命令)持独立 abortController,agent.abort 不覆盖,
+    // 需 abort_bash 单独中断。顺序:abort 会等 waitForIdle,工具不响应时阻塞,abort_bash
+    // 排在后面永远执行不到——先 abort_bash 快速断 bash,再 abort 收尾 agent。
+    // 这是 pi 内核专属的中断顺序(§6.4),收进适配器;壳的 SessionStore.abort() 只调
+    // backend.abort(),内核无关——dsh 走 DshBackend.abort() 各自干净。
+    await this.abortBash().catch(() => {});
     await this.adapter.send(buildAbortCommand(), { timeoutMs: ABORT_TIMEOUT_MS });
   }
 

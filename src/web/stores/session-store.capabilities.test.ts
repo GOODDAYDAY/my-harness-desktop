@@ -1,23 +1,26 @@
-// 能力面刷新守卫(根因修复:新会话壳首发前 piExtension=false,首发 sessionStart 时进程已注册
-// 转真——此前没人刷新,思考档位 levels 恒空、开关 disabled 到切会话才自愈)。
+// 能力面 push 守卫(根因修复:能力面是「拉式缓存 + N 个命令式刷新点」,每加一个生命周期
+// 转变就多一个失同步窗口。收口:main 在能力变化点广播 capabilitiesChanged/kernelChanged
+// (带完整快照),renderer 订阅即到位——不再散拉 refreshCapabilities。)
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { useSessionStore, initSessionStore } from "./session-store";
 import { useUiStore } from "./ui-store";
-import type { SessionEvent } from "@my-harness-desktop/shared";
+import type { KernelEvent } from "@my-harness-desktop/shared";
 
-type EventCb = (e: SessionEvent) => void;
+type KernelCb = (e: KernelEvent) => void;
 
 /** 最小 window.kernel mock:只装 initSessionStore 触达的面。 */
-function stubKernel(capture: { eventCb?: EventCb }, capabilities: () => Promise<unknown>) {
+function stubKernel(capture: { kernelCb?: KernelCb }, capabilities: () => Promise<unknown>) {
   const sessions = {
     setContext: async () => {},
     list: async () => [],
     getCapabilities: capabilities,
     getStats: async () => null,
     sync: async () => { throw new Error("no-kernel"); },
-    onEvent: (cb: EventCb) => { capture.eventCb = cb; return () => {}; },
+    onEvent: () => () => {},
     onSnapshot: () => () => {},
-    onKernelEvent: () => () => {},
+    onKernelEvent: (cb: KernelCb) => { capture.kernelCb = cb; return () => {}; },
     onHeaderChanged: () => () => {},
     onNeutralChange: () => () => {},
     getNeutral: async () => ({ session: null, activeLineageId: null }),
@@ -25,7 +28,7 @@ function stubKernel(capture: { eventCb?: EventCb }, capabilities: () => Promise<
   vi.stubGlobal("window", { kernel: { sessions } });
 }
 
-describe("能力面刷新(sessionStart 触发)", () => {
+describe("能力面 push(capabilitiesChanged 事件)", () => {
   beforeEach(() => {
     useUiStore.setState({ currentCwd: "/proj", currentSessionPath: null });
     useSessionStore.setState({
@@ -33,22 +36,33 @@ describe("能力面刷新(sessionStart 触发)", () => {
     });
   });
 
-  it("首发 sessionStart → 重拉 getCapabilities,piExtension 转真", async () => {
-    const capture: { eventCb?: EventCb } = {};
-    let calls = 0;
+  it("capabilitiesChanged 事件 → 直接采信推来的能力面快照,不重拉 getCapabilities", async () => {
+    const capture: { kernelCb?: KernelCb } = {};
+    let pulls = 0;
     stubKernel(capture, async () => {
-      calls += 1;
-      // 首发前:无进程(假);首发后:pi 进程在(piExtension=true)
-      return { kernel: "pi", locked: false, piExtension: calls >= 2, dshExtension: false };
+      pulls += 1;
+      return { kernel: "pi", locked: false, piExtension: false, dshExtension: false };
     });
     initSessionStore();
-    // init 拉一次(piExtension=false)
     await new Promise((r) => setTimeout(r, 0));
     expect(useSessionStore.getState().capabilities.piExtension).toBe(false);
-    // 首发 sessionStart 到达 → 应重拉
-    capture.eventCb?.({ type: "sessionStart", sessionFile: "/tmp/s.jsonl", neutralSessionId: "ns-1" } as unknown as SessionEvent);
+
+    // main 在 proc 就绪后推 capabilitiesChanged(带完整快照,piExtension 已转真)
+    capture.kernelCb?.({
+      kind: "capabilitiesChanged",
+      sessionKey: "k",
+      capabilities: { kernel: "pi", locked: false, piExtension: true, dshExtension: false },
+    });
     await new Promise((r) => setTimeout(r, 0));
-    expect(calls).toBeGreaterThanOrEqual(2);
+
+    // 能力面直接从事件 payload 落,不再触发 getCapabilities 重拉(拉式刷新点已删)
+    expect(pulls).toBe(1); // 只有 init 拉一次
     expect(useSessionStore.getState().capabilities.piExtension).toBe(true);
+  });
+
+  it("静态守卫:refreshCapabilities 只允许冷启动一次(防退化回拉式刷新点)", () => {
+    const src = readFileSync(fileURLToPath(new URL("./session-store.ts", import.meta.url)), "utf-8");
+    const calls = (src.match(/refreshCapabilities\(\);/g) ?? []).length;
+    expect(calls).toBe(1); // 只有 init 冷启动基线;能力变化走 push 事件,不再加命令式刷新点
   });
 });

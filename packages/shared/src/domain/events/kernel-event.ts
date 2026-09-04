@@ -157,6 +157,17 @@ export interface CapabilityDegradedEvent {
   method: string;
 }
 
+/** 能力面变化(desktop 自产;任何会改变 SessionCapabilities 的转变——会话打开/新建、
+ *  模型切换、内核就绪、首次发送后锁定——之后广播。renderer 订阅一次即可,不再在
+ *  每个生命周期转变处散拉式 refreshCapabilities(拉式缓存失同步的根因)。 */
+export interface CapabilitiesChangedEvent {
+  kind: "capabilitiesChanged";
+  /** 关联的会话 key。 */
+  sessionKey: string;
+  /** 变化后的完整能力面(renderer 直接采信,不必再 getCapabilities 重拉)。 */
+  capabilities: SessionCapabilities;
+}
+
 // ============ 统一联合 ============
 
 /** 内核事件联合:覆盖内核推送 + 桌面端自产的全部信息流。 */
@@ -166,7 +177,8 @@ export type KernelEvent =
   | ProcessExitEvent
   | RpcErrorEvent
   | KernelChangedEvent
-  | CapabilityDegradedEvent;
+  | CapabilityDegradedEvent
+  | CapabilitiesChangedEvent;
 
 // ============ Extension UI 回复类型(pi 适配器内部,不属中性事件)============
 
