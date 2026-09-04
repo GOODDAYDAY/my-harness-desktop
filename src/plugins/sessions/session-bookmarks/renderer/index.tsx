@@ -215,10 +215,10 @@ export function BookmarksTab(): React.ReactNode {
     setForkError(null);
     try {
       // 走快照发起:读快照 → seed 到目标内核 → fork 新 lineage(自包含,不依赖源会话)。
-      const lineageId = await ctx.sessions.resume(bm.id);
-      ctx.events.invoke("timeline:scrollTo", { messageId: bm.entryId });
+      // resume 返回新会话里锚点的中立坐标(重投影后的 id),scrollTo 据此定位(源 bm.entryId 已失效)。
+      const anchorId = await ctx.sessions.resume(bm.id);
+      ctx.events.invoke("timeline:scrollTo", { messageId: anchorId });
       setToast(t("bookmarks.forkCreated", { label: bm.label }));
-      void lineageId;
     } catch (err) {
       console.error("[session-bookmarks] fork failed", err);
       setForkError({ bm, message: err instanceof Error ? err.message : String(err) });

@@ -1129,12 +1129,14 @@ describe("resume 根 lineage 不变量(root lineageId ≡ neutralSessionId,unify
     const factory: BackendFactory = { create: () => new ResumeBackend() as unknown as BaseBackend };
     const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, undefined, () => bookmarkDir);
     s.setContext(CWD, null);
-    await s.resume(snapId);
+    const anchorId = await s.resume(snapId);
     // 新会话:根 lineage 必须 == neutralSessionId(不变量)
     const sessions = neutralStore.listByCwd(CWD);
     expect(sessions).toHaveLength(1);
     const ns = sessions[0].neutralSessionId;
     const rootLineage = neutralStore.get(ns)!.lineages.find((l) => l.fork === null)!;
     expect(rootLineage.lineageId).toBe(ns); // 根 lineageId ≡ neutralSessionId
+    // 返回新会话里锚点的中立坐标(重投影后 id,scrollTo 定位用)——不是源会话坐标、不是投影路径
+    expect(anchorId).toBe(`${ns}:0`); // 单条快照前缀,边界=第 0 条
   });
 });

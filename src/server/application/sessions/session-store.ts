@@ -959,9 +959,10 @@ export class SessionStore implements
     proc.activeLineageId = newLineageId;
     proc.materializedLineageId = ""; // 强制 seed 快照内容
     await this.materializeActiveLineage(proc);
-    const active = this.activeSessionPath ?? proc.boundSessionPath ?? proc.backend.sessionId ?? newLineageId;
-    if (!active) throw new Error("发起收藏后未拿到新会话路径");
-    return active;
+    // 返回快照锚点在**新会话**的中立坐标(边界=前缀最后一条,seq=len-1)。渲染层 forkFromBookmark
+    // 拿它 scrollTo 定位——此前返回投影路径,渲染层却拿源会话 bm.entryId 去定位,重投影后 id
+    // 变了、永不命中(DRIFT-12 scrollTo 静默落空)。
+    return neutralEntryId(newLineageId, entries.length - 1);
   }
 
   /** 取消收藏:删快照文件(元数据删除由渲染层负责)。 */
