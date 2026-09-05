@@ -839,9 +839,20 @@ export class SessionStore implements
     } else {
       await this.projectHeaderToKernel(sessionPath, patch);
     }
+    // toolConfig 的落点(HeaderPatch 文档注释:「落 custom-my-harness-desktop.toolConfig 保留键」):
+    // 中立层 custom.toolConfig 是**真相源**,内核文件(pi 头行/dsh RPC)只是投影——
+    // 此前这里只转 name/pinned/archived,toolConfig 从不进中立头:pi 会话下靠
+    // projectHeaderToKernel 恰好也写了 pi 文件、读路径(pi-catalog 读 pi 文件)勉强闭环;
+    // dsh 会话下无 pi 文件、dsh updateHeader 也不收 toolConfig → **限制发完即丢**
+    // (读回 null → 回落组默认 = 无限制,静默失效,违反 §7.6 不静默 + 单源不变量)。
+    // 修复:toolConfig 并进 custom 分片走 writeNeutralHeader(r317 的按键合并保证
+    // 不抹 model/goal 等同域他键;custom 显式传时并入,缺省时单传)。
+    const customPatch = patch.toolConfig !== undefined
+      ? { ...(patch.custom ?? {}), toolConfig: patch.toolConfig }
+      : (patch.custom ?? undefined);
     await this.writeNeutralHeader(sessionPath, {
       name: patch.name, pinned: patch.pinned, archived: patch.archived,
-      custom: patch.custom ?? undefined,
+      custom: customPatch,
     });
   }
   async copySession(srcPath: string, targetPath: string): Promise<void> {

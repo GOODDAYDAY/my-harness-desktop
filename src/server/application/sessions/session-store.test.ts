@@ -820,6 +820,30 @@ describe("归档/置顶:中立层真相源不被内核投影失败阻断", () =>
     expect(cust2.subagent).toEqual({ parent_id: "main" });
   });
 
+  it("updateHeader 的 toolConfig 落中立层(根因守卫,r328 实钉:此前 toolConfig 从不进 custom)", async () => {
+    // 根因:HeaderPatch 声明 toolConfig「落 custom-my-harness-desktop.toolConfig 保留键」,
+    // 但 updateHeader 的 writeNeutralHeader patch 只转 name/pinned/archived/custom 四键,
+    // toolConfig 被整个丢弃——中立层(真相源)永远查无此键。pi 会话靠投影文件(penalty:
+    // 读路径恰好也读 pi 文件)勉强闭环;dsh 会话无 pi 文件 → 工具限制发完即丢(静默失效,
+    // 违反 §7.6 不静默 + session-single-source「中立层是唯一真相源」)。
+    const { s, neutralStore, ns, sessionPath } = newNeutralStore();
+    await s.updateHeader(sessionPath, { toolConfig: { enabledGroupIds: [], enabledToolIds: ["bash"] } });
+    const cust = neutralStore.get(ns)?.header.custom as Record<string, unknown>;
+    expect(cust.toolConfig).toEqual({ enabledGroupIds: [], enabledToolIds: ["bash"] }); // 进中立层
+    expect(cust.subagent).toEqual({ parent_id: "main" }); // r317 按键合并:他键幸存
+    // 删键语义(null = 删 toolConfig,不动他键)
+    await s.updateHeader(sessionPath, { toolConfig: null });
+    const cust2 = neutralStore.get(ns)?.header.custom as Record<string, unknown>;
+    expect(cust2.toolConfig).toBeUndefined();
+    expect(cust2.subagent).toEqual({ parent_id: "main" });
+    // 与 custom 同帧共存:custom 写 goal + toolConfig 一起写,两键都进且他键幸存
+    await s.updateHeader(sessionPath, { custom: { goal: { objective: "g", phase: "active", round: 1, maxRounds: 3 } }, toolConfig: { enabledGroupIds: ["exec"], enabledToolIds: [] } });
+    const cust3 = neutralStore.get(ns)?.header.custom as Record<string, unknown>;
+    expect((cust3.toolConfig as { enabledGroupIds: string[] }).enabledGroupIds).toEqual(["exec"]);
+    expect((cust3.goal as { phase: string }).phase).toBe("active");
+    expect(cust3.subagent).toEqual({ parent_id: "main" });
+  });
+
   it("openSession 双形态归一:中立 ns 与投影路径都能开(入参不对称收口,不再静默查空)", async () => {
     // 根因守卫:openSession 经 resolveNs 归一——裸 ns 与投影路径(<cwd>/…/<rootLineageId>.jsonl)
     // 都命中同一中立会话。此前裸 get 传投影路径静默返回 null(调用方「点了没反应」零信号),
