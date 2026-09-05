@@ -217,8 +217,8 @@ export function parseSessionModelPrefs(custom: Record<string, unknown> | undefin
  *  收敛到 KERNEL_IDS(minimal-kernel §7.8.2):此前手写 v === "pi" || v === "dsh" 是
  *  字面量谓词漂移——KernelId 联合扩第三个内核时这里不报编译错,新内核的会话头
  *  kernel 字段会被静默剥成 undefined(模型偏好读回断链)。改用 KERNEL_IDS 单源,
- *  加内核只改 kernel.ts 一处,这里自动跟上。 */
-function isKernelId(v: unknown): v is KernelId {
+ *  加内核只改 kernel.ts 一处,这里自动跟上。导出供 resolveSessionKernel 等读回侧共用。 */
+export function isKernelId(v: unknown): v is KernelId {
   return (KERNEL_IDS as readonly string[]).includes(v as string);
 }
 

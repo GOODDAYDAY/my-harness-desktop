@@ -30,7 +30,7 @@ import type {
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
   SessionModelPrefs, SessionRole, KnownToolInfo, SessionRawFilePaths,
 } from "@my-harness-desktop/shared";
-import { truncateSessionName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt } from "@my-harness-desktop/shared";
+import { truncateSessionName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt, isKernelId } from "@my-harness-desktop/shared";
 
 import type { ModelCatalog } from "../models/model-catalog";
 import { classifyModel } from "../models/model-catalog";
@@ -428,7 +428,9 @@ export class SessionStore implements
     const custom = await this.catalog.readCustom(sessionPath).catch(() => null);
     const prefs = parseSessionModelPrefs(custom ?? undefined);
     if (prefs?.kernel) return prefs.kernel;
-    if (custom?.["kernel"] === "pi" || custom?.["kernel"] === "dsh") return custom["kernel"] as KernelId;
+    // 旧头行 custom.kernel 兜底:经 isKernelId 单源谓词识别(minimal-kernel §7.8.2——
+    // 此前手写 === "pi" || === "dsh",新内核接入时此兜底会静默拒认,同字面量谓词漂移)。
+    if (isKernelId(custom?.["kernel"])) return custom["kernel"];
     throw new Error("无法确定会话内核：会话头未记录内核归属，请先选择模型");
   }
 
