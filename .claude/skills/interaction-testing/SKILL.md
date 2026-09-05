@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**dsh 侧工具限制验收(r329,f64c16d2 修复面)**:dsh 会话是工具限制的「受损面」——修复前 toolConfig 无任何落点(dsh updateHeader 不收、中立层漏转),发完即丢、静默失效。验收序:dsh 显式选模 → 基线轮 → 工具面板关 4 组(pill)→ 发送 → toast + `header.custom.toolConfig` 落中立层 + `custom.model` 幸存(r317 键合并)+ 刷新持久。**跨内核修复的验收纪律:修复声称护住的每个内核面都要各自实弹**(pi 面过 ≠ dsh 面过——本次就是靠 dsh 面探针揪出修复前的真 bug)。
+
 **工具面板探针口径(r328 实钉)**:① 组开关 = **32x18 圆角胶囊 div(恰一个 knob 子 div)**——形态识别(children.length===1 && 宽 28-70 && 高 14-30 && 子宽<父宽),别用文本/类名猜(盲审面板有同款胶囊);② 发送时 flush 的 pending → 弹「**工具过滤已应用:N 个工具可用**」toast(timeline.toolsFilterApplied)——toast 出现 = pending 已落,是 flush 面的活证据;③ 断言落盘读 `header.custom.toolConfig`(中立层真相源;pi 投影文件只是镜像);④ 本次实弹揪出真 bug:updateHeader 漏转 toolConfig 进中立层(f64c16d2 修复)——「toast 出现但中立层查无此键」= 契约面已生效、持久化面断裂的判别法。
 
 **DOM×文件一致性对账法(r327 实钉)**:一条消息的旅程四层(pi JSONL → 中立层 JSON → DOM 行 → 可见文本),对账三断言——① 中立层条目数 = DOM 行数(虚拟列表滚动后);② 每个 data-message-id 都命中中立层(孤儿 0);③ pi 文件行数 ≥ 条目数且恰 1 行 session 头。活会话与刷新后各跑一遍(刷新前后条目数一致 = 单源零漂移)。两个必带判据:④ **写穿感知等待**——agentSettled 只是事件面,messageEnd 写穿可能晚到(实测轮 2 收敛后 1s 内才落盘),收敛断言要**轮询数据层**(assistant 计数到位)再对账,别赌 waitForDomIdle;⑤ **重开后点行先等列表**——reload 后侧栏异步重拉,行不在就点空;先 waitForFunction(行>0) 再点,点完等 DOM 行挂载(行点击后 openSession 异步)。
