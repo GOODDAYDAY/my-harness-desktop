@@ -122,7 +122,7 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
-**官方 e2e 矩阵(r326 轮全绿实跑)**:`scripts/demo/` 下有五套官方 e2e(ask-question 真实模型/ask-resume 杀内核复活/message-actions 收藏分叉入口/goal-command 删改停 25 断言/session-single-source 单源冒烟)——改壳侧代码后跑它们是「官方口径回归」的现成手段,不必自写:ask-question 6/6、ask-resume 13/13(含杀内核→重启→卡片复活→续路作答→模型继续的跨流程矩阵)、message-actions 3/3、goal-command 25/25(零 token 沙箱)、single-source 11/11。注意各带独立 --port 默认(9334-9338)与兄弟 e2e 错开;跑前清端口;goal-command 不花 token(种子沙箱),其余真实模型。
+**官方 e2e 矩阵(r326 轮全绿实跑)**:`scripts/demo/` 下有五套官方 e2e(ask-question 真实模型/ask-resume 杀内核复活/message-actions 收藏分叉入口/goal-command 删改停 25 断言/session-single-source 单源冒烟)——改壳侧代码后跑它们是「官方口径回归」的现成手段,不必自写:ask-question 6/6、ask-resume 13/13(含杀内核→重启→卡片复活→续路作答→模型继续的跨流程矩阵)、message-actions 3/3、goal-command 25/25(零 token 沙箱)、single-source 11/11。注意各带独立 --port 默认(9334-9338)与兄弟 e2e 错开;跑前清端口;goal-command 不花 token(种子沙箱),其余真实模型。 第六套 dsh-session 11/11(思考中自清/模型分隔线/dsh 上收藏分叉入口/不重名/刷新持久;隔离 HOME 需 dsh 三件,花真实 dsh token,端点限流=环境问题非产品)——至此官方六套共 69 断言构成双内核地面真值。
 
 **sub-agent 派活探针口径(r325 实钉)**:① 派活工具名 = **session_create**(bus 工具面;spawn_subagent 是插件内部名——痕迹断言两个都收);② worker 的 task 首条是**数组内容块** [{'type':'text','text':任务}]——needle 匹配统一 JSON.stringify(字符串原样、数组含块文本;typeof==='string' 过滤会把数组内容整个丢掉,r325 实钉);③ 隔层断言要**排除派活指令自身**(指令引用了任务文本,不排除就误报泄漏);④ watch:true 的完成回执 = `[bus session_done]` 帧(**以 user 消息落进主会话**)——数据层可见;⑤ 全链路验收序:主回合收敛→工人会话出现(轮询中立层)→工人 assistant 落盘→运维流有增量。
 
