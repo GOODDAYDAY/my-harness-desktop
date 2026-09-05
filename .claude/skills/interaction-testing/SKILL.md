@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**设置页三段式入口 + 浮层判据(r323 实钉)**:① 设置页是**分组 TAB**——点侧栏「设置」进的是第一个 TAB(pi 管理那组控件:自动压缩/分支摘要/请求重试);「通用」是独立 settings 入口(title=通用,order:1,自己的 configFile=general.json),得**再点一次**才进它的界面。② 找开关按 **locale 文案**(「启动时打开侧边栏」,非 key 名);settingsGroups 通用渲染的控件是 input[type=checkbox],**React 受控**——翻它要用原生 setter + click() 事件(鼠标坐标点可能只点中 label,onChange 不触发,值不变但 dirty 浮层可能出现,别拿浮层当翻成功)。③ dirty → 「确定改动」浮层是 fixed 定位在页面顶部中央(AnimatePresence),断言它出现 = 改动进 config state;落盘断言读 **dev 数据根**(~/.my-harness-desktop-dev/config/general.json)。
+
 **双会话并发流式(r322 实钉,「一个会话一个进程」最纯验收)**:A 流式中起 B(新会话发第二条长任务)→ 两进程**真并发**(并行时点 A 的文件 assistant=0 = A 还在生成)——两会话各自收敛、视图互不含对方内容、终态零互串。探针要点:① 并行实锤 = 在 B 流式中读 A 的中立文件(assistant 仍 0 证明 A 未被打断);② 两条长任务都写「不要使用任何工具」(防模型调工具拉长时序);③ 收敛判据全走数据层(轮询两文件各自的 assistant 落盘),不赌视图流。
 
 **流式中切换的断言口径(r321 实钉)**:① `sessions.onEvent` 是**视图流,只转激活会话**——切走后 A 的 agentSettled/messageEnd 永不进它(session-working-phase §2.2 的设计,不是丢事件);后台收敛判据必须走**数据层**(轮询中立层文件看 assistant 落盘)或 `onKernelEvent`(运维流,带 sessionKey 全转)。② 流式中切走的纯净断言三件套:壳态 0 行 + 无 A 的流式内容 + 无 A 的停止钮(执行态不跨会话污染);③ 切回视图恢复 + 终态落盘双验;④ 会话行定位兜底:needle 匹配不到时取**列表末行**(最近创建)——长 prompt 会话名可能被自动命名截成意外形状。
