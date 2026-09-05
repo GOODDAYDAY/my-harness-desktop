@@ -24,7 +24,7 @@
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
 import type { KernelEvent, QuestionAnswer, QuestionRequestEvent, PendingQuestionRecord } from "./events/kernel-event";
 import type { LineageTree } from "./backend";
-import type { KernelId } from "./kernel";
+import { KERNEL_IDS, type KernelId } from "./kernel";
 import type { DisplayMeta } from "./session-neutral";
 import type { BookmarkSnapshot } from "./bookmark-snapshot";
 import { truncateSessionName } from "./text";
@@ -213,9 +213,13 @@ export function parseSessionModelPrefs(custom: Record<string, unknown> | undefin
   return { provider: o.provider, modelId: o.modelId, thinkingLevel: o.thinkingLevel, kernel };
 }
 
-/** 值是否为合法内核 id(字面量联合窄化;契约单源,读写两侧共用同一判断)。 */
+/** 值是否为合法内核 id(字面量联合窄化;契约单源,读写两侧共用同一判断)。
+ *  收敛到 KERNEL_IDS(minimal-kernel §7.8.2):此前手写 v === "pi" || v === "dsh" 是
+ *  字面量谓词漂移——KernelId 联合扩第三个内核时这里不报编译错,新内核的会话头
+ *  kernel 字段会被静默剥成 undefined(模型偏好读回断链)。改用 KERNEL_IDS 单源,
+ *  加内核只改 kernel.ts 一处,这里自动跟上。 */
 function isKernelId(v: unknown): v is KernelId {
-  return v === "pi" || v === "dsh";
+  return (KERNEL_IDS as readonly string[]).includes(v as string);
 }
 
 /** Bash 执行结果。 */

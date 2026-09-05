@@ -1,6 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { deriveSessionTitle } from "./sessions";
+import { deriveSessionTitle, parseSessionModelPrefs } from "./sessions";
 import { truncateSessionName, SESSION_NAME_DISPLAY_MAX } from "./text";
+import { KERNEL_IDS } from "./kernel";
+
+describe("parseSessionModelPrefs 的内核字段窄化(字面量谓词与 KERNEL_IDS 单源守卫)", () => {
+  // 根因守卫(minimal-kernel §7.8.2):isKernelId 此前手写 v === "pi" || v === "dsh",
+  // KernelId 扩第三个内核时它不报编译错,新内核的会话头 kernel 字段会被静默剥成
+  // undefined(模型偏好读回断链)。守卫钉死:isKernelId 识别的集合 === KERNEL_IDS,
+  // 加内核只改 kernel.ts 一处,本守卫自动跟上;字面量谓词与字面量联合永不再漂。
+  it("isKernelId 识别集合 === KERNEL_IDS(经 parseSessionModelPrefs 端到端验)", () => {
+    for (const k of KERNEL_IDS) {
+      const prefs = parseSessionModelPrefs({ model: { provider: "p", modelId: "m", thinkingLevel: "", kernel: k } });
+      expect(prefs?.kernel).toBe(k); // 每个注册内核都该被识别——手写谓词漏新内核时此处即红
+    }
+    // 非法值仍被拒(undefined,不静默落 pi)
+    expect(parseSessionModelPrefs({ model: { provider: "p", modelId: "m", thinkingLevel: "", kernel: "bogus" } })?.kernel).toBeUndefined();
+  });
+});
 
 describe("deriveSessionTitle 派生会话显示名", () => {
   it("自定义名优先", () => {
