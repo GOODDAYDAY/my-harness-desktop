@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**归档流与分组 DOM 口径(r320 实钉)**:① 归档右键菜单项文本 = **「归档」/「取消归档」**(同一项按 session.archived 翻转);置顶 = 「置顶」/「取消置顶」同款。② 归档后行移入 **「已归档」分组**(zh-CN 文案,**不是英文 "archived"**——body 搜英文恒 false 是探针错,搜本地化词);分组带「全部删除」批量钮;默认折叠 defaultOpen:false,但单行时可能展开——断言用「已归档」词 + 行在其下。③ 数据层:`updateHeader({archived:true})` 落中立层 header.archived(r320 已验),server list 立即反映——UI 旧态 = 缓存未刷,别误判产品 bug:先 window.kernel.sessions.list 对照再下结论。④ 侧栏 10 面板全开零报错(收藏/Tree/统计/请求记录/Review/盲审/IM/图钉/文件/工具逐开,console 计数 0)——面板巡检是 DOM 一致性的廉价全量哨兵。
+
 **titlebar「收藏」钮是 toggle + 孤儿对账触发法(r319 实钉)**:① titlebar 的「收藏」钮(右上,x≈1242/y≈46)是 **aria-pressed 开关 toggle**——点一次关面板(组件卸载),再点重开(重挂载);它**不是**「打开面板」幂等钮。② 收藏插件的孤儿对账(bookmarks 目录无主快照回收)只跑在 **loadBookmarks 的挂载 useEffect**——触发 = 面板 tab 卸载再重挂(toggle 关→开),「+新会话」或切到别的面板 tab 都不重挂(侧栏页签的多开语义)。③ 手动添加表单:三个 placeholder 输入框(会话文件路径/entryId/收藏名称),校验失败两条文案都**显形在表单**且**不落盘**(§8.1)。
 
 **探针工程坑:后台任务里的文件修改不落盘(r319 实钉)**:`run_in_background: true` 的 bash 里跑 python 改探针 .mjs——print 确认了、文件却**没变**(13675→写入丢失,下一次跑的还是旧版,浪费三轮)。教训:**改探针文件的 patch 一律前台跑**,后台只跑「执行 node 探针」本身;改完 grep -c 验证关键词在盘上(0 = patch 丢了)再跑。
