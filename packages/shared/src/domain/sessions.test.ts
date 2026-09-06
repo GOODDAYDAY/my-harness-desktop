@@ -16,6 +16,34 @@ describe("parseSessionModelPrefs 的内核字段窄化(字面量谓词与 KERNEL
     // 非法值仍被拒(undefined,不静默落 pi)
     expect(parseSessionModelPrefs({ model: { provider: "p", modelId: "m", thinkingLevel: "", kernel: "bogus" } })?.kernel).toBeUndefined();
   });
+
+  // r367:真实世界损坏形态的容错面(半写/断电后的 custom.model)——每个损坏形态
+  // 都必须安全落到 null 或降级,绝不能抛错炸掉调用方(会话列表渲染/发送链全依赖它)。
+  it("损坏形态容错:model 非对象 → null(断电半写)", () => {
+    expect(parseSessionModelPrefs({ model: "半写的字符串" })).toBeNull();
+    expect(parseSessionModelPrefs({ model: 42 })).toBeNull();
+    expect(parseSessionModelPrefs({ model: null })).toBeNull();
+    expect(parseSessionModelPrefs({ model: [] })).toBeNull(); // 数组也是非模型对象
+  });
+
+  it("损坏形态容错:缺关键字段 → null(部分字段写穿失败)", () => {
+    expect(parseSessionModelPrefs({ model: { provider: "p" } })).toBeNull(); // 缺 modelId/thinkingLevel
+    expect(parseSessionModelPrefs({ model: { provider: "p", modelId: "m" } })).toBeNull(); // 缺 thinkingLevel
+    expect(parseSessionModelPrefs({ model: { provider: 123, modelId: "m", thinkingLevel: "" } })).toBeNull(); // provider 类型错
+  });
+
+  it("损坏形态容错:kernel 缺/坏 → 降级 undefined 而非整体拒(域级容错)", () => {
+    // kernel 字段损坏不该把整份偏好丢掉——provider/modelId 还有效,内核由读回侧再解析
+    const p = parseSessionModelPrefs({ model: { provider: "p", modelId: "m", thinkingLevel: "" } });
+    expect(p).toEqual({ provider: "p", modelId: "m", thinkingLevel: "", kernel: undefined });
+    const p2 = parseSessionModelPrefs({ model: { provider: "p", modelId: "m", thinkingLevel: "", kernel: 99 } });
+    expect(p2?.kernel).toBeUndefined();
+  });
+
+  it("custom 整个 undefined / 空对象 → null(无偏好的正常态)", () => {
+    expect(parseSessionModelPrefs(undefined)).toBeNull();
+    expect(parseSessionModelPrefs({})).toBeNull();
+  });
 });
 
 describe("deriveSessionTitle 派生会话显示名", () => {
