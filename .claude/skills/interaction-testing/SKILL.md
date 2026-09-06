@@ -122,6 +122,9 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**composer 多行契约(r339 实钉,10/10)**:① Shift+Enter = 换行(textarea 值计 
+,不触发发送);Enter = 发送——多行发送后 user 落盘**保留换行**(内容明文多行),DOM 组装行高随行数走(三行 ≈116px vs 单行 ~30px),渲染不丢行;② 空输入 Enter **不触发回合**(user 计数不变——断言口径:落盘计数,别赌 DOM);③ 真键盘序列:Shift 修饰要 keyboard.down(Shift)+press(Enter)+up(Shift),单次 press("Shift+Enter") 不带修饰。官方回归抽查(r39):goal-command 25/25 + single-source 11/11 在 989-test 构建上仍全绿。
+
 **WS 离线/重连探针口径(r337 实钉,疑点在档)**:① CDP `Network.emulateNetworkConditions` **不杀已建立的 WS**(活 socket 存活)——离线只拦新请求;离线证据 = 离线窗口内 fetch 被拦(TypeError: Failed to fetch)或 `Network.loadingFailed`;② **重连等待要清事件缓冲**:轮间不清 `window.__ev` 会让下一轮的 settle 立即返回(上一轮的 agentSettled 还在缓冲里)——每轮 settle 前清一次;③ **疑点已结案(r338 复验 10/10 全绿)**:r337 的「写穿推迟到进程关闭」是**探针伪影**——stale agentSettled 假满足 settle(读文件时轮次还没起跑),60s 窗口在慢轮次完成前耗尽。干净口径(每轮 settle 前清 `window.__ev` + 120s 数据感知窗口)下,离线窗口后的回合写穿正常(2+2 落盘、内容正确、基线无损)。**写穿链完好**的静态佐证:writeThroughMessageEnd 在**壳后端**事件泵里跑,走内核进程管道,与前端 WS 健康无关。教训:任何「X 推迟/丢失」结论前,先排除 settle 假满足(清缓冲重验),再下产品 bug 定性。④ e2e 探针 ESM 里别用 require(动态 import node:child_process)。
 
 **测试文件的 tsc 债(r335 实钉教训)**:`as never` 绕 props 能让 vitest 过(esbuild 只剥类型),但**全量 tsc 会照出缺的 props**——每轮写完测试必须跑 `npx tsc --noEmit -p tsconfig.json` 收尾,vitest 绿 ≠ tsc 绿。圆心接口的协议标记别省:测试造 `SessionBusMessage` 帧要带 `$bus: true`(它是「识别锚点」契约,缺了类型不过);MessageActionProps 的 text 是必填(渲染动作条需要,探针视角常忽略)。排查命令:`npx tsc --noEmit | grep test`。
