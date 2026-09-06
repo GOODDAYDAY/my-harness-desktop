@@ -126,6 +126,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **置顶×归档口径(r347 实钉,核心面全绿)**:① 置顶 = 右键「置顶」→ 行重排到顶 + **`header.pinned=true` 落中立层**;② 归档 = 右键「归档」→ **`header.archived=true`** + A 进「已归档」分组(行不消失——是**分组**不是隐藏;活跃列表断言要按分组上下文筛,别数全 DOM);③ **pinned/archived 是 NeutralSession 顶层字段**(session-neutral.ts §保留键注释:「保留键 pinned/archived/toolConfig 平铺顶层,插件域不得占用」)——断言读 `header.pinned`,**不是** `header.custom.pinned`(HeaderPatch 的注释文案是历史写法,schema 单源在顶层;探针读错位会得 custom={} 的假象);④ custom 域在置顶/归档后完整幸存(model 还在)——键互不干扰;⑤ 取消归档菜单项 =「取消归档」(sessions.unarchive),归档分组的行同样右键可达。
 
+**第三次大回归 checkpoint(r359,59 轮)**:官方六套 69/69 全绿(终态 build)+ r305 fork 抽检 22/23(唯一 FAIL = r348 已定性的视口假阴)。**探针超时的定性序**:先看**数据层**(会话文件的 user/assistant 计数)——user 在 assistant 空 = 回合未完成 = 模型端点瞬态(空回合是已知环境形态,r305 首跑超时即此),重跑即分;别把端点瞬态误定性为产品回归。**大回归纪律执行记录**:59 轮时官方矩阵 + 抽检全绿,与 r332/r348 的前两次 checkpoint 构成「每 ~10 轮回归一次」的节奏。
+
 **批量派活并发(r358 实钉,8/8)**:① 派活指令的**工具名与限定坑(二钉确认)**:工具面叫 **session_create**——写 spawn_subagent 模型会诚实答「没有这个工具」拒绝执行(好行为);**别加「禁止使用其它工具」**——派活本身就要用 session_create,自相矛盾的限定把它也禁掉(模型会卡死在确认);② 批量 = tasks 数组一次 spawn,三工人**并行起**(各一个进程)→ 各自完成(数据层各 1 assistant)→ **done 帧逐个回主会话**(user 总数 = 指令 1 + done 3);③ 隔离断言排除指令自身(指令引了任务文本;排除词=工具名「session_create」);④ 并行实锤口径:三个工人会话同时在存(轮询 listSessions 到 3),完成判据各自 assistant(数据层,别赌视图)。
 
 **titlebar 槽位与 ⌘B/⌘J(r357 实钉)**:① titlebar 按钮三核心(顶栏 60px 带):「切换左栏 (⌘B)」「切换右侧面板 (⌘J)」+「Debug: 元素审查模式」;⌘B/⌘J 是 shell 内建 toggle(不在 DEFAULT_BINDINGS,keybindings 插件的可配置表之外);② **⌘B 折叠是渐变/带过渡**——断言别写「宽=0」,写**往返恢复**(两翻后宽度回原值即 toggle 契约成立;折叠中间态宽 ~190 可能是动画或 icon-rail);③ 侧栏宽断言的取法:找含「新对话/项目」文本且 50-400px 宽的最大容器(左栏区域);④ titlebar 逐钮点(除重启/删除类)无崩溃 = 钮面健康;⑤ Debug 审查模式钮(title=「Debug: 元素审查模式…」)是 dev 侧 titlebar 贡献(⌥ 面板类)。
