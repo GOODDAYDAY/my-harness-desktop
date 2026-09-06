@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**双项目×跨内核验收(r334 实钉,18/18)**:项目隔离 + 各桶内核归属 + 切回续发全链。两个必带判据:① **项目注册探针法**——「添加项目」走原生目录选窗(探针不可自动化);程序化注册 = **预种 `~/.my-harness-desktop-dev/config/projects.json` 的 `recentCwds: [dirA,dirB]`**(projects 插件的插件配置全局层,config-store 按 pluginId 分文件)——不预种则列表空、切项目点空、B 轮全落 A 的 cwd;② 项目分桶判据 = 会话文件 `header.cwd` 落属主目录、桶间内容零互串、各桶内核归属正确;③ 切项目 = `setCurrentCwd + startNewChat`(壳态干净 0 行);④ 切回后原会话续发不撞「已固定内核」(项目切换不改会话归属,goal §9 的进程面在项目面上同样成立)。
+
 **review 评论篮的触发坑(r333 实钉,未完待续)**:① 评论入口 = **划词浮钮**(review Overlay:selectionchange 监听,选区须非折叠 + 落 [data-message-id] 行内)——**不是**消息行 hover 动作钮;② 消息行块布局(思考块/meta 标记/正文)导致双击/拖选**极易落在空白或 meta 上塌缩**(实弹:caretRangeFromPoint 命中的是「思考已完成(3.9s)」meta 文本,双击后选区塌缩)——要选中**正文叶子文本**需先按文本特征定位(TreeWalker 找非 meta/thinking 的深叶子)再程序化选区;③ 程序化 Selection API 设 Range 与 selectionchange 的时序:事件异步派发,设置后**要等 ≥500ms 真事件循环**再断言浮钮;④ Overlay 挂载机制 = 插件 module 的命名导出 `Overlay`(plugin-modules.getPluginOverlay,零 manifest 声明)——插件加载即挂载,排查 UI 不显形先查插件在不在清单(review 实证在)。
 
 **大回归纪律(r332 轮,30 轮里程碑)**:每完成一批修复后,**官方矩阵全量重跑 + 自写探针抽重跑**——官方六套(69 断言)是地面真值,自写探针补官方没覆盖的修复面(goal×切换/custom 域跨重启/fork 派生各抽其一)。重跑口径:① 全绿 = 修复间无互踩;② 出现 DOM 断言失败时**先查数据层**(读会话文件)再定性——虚拟视口(§3.3)的滚动假阴最多,数据层在 = 非回归;③ 全部在**同一隔离 build** 上跑,不许中途改代码。
