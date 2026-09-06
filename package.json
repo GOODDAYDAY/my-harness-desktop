@@ -18,6 +18,7 @@
     "start": "node scripts/run.cjs electron . --remote-debugging-port=9222",
     "server": "node out/main/server.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "audit:deps": "node scripts/dependency-audit.mjs",
     "lint": "eslint src/plugins/ --max-warnings=0",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder --publish never",
