@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**消息行动作齐性对账(r341 实钉,14/14)**:逐行型 hover 收集动作钮 title 集,断言行型齐性 + DOM⊆声明集。**行型动作矩阵**(实测):user=复制+钉图钉+回退;assistant=复制+分叉+收藏+钉图钉+重试(+异常停机态的「继续」);divider=只 meta 徽标(模型→/思考已完成/会话重命名——非动作,按行型豁免)。**声明集要逐插件审计**(timeline=复制+回退/timeline.rewind;bookmarks=收藏+分叉;retry=重试+确认重试?;continue=继续;colors=钉图钉+拔图钉)——想当然写清单必漏(本例初版清单漏了回退/钉图钉/meta,三处误报)。对账法:DOM 出现的 title 全集过滤 meta 正则后,断言差集为空。
+
 **收藏→分叉全链探针口径(r340 实钉,15/15)**:① 收藏动作 = hover assistant 行点「收藏」(一击默认 label,快照落 `<cwd>/.my-harness-desktop/bookmarks/<id>.json`);② **面板由 revealOn 自动揭示**(收藏点击 invoke `bookmarks:addRequested` → 框架展开收藏 tab)——探针**等行出现**(`[data-bookmark-id]`),别手动点「收藏」钮(可能点错 sidebar 组头、或把已激活 tab 点回隐藏);③ **收藏行本体即 fork 按钮**(行 div onClick=forkFromBookmark,GitBranch 图标 title「点击 fork」只是装饰——找不到「分叉」钮,点行);④ fork 链数据断言:新会话快照前缀 seed 落 user、内核归属同源、源会话零互串。
 
 **composer 多行契约(r339 实钉,10/10)**:① Shift+Enter = 换行(textarea 值计 
