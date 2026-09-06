@@ -38,6 +38,7 @@ vi.mock("react-i18next", () => ({
       "shell.retryFailed": `重试失败：${opts?.error ?? ""}`,
       "shell.retryStreamingBlocked": "生成进行中，无法重试",
       "shell.retryNoUserMessage": "找不到可重试的用户消息",
+      "shell.retryStaleRow": "消息不在当前快照中，请稍候再点一次",
     };
     return dict[k] ?? k;
   } }),
@@ -97,6 +98,20 @@ describe("RetryAction 点击(重试 = fork before + 重发原文,§7.1)", () => 
     clickArmConfirm(rerender, ui, () => screen.getByTitle("重试"));
     await vi.waitFor(() => expect(mocks.fork).toHaveBeenCalledWith("/proj/sess.jsonl", "u1", "before"));
     await vi.waitFor(() => expect(mocks.prompt).toHaveBeenCalledWith("原始问题文本"));
+  });
+
+  it("行不在快照(idx<0):toast 显形而非静默死(r363 缺口守卫)", async () => {
+    // 根因:事件态行(buf id 域)对不上投影域快照,findIndex 落空;此前纯静默
+    // return(§7.6 违例——点了像死了)。现在弹「消息不在当前快照中」toast。
+    mocks.state.snapshot = { state: { sessionFile: "/p/s.jsonl" }, messages: [] };  // 空快照 → idx 必 < 0
+    const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} text="" />;
+    const { rerender } = render(ui());
+    __armed = true;
+    rerender(ui());
+    fireEvent.click(screen.getByTitle("确认重试?"));
+    await vi.waitFor(() => expect(screen.getByText(/消息不在当前快照/)).toBeInTheDocument());
+    expect(mocks.fork).not.toHaveBeenCalled();
+    expect(mocks.prompt).not.toHaveBeenCalled();
   });
 
   it("fork 失败:错误原文 toast(不静默)", async () => {

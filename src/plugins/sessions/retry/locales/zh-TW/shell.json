@@ -3,5 +3,6 @@
   "shell.retryArmed": "確認重試？",
   "shell.retryFailed": "重試失敗：{{error}}",
   "shell.retryStreamingBlocked": "生成進行中，無法重試",
-  "shell.retryNoUserMessage": "找不到可重試的使用者訊息"
+  "shell.retryNoUserMessage": "找不到可重試的使用者訊息",
+  "shell.retryStaleRow": "訊息不在當前快照中，請稍候再點一次"
 }

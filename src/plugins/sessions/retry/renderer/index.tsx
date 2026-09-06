@@ -28,7 +28,13 @@ export function RetryAction({ message }: MessageActionProps): React.ReactNode {
     try {
       const msgs = snapshot?.messages ?? [];
       const idx = msgs.findIndex((m) => m.id === message.id);
-      if (idx < 0) return;
+      // §7.6 不静默(r363 实钉):事件态行(id 是流式 buf 域)对不上投影域快照时,
+      // 此前纯静默 return——按钮点了像死了。改为显形 toast,提示再点一次(快照
+      // 再水合后行 id 换轨,findIndex 即命中)。
+      if (idx < 0) {
+        setToast(t("shell.retryStaleRow"));
+        return;
+      }
       let userMsg: NeutralMessage | null = null;
       for (let i = idx; i >= 0; i--) {
         if (msgs[i].role === "user") { userMsg = msgs[i]; break; }
