@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**WS 离线/重连探针口径(r337 实钉,疑点在档)**:① CDP `Network.emulateNetworkConditions` **不杀已建立的 WS**(活 socket 存活)——离线只拦新请求;离线证据 = 离线窗口内 fetch 被拦(TypeError: Failed to fetch)或 `Network.loadingFailed`;② **重连等待要清事件缓冲**:轮间不清 `window.__ev` 会让下一轮的 settle 立即返回(上一轮的 agentSettled 还在缓冲里)——每轮 settle 前清一次;③ **疑点(下轮专攻)**:离线窗口后发送的回合,写穿疑似推迟到进程关闭才落——60s 轮询未见、killApp 后 mtime 更新且内容齐——若坐实是 transport 恢复后写穿链断裂,是根因级产品 bug;排查方向:writeThroughMessageEnd 的 messageEnd 事件在 WS 重连后是否还到得了壳(渲染层乐观回显掩盖了写穿缺失)。④ e2e 探针 ESM 里别用 require(动态 import node:child_process)。
+
 **测试文件的 tsc 债(r335 实钉教训)**:`as never` 绕 props 能让 vitest 过(esbuild 只剥类型),但**全量 tsc 会照出缺的 props**——每轮写完测试必须跑 `npx tsc --noEmit -p tsconfig.json` 收尾,vitest 绿 ≠ tsc 绿。圆心接口的协议标记别省:测试造 `SessionBusMessage` 帧要带 `$bus: true`(它是「识别锚点」契约,缺了类型不过);MessageActionProps 的 text 是必填(渲染动作条需要,探针视角常忽略)。排查命令:`npx tsc --noEmit | grep test`。
 
 **双项目×跨内核验收(r334 实钉,18/18)**:项目隔离 + 各桶内核归属 + 切回续发全链。两个必带判据:① **项目注册探针法**——「添加项目」走原生目录选窗(探针不可自动化);程序化注册 = **预种 `~/.my-harness-desktop-dev/config/projects.json` 的 `recentCwds: [dirA,dirB]`**(projects 插件的插件配置全局层,config-store 按 pluginId 分文件)——不预种则列表空、切项目点空、B 轮全落 A 的 cwd;② 项目分桶判据 = 会话文件 `header.cwd` 落属主目录、桶间内容零互串、各桶内核归属正确;③ 切项目 = `setCurrentCwd + startNewChat`(壳态干净 0 行);④ 切回后原会话续发不撞「已固定内核」(项目切换不改会话归属,goal §9 的进程面在项目面上同样成立)。
