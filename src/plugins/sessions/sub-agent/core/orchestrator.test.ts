@@ -3,6 +3,7 @@
 //   spawn 七步中可离线验的闸(max_concurrent/递归权威闸/tasks_empty)。
 //   端口全 mock(ports 是注入接口,天然可测——§4.5 判据:接口在圆心/插件内,实现可 mock)。
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { SessionBusMessage } from "@my-harness-desktop/shared";
 import { SubagentOrchestrator, isActive, type SubRecord, type OrchestratorPorts } from "./orchestrator";
 
 function makePorts(over: Partial<OrchestratorPorts> = {}): OrchestratorPorts {
@@ -35,7 +36,7 @@ function makePorts(over: Partial<OrchestratorPorts> = {}): OrchestratorPorts {
 }
 
 function frame(over: Record<string, unknown> = {}) {
-  return { id: "req-1", from: "session:parent", to: "orch", kind: "subagent_ping", payload: {}, timestamp: 0, ...over };
+  return { $bus: true, id: "req-1", from: "session:parent", to: "orch", kind: "subagent_ping", payload: {}, timestamp: 0, ...over } as SessionBusMessage;
 }
 
 describe("isActive(运行中判定)", () => {

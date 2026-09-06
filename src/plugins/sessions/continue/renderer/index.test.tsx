@@ -36,27 +36,27 @@ describe("ContinueAction 渲染条件(只在异常停机的 assistant 上)", () 
   beforeEach(() => { cleanup(); mocks.prompt.mockReset(); });
 
   it("user 消息:不渲染", () => {
-    const { container } = render(<ContinueAction message={{ role: "user", id: "u1" } as never} />);
+    const { container } = render(<ContinueAction message={{ role: "user", id: "u1" } as never} text="" />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("正常完成的 assistant(error/stopped 都无):不渲染——异常停机才给续跑入口", () => {
-    const { container } = render(<ContinueAction message={{ role: "assistant", id: "a1" } as never} />);
+    const { container } = render(<ContinueAction message={{ role: "assistant", id: "a1" } as never} text="" />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("error assistant(生成失败):渲染「继续」钮", () => {
-    render(<ContinueAction message={{ role: "assistant", id: "a1", error: true } as never} />);
+    render(<ContinueAction message={{ role: "assistant", id: "a1", error: true } as never} text="" />);
     expect(screen.getByTitle("继续")).toBeInTheDocument();
   });
 
   it("stopped assistant(用户中断):渲染", () => {
-    render(<ContinueAction message={{ role: "assistant", id: "a1", stopped: true } as never} />);
+    render(<ContinueAction message={{ role: "assistant", id: "a1", stopped: true } as never} text="" />);
     expect(screen.getByTitle("继续")).toBeInTheDocument();
   });
 
   it("无 id 的 assistant:不渲染(锚点缺失无法定位)", () => {
-    const { container } = render(<ContinueAction message={{ role: "assistant", error: true } as never} />);
+    const { container } = render(<ContinueAction message={{ role: "assistant", error: true } as never} text="" />);
     expect(container).toBeEmptyDOMElement();
   });
 });
@@ -65,7 +65,7 @@ describe("ContinueAction 点击行为(原地续跑 = 发消息)", () => {
   beforeEach(() => { cleanup(); mocks.prompt.mockReset(); });
 
   it("点击 → prompt 发通用续跑文案(goal.md §3.2:续跑就是发消息,不 fork 不重发)", async () => {
-    render(<ContinueAction message={{ role: "assistant", id: "a1", error: true } as never} />);
+    render(<ContinueAction message={{ role: "assistant", id: "a1", error: true } as never} text="" />);
     fireEvent.click(screen.getByTitle("继续"));
     await vi.waitFor(() => expect(mocks.prompt).toHaveBeenCalledTimes(1));
     expect(mocks.prompt).toHaveBeenCalledWith(expect.stringContaining("继续未完成的工作"));
@@ -73,7 +73,7 @@ describe("ContinueAction 点击行为(原地续跑 = 发消息)", () => {
 
   it("prompt 失败:失败 toast 显形(错误原文透传,不静默)", async () => {
     mocks.prompt.mockRejectedValueOnce(new Error("会话未启动"));
-    render(<ContinueAction message={{ role: "assistant", id: "a1", error: true } as never} />);
+    render(<ContinueAction message={{ role: "assistant", id: "a1", error: true } as never} text="" />);
     fireEvent.click(screen.getByTitle("继续"));
     await vi.waitFor(() => expect(screen.getByText(/继续失败：会话未启动/)).toBeInTheDocument());
   });

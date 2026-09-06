@@ -67,12 +67,12 @@ describe("RetryAction 渲染条件", () => {
   beforeEach(() => { cleanup(); mocks.prompt.mockReset(); mocks.fork.mockReset(); });
 
   it("user 消息:不渲染", () => {
-    const { container } = render(<RetryAction message={{ role: "user", id: "u1" } as never} />);
+    const { container } = render(<RetryAction message={{ role: "user", id: "u1" } as never} text="" />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it("assistant:渲染「重试」钮", () => {
-    render(<RetryAction message={{ role: "assistant", id: "a1" } as never} />);
+    render(<RetryAction message={{ role: "assistant", id: "a1" } as never} text="" />);
     expect(screen.getByTitle("重试")).toBeInTheDocument();
   });
 });
@@ -92,7 +92,7 @@ describe("RetryAction 点击(重试 = fork before + 重发原文,§7.1)", () => 
   });
 
   it("点击 → fork(会话文件, user id, before) + prompt(原 user 文本)", async () => {
-    const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} />;
+    const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} text="" />;
     const { rerender } = render(ui());
     clickArmConfirm(rerender, ui, () => screen.getByTitle("重试"));
     await vi.waitFor(() => expect(mocks.fork).toHaveBeenCalledWith("/proj/sess.jsonl", "u1", "before"));
@@ -101,7 +101,7 @@ describe("RetryAction 点击(重试 = fork before + 重发原文,§7.1)", () => 
 
   it("fork 失败:错误原文 toast(不静默)", async () => {
     mocks.fork.mockRejectedValueOnce(new Error("分叉锚点不在会话内容里"));
-    const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} />;
+    const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} text="" />;
     const { rerender } = render(ui());
     clickArmConfirm(rerender, ui, () => screen.getByTitle("重试"));
     await vi.waitFor(() => expect(screen.getByText(/重试失败：/)).toBeInTheDocument());
@@ -113,11 +113,11 @@ describe("RetryAction 点击(重试 = fork before + 重发原文,§7.1)", () => 
     mocks.state.snapshot = {
       state: { sessionFile: "/p/s.jsonl" },
       messages: [
-        { role: "user", id: "u1", content: [{ type: "text", text: "数组" }, { type: "text", text: "问题" }] },
+        { role: "user", id: "u1", content: "数组问题" },
         { role: "assistant", id: "a1", content: "答" },
       ],
     };
-    const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} />;
+    const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} text="" />;
     const { rerender } = render(ui());
     clickArmConfirm(rerender, ui, () => screen.getByTitle("重试"));
     await vi.waitFor(() => expect(mocks.prompt).toHaveBeenCalledWith("数组问题"));
