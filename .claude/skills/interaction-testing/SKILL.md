@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**语言切换口径(r344 实钉,②③ 面 8/11;④ 往返留憾)**:① 语言页四选项(ListItem 网格,当前项有实心圆点;页脚显 currentLocale);点击 = setCurrentLocale **直写**(实时生效,无「确定改动」浮层,saveMode=manual 的语言项走 prefs 直写);② 切 English 全 UI 立换(New chat/General/Theme/Skills/…中文全退)——「实时生效」契约实证;③ **prefs 键名 = `currentLocale`**(ui-store PREF_KEYS,不是 `locale`)——落盘断言读对键;④ 探针锚点必须 **locale-aware**(设置/Settings、语言/Language 双语认)——切完英文后中文锚点全扑空;语言名是**原生名**(简体中文/English 在任何 locale 下不变,可跨语言点)。**留憾**:en→zh-CN 的坐标点击两轮未生效(疑重导航后的点击落点/时序;② zh→en 一次过)——语言往返的探针化要 ElementHandle 精点 + 点击后立刻读页脚 currentLocale 复核,别赌 sleep。
+
 **会话搜索探针口径(r343 实钉,12/12)**:① 搜索 input **默认隐藏**——入口是「会话」区标题的搜索图标钮(aria-label=「搜索会话」),点开才有 placeholder=「搜索会话」的 input;② 该图标钮是 **toggle**——探针复用 typeSearch 别每轮再点(会把搜索框点折叠回去,清空 query 视觉残留 = 过滤态假锁死);③ 清空 query 用原生 setter + input 事件(受控 input 的可靠路径);④ 匹配大小写敏感(D9 注释:设计如此,name/created/id/ns 四键任一命中);⑤ 过滤是纯 UI 面(会话文件零影响——数据层计数对照)。顺带:列表行显示的是**会话首条 user 文本**(未命名/自动名形态),needle 要打在消息文本上别赌会话名。
 
 **依赖方向审计守卫(r342,npm run audit:deps 入仓)**:CLAUDE.md §6.3「CI 可自动化」的落地——`scripts/dependency-audit.mjs` 六检验(圆心零外部 import/application 不 import 内核实现/kernel-core 不碰具体内核/plugins 只认 shared+react/KernelId 字面量单源/会话链路零身份分支),269 文件实跑 0 违规,exit 1/0 可进 CI。**明文例外机制**:neutral-migration.ts 是 session-single-source.md §4.3 授权的离线迁移例外——「例外写在明处,禁令才守得住」(文档原句);审计脚本的豁免表引用文档条款,不悄悄放行。写架构守卫的纪律:先读文档例外、再写豁免规则、豁免注释引文档节号。
