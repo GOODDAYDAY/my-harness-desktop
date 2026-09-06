@@ -126,6 +126,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **置顶×归档口径(r347 实钉,核心面全绿)**:① 置顶 = 右键「置顶」→ 行重排到顶 + **`header.pinned=true` 落中立层**;② 归档 = 右键「归档」→ **`header.archived=true`** + A 进「已归档」分组(行不消失——是**分组**不是隐藏;活跃列表断言要按分组上下文筛,别数全 DOM);③ **pinned/archived 是 NeutralSession 顶层字段**(session-neutral.ts §保留键注释:「保留键 pinned/archived/toolConfig 平铺顶层,插件域不得占用」)——断言读 `header.pinned`,**不是** `header.custom.pinned`(HeaderPatch 的注释文案是历史写法,schema 单源在顶层;探针读错位会得 custom={} 的假象);④ custom 域在置顶/归档后完整幸存(model 还在)——键互不干扰;⑤ 取消归档菜单项 =「取消归档」(sessions.unarchive),归档分组的行同样右键可达。
 
+**右面板布局面(r352 实钉)**:① tab 全集 13 个(语音输入/手动添加/收藏/Review/盲审/工具/文件/IM/Tree/统计/请求记录/表情包/图钉);② prefs 键形态:`activeSidePanelTabs`(数组)+`rightPanelOpen`+`sidePanelOrder`+`sidepanelStyle/FontScale`(布局态全家);③ 面板默认开;开合状态**刷新后恢复**(layout store 从 prefs hydrate);④ Tab 切换的断言别赌空态文案(「暂无收藏」只是收藏空态的一种)——**读 prefs.activeSidePanelTabs 数组**才是激活态真相源;点击 tab 后要等 prefs 落键再断言(异步写)。
+
 **composerStats 槽与思考档位(r351 实钉)**:① **上下文占用条形态** = composer 区「{模型名}{档位}{百分比}」(实弹:「Qwen3.8 Max (Free)高1%」——token-stats 槽把模型+思考档+上下文占用三态一屏渲染;断言查 `\d+%` 正则即活证据);② **thinkingLevel 落 header.custom.model**(与 provider/modelId/kernel 同域——档位是模型偏好的一部分,非独立键);③ 档位的显示态是中文单字(高/off 等档名在 composer 区常驻),选档 UI 在模型下拉的 pi 页签内(levels 行——r324 口径);默认档来自 settings.defaultThinkingLevel(设置域)。
 
 **按会话草稿恢复(r350 实钉,10/10)**:草稿按会话键保留——A 留「草稿AAA」→ 切壳(壳 composer 空)→ 留「草稿BBB」→ 回 A:恢复 AAA;回壳:恢复 BBB;两草稿互不串。**r349 之谜的正面闭环**:残稿正是这个特性带回来的(切会话恢复),产品契约成立;探针纪律随之完备:**输入前原生 setter 置空**(防恢复的残稿吃掉斜杠命令前缀)。壳(新会话态)的草稿键 = `new:${cwd}`(与 pendingQueue/sessionModelPending 同款键形态)。
