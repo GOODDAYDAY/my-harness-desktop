@@ -1414,7 +1414,11 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
           </div>
         )}
         <div className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-          {rowText && <MessageActions message={message} text={rowText} />}
+          {/* 空正文也挂动作区(根因修复 r361):rowText 空门禁曾把整组 MessageActions 摘掉——
+              dsh 中断无流式缓冲时落空内容行(stopped=true),「继续」是它唯一的恢复入口,
+              却因「无正文」而永不出现(pi 中断常带部分内容,rowText 非空,故 pi 面看不出)。
+              修法:终结态(stopped/error)的消息即使无正文也渲染动作区;普通空行维持原门禁。 */}
+          {(rowText || message.stopped === true || message.error === true) && <MessageActions message={message} text={rowText} />}
           {/* 时间紧贴按钮右侧(AI 消息靠左,整行左对齐):hover 淡入,与复制/回退按钮相邻。 */}
           <MessageMeta message={message} />
         </div>
