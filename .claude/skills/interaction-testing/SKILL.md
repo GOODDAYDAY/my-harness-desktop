@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**大回归里程碑(r348,48 轮)**:官方六套(pi×5 + dsh)在终态 build 69/69 全绿 + 单测 989 + tsc 0 + deps-audit 0 + 修复面探针抽检(r328 toolConfig 8/8)。**r317 抽检发现的探针侧坑**:连续 send 之间 **composer 草稿残留**(第二轮键盘输入拼进上一条残稿,前缀污染把 /goal 命令变成普通消息——斜杠命令必须**独占消息开头**);抽检断言「X 没生效」时先 dump user 条目全文看**拼接痕迹**,前缀污染 = 探针没清稿,不是产品退化。**清稿纪律**:每次 setComposer 前原生 setter 置空(真键盘 type 不清残稿)。
+
 **置顶×归档口径(r347 实钉,核心面全绿)**:① 置顶 = 右键「置顶」→ 行重排到顶 + **`header.pinned=true` 落中立层**;② 归档 = 右键「归档」→ **`header.archived=true`** + A 进「已归档」分组(行不消失——是**分组**不是隐藏;活跃列表断言要按分组上下文筛,别数全 DOM);③ **pinned/archived 是 NeutralSession 顶层字段**(session-neutral.ts §保留键注释:「保留键 pinned/archived/toolConfig 平铺顶层,插件域不得占用」)——断言读 `header.pinned`,**不是** `header.custom.pinned`(HeaderPatch 的注释文案是历史写法,schema 单源在顶层;探针读错位会得 custom={} 的假象);④ custom 域在置顶/归档后完整幸存(model 还在)——键互不干扰;⑤ 取消归档菜单项 =「取消归档」(sessions.unarchive),归档分组的行同样右键可达。
 
 **会话重命名口径(r346 实钉,10/10)**:① 入口 = 侧栏行**右键菜单**(项:重命名/置顶/归档/打开 Desktop 会话文件/打开内核会话文件——右键五项是行操作的完整面);② 点重命名 → 行内 INPUT 编辑器(带旧名聚焦);③ 清旧值用**原生 setter**(CDP 的组合键命名不稳:Control+a/Meta+a 双双 Unknown key——受控 input 全场景原生 setter 是通用解);④ Enter 确认 → 列表行即显新名 + **header.name 落中立层**(单轨写名的真相源)+ 刷新重开后仍在(5s 内写穿完成);⑤ 断言读 `header.name`(不是列表文本——列表可能延迟)。
