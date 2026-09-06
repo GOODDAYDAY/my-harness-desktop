@@ -38,6 +38,40 @@ describe("NeutralSessionStore", () => {
     expect(store.get("nope")).toBeNull();
   });
 
+  // ============ 灾难隔离守卫(r370 根因修复,候选十一)============
+  // 形态:合法 JSON 但 lineages=null(断电半写)曾滑过 parse 守卫落进列表,
+  // 在 neutralToSessionInfo 的 lineages.find 上炸掉整条 map——单坏文件拖垮全列表
+  // (健康的邻居也消失)。守卫钉死:坏形状与坏 JSON 同等跳过,邻居健在。
+  it("lineages=null(合法 JSON 但形状坏)被跳过,健康邻居健在(r370 守卫)", () => {
+    store.put(makeSession("healthy-1"));
+    // 手写形状坏文件:lineages = null
+    writeFileSync(join((store as unknown as { dir: string }).dir, "corrupt-shape.json"), JSON.stringify({
+      neutralSessionId: "corrupt",
+      header: { kernel: "pi", cwd: "/proj", createdAt: "2024-01-01T00:00:00Z" },
+      lineages: null,
+    }));
+    const list = store.listByCwd("/proj");
+    expect(list.map((s) => s.neutralSessionId)).toEqual(["healthy-1"]); // 坏文件跳过,邻居在
+  });
+
+  it("JSON 半截(截断)被跳过,健康邻居健在", () => {
+    store.put(makeSession("healthy-2"));
+    writeFileSync(join((store as unknown as { dir: string }).dir, "truncated.json"), '{"neutralSessionId":"trunc","lineages":[');
+    const list = store.listByCwd("/proj");
+    expect(list.map((s) => s.neutralSessionId)).toEqual(["healthy-2"]);
+  });
+
+  it("lineages 非数组(字符串形态)也被形状守卫拒", () => {
+    store.put(makeSession("healthy-3"));
+    writeFileSync(join((store as unknown as { dir: string }).dir, "lineages-string.json"), JSON.stringify({
+      neutralSessionId: "bad-type",
+      header: { kernel: "pi", cwd: "/proj", createdAt: "2024-01-01T00:00:00Z" },
+      lineages: "corrupted-string",
+    }));
+    const list = store.listByCwd("/proj");
+    expect(list.map((s) => s.neutralSessionId)).toEqual(["healthy-3"]);
+  });
+
   it("delete 后 get 返回 null", () => {
     store.put(makeSession("ns-1"));
     store.delete("ns-1");

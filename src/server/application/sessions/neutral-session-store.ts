@@ -35,7 +35,12 @@ export class NeutralSessionStore {
 
   /** 列某 cwd 下的全部中立会话(扫 *.json、按 header.cwd 过滤;损坏文件跳过)。
    *  §kernel-forkless-branch §27 阶段 A:中立层独立回答「某 cwd 有哪些会话」——
-   *  这是阶段 D「list 读中立层」的前置能力。 */
+   *  这是阶段 D「list 读中立层」的前置能力。
+   *  灾难隔离(r370 根因修复,勿回退):try 只包住 JSON.parse——**合法 JSON 但形状坏**
+   *  (lineages=null/非数组,断电半写的常见形态)会滑过 parse 落进 result,然后在
+   *  session-store.neutralToSessionInfo 的 lineages.find 上炸掉整条 map——单个
+   *  坏文件拖垮整个会话列表(候选十一实钉:健康的邻居会话也消失)。修法:形状校验
+   *  挪进同一 try,坏形状与坏 JSON 同等跳过 + 记日志(可观测,不静默)。 */
   listByCwd(cwd: string): NeutralSession[] {
     if (!existsSync(this.dir)) return [];
     const result: NeutralSession[] = [];
@@ -43,9 +48,14 @@ export class NeutralSessionStore {
       if (!file.endsWith(".json")) continue;
       try {
         const session = JSON.parse(readFileSync(join(this.dir, file), "utf-8")) as NeutralSession;
+        if (!Array.isArray(session?.lineages) || typeof session?.neutralSessionId !== "string") {
+          // 形状坏(结构损坏):跳过该文件,不中断枚举;记日志可观测。
+          console.error(`[neutral-store] 会话文件形状损坏,列表已跳过: ${file}(lineages=${typeof session?.lineages},ns=${typeof session?.neutralSessionId})`);
+          continue;
+        }
         if (session?.header?.cwd === cwd) result.push(session);
       } catch {
-        // 损坏文件跳过,不中断枚举
+        // 损坏文件(JSON 解析失败)跳过,不中断枚举
       }
     }
     return result;
