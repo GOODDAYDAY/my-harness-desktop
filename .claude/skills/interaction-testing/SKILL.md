@@ -122,6 +122,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **同名按钮歧义:按 title/aria 找按钮前先排除消息行(r310 踩过)**:「收藏」title 在页面里有两种来源——右栏面板页签(sidePanel 槽)与消息行 hover 悬浮动作钮(BookmarkAction)。探针 `find(title==="收藏")` 会先命中消息行里残留的动作钮,点了它=误发一次收藏(多出一个"幽灵"快照+面板 revealOn 打开)。判别:面板页签不在 `[data-message-id]` 行内(`!b.closest("[data-message-id]`)`;同理「分叉」「重试」钮也各有行内/别处两种来源。另外:面板 revealOn 在一击收藏后已打开面板,再点页签=**切换关闭**——开面板先查"占位符已可见"(input[placeholder*=搜索收藏]),幂等勿重复点。
 
+**会话搜索探针口径(r343 实钉,12/12)**:① 搜索 input **默认隐藏**——入口是「会话」区标题的搜索图标钮(aria-label=「搜索会话」),点开才有 placeholder=「搜索会话」的 input;② 该图标钮是 **toggle**——探针复用 typeSearch 别每轮再点(会把搜索框点折叠回去,清空 query 视觉残留 = 过滤态假锁死);③ 清空 query 用原生 setter + input 事件(受控 input 的可靠路径);④ 匹配大小写敏感(D9 注释:设计如此,name/created/id/ns 四键任一命中);⑤ 过滤是纯 UI 面(会话文件零影响——数据层计数对照)。顺带:列表行显示的是**会话首条 user 文本**(未命名/自动名形态),needle 要打在消息文本上别赌会话名。
+
 **依赖方向审计守卫(r342,npm run audit:deps 入仓)**:CLAUDE.md §6.3「CI 可自动化」的落地——`scripts/dependency-audit.mjs` 六检验(圆心零外部 import/application 不 import 内核实现/kernel-core 不碰具体内核/plugins 只认 shared+react/KernelId 字面量单源/会话链路零身份分支),269 文件实跑 0 违规,exit 1/0 可进 CI。**明文例外机制**:neutral-migration.ts 是 session-single-source.md §4.3 授权的离线迁移例外——「例外写在明处,禁令才守得住」(文档原句);审计脚本的豁免表引用文档条款,不悄悄放行。写架构守卫的纪律:先读文档例外、再写豁免规则、豁免注释引文档节号。
 
 **消息行动作齐性对账(r341 实钉,14/14)**:逐行型 hover 收集动作钮 title 集,断言行型齐性 + DOM⊆声明集。**行型动作矩阵**(实测):user=复制+钉图钉+回退;assistant=复制+分叉+收藏+钉图钉+重试(+异常停机态的「继续」);divider=只 meta 徽标(模型→/思考已完成/会话重命名——非动作,按行型豁免)。**声明集要逐插件审计**(timeline=复制+回退/timeline.rewind;bookmarks=收藏+分叉;retry=重试+确认重试?;continue=继续;colors=钉图钉+拔图钉)——想当然写清单必漏(本例初版清单漏了回退/钉图钉/meta,三处误报)。对账法:DOM 出现的 title 全集过滤 meta 正则后,断言差集为空。
