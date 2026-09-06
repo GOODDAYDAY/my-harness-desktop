@@ -39,8 +39,9 @@ function unescape(s: string): string {
 
 /** 评论篮 → 结构化块文本(发送时经 sendSuffix 附加;模型看到带结构的条目,渲染层解析引用条)。
  *  promptHeader 是模型侧引导语(i18n key shell.reviewPromptHeader):在 items 之前一行,
- *  不在 <item> 里,对渲染层透明、只对模型可见(设计 §6.2)。 */
-function buildReviewBlock(comments: ReviewComment[], promptHeader: string): string {
+ *  不在 <item> 里,对渲染层透明、只对模型可见(设计 §6.2)。
+ *  导出供 DOM 交互测试(review-basket.dom.test)直测结构(零测试缺口补全)。 */
+export function buildReviewBlock(comments: ReviewComment[], promptHeader: string): string {
   if (comments.length === 0) return "";
   const items = comments.map((c, i) =>
     `<item seq="${numOf(i)}" quote="${escapeAttr(c.quote)}">${escapeText(c.comment)}</item>`,
