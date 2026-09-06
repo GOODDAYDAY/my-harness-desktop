@@ -61,6 +61,17 @@ describe("NeutralSessionStore", () => {
     expect(list.map((s) => s.neutralSessionId)).toEqual(["healthy-2"]);
   });
 
+  it("get 的形状守卫(r370 姊妹口):lineages=null 返回 null 而非坏对象", () => {
+    // 9 个调用方(openSession/写穿/树)全信任 get 返回——坏形状必须拦在源头
+    mkdirSync((store as unknown as { dir: string }).dir, { recursive: true });  // 首个 put 前目录不存在
+    writeFileSync(join((store as unknown as { dir: string }).dir, "bad-get.json"), JSON.stringify({
+      neutralSessionId: "bad-get",
+      header: { kernel: "pi", cwd: "/proj", createdAt: "2024-01-01T00:00:00Z" },
+      lineages: null,
+    }));
+    expect(store.get("bad-get")).toBeNull(); // 形状坏 = 损坏,不滑过
+  });
+
   it("lineages 非数组(字符串形态)也被形状守卫拒", () => {
     store.put(makeSession("healthy-3"));
     writeFileSync(join((store as unknown as { dir: string }).dir, "lineages-string.json"), JSON.stringify({

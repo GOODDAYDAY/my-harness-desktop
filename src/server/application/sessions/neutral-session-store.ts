@@ -22,12 +22,21 @@ export class NeutralSessionStore {
     return this.filePath(neutralSessionId);
   }
 
-  /** 读一个中立会话树;不存在/损坏返回 null。 */
+  /** 读一个中立会话树;不存在、形状坏、JSON 损坏,三者都返回 null。
+   *  形状守卫(r370 同源,listByCwd 的姊妹口):合法 JSON 但形状坏(lineages=null/
+   *  非数组)曾滑过 parse——get() 的 9 个调用方(openSession/写穿/树投影等)全部
+   *  直接信任返回值,坏形状会在下游 .lineages.find/flatMap 炸。与 listByCwd
+   *  同一条纪律:坏形状 = 损坏,返回 null + 记日志。 */
   get(neutralSessionId: string): NeutralSession | null {
     const file = this.filePath(neutralSessionId);
     if (!existsSync(file)) return null;
     try {
-      return JSON.parse(readFileSync(file, "utf-8")) as NeutralSession;
+      const session = JSON.parse(readFileSync(file, "utf-8")) as NeutralSession;
+      if (!Array.isArray(session?.lineages) || typeof session?.neutralSessionId !== "string") {
+        console.error(`[neutral-store] 会话文件形状坏,get 返回 null: ${neutralSessionId}(lineages=${typeof session?.lineages})`);
+        return null;
+      }
+      return session;
     } catch {
       return null;
     }
