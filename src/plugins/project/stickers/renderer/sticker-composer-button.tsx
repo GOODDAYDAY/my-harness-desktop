@@ -80,7 +80,9 @@ export function StickerComposerButton(): ReactNode {
     if (!cwd || streaming) return;
     if (btnRef.current) {
       const r = btnRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + 8, left: r.left });
+      // 按钮在 composer 底部工具栏(输入框左下方),下方就是屏幕底缘——弹层必须
+      // 锚在按钮上缘向上展开(translateY(-100%)),否则落在视口外点不到。
+      setPos({ top: r.top - 8, left: r.left });
     }
     setOpen(true);
   };
@@ -161,7 +163,7 @@ export function StickerComposerButton(): ReactNode {
   );
 }
 
-/** 选择器弹层(portal,锚在按钮下方):点击空白/Esc 关;外层处理键盘。 */
+/** 选择器弹层(portal,锚在按钮上方展开):点击空白/Esc 关;外层处理键盘。 */
 function PickerPortal({ pos, onClose, title, hint, children }: {
   pos: { top: number; left: number };
   onClose: () => void;
@@ -182,7 +184,9 @@ function PickerPortal({ pos, onClose, title, hint, children }: {
     <div
       ref={ref}
       style={{
-        position: "fixed", top: pos.top, left: Math.max(8, pos.left), zIndex: 99999,
+        position: "fixed", top: pos.top, left: Math.max(8, pos.left),
+        transform: "translateY(-100%)",
+        zIndex: 99999,
         maxWidth: "min(420px, calc(100vw - 16px))",
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",

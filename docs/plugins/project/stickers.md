@@ -159,7 +159,7 @@ banner 图是「图文件 + 条目里的逻辑路径引用」两段式：
 `StickerComposerButton`（`:57`）是 composerActions 槽贡献的按钮组件，props 无（契约 `ComposerActionContribution` 只 `id/component/order`）。
 
 - 打开时读一次贴纸（`loadStickers`），`system:settingsChanged` 后重读（`:69-77`）。
-- `openPicker`（`:79`）：`!cwd || streaming` 直接 return（无项目/回复中不开）；`getBoundingClientRect()` 锚定按钮位置，选择器 portal 到 `document.body`，`position: fixed` 定位在按钮下方。
+- `openPicker`（`:79`）：`!cwd || streaming` 直接 return（无项目/回复中不开）；`getBoundingClientRect()` 锚定按钮位置，选择器 portal 到 `document.body`，`position: fixed` 锚在按钮上缘向上展开（`translateY(-100%)`，因按钮在 composer 底部工具栏、下方即屏幕底缘，向下会落视口外点不到）。
 - `send(sticker)`（`:88`）：与 `index.tsx` 的 `sendSticker` 同逻辑（`content.trim() || title.trim() || ""`），`ctx.events.emit("stickers:send", { text, image })`，然后 `setOpen(false)`。**同一份发送请求构造逻辑在 index.tsx 和本文件各写了一遍**——这是个小重复（两处 `const text = sticker.content.trim() || sticker.title?.trim() || ""`），但不构成跨层违规，属同插件内两视图的平行实现。
 - `fill(sticker)`（`:100`）：`readBannerDataUri` 读图 → `ctx.events.emit("stickers:fillComposer", { text, image: { src, title, dataUri } })` → 关选择器。
 - 键盘导航（`:110-120`）：`window.addEventListener("keydown")`，←↑→↓ 在网格平铺回绕（`(i ± 1 + n) % n`），Enter 发、Esc 关。
