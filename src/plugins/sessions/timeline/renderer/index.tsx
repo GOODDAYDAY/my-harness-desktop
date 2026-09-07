@@ -1071,6 +1071,9 @@ export function TimelineView(): React.ReactNode {
         currentLevel={currentLevel}
         onPickModel={pickModel}
         onPickLevel={pickLevel}
+        // 显式降级(§7.6,能力探测非内核身份分支):当前后端有 dsh 扩展面而无 pi 面 →
+        // 运行时切档不可用,思考开关置灰并悬浮真实原因(此前只挂「思考已关闭」误导文案)。
+        thinkingUnavailableHint={capabilities.dshExtension && !capabilities.piExtension ? t("shell.thinkingSwitchUnsupported") : undefined}
         commands={allCommands}
         currentKernel={capabilities.kernel}
         kernelLocked={capabilities.locked}

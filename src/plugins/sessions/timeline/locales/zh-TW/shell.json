@@ -42,6 +42,7 @@
   "shell.stopped": "已停止",
   "shell.thinkingOn": "思考已開啟",
   "shell.thinkingOff": "思考已關閉",
+  "shell.thinkingSwitchUnsupported": "當前內核不支援運行時切換思考深度（dsh 的思考深度由設定決定）",
   "shell.rewind": "回退",
   "shell.rewindFailed": "回退失敗：{{error}}",
   "shell.rewindStreamingBlocked": "生成進行中，無法回退",

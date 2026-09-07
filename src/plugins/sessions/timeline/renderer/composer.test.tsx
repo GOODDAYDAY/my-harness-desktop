@@ -191,3 +191,32 @@ describe("Composer goal 生效着色(输入框上方目标条的呼应面)", () 
     expect(pill.getAttribute("data-goal-active")).toBeNull();
   });
 });
+
+describe("Composer 思考开关的显式降级(§7.6:dsh 无运行时切档面)", () => {
+  // 中段渲染门槛是 models/levels 任一非空(hasMiddle);dsh 会话 models 非空、levels 空。
+  const dshModels = [{ kernel: "dsh" as const, provider: "us-new", id: "m1", name: "m1", contextWindow: 128000, maxTokens: 8192 }];
+
+  it("后端无切档面(dsh):思考开关置灰 + 悬浮诚实原因,不挂「思考已关闭」误导文案", () => {
+    render(
+      <Composer
+        value="" onValueChange={() => {}} onSubmit={() => {}}
+        models={dshModels} levels={[]} onPickLevel={() => {}}
+        thinkingUnavailableHint="当前内核不支持运行时切换思考深度"
+      />,
+    );
+    // 置灰开关的 title = 诚实原因(显式降级),而不是 on/off 语义文案
+    const btn = screen.getByTitle("当前内核不支持运行时切换思考深度");
+    expect(btn).toBeDisabled();
+    expect(screen.queryByTitle("shell.thinkingOff")).not.toBeInTheDocument();
+  });
+
+  it("后端有切档面(pi):不传 hint,保持「思考已开启/已关闭」语义(回归位)", () => {
+    render(
+      <Composer
+        value="" onValueChange={() => {}} onSubmit={() => {}}
+        models={dshModels} levels={["off", "high"]} currentLevel="high" onPickLevel={() => {}}
+      />,
+    );
+    expect(screen.getByTitle("shell.thinkingOn")).toBeInTheDocument();
+  });
+});

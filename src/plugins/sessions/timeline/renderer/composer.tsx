@@ -59,6 +59,10 @@ export interface ComposerProps
   currentLevel?: string;
   onPickModel?: (m: ModelInfo) => void;
   onPickLevel?: (l: string) => void;
+  /** 思考切换不可用的诚实原因(§7.6 显式降级:当前后端无运行时切档面时——
+   *  如 dsh(reasoningEffort 是配置态),思考开关置灰并悬浮本提示,
+   *  不再只挂「思考已开启/已关闭」的误导性文案)。 */
+  thinkingUnavailableHint?: string;
   commands?: CommandItem[];
   /** 当前会话内核归属(锁定后非此内核的 TAB 置灰)。 */
   currentKernel?: KernelId | null;
@@ -136,6 +140,7 @@ export function Composer({
   currentLevel,
   onPickModel,
   onPickLevel,
+  thinkingUnavailableHint,
   commands,
   currentKernel,
   kernelLocked = false,
@@ -458,10 +463,12 @@ export function Composer({
                   </DropdownMenu.Root>
                 )}
                 {/* 思考模式开关(bool):开=primary 色(Brain 亮);关=muted + 横划线(不思考)。
-                    点 = 在 off 和 medium 之间切(经 onPickLevel,走偏好/setThinkingLevel)。 */}
+                    点 = 在 off 和 medium 之间切(经 onPickLevel,走偏好/setThinkingLevel)。
+                    后端无运行时切档面时(dsh)悬浮诚实原因(thinkingUnavailableHint),不装能切。 */}
                 <ThinkingToggle
                   on={currentLevel ? currentLevel !== "off" : false}
                   disabled={!levels || levels.length === 0 || !onPickLevel}
+                  unavailableHint={thinkingUnavailableHint}
                   onClick={() => onPickLevel?.(currentLevel && currentLevel !== "off" ? "off" : "medium")}
                   t={t}
                 />
@@ -537,10 +544,12 @@ export function Composer({
 }
 
 /** 思考模式开关(bool):开=primary 色(Brain 亮);关=muted + 横划线穿过图标(不思考)。
- *  纯视觉开关,实际切换由 onClick(调 onPickLevel off↔medium)。 */
-function ThinkingToggle({ on, disabled, onClick, t }: {
+ *  纯视觉开关,实际切换由 onClick(调 onPickLevel off↔medium)。
+ *  置灰且带 unavailableHint 时悬浮提示不可用原因(显式降级,不装能切)。 */
+function ThinkingToggle({ on, disabled, unavailableHint, onClick, t }: {
   on: boolean;
   disabled?: boolean;
+  unavailableHint?: string;
   onClick: () => void;
   t: (k: string, vars?: Record<string, unknown>) => string;
 }): React.ReactNode {
@@ -549,7 +558,7 @@ function ThinkingToggle({ on, disabled, onClick, t }: {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={on ? t("shell.thinkingOn") : t("shell.thinkingOff")}
+      title={(disabled && unavailableHint) ? unavailableHint : (on ? t("shell.thinkingOn") : t("shell.thinkingOff"))}
       className="flex items-center justify-center size-6 rounded-full border-none cursor-pointer disabled:cursor-default disabled:opacity-30"
       style={{
         background: on ? "var(--color-primary)" : "transparent",

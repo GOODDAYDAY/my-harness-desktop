@@ -42,6 +42,7 @@
   "shell.stopped": "Stopped",
   "shell.thinkingOn": "Thinking on",
   "shell.thinkingOff": "Thinking off",
+  "shell.thinkingSwitchUnsupported": "This kernel doesn't support switching thinking depth at runtime (dsh sets it via config)",
   "shell.rewind": "Rewind",
   "shell.rewindFailed": "Rewind failed: {{error}}",
   "shell.rewindStreamingBlocked": "Cannot rewind while generating",

@@ -42,6 +42,7 @@
   "shell.stopped": "Angehalten",
   "shell.thinkingOn": "Denken aktiviert",
   "shell.thinkingOff": "Denken deaktiviert",
+  "shell.thinkingSwitchUnsupported": "Dieser Kernel unterstützt kein Umschalten der Denktiefe zur Laufzeit (dsh legt sie per Konfiguration fest)",
   "shell.rewind": "Zurück",
   "shell.rewindFailed": "Zurückspulen fehlgeschlagen: {{error}}",
   "shell.rewindStreamingBlocked": "Zurückspulen während der Generierung nicht möglich",
