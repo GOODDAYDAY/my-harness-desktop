@@ -160,6 +160,11 @@ const PI_SETTINGS_RESOLVE_PATHS = [
 // + settings.yaml(用户覆盖 namespace,~/.dsh/settings.yaml)。读不到 → 空,不炸应用(§6.2)。
 // DSH_CORDIS_PATH 单源:配置读写(DshConfigSource)与 spawn(DSH_CORDIS_CONFIG env)共用同一路径。
 const DSH_CORDIS_PATH = process.env.DSH_CORDIS_CONFIG ?? join(HOME_DIR, ".dsh", "cordis.yml");
+// DSH_HOME 钉住到 cordis.yml 所在目录:dsh 运行时 resolveDshHome 优先吃 DSH_HOME env——
+// 宿主 shell 若导出了指向别处的 DSH_HOME,dsh 会读那份 settings.yaml 而桌面写这份,
+// 模型/推理配置静默分裂(实测:桌面给模型落了 reasoningEfforts,运行时读另一份 →
+// 思考档位清单恒空)。钉住后两边恒同根,与 DSH_CORDIS_PATH 同一来源。
+const DSH_HOME = dirname(DSH_CORDIS_PATH);
 const dshConfigSource = new DshConfigSource(
   DSH_CORDIS_PATH,
   join(HOME_DIR, ".dsh", "settings.yaml"),
@@ -272,7 +277,7 @@ const baseBackendFactory: BackendFactory = {
       model,
       cliPath: dshCliPath(),
       cordisConfig: DSH_CORDIS_PATH,
-      env: { DSH_SESSION_ROOT },
+      env: { DSH_SESSION_ROOT, DSH_HOME },
     });
   },
   // 预 seed(§4.5 生命周期不对称):pi 的 seed 是纯文件写,先 seed 得路径、再以路径 spawn;
@@ -322,7 +327,7 @@ const dshDefaultProviderModel = (): { provider: string; model: string } => {
 // dsh 目录:dsh 会话真相源在 dsh 进程内,目录/CRUD 经懒 spawn 的 dsh transport 走 JSON-RPC。
 const sessionCatalogFactory: SessionCatalogFactory = {
   create: (kernel) => (kernel === "dsh"
-    ? createDshCatalog({ cliPath: dshCliPath(), cordisConfig: DSH_CORDIS_PATH, env: { DSH_SESSION_ROOT }, ...dshDefaultProviderModel() })
+    ? createDshCatalog({ cliPath: dshCliPath(), cordisConfig: DSH_CORDIS_PATH, env: { DSH_SESSION_ROOT, DSH_HOME }, ...dshDefaultProviderModel() })
     : createPiCatalog(PI_AGENT_DIR)),
 };
 const sessionStore = new SessionStore(

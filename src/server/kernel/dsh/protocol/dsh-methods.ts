@@ -26,6 +26,8 @@ export const DSH_METHODS = {
   sessionGet: "session/get",
   sessionGetEntries: "session/getEntries",
   sessionGetTree: "session/getTree",
+  /** 思考档位清单(补面方法,由桌面适配插件拦截提供;dsh-thinking-level.md)。 */
+  sessionGetThinkingLevels: "session/getThinkingLevels",
   sessionList: "session/list",
   sessionProjectStats: "session/projectStats",
   sessionPrompt: "session/prompt",
@@ -33,6 +35,8 @@ export const DSH_METHODS = {
   sessionResume: "session/resume",
   sessionSeed: "session/seed",
   sessionSetModel: "session/setModel",
+  /** 运行时切思考深度(补面方法,由桌面适配插件拦截提供;dsh-thinking-level.md)。 */
+  sessionSetThinkingLevel: "session/setThinkingLevel",
   sessionTitle: "session/title",
   sessionUpdateHeader: "session/updateHeader",
 } as const;

@@ -171,3 +171,47 @@ describe("dsh seed 转录(wire 形状对齐 session/seed 的 NeutralSessionWire 
     expect(() => new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m" })).toThrow(/缺少会话标识/);
   });
 });
+
+describe("dsh 思考深度补面(dsh-thinking-level.md)", () => {
+  it("setThinkingLevel 发 session/setThinkingLevel RPC(热切,不重启)", async () => {
+    const { t, b } = makeBackend();
+    await b.setThinkingLevel("high");
+    expect(t.requests.some((r) => r.method === "session/setThinkingLevel" && (r.params as { level?: string }).level === "high")).toBe(true);
+  });
+
+  it("setThinkingLevel 未物化会话(unknown session):暂存 pending,首个 prompt 落定后补发", async () => {
+    const { t, b } = makeBackend();
+    t.errors.set("session/setThinkingLevel", new Error("unknown session: s-test"));
+    await b.setThinkingLevel("low"); // 不炸:暂存
+    // 首个 prompt 后补发
+    t.errors.delete("session/setThinkingLevel");
+    await b.sendMessage("hi");
+    expect(t.requests.some((r) => r.method === "session/setThinkingLevel" && (r.params as { level?: string }).level === "low")).toBe(true);
+  });
+
+  it("setThinkingLevel 旧适配插件缺面(unknown method):记缺面 + no-op,不打断发送", async () => {
+    const { t, b } = makeBackend();
+    t.errors.set("session/setThinkingLevel", unknownMethod("session/setThinkingLevel"));
+    const onMissing = vi.fn();
+    b.capabilities.dsh.onMissing = onMissing;
+    await expect(b.setThinkingLevel("high")).resolves.toBeUndefined();
+    expect(b.capabilities.dsh.missing.has("session/setThinkingLevel")).toBe(true);
+    expect(onMissing).toHaveBeenCalledWith("session/setThinkingLevel");
+  });
+
+  it("setThinkingLevel 校验拒绝(模型不支持该档位):照常外抛,诚实立即反馈", async () => {
+    const { t, b } = makeBackend();
+    t.errors.set("session/setThinkingLevel", new DshRpcError('provider "p" model "m" does not support reasoning effort "xhigh"', -32000, "session/setThinkingLevel"));
+    await expect(b.setThinkingLevel("xhigh")).rejects.toThrow(/does not support reasoning effort/);
+  });
+
+  it("getThinkingLevels 补面查询:答档位清单;缺面 → 空清单(壳藏控件)", async () => {
+    const { t, b } = makeBackend();
+    t.results.set("session/getThinkingLevels", { levels: ["off", "low", "high"] });
+    await expect(b.capabilities.dsh.getThinkingLevels!()).resolves.toEqual(["off", "low", "high"]);
+    // 缺面:unknown method → 空清单,不抛
+    t.errors.set("session/getThinkingLevels", unknownMethod("session/getThinkingLevels"));
+    const b2 = new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m", sessionId: "s-2" });
+    await expect(b2.capabilities.dsh.getThinkingLevels!()).resolves.toEqual([]);
+  });
+});

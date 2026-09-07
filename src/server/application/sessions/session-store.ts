@@ -1756,11 +1756,13 @@ export class SessionStore implements
     // §atomic-send 修订:强度对齐只对「支持运行时切档」的内核生效(能力探测,非内核身份硬分支)。
     // 根因:composer 的 pickModel 无条件把默认档位盖进 pending,而 setThinkingLevel 已从
     // PiBackendExtensions 提升进契约、dsh 继承缺面默认抛错——dsh 每次带 pending 发送都被它打断成
-    // 「当前内核不支持思考强度切换」。dsh 的 reasoningEffort 在 initialize/settings.yaml 定、
-    // 无运行时 RPC,发送路径上该意图无意义 → 跳过而非抛错;显式切档(setThinkingLevel IPC /
-    // cycleThinkingLevel / immediate 模式)仍走契约抛错显形(§7.6 显式降级)。
-    if (prefs?.thinkingLevel && this.activeProc()?.backend.capabilities.pi) {
-      await this.setThinkingLevel(prefs.thinkingLevel);
+    // 「当前内核不支持思考强度切换」。dsh 侧:适配插件补面后(dsh-thinking-level.md,
+    //  capabilities.dsh.getThinkingLevels 在 = session/setThinkingLevel 热切面在)走对齐;
+    //  补面缺席(旧插件)时 DshBackend.setThinkingLevel 懒探测记缺面 + no-op,发送不炸。
+    if (prefs?.thinkingLevel) {
+      const be = this.activeProc()?.backend;
+      const canSwitchThinking = !!be && (be.capabilities.pi != null || be.capabilities.dsh?.getThinkingLevels != null);
+      if (canSwitchThinking) await this.setThinkingLevel(prefs.thinkingLevel);
     }
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
@@ -2089,8 +2091,17 @@ export class SessionStore implements
     });
   }
 
+  /** 当前模型可用的思考档位清单(能力驱动,§7.6):pi 走扩展面 RPC;dsh 走补面查询
+   *  (capabilities.dsh.getThinkingLevels,桌面适配插件提供,docs/design/dsh-thinking-level.md);
+   *  无活进程/两面皆缺 → 空清单(调用方/renderer 藏档位控件,显式降级,不抛错刷屏)。 */
   async getThinkingLevels(): Promise<string[]> {
-    return this.piSend((pi) => pi.getThinkingLevels());
+    const proc = this.activeProc();
+    if (!proc || !proc.backend.alive) return [];
+    const pi = proc.backend.capabilities.pi as PiBackendExtensions | undefined;
+    if (pi) return pi.getThinkingLevels();
+    const dshLevels = proc.backend.capabilities.dsh?.getThinkingLevels;
+    if (dshLevels) return dshLevels();
+    return [];
   }
 
   async setThinkingLevel(level: string): Promise<void> {

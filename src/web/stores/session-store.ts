@@ -353,15 +353,16 @@ function refreshStats(): void {
 }
 
 /** thinkingLevels 框架唯一拉取口:快照到达/模型切换时调(档位清单随模型变)。
- *  thinkingLevels 是 pi 专属能力(§7.6):非 pi 内核不拉取——避免静默发一个
- *  注定抛「不支持 pi 专属命令」的 RPC。空清单不覆盖——内核异常回空时保持现值,
+ *  能力探测门槛(§7.6):pi 扩展面 或 dsh 补面(dsh-thinking-level.md)任一在才拉——
+ *  避免对无切档面的会话静默发一个注定失败的 RPC。空清单不覆盖——内核异常回空时保持现值,
  *  与 stats 的 catch 兜底同语义。 */
 function refreshThinkingLevels(): void {
-  if (!useSessionStore.getState().capabilities.piExtension) return;
+  const caps = useSessionStore.getState().capabilities;
+  if (!caps.piExtension && !caps.dshExtension) return;
   const gen = sessionGen;
   void window.kernel.sessions.pi.getThinkingLevels()
     .then((ls) => { if (gen === sessionGen && ls.length > 0) useSessionStore.setState({ thinkingLevels: ls }); })
-    .catch(() => { /* pi 中途退出:保持现状,下次快照/切模型再试 */ });
+    .catch(() => { /* 内核中途退出/补面缺位:保持现状,下次快照/切模型再试 */ });
 }
 
 /** 当前会话扩展能力面拉取(main 侧 capabilities 投影;内核切换/启动时调)。 */

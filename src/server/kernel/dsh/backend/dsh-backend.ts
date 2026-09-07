@@ -90,9 +90,12 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   /** 懒探测记下的缺面方法名(session/xxx)。首次「unknown method」时记录,本进程内不再重调。 */
   private readonly missingMethods = new Set<string>();
 
-  /** dsh 能力面(§7.6):missing 是活缺面清单,onMissing 由壳绑定后广播降级事件。 */
+  /** dsh 能力面(§7.6):missing 是活缺面清单,onMissing 由壳绑定后广播降级事件。
+   *  getThinkingLevels:思考档位清单查询(补面,dsh-thinking-level.md)——桌面适配插件
+   *  拦截 session/getThinkingLevels 提供;旧版插件无此面 → 懒探测记缺面 + 空清单,
+   *  壳据此藏档位控件(显式降级,不伪造可切)。 */
   override readonly capabilities: { dsh: DshCapabilities } = {
-    dsh: { missing: this.missingMethods, onMissing: null },
+    dsh: { missing: this.missingMethods, onMissing: null, getThinkingLevels: () => this.fetchThinkingLevels() },
   };
 
   /** 能力轴(docs/model-switching.md §11.2):运行时切模型 = session/setModel 不缺面。
@@ -222,6 +225,57 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
         ? { images: images.map(i => ({ data: i.data, mediaType: i.mimeType, ...(i.name ? { name: i.name } : {}) })) }
         : {}),
     });
+    // 首个 prompt 落定即物化服务端会话——此前因 unknown session 暂存的思考档位在此补发
+    // (与 pi 的 pendingModelPrefs 同款模式);补发失败只记日志不炸发送(首个 step 已按旧档位出发)。
+    if (this.pendingThinkingLevel !== undefined) await this.flushThinkingLevel().catch((e) => console.warn("[dsh-backend] 思考档位补发失败:", e));
+  }
+
+  /** 思考档位暂存:会话未物化(unknown session)时 setThinkingLevel 记此,首个 prompt 后补发。 */
+  private pendingThinkingLevel: string | undefined;
+
+  /** 补发暂存的思考档位;一次性(成败都清账,不无限重试)。 */
+  private async flushThinkingLevel(): Promise<void> {
+    const level = this.pendingThinkingLevel;
+    this.pendingThinkingLevel = undefined;
+    if (level === undefined) return;
+    await this.requestSession(DSH_METHODS.sessionSetThinkingLevel, { sessionId: this.sessionId, level });
+  }
+
+  /** override 契约缺面默认(dsh-thinking-level.md):运行时切思考深度经桌面适配插件的
+   *  session/setThinkingLevel(installModelSelection 热切,下一 step 生效,不重启)。
+   *  降级纪律:旧版适配插件无此面 → 懒探测记缺面 + no-op(capabilityDegraded 显形,
+   *  不打断发送);会话未物化(首个 prompt 前)→ 暂存 pending,首发落定补发;
+   *  校验拒绝(模型不支持该档位)等真错误照常外抛——诚实,立即反馈。 */
+  override async setThinkingLevel(level: string): Promise<void> {
+    try {
+      await this.requestSession(DSH_METHODS.sessionSetThinkingLevel, { sessionId: this.sessionId, level });
+      this.pendingThinkingLevel = undefined;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (this.missingMethods.has(DSH_METHODS.sessionSetThinkingLevel)) {
+        console.warn("[dsh-backend] 运行时切思考深度缺面:该 dsh 适配插件版本没有 session/setThinkingLevel,档位停在配置值");
+        return;
+      }
+      if (msg.includes("unknown session")) {
+        this.pendingThinkingLevel = level;
+        return;
+      }
+      throw e;
+    }
+  }
+
+  /** 思考档位清单(补面查询):桌面适配插件答精确模型的支持档位;无推理元数据的模型 →
+   *  空清单(壳藏档位控件);旧版插件缺面 → 懒探测记录 + 空清单。 */
+  private async fetchThinkingLevels(): Promise<string[]> {
+    try {
+      const res = await this.requestSession<{ levels?: unknown }>(DSH_METHODS.sessionGetThinkingLevels, { sessionId: this.sessionId });
+      return Array.isArray(res?.levels) ? res.levels.filter((l): l is string => typeof l === "string") : [];
+    } catch (e) {
+      if (this.missingMethods.has(DSH_METHODS.sessionGetThinkingLevels)) return [];
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("unknown session")) return [];
+      throw e;
+    }
   }
 
   async abort(): Promise<void> {

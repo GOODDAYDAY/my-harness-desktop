@@ -63,6 +63,57 @@ const modelSelectionRefs = new WeakMap();
 
 const __dshServerHandleRequest = HarnessSdkJsonRpcServer.prototype.handleRequest;
 HarnessSdkJsonRpcServer.prototype.handleRequest = async function (method, params) {
+  // ============================================================================================
+  // 5b. 思考档位补面(docs/design/dsh-thinking-level.md):dsh 运行时本无切档面(reasoningEffort
+  //     只在配置/握手),这里经 installModelSelection 的同一热切机制补——不 dispose、不重启,
+  //     下一 step 的 agent/request 钩子自动应用。清单/校验都经 ctx.llm(与 dsh-web 的
+  //     session.selectModel 同一校验面):模型不支持的档位 resolveCallConfig 抛错,诚实拒绝。
+  // ============================================================================================
+  if (method === "session/getThinkingLevels") {
+    const record = this.sessions.get(params.sessionId);
+    const agent = record?.handle?.agent;
+    // 当前路由:热切选择 ref → agent 握手值 → server 握手默认(会话未物化时首发前查档位是
+    // 合法路径,不能因 unknown session 把档位查询打死)。
+    const sel = agent ? modelSelectionRefs.get(agent)?.current : undefined;
+    const provider = params.provider ?? sel?.provider ?? agent?.options?.provider ?? this.provider;
+    const model = params.model ?? sel?.model ?? agent?.options?.model ?? this.model;
+    const llm = this.ctx.get("llm");
+    if (!llm) throw new Error("llm 服务不可用(无法解析思考档位)");
+    const info = await llm.resolveModelInfo(provider, model);
+    // DEBUG(临时,定位后删):档位清单为空的原因定位——连设置缝服务的原始段落一起倒出来
+    try {
+      const { appendFileSync } = await import("node:fs");
+      const served = this.ctx.get("settings")?.get?.("llm-pi-ai");
+      const servedModel = served?.providers?.[provider]?.models?.find?.((m) => m?.id === model);
+      appendFileSync(join(homedir(), ".dsh", "levels-debug.log"), `${Date.now()} reasoning=${JSON.stringify(info?.reasoning ?? null)} servedModel=${JSON.stringify(servedModel ?? "NO-MODEL")}\n`);
+    } catch { /* ignore */ }
+    // 无推理元数据的模型:reasoning 缺席 → 空清单(壳据此藏档位控件,显式降级,不伪造可切)。
+    return { levels: (info.reasoning?.efforts ?? []).map((e) => e.id) };
+  }
+  if (method === "session/setThinkingLevel") {
+    const record = this.sessions.get(params.sessionId);
+    if (!record) throw new Error(`unknown session: ${params.sessionId}`);
+    const agent = record.handle.agent;
+    const sel = modelSelectionRefs.get(agent)?.current;
+    const provider = params.provider ?? sel?.provider ?? agent.options.provider;
+    const model = params.model ?? sel?.model ?? agent.options.model;
+    const llm = this.ctx.get("llm");
+    if (!llm) throw new Error("llm 服务不可用(无法设置思考档位)");
+    // 校验先于落选择:不支持的档位抛错(诚实拒绝,下一发不会带着坏档位出去)。
+    const resolved = await llm.resolveCallConfig({ provider, model, reasoningEffort: params.level });
+    let ref = modelSelectionRefs.get(agent);
+    if (!ref) {
+      ref = { current: undefined, assembled: undefined };
+      modelSelectionRefs.set(agent, ref);
+      installModelSelection(agent.ctx, ref);
+    }
+    ref.current = {
+      provider: resolved.provider,
+      model: resolved.model,
+      ...(resolved.reasoningEffort !== undefined ? { reasoningEffort: resolved.reasoningEffort } : {}),
+    };
+    return {};
+  }
   if (method !== "session/setModel") {
     return __dshServerHandleRequest.call(this, method, params);
   }

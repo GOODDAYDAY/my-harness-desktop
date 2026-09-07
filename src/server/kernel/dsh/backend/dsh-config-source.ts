@@ -114,6 +114,17 @@ function jsFallback(expr: string): string | undefined {
   return m?.[2] ?? m?.[3];
 }
 
+/** 推理模型的默认思考档位映射(dsh-thinking-level.md §5):off 缺省(发请求时省略推理参数),
+ *  其余档 wire 值与档同名——pi-ai 的 openai-completions(reasoning_effort 参数)与
+ *  anthropic-messages(mapThinkingLevelToEffort)两路都按档名消费,同一张映射两路通用。
+ *  只在用户在模型管理页把模型标为 reasoning 时写入 settings.yaml(不标则模型无推理面)。 */
+const DEFAULT_REASONING_EFFORTS: Record<string, string | null> = {
+  off: null,
+  low: "low",
+  medium: "medium",
+  high: "high",
+};
+
 /** 把一条 model 形状(字符串 id 或 {id,name,contextWindow,maxTokens})归一成 DshModelSpec。 */
 function toModelSpec(v: unknown): DshModelSpec | null {
   if (typeof v === "string") return { id: v };
@@ -132,7 +143,12 @@ function toModelSpec(v: unknown): DshModelSpec | null {
       const n = typeof raw === "number" ? raw : isJsExpr(raw) && raw.__js ? Number(jsFallback(raw.__js)) : NaN;
       return Number.isFinite(n) ? n : undefined;
     };
-    return { id, name: str("name"), contextWindow: num("contextWindow"), maxTokens: num("maxTokens") };
+    return {
+      id, name: str("name"), contextWindow: num("contextWindow"), maxTokens: num("maxTokens"),
+      // 推理能力读回:reasoningEfforts 声明在 = 该模型可切思考深度(dsh-thinking-level.md §5;
+      //  中性面只携布尔,档位映射细节留在 settings.yaml 不动)。
+      ...(o.reasoningEfforts !== undefined ? { reasoning: true } : {}),
+    };
   }
   return null;
 }
@@ -367,20 +383,26 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
   async setProvider(provider: string, detail: Omit<DshProvider, "provider">): Promise<void> {
     assertPiAiRouteServiceable(provider, detail);
     const settings = this.readSettings();
+    const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
+    const providers = (ns.providers ?? {}) as Record<string, unknown>;
+    const route = (providers[provider] ?? {}) as Record<string, unknown>;
+    // 推理元数据(dsh-thinking-level.md §5 配套):模型标 reasoning → 展开 reasoningEfforts
+    // 档位映射(off=省略参数,其余档 wire 值与档同名——openai-completions 的 reasoning_effort
+    // 与 anthropic-messages 的 mapThinkingLevelToEffort 都按档名消费);未标 → 不写
+    // (无推理元数据的模型切档会抛 UNSUPPORTED_REASONING_EFFORT,诚实缺面,不伪造)。
+    // 档位声明随 models 整列表替换写入,与既有 models 语义一致。
     const writeModels = detail.models.map((m) => ({
       id: m.id,
       ...(m.name !== undefined ? { name: m.name } : {}),
       ...(m.contextWindow !== undefined ? { contextWindow: m.contextWindow } : {}),
       ...(m.maxTokens !== undefined ? { maxTokens: m.maxTokens } : {}),
+      ...(m.reasoning === true ? { reasoningEfforts: DEFAULT_REASONING_EFFORTS } : {}),
     }));
     const setStr = (target: Record<string, unknown>, key: string, v: string | undefined): void => {
       if (v === undefined) return;
       if (v === "") delete target[key];
       else target[key] = v;
     };
-    const ns = (settings["llm-pi-ai"] ?? {}) as Record<string, unknown>;
-    const providers = (ns.providers ?? {}) as Record<string, unknown>;
-    const route = (providers[provider] ?? {}) as Record<string, unknown>;
     setStr(route, "apiKeyEnv", deriveKeyRef(provider));
     setStr(route, "displayName", detail.displayName);
     setStr(route, "api", detail.api);

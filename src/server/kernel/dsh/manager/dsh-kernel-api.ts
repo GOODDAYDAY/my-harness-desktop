@@ -19,7 +19,7 @@ export function createDshModelsApi(
       baseUrl: p.baseURL,
       api: p.api,
       apiKey: p.apiKey ?? "",
-      models: p.models.map((m) => ({ id: m.id, name: m.name ?? m.id, contextWindow: m.contextWindow, maxTokens: m.maxTokens })),
+      models: p.models.map((m) => ({ id: m.id, name: m.name ?? m.id, reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens })),
     }));
 
   const setImpl = async (provider: string, detail: Omit<NeutralProvider, "id">): Promise<void> => {
@@ -28,7 +28,8 @@ export function createDshModelsApi(
       api: detail.api,
       baseURL: detail.baseUrl,
       apiKey: detail.apiKey,
-      models: detail.models.map((m) => ({ id: m.id, name: m.name, contextWindow: m.contextWindow, maxTokens: m.maxTokens })),
+      // reasoning 标记透传(写回时展开成 reasoningEfforts;dsh-thinking-level.md §5)
+      models: detail.models.map((m) => ({ id: m.id, name: m.name, reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens })),
     });
   };
 

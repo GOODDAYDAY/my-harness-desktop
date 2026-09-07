@@ -1,7 +1,8 @@
 // dsh-manager 插件 renderer ——「DSH 入口 · DSH 模型」TAB（薄 wrapper）。
 //
 // 模型配置走共享 base ModelConfigPage（kernel-design-spec.md §12.5）。dsh 的能力旗标：
-// reasoning=false（dsh 是 agent 级 reasoningEffort，非 per-model 布尔 → 显式降级，隐藏该列）。
+// reasoning=true(dsh-thinking-level.md §5:reasoning 标记写回 settings.yaml 时展开成
+// reasoningEfforts 档位映射,dsh 会话的思考档位切换自此可对模型逐条声明)。
 // 数据/保存走框架（config/onChange/dirty 由 SettingsPage 注入），本 wrapper 只填 spec。
 import { ModelConfigPage, usePluginContext, type SettingsComponentProps } from "@my-harness-desktop/react";
 
@@ -13,7 +14,7 @@ export function DshModelsPage(props: SettingsComponentProps): React.ReactNode {
     <ModelConfigPage
       api={ctx.kernelModels.dsh}
       i18nPrefix="dshModels"
-      capabilities={{ reasoning: false }}
+      capabilities={{ reasoning: true }}
       config={props.config}
       dirty={props.dirty ?? false}
       onChange={props.onChange}

@@ -167,6 +167,10 @@ export interface DshCapabilities {
   readonly missing: ReadonlySet<string>;
   /** 新缺面发现回调(壳绑定后广播降级事件，驱动 UI 置灰入口)。 */
   onMissing: ((method: string) => void) | null;
+  /** 思考档位清单查询(补面，docs/design/dsh-thinking-level.md)：桌面适配插件拦截
+   *  session/getThinkingLevels 提供;旧版适配插件无此面 → 调用时懒探测记缺面、
+   *  壳据此显式降级(藏档位控件),不静默、不伪造成功。 */
+  getThinkingLevels?: () => Promise<string[]>;
 }
 
 /**

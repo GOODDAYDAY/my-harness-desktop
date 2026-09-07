@@ -340,10 +340,17 @@ export function TimelineView(): React.ReactNode {
   }, [rewindTarget, closeRewind]);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
-  // 思考档位是 pi 专属能力(§7.6):dsh 无此面 → levels 置空,composer 不画档位 dropdown + cycle 落空。
+  // 思考档位清单(能力探测,§7.6):
+  // - pi 扩展面:内核 RPC 清单优先,空回退默认清单(与历史行为一致);
+  // - dsh 补面(dsh-thinking-level.md):只用精确模型清单(扩展答当前模型支持的档位),
+  //   空清单 = 模型无推理元数据/补面缺席 → 不渲染下拉(显式降级,诚实提示由
+  //   thinkingUnavailableHint 承担),不拿 DEFAULT_LEVELS 伪造可切;
+  // - 两面皆无:空(不渲染)。
   const levels = capabilities.piExtension
     ? (thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS)
-    : [];
+    : capabilities.dshExtension
+      ? thinkingLevels
+      : [];
 
   // 模型清单装载已并入 refreshExternals(见上):挂载 + 刷新信号 + models.json 保存
   // (configFileSaved 按 path 匹配)三个触发统一重探,不再单独维护 load。

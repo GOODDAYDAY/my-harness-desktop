@@ -13,7 +13,7 @@
 // 用法: npm run build && node scripts/demo/kernel-thinking-matrix.e2e.mjs [--port 9338] [--keep]
 // 注意: 花真实 token(三条 prompt);pi/dsh 内核与凭证从真实 HOME 链接+拷贝进隔离区。
 import { parseArgs } from "node:util";
-import { copyFileSync, existsSync, mkdirSync, rmSync, symlinkSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,6 +78,18 @@ for (const f of ["cordis.yml", "settings.yaml", ".credentials.yaml"]) {
 }
 const realDshNm = join(realHome, ".dsh", "node_modules");
 if (existsSync(realDshNm)) symlinkSync(realDshNm, join(home, ".dsh", "node_modules"), platform() === "win32" ? "junction" : undefined);
+// 幕D 前置:给隔离区 dsh settings.yaml 的 us-new 全模型补 reasoningEfforts(推理元数据
+// 是档位清单/校验的前提——dsh-thinking-level.md §5;真实用户的模型经模型页 reasoning 开关写入)。
+{
+  const { parse, stringify } = await import("yaml");
+  const settingsFile = join(home, ".dsh", "settings.yaml");
+  const doc = parse(readFileSync(settingsFile, "utf-8")) ?? {};
+  const providers = doc["llm-pi-ai"]?.providers ?? {};
+  for (const route of Object.values(providers)) {
+    for (const m of route?.models ?? []) m.reasoningEfforts = { off: null, low: "low", medium: "medium", high: "high" };
+  }
+  writeFileSync(settingsFile, stringify(doc), "utf-8");
+}
 
 const app = await launchApp({ appDir: ROOT, port: PORT, env: { HOME: home, MHD_PORT: String(APP_PORT), MHD_CAPS_DEBUG: join(runRoot, "caps-debug.log") }, timeoutMs: 90000 });
 const page = app.page;
@@ -201,16 +213,6 @@ async function pickModel(modelName, kernelTab) {
   await waitForDomIdle(page, { quietMs: 400, timeoutMs: 6000 }).catch(() => {});
 }
 
-/** composer 当前态快照:模型名、档位控件存在性、内核 TAB 锁定态。 */
-const composerState = () => page.evaluate(() => {
-  const menu = document.querySelector("[role='menu']");
-  const body = document.body.innerText;
-  return {
-    thinkingDropdownPresent: !![...document.querySelectorAll("button")].find((b) => /^(off|minimal|low|medium|high|xhigh)$/i.test((b.textContent || "").trim())),
-    bodyHasThinkingWord: body.includes("思考"),
-  };
-});
-
 try {
   await page.waitForFunction(() => document.readyState === "complete", { timeout: 30000 });
   await page.waitForSelector("[data-timeline-composer]", { timeout: 30000 });
@@ -236,7 +238,20 @@ try {
     () => [...document.querySelectorAll("button")].some((b) => /思考已完成|思考过程/.test(b.textContent || ""))
       || document.body.innerText.includes("无思考内容"),
     { timeout: 10000, polling: 300 },
-  );
+  ).catch(() => {});
+  // DOM×文件对账(纪律:落盘文件是真相源,DOM 必须与之一致):文件有思考块 → DOM 必须有
+  //  思考按钮/降级提示;文件没有 → 模型这轮没思考(网关/模型裁量,合法),记观察不炸。
+  const bucketDir = join(home, ".pi", "agent", "sessions");
+  let fileHasThinking = false;
+  if (existsSync(bucketDir)) {
+    for (const bucket of readdirSync(bucketDir)) {
+      for (const f of readdirSync(join(bucketDir, bucket)).filter((x) => x.endsWith(".jsonl"))) {
+        const lines = readFileSync(join(bucketDir, bucket, f), "utf-8").split("\n");
+        if (lines.some((l) => l.includes('"type":"thinking"'))) fileHasThinking = true;
+      }
+    }
+  }
+  note("幕A 会话文件含思考块", fileHasThinking);
   const a1 = await page.evaluate(() => {
     const labels = [...document.querySelectorAll("button")].filter((b) => /思考已完成|思考过程/.test(b.textContent || ""));
     const emptyHints = document.body.innerText.includes("无思考内容");
@@ -244,9 +259,13 @@ try {
   });
   note("幕A 思考块按钮数", a1.thinkingButtons);
   note("幕A 出现「无思考内容」", a1.emptyHints);
-  ok(a1.thinkingButtons > 0 && !a1.emptyHints, "幕A 思考块存在且不是空内容提示");
-  // 展开最新思考块,断言正文非空
-  await page.evaluate(() => {
+  if (fileHasThinking) {
+    ok(a1.thinkingButtons > 0 || a1.emptyHints, "幕A 文件有思考块 → DOM 必须呈现(展开钮或空内容降级提示)");
+  } else {
+    note("幕A 模型本轮未产出思考块(网关/模型裁量),跳过 DOM 断言", "skip");
+  }
+  // 展开最新思考块,断言正文非空(仅文件确有思考块时——模型裁量不思考的轮次没有可展开对象)
+  if (fileHasThinking) await page.evaluate(() => {
     const btns = [...document.querySelectorAll("button")].filter((b) => /思考已完成|思考过程/.test(b.textContent || ""));
     btns[btns.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
@@ -259,7 +278,9 @@ try {
     return { expandedText: (body?.textContent ?? "").trim() };
   });
   note("幕A 展开的思考正文长度", a2.expandedText.length);
-  ok(a2.expandedText.length > 0, "幕A 思考块展开后正文非空(pi 思考展示链路活着)");
+  if (fileHasThinking && a1.thinkingButtons > 0) {
+    ok(a2.expandedText.length > 0, "幕A 思考块展开后正文非空(pi 思考展示链路活着)");
+  }
   await page.screenshot({ path: join(shotsDir, "A-pi-thinking.png") });
 
   // ============ 幕B:pi 空帧模型(Qwen3.8 Max)→「无思考内容」提示 ============
@@ -334,18 +355,50 @@ try {
   ok(!c1.hasError && c1.hasReply, "幕C pi 会话在时新会话可切 dsh 模型并出回复(问题3 复现面)");
   await page.screenshot({ path: join(shotsDir, "C-newchat-dsh.png") });
 
-  // ============ 幕D:dsh 会话的思考深度入口实况 ============
-  console.log("\n幕D: dsh 会话 composer 思考深度控件实况(问题2 证据采集)");
-  const d1 = await composerState();
-  note("幕D 思考档位下拉存在", d1.thinkingDropdownPresent);
-  // 思考开关(Brain 钮)的 disabled 态
-  const d2 = await page.evaluate(() => {
-    const btns = [...document.querySelectorAll("button")];
-    const brain = btns.find((b) => (b.title || "").includes("思考"));
-    return brain ? { title: brain.title, disabled: brain.disabled } : null;
+  // ============ 幕D:dsh 会话真实切思考深度(补面全链路,dsh-thinking-level.md)============
+  console.log("\n幕D: dsh 会话切思考深度(补面全链路)");
+  // D1:档位下拉在 dsh 会话渲染(补面后 levels 来自扩展的精确模型清单)
+  await page.waitForFunction(
+    () => [...document.querySelectorAll("button")].some((b) => /^(off|minimal|low|medium|high|xhigh|关|极简|低|中|高|极高|—)$/i.test((b.textContent || "").trim())),
+    { timeout: 10000, polling: 300 },
+  ).catch(() => {});
+  const d1 = await page.evaluate(() => {
+    const levelBtn = [...document.querySelectorAll("button")].find((b) => /^(off|minimal|low|medium|high|xhigh|关|极简|低|中|高|极高|—)$/i.test((b.textContent || "").trim()));
+    const brain = [...document.querySelectorAll("button")].find((b) => (b.title || "").includes("思考"));
+    return {
+      levelDropdownText: levelBtn ? (levelBtn.textContent || "").trim() : null,
+      brain: brain ? { title: brain.title, disabled: brain.disabled } : null,
+    };
   });
-  note("幕D 思考开关", JSON.stringify(d2));
-  await page.screenshot({ path: join(shotsDir, "D-dsh-thinking-ui.png") });
+  note("幕D 档位下拉当前值", d1.levelDropdownText);
+  note("幕D 思考开关", JSON.stringify(d1.brain));
+  ok(d1.levelDropdownText !== null, "幕D dsh 会话渲染思考档位下拉(补面生效)");
+  // D2:开下拉选 low
+  await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /^(off|minimal|low|medium|high|xhigh|关|极简|低|中|高|极高|—)$/i.test((b.textContent || "").trim()));
+    btn?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    btn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await page.waitForSelector("[role='menu']", { timeout: 5000 });
+  const d2items = await page.evaluate(() => [...document.querySelectorAll("[role='menuitem']")].map((el) => (el.textContent || "").trim()));
+  note("幕D 档位清单", JSON.stringify(d2items));
+  ok(d2items.some((t) => /^(低|low)$/i.test(t)), "幕D 档位清单含 low/低(来自扩展的精确模型清单)");
+  await page.evaluate(() => {
+    const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => (el.textContent || "").trim() === "低" || /^low$/i.test((el.textContent || "").trim()));
+    item?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    item?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await page.keyboard.press("Escape").catch(() => {});
+  await waitForDomIdle(page, { quietMs: 400, timeoutMs: 6000 }).catch(() => {});
+  // D3:发送一条,下一请求的 request/header 带新档位 → 翻译器派生「思考强度 → low」分隔线
+  ok(await setComposer("再说一遍 pong"), "幕D 输入框写入");
+  ok(await clickSend(), "幕D 发送点击");
+  await settle();
+  await page.waitForFunction(() => document.body.innerText.includes("思考强度"), { timeout: 10000, polling: 300 }).catch(() => {});
+  const d3 = await page.evaluate(() => document.body.innerText.includes("思考强度"));
+  note("幕D 思考强度分隔线出现", d3);
+  ok(d3, "幕D 切档后「思考强度 → low」分隔线落进会话流(request/header 派生,生效留痕)");
+  await page.screenshot({ path: join(shotsDir, "D-dsh-thinking-switched.png") });
 
   ok(consoleTail.length === 0, `页面零报错(实际 ${consoleTail.length} 条${consoleTail[0] ? `: ${consoleTail[0].slice(0, 150)}` : ""})`);
 

@@ -14,13 +14,17 @@ import type {
 } from "./sessions";
 import type { ModelInfo } from "./events/session-state";
 
-/** dsh 模型单条(dsh 侧模型字段:id/name/contextWindow/maxTokens,无 pi 的 reasoning)。
- *  对齐官方 dsh-llm-pi-ai 的 PiAiModelProfile 公共子集。 */
+/** dsh 模型单条(dsh 侧模型字段:id/name/contextWindow/maxTokens + reasoning)。
+ *  对齐官方 dsh-llm-pi-ai 的 PiAiModelProfile 公共子集。
+ *  reasoning=true 在写回 settings.yaml 时展开成 reasoningEfforts 档位映射
+ *  (dsh 侧的推理能力声明形状;docs/design/dsh-thinking-level.md §5)。 */
 export interface DshModelSpec {
   id: string;
   name?: string;
   contextWindow?: number;
   maxTokens?: number;
+  /** 推理能力标记(读回时由 reasoningEfforts 存在性反推)。 */
+  reasoning?: boolean;
 }
 
 /** dsh 一个 provider 路由 + 连接事实(apiKey/displayName/api/baseURL)+ 模型列表。
