@@ -1,7 +1,9 @@
 // StickerComposerButton —— composerActions 槽贡献的表情包快速入口按钮 + 网格选择器。
 // 按钮渲染进 composer 底部工具栏的 children(设计 docs/design/sticker-plugin.md §5)。
-// 点击弹选择器:网格铺贴纸(banner 图/标题),↑↓←→ 导航、Enter 直接发、Esc 关;
-// 每格 hover 出「加入输入框」小按钮(复用 stickers:fillComposer 通道,走 timeline 挂图)。
+// 点击弹选择器:网格铺贴纸(banner 图/标题),←→ 水平移动、↑↓ 垂直跨行(列保持回绕)、
+// Enter 直接发、Esc 关;顶栏中缝是迷你灰字键位提示,选中项标题条固定在网格上方
+// (纯图贴纸键盘导航时也能认出内容);每格 hover 出「加入输入框」小按钮
+// (复用 stickers:fillComposer 通道,走 timeline 挂图)。
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -9,6 +11,15 @@ import { Sticker, TextCursorInput } from "lucide-react";
 import { usePluginContext, useSessionStore, useUiStore } from "@my-harness-desktop/react";
 import { loadStickers, type LayeredSticker } from "../client/stickers-store";
 import { readBannerDataUri, useBannerDataUri } from "./sticker-card";
+import { moveIndex, resolveGridCols } from "./picker-grid";
+
+/** 选中项一行摘要:有标题给「标题 · 内容首行」;无标题给首行;两者相同不重复。 */
+function selectedLabel(s: LayeredSticker, untitled: string): string {
+  const title = s.title?.trim() ?? "";
+  const firstLine = (s.content.split("\n")[0] ?? "").trim();
+  if (title && firstLine && title !== firstLine) return `${title} · ${firstLine}`;
+  return title || firstLine || untitled;
+}
 
 /** 选择器单格:优先 banner 图,无图显示标题/内容摘要;选中高亮,hover 出「加入输入框」。 */
 function StickerCell({ sticker, selected, onSelect, onSend, onFill }: {
@@ -18,10 +29,12 @@ function StickerCell({ sticker, selected, onSelect, onSend, onFill }: {
   onSend: () => void;
   onFill: () => void;
 }): ReactNode {
+  const { t } = useTranslation();
   const uri = useBannerDataUri(sticker.banner);
-  const label = sticker.title || sticker.content.split("\n")[0] || "贴纸";
+  const label = sticker.title || sticker.content.split("\n")[0] || t("stickers.untitled");
   return (
     <div
+      data-sticker-cell
       className="group relative cursor-pointer rounded-[var(--radius-sm)] border overflow-hidden"
       style={{
         width: 72, height: 72,
@@ -29,6 +42,7 @@ function StickerCell({ sticker, selected, onSelect, onSend, onFill }: {
         outline: selected ? "1px solid var(--color-primary)" : "none",
         background: "var(--color-surface)",
       }}
+      title={label}
       onClick={onSelect}
       onDoubleClick={onSend}
     >
@@ -43,11 +57,11 @@ function StickerCell({ sticker, selected, onSelect, onSend, onFill }: {
       <div className="absolute inset-x-0 top-0 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity">
         <button
           type="button"
-          title="加入输入框（不发送，可改后再发）"
+          title={t("stickers.fillComposer")}
           onClick={(e) => { e.stopPropagation(); onFill(); }}
           className="mt-1 flex items-center gap-0.5 px-1.5 py-0.5 rounded-[var(--radius-xs)] border border-[var(--color-border)] bg-[var(--color-bg)]/90 text-[var(--color-muted)] hover:text-[var(--color-fg)] text-[length:var(--font-size-xs)] cursor-pointer"
         >
-          <TextCursorInput className="size-3" />加入
+          <TextCursorInput className="size-3" />{t("stickers.fillShort")}
         </button>
       </div>
     </div>
@@ -63,6 +77,7 @@ export function StickerComposerButton(): ReactNode {
   const [stickers, setStickers] = useState<LayeredSticker[]>([]);
   const [index, setIndex] = useState(0);
   const btnRef = useRef<HTMLButtonElement | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   // 打开时读一次贴纸(与面板/设置页同一份数据);settingsChanged 后重读。
@@ -108,13 +123,16 @@ export function StickerComposerButton(): ReactNode {
     setOpen(false);
   }, [ctx]);
 
-  // 键盘导航:←↑→↓ 在网格移动(平铺回绕),Enter 直接发,Esc 关。
+  // 键盘导航:←→ 水平平移,↑↓ 垂直跨行(列数由网格实际轨道解析),Enter 直接发,Esc 关。
   useEffect(() => {
     if (!open || stickers.length === 0) return;
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); setIndex((i) => (i + 1) % stickers.length); return; }
-      if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); setIndex((i) => (i - 1 + stickers.length) % stickers.length); return; }
+      if (e.key.startsWith("Arrow")) {
+        e.preventDefault();
+        setIndex((i) => moveIndex(i, e.key, resolveGridCols(gridRef.current, window.innerWidth), stickers.length));
+        return;
+      }
       if (e.key === "Enter" && stickers[index]) { e.preventDefault(); void send(stickers[index]); }
     };
     window.addEventListener("keydown", onKey);
@@ -138,13 +156,15 @@ export function StickerComposerButton(): ReactNode {
           onClose={() => setOpen(false)}
           title={t("stickers.composerEntry")}
           hint={t("stickers.pickerHint")}
+          keysHint={t("stickers.pickerKeys")}
+          selection={stickers[index] ? selectedLabel(stickers[index], t("stickers.untitled")) : undefined}
         >
           {stickers.length === 0 ? (
             <div className="p-4 text-center text-[var(--color-muted)] text-[length:var(--font-size-xs)]">
               {t("stickers.pickerEmpty")}
             </div>
           ) : (
-            <div className="grid gap-2 p-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(72px, 72px))" }}>
+            <div ref={gridRef} data-sticker-grid className="grid gap-2 p-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(72px, 72px))" }}>
               {stickers.map((n, i) => (
                 <StickerCell
                   key={n.id}
@@ -163,12 +183,15 @@ export function StickerComposerButton(): ReactNode {
   );
 }
 
-/** 选择器弹层(portal,锚在按钮上方展开):点击空白/Esc 关;外层处理键盘。 */
-function PickerPortal({ pos, onClose, title, hint, children }: {
+/** 选择器弹层(portal,锚在按钮上方展开):点击空白/Esc 关;外层处理键盘。
+ *  顶栏三段:左标题 / 中缝迷你灰字键位提示 / 右操作提示;选中项标题条固定在网格上方。 */
+function PickerPortal({ pos, onClose, title, hint, keysHint, selection, children }: {
   pos: { top: number; left: number };
   onClose: () => void;
   title: string;
   hint: string;
+  keysHint: string;
+  selection?: string;
   children: ReactNode;
 }): ReactNode {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -183,6 +206,7 @@ function PickerPortal({ pos, onClose, title, hint, children }: {
   return createPortal(
     <div
       ref={ref}
+      data-sticker-picker
       style={{
         position: "fixed", top: pos.top, left: Math.max(8, pos.left),
         transform: "translateY(-100%)",
@@ -194,14 +218,15 @@ function PickerPortal({ pos, onClose, title, hint, children }: {
         boxShadow: "var(--shadow-lg)",
       }}
     >
-      <div className="flex items-center justify-between px-3 pt-2">
-        <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{title}</span>
-        <span className="text-[length:var(--font-size-xs)] text-[var(--color-muted)]">{hint}</span>
+      <div className="flex items-center gap-2 px-3 pt-2">
+        <span className="shrink-0 text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{title}</span>
+        <span data-sticker-keys-hint className="flex-1 truncate text-center text-[10px] leading-4 text-[var(--color-muted)]">{keysHint}</span>
+        <span className="shrink-0 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">{hint}</span>
       </div>
+      {selection && (
+        <div data-sticker-selection className="truncate px-3 pt-1 text-[length:var(--font-size-xs)] text-[var(--color-fg)]">{selection}</div>
+      )}
       <div className="max-h-72 overflow-y-auto">{children}</div>
-      <div className="px-3 py-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
-        Enter 直接发 · ↑↓←→ 选择 · Esc 关闭 · 每格 hover「加入」= 加入输入框
-      </div>
     </div>,
     document.body,
   );

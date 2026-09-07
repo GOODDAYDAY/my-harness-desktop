@@ -30,5 +30,9 @@
   "stickers.newSticker": "New sticker",
   "stickers.composerEntry": "Sticker picker",
   "stickers.pickerHint": "Pick a sticker",
-  "stickers.pickerEmpty": "No stickers yet — create one in the sticker panel"
+  "stickers.pickerKeys": "Enter sends · ↑↓←→ select · Esc closes · hover \"Add\" fills input",
+  "stickers.pickerEmpty": "No stickers yet — create one in the sticker panel",
+  "stickers.untitled": "Sticker",
+  "stickers.fillComposer": "Add to composer (not sent yet — edit before sending)",
+  "stickers.fillShort": "Add"
 }

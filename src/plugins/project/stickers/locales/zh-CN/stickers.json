@@ -30,5 +30,9 @@
   "stickers.newSticker": "新建贴纸",
   "stickers.composerEntry": "表情包快速入口",
   "stickers.pickerHint": "选择贴纸",
-  "stickers.pickerEmpty": "还没有贴纸，去表情包面板新建"
+  "stickers.pickerKeys": "Enter 直接发 · ↑↓←→ 选择 · Esc 关闭 · hover「加入」入输入框",
+  "stickers.pickerEmpty": "还没有贴纸，去表情包面板新建",
+  "stickers.untitled": "贴纸",
+  "stickers.fillComposer": "加入输入框（不发送，可改后再发）",
+  "stickers.fillShort": "加入"
 }
