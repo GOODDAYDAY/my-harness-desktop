@@ -4,6 +4,7 @@
   "shell.thinkingStalled": "思考時間較長…",
   "shell.thinkingProcess": "思考過程",
   "shell.thinkingDone": "思考已完成({{duration}})",
+  "shell.thinkingEmpty": "無思考內容",
   "shell.toolParams": "參數",
   "shell.thinkingInProgress": "思考中…",
   "shell.emptyMessage": "(空訊息)",

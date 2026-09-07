@@ -65,7 +65,8 @@
 - 停顿提示：`useStalledHint(streaming, content.thinking.length)` 复用流式件（§5）——思考文本 800ms 不增长时显示「思考时间较长…」。
 - 标签三段式（第 76–81 行）：流式期 `stalled ? shell.thinkingStalled : shell.thinkingInProgress` 并拼 `elapsed` 实时计时；非流式 `shell.thinkingDone`（带 `{{duration}}`）或 `shell.thinkingProcess`。
 - `content.redacted` 分支（第 61–72 行）：只渲染一个带 `Brain` 图标的 `shell.thinkingFiltered` 按钮，不渲染正文——思考被模型方过滤时不假装有内容。
-- 正文渲染：展开时 `<StreamTextReveal text={content.thinking} streaming={streaming} />`，流式中防抖 + 光标 + 停顿提示，非流式直接渲染原文。`renderer/thinking-chain-block.test.tsx` 用 `vi.useFakeTimers` 锁了两条回归：流式期 label 必须露出实时计时（不是只显示静态「思考中…」）、非流式期保持「思考已完成」语义。
+- 空思考定稿的显式降级（第 84–93 行）：非流式 + `thinking` 正文为空（trim 后零长）→ 渲染静态提示行（`Brain` 图标 + label + `shell.thinkingEmpty`「无思考内容」），**无 chevron、不可点**——空正文配可点展开器等于假装「点开有东西」（实测观感 = 点击没用、不展开、点开空白；数据源是供应商只回空 thinking 帧的网关模型，pi 落盘 `thinking:""`）。流式期不走此分支（正文可能还在路上），有正文的块照旧点击展开全文（无任何截断）。
+- 正文渲染：展开时 `<StreamTextReveal text={content.thinking} streaming={streaming} />`，流式中防抖 + 光标 + 停顿提示，非流式直接渲染原文。`renderer/thinking-chain-block.test.tsx` 用 `vi.useFakeTimers` 锁了四条回归：流式期 label 必须露出实时计时（不是只显示静态「思考中…」）、非流式期保持「思考已完成」语义、空思考块不渲染展开器、有正文块点击展开全文再点收起。
 
 ### 4.2 `toolCall` → 四张卡（Bash/Edit/Read/Default）
 
@@ -177,7 +178,7 @@
 ## 8 i18n：三个命名空间、四语言、归属尺子
 
 - `locales/` 下每语言三个文件：`shell.json`（组件自身文案）、`timeline.json`（divider 的 `i18nKey` 目标）、`plugin.json`（插件 displayName/description）。
-- `shell.json` 承载 `ThinkingChainBlock`/`DefaultCard`/`UserBubble`/`CommentsOnlyBubble` 消费的 key：`shell.toolParams`、`shell.toolResult`、`shell.thinkingFiltered`、`shell.thinkingStalled`、`shell.thinkingProcess`、`shell.thinkingDone`、`shell.thinkingInProgress`、`shell.emptyMessage`、`shell.commentsOnly` 等。
+- `shell.json` 承载 `ThinkingChainBlock`/`DefaultCard`/`UserBubble`/`CommentsOnlyBubble` 消费的 key：`shell.toolParams`、`shell.toolResult`、`shell.thinkingFiltered`、`shell.thinkingStalled`、`shell.thinkingProcess`、`shell.thinkingDone`、`shell.thinkingEmpty`、`shell.thinkingInProgress`、`shell.emptyMessage`、`shell.commentsOnly` 等。
 - `timeline.json` 承载 divider 的 `i18nKey`：`timeline.modelChange`、`timeline.thinkingLevel`、`timeline.compaction`、`timeline.branchSummary`、`timeline.sessionRenamed`、`timeline.bookmark`、`timeline.unknownEntry`、`timeline.entry`、`timeline.divider`。这些 key 是 `sessionEntryToNeutral` 产出的契约 key，值是 message-blocks 供给的文案。
 - 归属尺子（设计文档 §4.4）：key 的消费者在哪个插件，key 就在哪个插件的 locales 里。divider 相关 key 随 `EntryDivider` 搬来 message-blocks；`shell.emptyMessage`/`shell.stopped`/`shell.error` 等消息行 chrome 文案留在 timeline（消费者是 `MessageRow`）。
 - 文案值全是主题 token 的消费者（`t("key")` 查 i18next），组件里没有一个写死的中文/英文文案——token key 是契约、值是内容，值与文案都外挂。

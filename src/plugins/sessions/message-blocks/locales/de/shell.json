@@ -4,6 +4,7 @@
   "shell.thinkingStalled": "Denkt noch…",
   "shell.thinkingProcess": "Denken",
   "shell.thinkingDone": "Nachgedacht ({{duration}})",
+  "shell.thinkingEmpty": "Keine Denkinhalte",
   "shell.toolParams": "Parameter",
   "shell.thinkingInProgress": "Denkt nach…",
   "shell.emptyMessage": "(leere Nachricht)",

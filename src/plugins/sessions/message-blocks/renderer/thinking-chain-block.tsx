@@ -80,6 +80,20 @@ export function ThinkingChainBlock({
       ? t("shell.thinkingDone", { duration: elapsed })
       : t("shell.thinkingProcess");
 
+  // 空思考定稿的显式降级(不静默):供应商只回了空 thinking 帧时(实测:anthropic-messages
+  // 网关的 reasoning 模型,content_block_start 后无 thinking_delta,pi 落盘 thinking:""),
+  // 块里没有任何正文——此时渲染「可点击展开器」等于假装点开有东西(实测观感 = 点击没用、
+  // 不展开、点开也看不到)。非流式 + 空正文 → 静态提示(保留时长信息),无 chevron、不可点;
+  // 流式期不受影响(正文可能还在路上),有正文的块照旧点击展开全文(无任何截断)。
+  if (!streaming && content.thinking.trim().length === 0) {
+    return (
+      <div className="mb-1 flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)]">
+        <Brain className="size-3.5" />
+        {label} · {t("shell.thinkingEmpty")}
+      </div>
+    );
+  }
+
   return (
     <div className="mb-1">
       <button
