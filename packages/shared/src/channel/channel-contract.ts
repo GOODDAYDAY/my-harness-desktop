@@ -212,7 +212,8 @@ export const IPC = {
     getSnapshot: "session:getSnapshot",
     getStats: "session:getStats",
     getThinkingLevels: "session:getThinkingLevels",
-    /** 列表行字段变更推送(归档/置顶/改名/删除后,第 21 项):各端据此重拉会话列表。 */
+    /** 列表行字段变更推送(归档/置顶/改名/删除后,第 21 项):payload 为 SessionHeaderChangedEvent,
+     *  自带补丁,客户端本地打行(copy 例外仍重拉,docs/design/neutral-storage-split.md §2.6)。 */
     headerChanged: "session:headerChanged",
     kernelEvent: "session:kernelEvent",
     open: "session:open",

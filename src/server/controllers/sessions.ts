@@ -3,7 +3,7 @@ import type { Gateway } from "../routing/gateway";
 import { sep } from "node:path";
 import { expandDesktopPath } from "../application/config/paths";
 import { IPC } from "@my-harness-desktop/shared";
-import type { ImageInput, SessionRole, SessionModelPrefs } from "@my-harness-desktop/shared";
+import type { ImageInput, SessionRole, SessionModelPrefs, SessionHeaderChangedEvent } from "@my-harness-desktop/shared";
 import type { DisplayMeta } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
 import type { KernelId } from "@my-harness-desktop/shared";
@@ -25,9 +25,11 @@ function assertSessionPathAllowed(p: string, paths: MainPaths): void {
 
 export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   const { sessionStore } = ctx;
-  // 列表行字段变更(归档/置顶/改名/删除/复制)后广播,各端重拉会话列表——
-  // 此前只写不播,操作端本地重拉,其他端纹丝不动(第 21 项「归档没有同步多端」根因)。
-  const notifyHeaderChanged = (payload: Record<string, unknown>): void =>
+  // 列表行字段变更(归档/置顶/改名/删除/复制)后广播,各端据此本地打补丁——
+  // 此前只写不播,操作端本地重拉,其他端纹丝不动(第 21 项「归档没有同步多端」根因);
+  // 再后来各端收到广播全量重拉(每端全目录 parse,被归档次数×客户端数乘法放大)——
+  // §neutral-storage-split §2.6 起 payload 类型化自带补丁,客户端本地打行,copy 例外仍重拉。
+  const notifyHeaderChanged = (payload: SessionHeaderChangedEvent): void =>
     gateway.broadcast(IPC.session.headerChanged, payload);
 
   gateway.register(IPC.session.start, async (_e, cwd: string, sessionPath?: string, role?: SessionRole) => {

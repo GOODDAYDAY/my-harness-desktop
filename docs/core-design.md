@@ -119,9 +119,9 @@
 
 ### 3.2 中立层是唯一真相源
 
-`SessionStore.list()`（`session-store.ts`）的实现只有一行核心：`this.neutralStore?.listByCwd(cwd)`。会话列表的唯一源是壳自己的中立层，不读内核存储。`openSession` 同样读中立层。会话创建即写空中立会话（`emptyNeutralSession`），「开始但未发言」的会话也进中立层——否则 list 会漏掉它。
+`SessionStore.list()`（`session-store.ts`）的实现只有一行核心：`this.neutralStore?.listByCwd(cwd)`。会话列表的唯一源是壳自己的中立层，不读内核存储。中立层按 header/entries 分文件存（`<ns>.header.json` + `<ns>.entries.json`，docs/design/neutral-storage-split.md），列表只读 header 小文件、返回不含 entries 的摘要；`openSession` 才读整棵树。会话创建即写空中立会话（`emptyNeutralSession`），「开始但未发言」的会话也进中立层——否则 list 会漏掉它。
 
-内核存储退为投影：`rename`/`updateHeader` 时，名字/置顶/归档先写中立层（真相源），再投影回内核存储（`projectHeaderToKernel`，失败不阻断——中立层才是真相源）。这条「投影失败不阻断」是有血泪教训的：早期 pi 投影因派生路径与 pi 实际文件名不匹配而抛「会话文件不存在」，把中立层写整个吞掉，归档/置顶一次就丢名。
+内核存储退为投影：`rename`/`updateHeader` 时，名字/工具配置先写中立层（真相源），再投影回内核存储（`projectHeaderToKernel`，失败不阻断——中立层才是真相源）；置顶/归档是例外——pi 头行 `pinned/archived` 查证零读者，投影直接跳过（§neutral-storage-split §2.5）。这条「投影失败不阻断」是有血泪教训的：早期 pi 投影因派生路径与 pi 实际文件名不匹配而抛「会话文件不存在」，把中立层写整个吞掉，归档/置顶一次就丢名。
 
 ### 3.3 纯函数 mutation
 

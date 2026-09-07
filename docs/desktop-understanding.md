@@ -195,15 +195,15 @@ stateDiagram-v2
 
 ## 四、会话生命周期：中立层是唯一真相源
 
-「中立层是真相源」是贯穿 `session-store.ts` 的一条红线，它对应不变量 #1「壳不读任何内核的存储」。落地载体是 `NeutralSessionStore`（65 行，纯 JSON 整读整写）：
+「中立层是真相源」是贯穿 `session-store.ts` 的一条红线，它对应不变量 #1「壳不读任何内核的存储」。落地载体是 `NeutralSessionStore`（header/entries 分文件存储，docs/design/neutral-storage-split.md）：
 
 ```ts
 class NeutralSessionStore {
-  get(ns) / put(session) / delete(ns) / listByCwd(cwd) / filePathOf(ns)
+  get(ns) / getHeader(ns) / put(session) / putHeader(ns, header) / delete(ns) / listByCwd(cwd) / filePathOf(ns)
 }
 ```
 
-每个中立会话是一个 `NeutralSession`（`neutralSessionId` + `header` + `lineages[]`），存 `<数据根>/sessions/<ns>.json`。内核的存储（pi 的 JSONL 文件、dsh 的 append-only 日志）是「这个中立树的投影」，不是真相。这条原则在四个生命周期动作里各有具体落地。
+每个中立会话是一个 `NeutralSession`（`neutralSessionId` + `header` + `lineages[]`），拆分存成 `<数据根>/sessions/<ns>.header.json`（列表行字段 + rootLineageId，几 KB）与 `<ns>.entries.json`（全部条目，大头）两个文件；遗留 `<ns>.json` 整树文件读到即懒迁移（拆开 + heal 头字段 + 删旧）。列表与写头只碰 header 小文件（`listByCwd` 返回不含 entries 的摘要），打开会话才读 entries。内核的存储（pi 的 JSONL 文件、dsh 的 append-only 日志）是「这个中立树的投影」，不是真相。这条原则在四个生命周期动作里各有具体落地。
 
 ### 4.1 新建：会话创建即写空中立层
 
@@ -435,7 +435,7 @@ sequenceDiagram
 
 **第一，心智负担集中在「多槽位并存」和「内核差异」。** `procs` 的二维表（会话 × 内核）意味着每个涉及进程的代码路径都要回答「是哪个内核、哪个会话、是否激活」。`dispatch` 里的「按 key 记账、激活全量、后台转增量」三分流，是「多会话并存」必须付出的复杂度。而内核差异（pi 有快照面、dsh 无；pi 有运行时切模、dsh 握手定死；pi 文件型、dsh 惰性）散落在 `sync`/`ensureForSend`/`setModel`/`materializeActiveLineage` 各处的能力探测分支里——虽然都用 `capabilities.pi` 而非 `kernel === "pi"` 硬分支，但「读代码时要同时装两套内核模型」是真实成本。
 
-**第二，中立层「双写」是真相源换来的持久化冗余。** 会话内容写中立层（真相源）+ 投影回内核存储（pi 文件头行、dsh rename），改名/归档/置顶要 `projectHeaderToKernel` + `writeNeutralHeader` 两笔。投影失败不阻断（中立层才是真相），但这意味着「内核侧存储可能短暂落后于中立层」，`sync` 的「进程→头」回写和 `pendingModelPrefs` 补写账，都是这个冗余的收尾。
+**第二，中立层「双写」是真相源换来的持久化冗余。** 会话内容写中立层（真相源）+ 投影回内核存储（pi 文件头行、dsh rename），改名/工具配置要 `projectHeaderToKernel` + `writeNeutralHeader` 两笔；归档/置顶已不投影（pi 头行 `pinned/archived` 零读者，docs/design/neutral-storage-split.md §2.5），`writeNeutralHeader` 也只写 header 小文件（§2.4），不再是整树读写。投影失败不阻断（中立层才是真相），但这意味着「内核侧存储可能短暂落后于中立层」，`sync` 的「进程→头」回写和 `pendingModelPrefs` 补写账，都是这个冗余的收尾。
 
 **第三，降级面（缺面/补面/降级三分法）把「能力差异」变成了「处处要处理的可选分支」。** dsh 缺 `get_state` 快照面 → `sync` 降级 no-op；dsh 缺运行时切模 → `ensureForSend` 停旧起新；dsh 缺 `steer/followUp` → `asPi` 抛错。这些降级是「不静默、不伪造成功」的诚实代价——但每一处降级都是一段「读代码时不可跳过」的分支。相比之下，一个单内核系统可以完全不用想这些。
 

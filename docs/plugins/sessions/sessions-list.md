@@ -54,20 +54,20 @@
 ## 4 数据流总览：会话列表从哪来
 
 - 列表数据的真相源是壳自己的中立层存储，不是任何内核的会话文件——这是本插件一个最容易误解、也最重要的架构事实。
-  - main 侧 `SessionStore.list(cwd)`（`src/server/application/sessions/session-store.ts` 第 599-604 行）的实现是 `this.neutralStore?.listByCwd(cwd)`，再逐条 `neutralToSessionInfo(s, cwd)` 映射。
-  - `NeutralSessionStore.listByCwd(cwd)`（`src/server/application/sessions/neutral-session-store.ts` 第 39-52 行）扫 `<数据根>/sessions/*.json`，按 `header.cwd === cwd` 过滤——它读的是壳自己写的 `NeutralSession` JSON 树，不读 pi 的 `.jsonl` 文件、不读 dsh 的 `session.jsonl.zstd`。
+  - main 侧 `SessionStore.list(cwd)`（`src/server/application/sessions/session-store.ts`）的实现是 `this.neutralStore?.listByCwd(cwd)`，再逐条把摘要映射成 `SessionInfo`。
+  - `NeutralSessionStore.listByCwd(cwd)`（`src/server/application/sessions/neutral-session-store.ts`）扫 `<数据根>/sessions/*.header.json`（**header/entries 分文件格局**，docs/design/neutral-storage-split.md），按 `header.cwd === cwd` 过滤——只读每个会话几 KB 的 header 小文件，**不再 parse 整棵会话树**（拆分前实测 1089 会话/308MB ≈1.75s/次；拆分后 ≈48ms）。遗留 `<ns>.json` 整树文件读到即懒迁移（拆开 + heal 头字段 + 删旧）。不读 pi 的 `.jsonl` 文件、不读 dsh 的 `session.jsonl.zstd`。
   - 代码注释明确标注这是 `§kernel-forkless §27 阶段 D` 的落地："会话列表的唯一源是壳自己的中立层，不读内核存储；path 是投影地址（由 lineageId 派生，§12.2），不再做主键"。
 
-- `neutralToSessionInfo(s, cwd)`（session-store.ts 第 624-646 行）把一条 `NeutralSession` 投影成渲染层要的 `SessionInfo`。
-  - `neutralSessionId` 直接来自 `s.neutralSessionId`（主键）；`id` 取根 lineage 的 `lineageId`（`s.lineages.find((l) => l.fork === null)?.lineageId ?? s.neutralSessionId`）。
+- 列表行的映射直接消费 `NeutralSessionSummary`（`{ neutralSessionId, rootLineageId, header }`，摘要类型刻意不带 lineages——列表想拿 entries 在类型层写不出来）。
+  - `neutralSessionId` 是主键；`id` 取摘要的 `rootLineageId`（clone/seed 会话根 lineageId ≠ ns，派生保留源 lineageId，故摘要单列携带）。
   - `path` 是**投影地址**，由 `catalog.projectionPath(cwd, rootLineageId)` 派生（pi = `piDerivedSessionPath`，dsh = 裸 lineageId），注释强调"投影地址是坐标系，不承诺磁盘上存在对应文件"。
-  - `name` / `created` / `modified` / `lastMessage` / `lastEntryId` / `pinned` / `archived` / `custom` 全部来自中立 header（`s.header.*`），其中 `modified` 用 `updatedAt ?? derived.updatedAt ?? createdAt` 兜底；`derivedHeaderFromSession(s)` 对历史旧数据（阶段 D 之前写入、缺 `lastMessage`/`lastEntryId`/`updatedAt`）做读时自愈回填。
+  - `name` / `created` / `modified` / `lastMessage` / `lastEntryId` / `pinned` / `archived` / `custom` 全部来自中立 header（`s.header.*`）；历史旧数据（阶段 D 之前写入、缺 `lastMessage`/`lastEntryId`/`updatedAt`）在**遗留文件懒迁移时**由 `derivedHeaderFromSession` 一次性 heal 落盘，列表热路径不再有读时兜底。
 
 - renderer 侧的会话元数据由框架 `useSessionStore` 统一拉取和维护，本插件零拉取、零失效维护。
   - `initSessionStore()`（`src/web/stores/session-store.ts` 第 612-657 行）在应用启动时订阅 `currentCwd` 变化与内核事件流，两者任一触发就 `loadForCwd()` → `useSessionStore.getState().loadSessionInfos(cwd)`。
   - `loadSessionInfos(cwd)`（第 394-411 行）调 `window.kernel.sessions.list(cwd)`，把返回的 `SessionInfo[]` 建成**双键 map**：每个会话既按 `path` 索引、又按 `neutralSessionId` 索引（第 401-406 行），并带 `sessionInfosCwd` 防竞态（切 cwd 后旧响应丢弃）。
   - 触发重拉的内核事件集合是 `sessionStart` / `messageStart` / `messageEnd` / `agentSettled`（第 652 行）——因为新文件落盘（sessionStart）、自动命名落 `session_info`（messageStart）、消息定稿（messageEnd）、轮次结束（agentSettled）都可能改变本目录的列表内容。
-  - 另外 `onHeaderChanged` 广播（第 662 行，第 21 项多端同步）也会触发 `loadForCwd()`——任一客户端归档/置顶/改名/删除会话后，本端列表跟着重拉。
+  - 另外 `onHeaderChanged` 广播（第 21 项多端同步 + neutral-storage-split §2.6）现在走**增量补丁**：`updateHeader`/`rename`/`delete` 三种 payload 自带补丁，web store 的 `applyHeaderPatch`/`removeSessionRows` 就地改/摘 `sessionInfos` 里那一行（path 与 ns 双键同步），**不再全量重拉**；只有 copy/bookmark/fork/clone 这类"产生/消减整行"的罕见操作才触发 `loadForCwd()`。
 
 - 为什么本插件不自己 `ctx.sessions.list()`？因为那会造成多个消费方各自拉取、各自维护失效时机，行为漂移。
   - `session-store.ts` 顶部注释记录了历史根因：此前 timeline / token-stats 各自 `useState + getStats + 挑事件刷新`，生命周期维护两份且不一致；会话列表收敛为框架统一维护后，"就绪闸 / 防竞态只有这一份"。
@@ -113,7 +113,7 @@
   - `phaseByPath`：`Record<string, WorkingPhase>`，key 是会话（`neutralSessionId ?? path`），值由 `advancePhase` 增量推进；注释说明它替代了旧的 `busyByPath` 二元忙标志（设计 `docs/design/session-working-phase.md §2.3`）。
   - `lastEntryByPath`：`Record<string, string>`，记录每个会话最后一条 entry id，未读判定依赖它；由 `entryAppended`（权威）与 `messageEnd`（兜底）两个事件源增量更新。
   - `readState` + `readStateRef` + `readLoadedRef`：已读位标，`ref` 保最新值防连续 `markRead` 闭包旧值互相覆盖，`readLoadedRef` 保证盘上读回前不推进（基于空 ref 写会冲掉盘上其他会话的 key）。
-  - `removing` + `removingRef`：乐观移除集合，写操作（归档/删除）点击瞬间把行摘出渲染树，exit 动画即刻播放，权威重拉完成后清空。
+  - `removing` + `removingRef`：乐观移除集合，写操作（归档/删除）点击瞬间把行摘出渲染树，exit 动画即刻播放，本地补丁（或失败重拉）完成后清空。
   - `customOrder` + `customOrderRef` + `customOrderLoadedRef`：组内拖拽自定义序，`groupId → path[]`，与 `readState` 同落点同机制持久化。
 
 - 挂载时的一次性初始化（第 111-126 行）用 `Promise.all` 并发读两个私有配置 key，读完才置 loaded 标记。
@@ -210,19 +210,20 @@
 ### 6.8 写操作
 
 - 所有写操作都经 `ctx.sessions.*` 走 IPC 到 main 侧 `SessionStore`，本插件不直连任何存储。
-  - `ctx.sessions.updateHeader(s.path, patch)`（第 305、532 行）：改写 name/pinned/archived，main 侧 `SessionStore.updateHeader`（session-store.ts 第 707-721 行）双写中立 header + 投影回内核存储。
-  - `ctx.sessions.deleteSessions(paths)`（第 319、334 行）：真删会话，main 侧 `deleteSessions`（第 725-734 行）过滤活跃会话后调 `catalog.deleteSessions` 并级联删中立层。
-  - `ctx.sessions.rawFilePaths(s.neutralSessionId ?? s.path)`（第 239 行）：解析可打开的原始文件地址，main 侧 `rawFilePaths`（第 611-620 行）返回 `{ desktop, kernel }`。
+  - `ctx.sessions.updateHeader(s.path, patch)`：改写 name/pinned/archived，main 侧 `SessionStore.updateHeader` 写中立 header（`putHeader` 定点小写，§neutral-storage-split §2.4）+ 投影回内核存储（`{pinned,archived}` 纯补丁**跳过投影**——pi 头行这两个键零读者，§2.5）。
+  - `ctx.sessions.deleteSessions(paths)`：真删会话，main 侧 `deleteSessions` 过滤活跃会话后调 `catalog.deleteSessions` 并级联删中立层（header/entries 双文件）。
+  - `ctx.sessions.rawFilePaths(s.neutralSessionId ?? s.path)`：解析可打开的原始文件地址，main 侧 `rawFilePaths` 返回 `{ desktop, kernel }`（desktop 拆分后指向 entries 文件，未迁移遗留会话仍指 `<ns>.json`）。
 
-- 写操作普遍带"乐观摘行 + 权威重拉 + 失败回滚"三段式。
-  - 归档/删除点击瞬间 `markRemoving(s.path)` 把行摘出渲染树（第 530、303 行），exit 动画立即播，不等写 + 重拉两跳 IPC。
-  - `reloadAfterWrite()`（第 294-297 行）统一走 `useSessionStore.getState().loadSessionInfos(cwd)` 重拉权威列表，返回 promise 供调用方在 finally 里 `clearRemoving()`。
-  - `finally` 兜底失败路径：写失败时行必须能回滚，乐观摘除不能永久吞行（第 539-541 行注释）。
+- 写操作带"乐观摘行 + 成功本地补丁 / 失败重拉回滚"三段式（§neutral-storage-split §2.6 起，成功路径不再全量重拉）。
+  - 归档/删除点击瞬间 `markRemoving(s.path)` 把行摘出渲染树，exit 动画立即播，不等写的 IPC 往返。
+  - 写成功后调 store 动作本地生效：`applyHeaderPatch(path(s), patch)`（归档/置顶/改名）/ `removeSessionRows(paths)`（删除）——就地改/摘 `sessionInfos` 里那行；随后到达的 `headerChanged` 广播是幂等双写。
+  - `reloadAfterWrite()` 降级为**失败回滚**专用：写失败时全量重拉恢复权威真相，乐观摘除不能永久吞行。
+  - `clearRemoving` 在 finally 里调（成功补丁后 / 失败重拉后），保证回滚正确性。
 
 - 批量操作做了一层安全护栏：`archiveAll` / `deleteAll` 分别针对"整组归档"与"整组删除"。
-  - `archiveAll`（第 301-313 行）对整组 `Promise.all` 并发 `updateHeader({ archived: true })`，失败进 console，但 finally 仍 reload（已写成功的部分要立刻可见）。
-  - `deleteAll`（第 329-341 行）先 `filter((s) => s.neutralSessionId !== currentNeutralSessionId)` 剔除当前活跃会话（进程 append 会复活文件），再批量删。
-  - `deleteOne`（第 316-326 行）删单个，`confirmingDelete` 内联确认态兜底"真删 JSONL，不可恢复"的强提醒。
+  - `archiveAll` 对整组 `Promise.all` 并发 `updateHeader({ archived: true })`，成功后 `applyHeaderPatch(paths, { archived: true })` 一次改多行；失败进 console 并重拉回滚。
+  - `deleteAll` 先 `filter((s) => s.neutralSessionId !== currentNeutralSessionId)` 剔除当前活跃会话（进程 append 会复活文件），再批量删、成功后 `removeSessionRows(targets)`。
+  - `deleteOne` 删单个，`confirmingDelete` 内联确认态兜底"真删 JSONL，不可恢复"的强提醒。
 
 - `select`（第 261-290 行）是"点选切换会话"的核心，体现乐观层 + 权威层两层水合契约。
   - 点击瞬间同步写 `setCurrentSessionPath(s.path)` / `setCurrentNeutralSessionId` / `setSessionTitle(deriveSessionTitle(s))`——这是**乐观层**，管高亮即时性（async IPC 事件有毫秒级差，不能等）。
@@ -243,13 +244,13 @@
 
 - 乐观移除（`removing`）是纯渲染投影，权威数据源（`sessionInfos`）不动。
   - `markRemoving` 把 path 加入 `Set`，渲染时 `.filter((s) => !removing.has(s.path))` 摘除（第 490-491 行），`AnimatePresence mode="popLayout"` 让 exit 动画立即播。
-  - `clearRemoving` 只在权威重拉完成后调（各写操作的 finally 里），保证回滚正确性。
+  - `clearRemoving` 在本地补丁（成功）或权威重拉（失败回滚）完成后调（各写操作的 finally 里），保证回滚正确性。
 
 ## 8 与框架 store 的分工
 
 - 本插件读两个框架 store，但遵守"共享 store 只读"纪律：读 `useUiStore` / `useSessionStore` 的状态，写它们只经框架暴露的 setter 动作，不直接 `setState`。
   - 读：`useUiStore` 的 `currentCwd` / `currentNeutralSessionId`；`useSessionStore` 的 `snapshot` / `sessionInfos`。
-  - 写：`useSessionStore.getState().openSession(...)` / `.startNewChat(...)` / `.loadSessionInfos(...)`（框架动作，不是裸 set）；`useUiStore.getState().setCurrentSessionPath(...)` / `.setCurrentNeutralSessionId(...)` / `.setSessionTitle(...)`（框架 setter）。
+  - 写：`useSessionStore.getState().openSession(...)` / `.startNewChat(...)` / `.loadSessionInfos(...)` / `.applyHeaderPatch(...)` / `.removeSessionRows(...)`（框架动作，不是裸 set）；`useUiStore.getState().setCurrentSessionPath(...)` / `.setCurrentNeutralSessionId(...)` / `.setSessionTitle(...)`（框架 setter）。
   - 本插件不碰 `useSessionStore.setState`，不碰 `useUiStore.setState`——状态变更意图全部经框架动作表达，符合"插件不直改 store（§8.2 只读纪律）"。
 
 - `newSession`（第 227-232 行）与 `startNewChat` 的分工是"清 UI 态 + 起空会话壳"。
@@ -345,9 +346,9 @@
 
 因为"未读"必须相对"用户读到哪里"。布尔 busy 标志只能表达"这个会话有没有活动"，表达不了"活动之后用户看没看"。位标方案用两个变量：`readState[path]`（用户最后读到哪条 entry id）与 `lastEntryByPath[path]`（这个会话最新 entry id），两者不相等 = 有未读。`lastEntryByPath` 由 `entryAppended`/`messageEnd` 事件增量维护，与列表重拉解耦，所以消息一到就能亮，不必等列表刷新。
 
-**Q：为什么归档/删除要"乐观摘行 + 权威重拉"，直接等 IPC 回来刷新不行吗？**
+**Q：为什么归档/删除要"乐观摘行 + 本地补丁"，直接等 IPC 回来刷新不行吗？**
 
-行直接摘除能让 exit 动画立即播，体感是"点击瞬间消失"；如果等 `updateHeader` + 重拉两跳 IPC，期间行纹丝不动，体感是"停一会儿才消失"。乐观层管即时性，权威层管最终一致性——重拉完成后 `clearRemoving` 让权威数据接管渲染。失败路径靠 `finally` 兜底：写失败时行必须回滚，乐观摘除不能永久吞行。
+行直接摘除能让 exit 动画立即播，体感是"点击瞬间消失"；如果等 `updateHeader` + 重拉两跳 IPC，期间行纹丝不动，体感是"停一会儿才消失"。乐观层管即时性。权威层在 §neutral-storage-split §2.6 之后也不再全量重拉：写成功后 `applyHeaderPatch`/`removeSessionRows` 就地改/摘那一行，`headerChanged` 广播到达是幂等双写——只有写失败才 `loadSessionInfos` 全量回滚（乐观摘除不能永久吞行）。改前的旧链路（每次归档全端全目录重扫，实测 1.75s/次/端 ×「归档次数 × 客户端数」）是"归档极耗性能"的根因，细节与取舍见 `docs/design/neutral-storage-split.md`。
 
 **Q：`WorkingPhase` 为什么不直接用 timeline 的 `phaseFromView`，而要多一个 `advancePhase`？**
 

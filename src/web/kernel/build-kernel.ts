@@ -5,7 +5,7 @@ import type { KernelApi } from "@my-harness-desktop/react";
 import type { RemoteTransport } from "../transport/ws-transport";
 
 import { IPC } from "@my-harness-desktop/shared";
-import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry } from "@my-harness-desktop/shared";
+import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry, SessionHeaderChangedEvent } from "@my-harness-desktop/shared";
 import type { DshProvider, DshDefaultModel } from "@my-harness-desktop/shared";
 import type { KernelId, KernelLogo, KernelStatusView } from "@my-harness-desktop/shared";
 
@@ -360,9 +360,9 @@ const kernel = {
       transport.on("session:event", listener);
       return () => { transport.off("session:event", listener); };
     },
-    /** 列表行变更推送(归档/置顶/改名/删除,第 21 项):各端据此重拉会话列表。 */
-    onHeaderChanged: (cb: (info: unknown) => void): (() => void) => {
-      const listener = (info: unknown) => cb(info);
+    /** 列表行变更推送(归档/置顶/改名/删除,第 21 项):payload 自带补丁,订阅方本地打行(copy 例外重拉)。 */
+    onHeaderChanged: (cb: (info: SessionHeaderChangedEvent) => void): (() => void) => {
+      const listener = (info: unknown) => cb(info as SessionHeaderChangedEvent);
       transport.on(IPC.session.headerChanged, listener);
       return () => { transport.off(IPC.session.headerChanged, listener); };
     },

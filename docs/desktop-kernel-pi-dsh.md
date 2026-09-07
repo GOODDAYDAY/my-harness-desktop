@@ -153,6 +153,8 @@
 | `kernel` | `"pi"` | `"dsh"` |
 | `rename` | `piRenameSession` → `piUpdateSessionHeader`（append `session_info` 条目） | `session/rename` RPC |
 | `updateHeader` | `piUpdateSessionHeader`（改写头行 `custom-my-harness-desktop`，加 `withDirLock` 锁） | `session/updateHeader` RPC（只传 pinned/archived/custom） |
+
+> 注（§neutral-storage-split §2.5）：`{pinned, archived}` 纯补丁在 `session-store.projectHeaderToKernel` 处就跳过投影、不进本表这条链路——pi 头行这两个键零读者（列表/打开都读中立层，tool-gate 只消费 toolConfig），投影是纯冗余的整文件重写。name/toolConfig/custom 照投。
 | `deleteSessions` | `piDeleteSessionFiles`（按目录分组加锁、真删） | 逐 id `session/delete` RPC |
 | `copy` | `copyFileWithDir`（同步，`forkFromSession` 依赖"copy 在 setContext 之前"竞态护栏） | `throw new Error(NOT_WIRED)`（降级抛错） |
 | `readToolConfig` | `piReadSessionToolConfig`（读头行 custom.toolConfig） | 返回 `null`（dsh 无 tool-gate，显式缺面） |
@@ -547,11 +549,11 @@ src/server/kernel/dsh/manager/dsh-kernel.ts     DshKernelManager extends（DSH_S
 
 ### 10.4 投影地址 vs 原始文件（`rawFilePath` 的降级语义）
 
-`SessionInfo.path` 是**投影地址**（`projectionPath` 派生，坐标系线索，不再做主键），**不承诺磁盘上存在对应文件**。要"打开原始文件"必须走 `rawFilePath`（内核专属知识，由各内核 `SessionCatalog` 解析），壳/插件不拿投影地址硬猜。返回 null（临时会话/迁移前旧文件无投影）时调用方必须显式降级（提示用户），不得静默吞掉。`session-store.rawFilePaths` 返回双地址：`desktop`（中立层会话文件 `<数据根>/sessions/<ns>.json`）+ `kernel`（内核原始文件，投影存在才返回）。
+`SessionInfo.path` 是**投影地址**（`projectionPath` 派生，坐标系线索，不再做主键），**不承诺磁盘上存在对应文件**。要"打开原始文件"必须走 `rawFilePath`（内核专属知识，由各内核 `SessionCatalog` 解析），壳/插件不拿投影地址硬猜。返回 null（临时会话/迁移前旧文件无投影）时调用方必须显式降级（提示用户），不得静默吞掉。`session-store.rawFilePaths` 返回双地址：`desktop`（中立层会话文件，header/entries 拆分后指向 `<数据根>/sessions/<ns>.entries.json`，未迁移遗留会话仍指 `<ns>.json`）+ `kernel`（内核原始文件，投影存在才返回）。
 
 ### 10.5 会话列表的唯一源是中立层
 
-`SessionStore.list` 的唯一源是壳自己的中立层（`NeutralSessionStore.listByCwd`），不读内核存储——`neutralToSessionInfo` 把中立会话转成 `SessionInfo`（`neutralSessionId` 是主键、`path` 是投影地址、`id` 是 root lineageId）。`openSession` 读中立层，`lineageContent` 展开根 lineage 的线性内容 + `display.image` 合到 `message.__image`。
+`SessionStore.list` 的唯一源是壳自己的中立层（`NeutralSessionStore.listByCwd`，只读 header 小文件、返回 `NeutralSessionSummary` 摘要，docs/design/neutral-storage-split.md），不读内核存储——摘要直映成 `SessionInfo`（`neutralSessionId` 是主键、`path` 是投影地址、`id` 是摘要携带的 rootLineageId）。`openSession` 读中立层整树，`lineageContent` 展开根 lineage 的线性内容 + `display.image` 合到 `message.__image`。
 
 ## 11 附：关键不变量与易错点速查
 

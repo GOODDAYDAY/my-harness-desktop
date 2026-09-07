@@ -32,6 +32,17 @@ export interface NeutralSession {
   lineages: NeutralLineage[];
 }
 
+/** 中立会话摘要(列表行读口,docs/design/neutral-storage-split.md §2.3):
+ *  header/entries 分文件后,列表只读 header 文件——摘要类型刻意不带 lineages,
+ *  让「列表想拿 entries」在类型层写不出来。rootLineageId 单列:clone/seed 会话的
+ *  根 lineageId ≠ ns(派生保留源 lineageId),投影地址按根 lineageId 派生,不能凭 ns 猜。 */
+export interface NeutralSessionSummary {
+  neutralSessionId: string;
+  /** 根 lineage id(fork=null 那条);空会话(尚无 lineage)回退 neutralSessionId。 */
+  rootLineageId: string;
+  header: NeutralSessionHeader;
+}
+
 export interface NeutralSessionHeader {
   kernel: KernelId;
   cwd: string;

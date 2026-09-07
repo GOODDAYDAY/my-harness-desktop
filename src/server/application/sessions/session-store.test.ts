@@ -13,7 +13,7 @@ import { PiSessionCatalog } from "../../kernel/pi/backend/pi-catalog";
 import { cwdToBucketName } from "@my-harness-desktop/shared";
 import type { RpcAdapter } from "../../kernel/pi/backend/rpc-adapter";
 import type { RpcCommand } from "../../kernel/pi/protocol/rpc-types";
-import type { BaseBackend, LineageTree, Anchor, BoundaryRef, SessionCatalogFactory, KernelModelSource } from "@my-harness-desktop/shared";
+import type { BaseBackend, LineageTree, Anchor, BoundaryRef, SessionCatalog, SessionCatalogFactory, KernelModelSource } from "@my-harness-desktop/shared";
 import type { NeutralMessage } from "@my-harness-desktop/shared";
 import type { NeutralSession } from "@my-harness-desktop/shared";
 import { ModelCatalog } from "../models/model-catalog";
@@ -658,7 +658,9 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
       .resolves.toBeUndefined();
     const sessions = neutralStore.listByCwd(CWD);
     expect(sessions).toHaveLength(1); // 同一会话续发,没漂去新会话
-    expect(sessions[0].lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "user")).toHaveLength(2);
+    // 摘要不带 entries(§neutral-storage-split §2.3):断言条目数走 get 全量读
+    const full = neutralStore.get(sessions[0].neutralSessionId)!;
+    expect(full.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "user")).toHaveLength(2);
   });
 
   it("⌘N 新会话后再发:不复用旧会话的 dsh 进程(消息不串会话)", async () => {
@@ -678,7 +680,9 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     for (const sess of sessions) {
       expect(sess.header.kernel).toBe("dsh");
       // 每个会话恰好一条用户消息(分隔线等元条目随双落点入中立层是预期,不按总条目数断言)
-      const userEntries = sess.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "user");
+      // 摘要不带 entries(§neutral-storage-split §2.3):断言条目数走 get 全量读
+      const fullSess = neutralStore.get(sess.neutralSessionId)!;
+      const userEntries = fullSess.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "user");
       expect(userEntries).toHaveLength(1);
     }
     expect(created).toEqual(["dsh", "dsh"]);
@@ -900,6 +904,70 @@ describe("归档/置顶:中立层真相源不被内核投影失败阻断", () =>
     // 注解条目随 openSession 进消息流(messageRenderers 槽按 role 认领渲染)
     const detail = await s.openSession(ns);
     expect(detail?.messages.some((m) => m.role === "goal_note")).toBe(true);
+  });
+});
+
+describe("内核投影取舍(neutral-storage-split §2.5):{pinned,archived} 纯补丁跳过内核写", () => {
+  /** 带记账 catalog 的 store:catalog 的 rename/updateHeader 调用全记录,
+   *  据此钉死「哪些补丁投影、哪些跳过」的边界。 */
+  function newSpyingStore(): { s: SessionStore; neutralStore: NeutralSessionStore; ns: string; sessionPath: string; calls: { rename: number; updateHeader: number } } {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "session-store-proj-skip-")));
+    const ns = "ns-proj-skip";
+    neutralStore.put(emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-08-27T00:00:00.000Z" }));
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    const calls = { rename: 0, updateHeader: 0 };
+    const real = new PiSessionCatalog(dir);
+    const spying: SessionCatalog = {
+      ...real,
+      kernel: "pi",
+      rename: async (id, name) => { calls.rename++; return real.rename(id, name); },
+      updateHeader: async (id, patch) => { calls.updateHeader++; return real.updateHeader(id, patch); },
+    } as SessionCatalog;
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
+    const s = new SessionStore(factory, { create: () => spying }, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    s.setContext(CWD, sessionPath);
+    return { s, neutralStore, ns, sessionPath, calls };
+  }
+
+  it("纯归档补丁:中立层照写,内核投影零调用(整文件重写的冗余被砍掉)", async () => {
+    const { s, neutralStore, ns, sessionPath, calls } = newSpyingStore();
+    await s.updateHeader(sessionPath, { archived: true });
+    expect(neutralStore.getHeader(ns)?.header.archived).toBe(true); // 真相源照写
+    expect(calls.rename).toBe(0);
+    expect(calls.updateHeader).toBe(0); // 投影跳过
+  });
+
+  it("pinned+archived 混合纯补丁同样跳过", async () => {
+    const { s, sessionPath, calls } = newSpyingStore();
+    await s.updateHeader(sessionPath, { pinned: true, archived: false });
+    expect(calls.rename).toBe(0);
+    expect(calls.updateHeader).toBe(0);
+  });
+
+  it("name 照投(rename 有内核侧消费者:pi session_info 条目)", async () => {
+    const { s, neutralStore, ns, sessionPath, calls } = newSpyingStore();
+    await s.updateHeader(sessionPath, { name: "改名" });
+    expect(calls.rename).toBe(1);
+    expect(neutralStore.getHeader(ns)?.header.name).toBe("改名");
+  });
+
+  it("toolConfig 照投(tool-gate 内核扩展进程内读头行,真实消费者)", async () => {
+    const { s, neutralStore, ns, sessionPath, calls } = newSpyingStore();
+    await s.updateHeader(sessionPath, { toolConfig: { enabledGroupIds: [], enabledToolIds: ["bash"] } });
+    expect(calls.updateHeader).toBe(1);
+    const cust = neutralStore.getHeader(ns)?.header.custom as Record<string, unknown>;
+    expect(cust.toolConfig).toEqual({ enabledGroupIds: [], enabledToolIds: ["bash"] });
+  });
+
+  it("name+archived 混合补丁:name 投影、archived 不单独投影(搭 rename 的车)", async () => {
+    const { s, neutralStore, ns, sessionPath, calls } = newSpyingStore();
+    await s.updateHeader(sessionPath, { name: "混合", archived: true });
+    expect(calls.rename).toBe(1);
+    // rest={archived} ⊆ {pinned,archived} → updateHeader 跳过,不再多一次整文件重写
+    expect(calls.updateHeader).toBe(0);
+    const h = neutralStore.getHeader(ns)?.header;
+    expect(h?.name).toBe("混合");
+    expect(h?.archived).toBe(true);
   });
 });
 

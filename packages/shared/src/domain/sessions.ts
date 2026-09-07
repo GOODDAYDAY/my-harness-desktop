@@ -186,6 +186,21 @@ export type HeaderPatch = {
   custom?: Record<string, unknown> | null;
 };
 
+/** 列表行变更推送(docs/design/neutral-storage-split.md §2.6,第 21 项多端同步的增量版):
+ *  updateHeader/rename/delete 三种 payload 自带补丁,客户端本地打行
+ *  (applyHeaderPatch/removeSessionRows),不再全量重拉;其余 kind(copy/bookmark/fork/
+ *  clone 等产生/消减整行的罕见操作)客户端收到后重拉一次。 */
+export type SessionHeaderChangedEvent =
+  | { kind: "updateHeader"; sessionPath: string; patch: { name?: string; pinned?: boolean; archived?: boolean } }
+  | { kind: "rename"; sessionPath: string; name: string }
+  | { kind: "delete"; paths: string[] }
+  | { kind: "copy"; sessionPath: string }
+  | { kind: "bookmark"; sessionPath: string }
+  | { kind: "deleteBookmark"; snapshotId: string }
+  | { kind: "fork"; parentLineageId: string }
+  | { kind: "forkFromSession"; srcNs: string }
+  | { kind: "clone" };
+
 /** 会话级模型与思考深度(头行 custom-my-harness-desktop.model 域的形状)。
  *  设计 docs/design/session-model-config.md §3.2:单域三字段原子替换,没有混合态。 */
 export interface SessionModelPrefs {

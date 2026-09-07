@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type {
   Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
-  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo, SessionRawFilePaths, PendingQuestionRecord,
+  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo, SessionRawFilePaths, PendingQuestionRecord, SessionHeaderChangedEvent,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage, ConnectionInfo,
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
@@ -135,8 +135,8 @@ export interface KernelApi {
     switchKernel: (target: KernelId) => Promise<void>;
     getCapabilities: () => Promise<{ kernel: KernelId | null; locked: boolean; piExtension: boolean; dshExtension: boolean }>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
-    /** 列表行变更推送(归档/置顶/改名/删除/复制,第 21 项):各端据此重拉会话列表。 */
-    onHeaderChanged: (cb: (info: { kind?: string; sessionPath?: string; paths?: string[]; patch?: Record<string, unknown> }) => void) => () => void;
+    /** 列表行变更推送(归档/置顶/改名/删除/复制,第 21 项):payload 自带补丁,本地打行不重拉(copy 例外)。 */
+    onHeaderChanged: (cb: (info: SessionHeaderChangedEvent) => void) => () => void;
     onKernelEvent: (cb: (event: KernelEvent) => void) => () => void;
     onQuestion: (cb: (req: QuestionRequestEvent) => void) => () => void;
     answerQuestion: (requestId: string, answers: QuestionAnswer[]) => Promise<void>;

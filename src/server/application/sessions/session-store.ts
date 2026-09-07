@@ -421,7 +421,7 @@ export class SessionStore implements
    *  读不到即报错——内核 = 模型的派生量,查无实据时不静默落 pi(§kernel-follows-model)。 */
   private async resolveSessionKernel(sessionPath: string | null | undefined, ns?: string): Promise<KernelId> {
     if (ns) {
-      const neutral = this.neutralStore?.get(ns);
+      const neutral = this.neutralStore?.getHeader(ns);
       if (neutral?.header?.kernel) return neutral.header.kernel;
     }
     if (!sessionPath) throw new Error("无法确定会话内核：新会话需先选择模型");
@@ -446,7 +446,7 @@ export class SessionStore implements
     const ns = neutralSessionId ?? randomUUID();
     // 中立层成为唯一真相源(§kernel-forkless §27 阶段 D):会话创建即写空中立会话,
     // 不等到首条消息——「开始但未发言」的会话也进中立层,list 读中立层才不漏。
-    if (this.neutralStore && !ephemeral && !this.neutralStore.get(ns)) {
+    if (this.neutralStore && !ephemeral && !this.neutralStore.getHeader(ns)) {
       const empty = emptyNeutralSession(ns, { kernel, cwd, createdAt: new Date().toISOString() });
       this.putNeutral(empty, { ns, kind: "session", session: empty });
     }
@@ -475,7 +475,7 @@ export class SessionStore implements
       // 此前用 `factory.seed 有无` 判,但生产 factory.seed 恒定义(dsh 返 null 表 RPC seed),
       // 恒真 → dsh 也标 ns=已物化 → 重开历史 dsh 会话 seed 回填被提前 return 跳过、历史丢失。
       // capabilities 在 backend 构造时即定(PiBackend/DshBackend 字段初始化),createProc 时可用。
-      materializedLineageId: this.neutralStore?.get(ns)?.header.pendingSeed === true
+      materializedLineageId: this.neutralStore?.getHeader(ns)?.header.pendingSeed === true
         ? ""
         : (backend.capabilities.pi ? ns : "") };
     this.bindProcEvents(proc);
@@ -483,13 +483,14 @@ export class SessionStore implements
   }
 
   /** 清派生会话的 pendingSeed 标记(§6.5「内核认同」后):物化成功才调——
-   *  失败路径不调(标记保持,下次首发自动重试;持久标记天然崩溃恢复)。 */
+   *  失败路径不调(标记保持,下次首发自动重试;持久标记天然崩溃恢复)。
+   *  纯头变更走 putNeutralHeader(§2.4),不搬运整树。 */
   private clearPendingSeed(proc: SessionProc): void {
     const cur = this.readNeutral(proc);
     if (!cur?.header.pendingSeed) return;
     const header = { ...cur.header };
     delete header.pendingSeed;
-    this.putNeutral({ ...cur, header }, { ns: proc.neutralSessionId, kind: "header", header });
+    this.putNeutralHeader(proc.neutralSessionId, header);
   }
 
   /** 绑定进程条目的事件通道(createProc 与跨内核切换重绑共用)。
@@ -673,8 +674,26 @@ export class SessionStore implements
   async list(cwd: string): Promise<SessionInfo[]> {
     // §kernel-forkless §27 阶段 D:会话列表的唯一源是壳自己的中立层,不读内核存储。
     // path 是投影地址(由 lineageId 派生,§12.2),不再做主键。
-    const sessions = this.neutralStore?.listByCwd(cwd) ?? [];
-    return sessions.map((s) => this.neutralToSessionInfo(s, cwd));
+    // §neutral-storage-split:listByCwd 返回摘要(header 文件直读,不 parse entries)——
+    // 列表行字段全在 header(遗留文件迁移时已 heal),不再需要整树。
+    const summaries = this.neutralStore?.listByCwd(cwd) ?? [];
+    return summaries.map((s) => {
+      const catalog = this.catalogFor(s.header.kernel);
+      return {
+        neutralSessionId: s.neutralSessionId,
+        path: catalog.projectionPath(cwd, s.rootLineageId),
+        id: s.rootLineageId,
+        cwd: s.header.cwd,
+        name: s.header.name,
+        created: s.header.createdAt,
+        modified: s.header.updatedAt ?? s.header.createdAt,
+        lastMessage: s.header.lastMessage,
+        lastEntryId: s.header.lastEntryId,
+        pinned: s.header.pinned,
+        archived: s.header.archived,
+        custom: s.header.custom,
+      };
+    });
   }
 
   /** 解析会话可打开的原始文件地址(§7.6:原始文件位置是内核专属知识,经各内核
@@ -683,13 +702,13 @@ export class SessionStore implements
    *  - kernel = 内核原始文件(投影文件存在才返回;临时会话/迁移前旧文件 → null)。
    *  会话不存在 / 无中立层时两项皆 null,调用方显式降级,不静默。 */
   async rawFilePaths(sessionId: string): Promise<SessionRawFilePaths> {
-    const session = this.neutralStore?.get(this.resolveNs(sessionId));
-    if (!session) return { desktop: null, kernel: null };
-    const ns = session.neutralSessionId;
+    const summary = this.neutralStore?.getHeader(this.resolveNs(sessionId));
+    if (!summary) return { desktop: null, kernel: null };
+    const ns = summary.neutralSessionId;
     const desktop = this.neutralStore!.filePathOf(ns);
-    const rootLineageId = session.lineages.find((l) => l.fork === null)?.lineageId ?? ns;
-    const catalog = this.catalogFor(session.header.kernel);
-    const kernel = catalog.rawFilePath(session.header.cwd, rootLineageId);
+    const rootLineageId = summary.rootLineageId;
+    const catalog = this.catalogFor(summary.header.kernel);
+    const kernel = catalog.rawFilePath(summary.header.cwd, rootLineageId);
     return { desktop: existsSync(desktop) ? desktop : null, kernel };
   }
 
@@ -753,14 +772,15 @@ export class SessionStore implements
     if (!this.neutralStore) return;
     const ns = this.neutralSessionIdFromPath(sessionPath);
     if (!ns) return;
-    const session = this.neutralStore.get(ns);
-    if (!session) return;
-    const header: NeutralSessionHeader = { ...session.header };
+    // 只读 header 小文件(§neutral-storage-split §2.4):归档/置顶/改名不再整树读写。
+    const cur = this.neutralStore.getHeader(ns);
+    if (!cur) return;
+    const header: NeutralSessionHeader = { ...cur.header };
     for (const [k, v] of Object.entries(patch)) {
       if (v === undefined) continue;
       if (k === "custom" && v && typeof v === "object" && !Array.isArray(v)) {
         // 按键合并:显式 null = 删键;对象值 = 覆盖该键
-        const merged: Record<string, unknown> = { ...(session.header.custom ?? {}) };
+        const merged: Record<string, unknown> = { ...(cur.header.custom ?? {}) };
         for (const [ck, cv] of Object.entries(v as Record<string, unknown>)) {
           if (cv === null) delete merged[ck];
           else merged[ck] = cv;
@@ -770,16 +790,21 @@ export class SessionStore implements
       }
       (header as unknown as Record<string, unknown>)[k] = v;
     }
-    this.putNeutral({ ...session, header }, { ns, kind: "header", header });
+    this.putNeutralHeader(ns, header);
   }
 
   /** 列表行字段投影回内核存储(§27 阶段 D 双写第二写)。中立层是真相源,内核写是投影:
    *  按会话内核归属路由(不再写死 pi),失败不阻断——文件缺失/内核缺面/旧命名不匹配
    *  都不该让归档/置顶/改名失效(此前 pi 投影因 `<ns>.jsonl` 派生路径与 pi 实际
-   *  `<stamp>_<id>.jsonl` 文件名不匹配而抛「会话文件不存在」,把中立层写整个吞掉)。 */
+   *  `<stamp>_<id>.jsonl` 文件名不匹配而抛「会话文件不存在」,把中立层写整个吞掉)。
+   *  §neutral-storage-split §2.5:{pinned,archived} 纯补丁**跳过内核写**——查证过 pi 头行
+   *  pinned/archived 零读者(列表/打开读中立层;snapshot 兜底重建今天就不恢复它们;
+   *  piReadSessionHeader 的消费者只取 toolConfig),投影是纯冗余的整文件重写。
+   *  name 照投(pi session_info 条目有内核侧消费者);toolConfig/custom 照投
+   *  (tool-gate 内核扩展进程内读头行)。 */
   private async projectHeaderToKernel(sessionPath: string, patch: HeaderPatch): Promise<void> {
     const ns = this.neutralSessionIdFromPath(sessionPath);
-    const kernel: KernelId = (ns && this.neutralStore?.get(ns)?.header.kernel) || "pi";
+    const kernel: KernelId = (ns && this.neutralStore?.getHeader(ns)?.header.kernel) || "pi";
     const catalog = this.catalogFor(kernel);
     try {
       // 名字下沉:dsh 的 updateHeader 面不含 name,走 session/rename;pi 的 rename 就是
@@ -787,7 +812,9 @@ export class SessionStore implements
       if (patch.name != null) await catalog.rename(sessionPath, patch.name);
       const rest = { ...patch };
       delete rest.name;
-      if (Object.keys(rest).length > 0) await catalog.updateHeader(sessionPath, rest);
+      const keys = Object.keys(rest);
+      if (keys.length > 0 && keys.every((k) => k === "pinned" || k === "archived")) return;
+      if (keys.length > 0) await catalog.updateHeader(sessionPath, rest);
     } catch {
       // 投影失败不阻断——中立层才是真相源(§7.5 不变量 #1)。
     }
@@ -986,7 +1013,7 @@ export class SessionStore implements
     const kernel = this.activeKernel ?? snap.sourceKernel;
     // 模型域:源会话还在就继承它的模型归属(派生会话首发/续发的偏好解析依赖中立 custom);
     // 源已删则略过,首发经渲染层三级偏好解析兜底——不伪造归属。
-    const srcPrefs = parseSessionModelPrefs(this.neutralStore.get(snap.sourceNeutralSessionId)?.header.custom ?? undefined);
+    const srcPrefs = parseSessionModelPrefs(this.neutralStore.getHeader(snap.sourceNeutralSessionId)?.header.custom ?? undefined);
     const newNs = this.deriveSession({
       entries: snap.lineage.entries,
       kernel,
@@ -1042,6 +1069,15 @@ export class SessionStore implements
     this.neutralStore?.put(session);
     for (const cb of this.neutralListeners) {
       try { cb(change); } catch (err) { console.error("[session-store] 中立层变更监听器抛错已隔离:", err); }
+    }
+  }
+
+  /** 纯头变更的写口(§neutral-storage-split §2.4):只写 header 小文件,不搬运整树——
+   *  归档/置顶/改名/模型域落盘走这里;条目变更仍走 putNeutral(entries+header 双写)。 */
+  private putNeutralHeader(ns: string, header: NeutralSessionHeader): void {
+    this.neutralStore?.putHeader(ns, header);
+    for (const cb of this.neutralListeners) {
+      try { cb({ ns, kind: "header", header }); } catch (err) { console.error("[session-store] 中立层变更监听器抛错已隔离:", err); }
     }
   }
 
@@ -1704,7 +1740,7 @@ export class SessionStore implements
     // prefs 为空 → 下方「会话未启动,请先选择模型」显式报错,不静默回落任何内核。
     if (!prefs && this.activeSessionPath) {
       const ns = this.neutralSessionIdFromPath(this.activeSessionPath);
-      const headerPrefs = ns ? parseSessionModelPrefs(this.neutralStore?.get(ns)?.header.custom ?? undefined) : null;
+      const headerPrefs = ns ? parseSessionModelPrefs(this.neutralStore?.getHeader(ns)?.header.custom ?? undefined) : null;
       if (headerPrefs?.provider && headerPrefs?.modelId && headerPrefs.kernel) prefs = headerPrefs;
     }
     // §atomic-send:回灌编排先于「拿 proc」——setModel 内部 ensureForSend 起进程。
@@ -1754,7 +1790,7 @@ export class SessionStore implements
     const neutralName = (() => {
       if (!this.activeSessionPath) return undefined;
       const ns = this.neutralSessionIdFromPath(this.activeSessionPath);
-      return ns ? this.neutralStore?.get(ns)?.header.name : undefined;
+      return ns ? this.neutralStore?.getHeader(ns)?.header.name : undefined;
     })();
     const currentName = this.latestSnapshot?.state.sessionName ?? neutralName;
     if (this.activeSessionPath && !currentName) {
@@ -1827,12 +1863,13 @@ export class SessionStore implements
   private async writeNeutralModelPrefs(sessionPath: string, prefs: SessionModelPrefs): Promise<void> {
     const ns = this.neutralSessionIdFromPath(sessionPath);
     if (!ns || !this.neutralStore) return;
-    const cur = this.neutralStore.get(ns);
+    // 只读/写 header 小文件(§neutral-storage-split §2.4):发消息高频路径,不搬运整树。
+    const cur = this.neutralStore.getHeader(ns);
     if (!cur) return;
     const modelDomain = { provider: prefs.provider, modelId: prefs.modelId, thinkingLevel: prefs.thinkingLevel, ...(prefs.kernel ? { kernel: prefs.kernel } : {}) };
     const custom = { ...(cur.header.custom ?? {}), [SESSION_MODEL_PREFS_KEY]: modelDomain };
     const header = { ...cur.header, ...(prefs.kernel ? { kernel: prefs.kernel } : {}), custom };
-    this.putNeutral({ ...cur, header }, { ns, kind: "header", header });
+    this.putNeutralHeader(ns, header);
   }
 
   /** 旁路改模型的头域回写(§4.5):只更新 provider/modelId/kernel,thinkingLevel 读现存域保留——
@@ -1840,7 +1877,7 @@ export class SessionStore implements
   private async writeBackModelRef(sessionPath: string, provider: string, modelId: string, kernel: KernelId): Promise<void> {
     const ns = this.neutralSessionIdFromPath(sessionPath);
     if (!ns || !this.neutralStore) return;
-    const cur = this.neutralStore.get(ns);
+    const cur = this.neutralStore.getHeader(ns);
     const existing = parseSessionModelPrefs(cur?.header.custom ?? undefined);
     await this.writeNeutralModelPrefs(sessionPath, {
       provider, modelId, kernel,
@@ -2805,7 +2842,7 @@ export class SessionStore implements
   private activeSessionKernel(): KernelId | null {
     const ns = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
     if (!ns || !this.neutralStore) return null;
-    return this.neutralStore.get(ns)?.header.kernel ?? null;
+    return this.neutralStore.getHeader(ns)?.header.kernel ?? null;
   }
 
   /** 激活会话是否已有持久历史(中立层任一 lineage 有 entry)——「会话已固定内核」的持久真相,

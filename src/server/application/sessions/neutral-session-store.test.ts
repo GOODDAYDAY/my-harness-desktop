@@ -1,6 +1,6 @@
 // NeutralSessionStore 单测:中立会话树的持久化读写(纯存储,不依赖内核)。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readdirSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NeutralSessionStore } from "./neutral-session-store";
@@ -111,5 +111,100 @@ describe("NeutralSessionStore", () => {
 
   it("listByCwd 目录不存在返回空数组", () => {
     expect(store.listByCwd("/proj")).toEqual([]);
+  });
+
+  // ============ header/entries 拆分(neutral-storage-split §2.1)============
+
+  it("put 写拆分双文件(header+entries),无遗留整树文件,紧凑序列化", () => {
+    store.put(makeSession("ns-split"));
+    const dirPath = (store as unknown as { dir: string }).dir;
+    const files = readdirSync(dirPath);
+    expect(files.sort()).toEqual(["ns-split.entries.json", "ns-split.header.json"]);
+    // 紧凑序列化(顺手刀):无美化缩进(文件不含换行)
+    expect(readFileSync(join(dirPath, "ns-split.header.json"), "utf-8")).not.toContain("\n");
+    expect(readFileSync(join(dirPath, "ns-split.entries.json"), "utf-8")).not.toContain("\n");
+  });
+
+  it("getHeader 返回摘要:带 rootLineageId,不带 lineages", () => {
+    store.put(makeSession("ns-h"));
+    const summary = store.getHeader("ns-h");
+    expect(summary).toBeTruthy();
+    expect(summary!.neutralSessionId).toBe("ns-h");
+    expect(summary!.rootLineageId).toBe("root"); // makeSession 的根 lineageId
+    expect(summary!.header.cwd).toBe("/proj");
+    expect("lineages" in summary!).toBe(false);
+  });
+
+  it("listByCwd 返回摘要不带 lineages(类型层收窄:列表想拿 entries 写不出来)", () => {
+    store.put(makeSession("ns-l"));
+    const list = store.listByCwd("/proj");
+    expect(list).toHaveLength(1);
+    expect(list[0].neutralSessionId).toBe("ns-l");
+    expect(list[0].rootLineageId).toBe("root");
+    expect("lineages" in list[0]).toBe(false);
+  });
+
+  it("懒迁移:遗留整树文件读到即拆,顺手 heal 头字段,旧文件删除", () => {
+    const dirPath = (store as unknown as { dir: string }).dir;
+    mkdirSync(dirPath, { recursive: true });
+    // pre-阶段-D 形态的遗留文件:header 缺 lastMessage/lastEntryId/updatedAt
+    const legacy: NeutralSession = {
+      neutralSessionId: "ns-legacy",
+      header: { kernel: "pi", cwd: "/proj", createdAt: "2024-01-01T00:00:00.000Z" },
+      lineages: [{
+        lineageId: "ns-legacy",
+        fork: null,
+        entries: [{ neutralEntryId: "ns-legacy:0", message: { role: "user", content: "历史消息", timestamp: 1700000000000 } }],
+      }],
+    };
+    writeFileSync(join(dirPath, "ns-legacy.json"), JSON.stringify(legacy));
+
+    const list = store.listByCwd("/proj");
+    expect(list).toHaveLength(1);
+    // heal 落盘:lastMessage/updatedAt 从 entries 补齐
+    expect(list[0].header.lastMessage).toBe("历史消息");
+    expect(list[0].header.updatedAt).toBe("2023-11-14T22:13:20.000Z");
+    expect(list[0].header.lastEntryId).toBe("ns-legacy:0");
+    // 旧文件已删,拆分文件已建
+    expect(existsSync(join(dirPath, "ns-legacy.json"))).toBe(false);
+    expect(existsSync(join(dirPath, "ns-legacy.header.json"))).toBe(true);
+    expect(existsSync(join(dirPath, "ns-legacy.entries.json"))).toBe(true);
+    // 迁移后 get 能读回完整树
+    expect(store.get("ns-legacy")?.lineages[0].entries).toHaveLength(1);
+  });
+
+  it("putHeader 只写 header 小文件,entries 原样不动", () => {
+    store.put(makeSession("ns-ph"));
+    const dirPath = (store as unknown as { dir: string }).dir;
+    const entriesBefore = readFileSync(join(dirPath, "ns-ph.entries.json"), "utf-8");
+    store.putHeader("ns-ph", { kernel: "pi", cwd: "/proj", createdAt: "2024-01-01T00:00:00Z", archived: true });
+    expect(readFileSync(join(dirPath, "ns-ph.entries.json"), "utf-8")).toBe(entriesBefore);
+    expect(store.getHeader("ns-ph")?.header.archived).toBe(true);
+    // get 全量读回来,entries 没丢
+    expect(store.get("ns-ph")?.lineages[0].entries).toHaveLength(1);
+  });
+
+  it("putHeader 保留 rootLineageId(header 文件重写不丢投影坐标)", () => {
+    store.put(makeSession("ns-rl"));
+    store.putHeader("ns-rl", { kernel: "pi", cwd: "/proj", createdAt: "2024-01-01T00:00:00Z", pinned: true });
+    expect(store.getHeader("ns-rl")?.rootLineageId).toBe("root");
+  });
+
+  it("put 顺手删同 ns 遗留整树文件(防旧文件在迁移判定里诈尸)", () => {
+    const dirPath = (store as unknown as { dir: string }).dir;
+    mkdirSync(dirPath, { recursive: true });
+    writeFileSync(join(dirPath, "ns-z.json"), JSON.stringify(makeSession("ns-z")));
+    store.put(makeSession("ns-z"));
+    expect(existsSync(join(dirPath, "ns-z.json"))).toBe(false);
+  });
+
+  it("delete 清三个文件变体(header/entries/遗留整树)", () => {
+    const dirPath = (store as unknown as { dir: string }).dir;
+    mkdirSync(dirPath, { recursive: true });
+    store.put(makeSession("ns-del"));
+    writeFileSync(join(dirPath, "ns-del2.json"), JSON.stringify(makeSession("ns-del2")));
+    store.delete("ns-del");
+    store.delete("ns-del2");
+    expect(readdirSync(dirPath)).toEqual([]);
   });
 });

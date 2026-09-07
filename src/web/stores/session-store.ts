@@ -199,6 +199,12 @@ export interface SessionStoreState {
   sessionInfosCwd: string | null;
   /** 框架唯一拉取口:拉 currentCwd 的会话列表进 sessionInfos。切 cwd 与 kernel 事件流触发。 */
   loadSessionInfos: (cwd: string) => Promise<void>;
+  /** 列表行本地补丁(§neutral-storage-split §2.6):headerChanged 广播/插件写成功后调用,
+   *  就地改 sessionInfos 里那一行(path 与 ns 双键同改),不再全量重拉。patch 只认
+   *  name/pinned/archived 三键(与广播 payload 契约一致)。 */
+  applyHeaderPatch: (sessionPaths: string | string[], patch: { name?: string; pinned?: boolean; archived?: boolean }) => void;
+  /** 列表行本地摘除(delete 广播/删除成功后):path 与 ns 别名键一起摘。 */
+  removeSessionRows: (paths: string[]) => void;
   /** 打开历史会话:纯文件读,秒开,不启 pi。
    *  返回 false = 文件缺失/不可读(静默放弃,不进空会话、不 setContext——
    *  cwd 落空的防护语义不变,只是不再以异常噪音上报,由调用方决定如何呈现)。 */
@@ -397,6 +403,35 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     } catch {
       // 拉取失败保持旧值(切 cwd 瞬间 main 未就绪等);下次触发重试
     }
+  },
+  applyHeaderPatch: (sessionPaths, patch) => {
+    const infos = useSessionStore.getState().sessionInfos;
+    if (!infos) return;
+    const paths = Array.isArray(sessionPaths) ? sessionPaths : [sessionPaths];
+    let map: Record<string, SessionInfo> | null = null;
+    for (const p of paths) {
+      const cur = (map ?? infos)[p];
+      if (!cur) continue;
+      const next: SessionInfo = { ...cur };
+      if (patch.name !== undefined) next.name = patch.name;
+      if (patch.pinned !== undefined) next.pinned = patch.pinned;
+      if (patch.archived !== undefined) next.archived = patch.archived;
+      if (!map) map = { ...infos };
+      map[p] = next;
+      if (cur.neutralSessionId) map[cur.neutralSessionId] = next;
+    }
+    if (map) useSessionStore.setState({ sessionInfos: map });
+  },
+  removeSessionRows: (paths) => {
+    const infos = useSessionStore.getState().sessionInfos;
+    if (!infos) return;
+    const map = { ...infos };
+    for (const p of paths) {
+      const cur = map[p];
+      if (cur?.neutralSessionId) delete map[cur.neutralSessionId];
+      delete map[p];
+    }
+    useSessionStore.setState({ sessionInfos: map });
   },
   openSession: async (id) => {
     sessionGen++;
@@ -660,10 +695,28 @@ export function initSessionStore(): void {
   // 模块级单例:进程内不复用卸载清理(与 onSnapshot 同生命周期,应用关才拆)。
   void unsubCwd; void offKernel;
 
-  // 第 21 项:任一客户端改列表行(归档/置顶/改名/删除/复制)服务端广播 headerChanged,
-  // 本端重拉列表——此前只写不播,归档只在操作端消失,其他端纹丝不动。
+  // 第 21 项 + §neutral-storage-split §2.6:任一客户端改列表行(归档/置顶/改名/删除/复制),
+  // 服务端广播 headerChanged——updateHeader/rename/delete 自带补丁,本地打行,不再全量重拉
+  // (此前各端重拉一次 = 全目录整树 parse,被「归档次数×客户端数」乘法放大);
+  // copy/bookmark/fork/clone 等产生/消减整行的罕见操作本地无行可补丁,重拉一次。
   // 可选调用:旧内核 API 面(含测试 mock)无此订阅时显式降级,不炸初始化。
-  const offHeaderChanged = window.kernel.sessions.onHeaderChanged?.(() => loadForCwd());
+  const offHeaderChanged = window.kernel.sessions.onHeaderChanged?.((info) => {
+    if (info.kind === "delete") {
+      useSessionStore.getState().removeSessionRows(info.paths);
+      return;
+    }
+    if (info.kind === "rename") {
+      useSessionStore.getState().applyHeaderPatch(info.sessionPath, { name: info.name });
+      return;
+    }
+    if (info.kind === "updateHeader") {
+      useSessionStore.getState().applyHeaderPatch(info.sessionPath, info.patch);
+      return;
+    }
+    // copy/bookmark/deleteBookmark/fork/forkFromSession/clone:产生/消减整行的罕见操作,
+    // 本地无行可补丁,重拉一次。
+    loadForCwd();
+  });
   void offHeaderChanged;
 
   // session:event 只含激活会话(main dispatch 已按 activeProcKey 过滤),

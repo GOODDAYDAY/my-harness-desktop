@@ -4,7 +4,8 @@
 // 交互:点选 = switchSession + 面包屑标题 + nonce 触发 timeline 重 resync;
 // "+" = newSession(直接开,不弹确认)。
 // 分组:已置顶(恒在最上,带 Pin)> 时间四档(今天/昨天/过去7天/更早,各可折叠)
-//       > 已归档(默认折叠,带 Archive)。pinned/archived 写 JSONL 头行,updateHeader 一处写。
+//       > 已归档(默认折叠,带 Archive)。pinned/archived 写中立层 header(真相源),
+//       内核投影已跳(neutral-storage-split §2.5);写后本地补丁生效,不重拉(§2.6)。
 // 状态标识:执行中(onKernelEvent 按 sessionKey 维护 busyMap,messageStart→agentSettled,
 // 含后台会话)> 未读(readState 存插件 config,活跃会话自动跟随已读,非活跃有新 entry 亮圆点)。
 import { useEffect, useState, useRef, useMemo, useCallback, forwardRef } from "react";
@@ -289,38 +290,40 @@ export function SessionsSection(): React.ReactNode {
     }
   };
 
-  /** 写操作(归档/删除/改名)后的重拉:统一走框架 re-pull 入口(设计 §4.2)。
-      返回 promise——权威重拉完成后调用方收尾(如清乐观移除标记)。 */
+  /** 写操作失败后的回滚:全量重拉恢复权威真相(成功路径不需要——
+      §neutral-storage-split §2.6 起本地补丁即时生效,广播到达是幂等双写)。 */
   const reloadAfterWrite = async (): Promise<void> => {
     const cwd = useUiStore.getState().currentCwd;
     if (cwd) await useSessionStore.getState().loadSessionInfos(cwd);
   };
 
   /** 批量归档:对一组会话逐个写头行 archived:true(同一目录锁在 withDirLock 里排队串行)。
-      失败也照常 reload——已写成功的部分要立刻在 UI 可见,错误进 console。 */
+      成功后本地打补丁(逐行挪入归档组);失败才全量重拉回滚。 */
   const archiveAll = async (items: SessionInfo[]): Promise<void> => {
     // 乐观移除:点击瞬间全部行即刻退场(exit 动画立即播),不等写+重拉的 IPC 往返。
     for (const s of items) markRemoving(s.path);
     try {
       await Promise.all(items.map((s) => ctx.sessions.updateHeader(s.path, { archived: true })));
+      useSessionStore.getState().applyHeaderPatch(items.map((s) => s.path), { archived: true });
     } catch (err) {
       console.error("[sessions-list] 批量归档失败:", err);
-    } finally {
-      // 权威重拉完成才清标记:归档行此时已在 archive 分组,交由权威数据接管渲染。
+      // 失败回滚:重拉权威真相(已写成功的部分也要可见)。
       await reloadAfterWrite();
+    } finally {
       clearRemoving();
     }
   };
 
-  /** 删除单个会话(真删 JSONL,不可恢复);错误进 console,删后 reload 立即反映。 */
+  /** 删除单个会话(真删 JSONL,不可恢复);错误进 console 并重拉回滚。 */
   const deleteOne = async (s: SessionInfo): Promise<void> => {
     markRemoving(s.path);
     try {
       await ctx.sessions.deleteSessions([s.path]);
+      useSessionStore.getState().removeSessionRows([s.path]);
     } catch (err) {
       console.error("[sessions-list] 删除会话失败:", err);
-    } finally {
       await reloadAfterWrite();
+    } finally {
       clearRemoving();
     }
   };
@@ -332,10 +335,11 @@ export function SessionsSection(): React.ReactNode {
     for (const p of targets) markRemoving(p);
     try {
       await ctx.sessions.deleteSessions(targets);
+      useSessionStore.getState().removeSessionRows(targets);
     } catch (err) {
       console.error("[sessions-list] 批量删除失败:", err);
-    } finally {
       await reloadAfterWrite();
+    } finally {
       clearRemoving();
     }
   };
@@ -526,19 +530,20 @@ export function SessionsSection(): React.ReactNode {
                 onRawPaths={fetchRawPaths}
                 onOpenRawFile={(p) => void openRawFile(p)}
                 onUpdate={async (patch) => {
-                  // 归档/取消归档:点击瞬间乐观摘行(立即播消失动画),不等写+重拉的 IPC 往返。
+                  // 归档/取消归档:点击瞬间乐观摘行(立即播消失动画),不等写的 IPC 往返。
                   if (patch.archived != null) markRemoving(s.path);
                   try {
                     await ctx.sessions.updateHeader(s.path, patch);
+                    // 成功:本地打补丁即时生效(§2.6;广播到达是幂等双写),不再全量重拉。
+                    useSessionStore.getState().applyHeaderPatch(s.path, patch);
                     if (patch.name != null && currentNeutralSessionId === s.neutralSessionId) {
                       setSessionTitle(deriveSessionTitle({ ...s, name: patch.name }));
                     }
                   } catch (err) {
                     console.error("[sessions-list] 更新会话头失败:", err);
-                  } finally {
-                    // 权威重拉完成才清标记:归档行此时已归位到 archive 分组,由权威数据接管。
-                    // finally 兜底失败路径:写失败时行必须能回滚(乐观摘除不能永久吞行)。
+                    // 失败回滚:重拉权威真相,乐观摘除不能永久吞行。
                     await reloadAfterWrite();
+                  } finally {
                     clearRemoving();
                   }
                 }}

@@ -170,8 +170,9 @@ describe("写穿:messageEnd 是内容落中立层的主触发", () => {
     const cloned = sessions.find((x) => x.header.name?.includes("(copy)"));
     expect(cloned).toBeTruthy();
     expect(cloned!.neutralSessionId).not.toBe(ns);
-    // 内容整树复制(对话条目同文)
-    const clonedConvo = cloned!.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "user" || e.message.role === "assistant");
+    // 内容整树复制(对话条目同文)——摘要不带 entries(§neutral-storage-split §2.3),走 get 全量读
+    const clonedFull = neutralStore.get(cloned!.neutralSessionId)!;
+    const clonedConvo = clonedFull.lineages.flatMap((l) => l.entries).filter((e) => e.message.role === "user" || e.message.role === "assistant");
     expect(clonedConvo.map((e) => e.message.role)).toEqual(["user", "assistant"]);
     // 克隆条目不携带源会话的内核 id(目标内核 seed 时重分配)
     expect(clonedConvo.every((e) => e.kernelEntryId === undefined)).toBe(true);

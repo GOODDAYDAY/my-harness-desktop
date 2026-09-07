@@ -3,7 +3,8 @@
 // (隔离 HOME + 独立端口 + CDP),真实 pi 内核 + 真实模型(一次 ping,花极少 token):
 //   ① 应用起得来、composer 可用(不黑屏)
 //   ② 发一条 ping,回合收敛(写穿链路:事件→dispatch→中立层)
-//   ③ 中立层落盘硬断言:sessions/<ns>.json 含 user+assistant 条目,assistant 带 usage、
+//   ③ 中立层落盘硬断言:sessions/<ns>.entries.json(header/entries 拆分后,内容在 entries 文件)
+//     含 user+assistant 条目,assistant 带 usage、
 //     startedAt(内核开始时间)与 timestamp(写穿完成时刻)双时间戳
 //   ④ 渲染层镜像收到写穿回执(window.__neutralLog 插桩,session:neutralChange 到达)
 //   ⑤ 刷新重开后会话内容仍在(中立层单源,刷新前后一致)
@@ -63,11 +64,12 @@ async function settle(page, timeoutMs = 120000) {
   }
 }
 
-/** 等中立层数据落位(轮询会话文件,事件驱动的兜底是截止时间,失败不吞)。 */
+/** 等中立层数据落位(轮询 entries 会话文件——header/entries 拆分后条目在 <ns>.entries.json;
+ *  事件驱动的兜底是截止时间,失败不吞)。 */
 async function waitNeutralEntry(sessDir, pred, timeoutMs = 90000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const files = existsSync(sessDir) ? readdirSync(sessDir).filter((f) => f.endsWith(".json")) : [];
+    const files = existsSync(sessDir) ? readdirSync(sessDir).filter((f) => f.endsWith(".entries.json") || (f.endsWith(".json") && !f.endsWith(".header.json"))) : [];
     for (const f of files) {
       try {
         const sess = JSON.parse(readFileSync(join(sessDir, f), "utf-8"));
