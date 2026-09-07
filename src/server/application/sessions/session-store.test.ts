@@ -1535,3 +1535,52 @@ describe("fork/clone 派生会话首发物化(内核私有 id 派生自新会话
     expect(neutralStore.get(cloneNs)?.header.pendingSeed).toBeUndefined();
   });
 });
+
+describe("能力面广播(§7.6 push 收口:打开/新建、首发送锁定、总线不锁)", () => {
+  const collectCaps = (): { seen: Array<{ kernel?: string | null; locked?: boolean }>; off: () => void } => {
+    const seen: Array<{ kernel?: string | null; locked?: boolean }> = [];
+    const off = store.onKernelEvent((e) => {
+      if (e.kind === "capabilitiesChanged") seen.push(e.capabilities as { kernel?: string | null; locked?: boolean });
+    });
+    return { seen, off };
+  };
+
+  it("setContext 打开/新建会话 → 广播一次能力面(渲染层不滞留上一会话的锁定)", () => {
+    const { seen, off } = collectCaps();
+    try {
+      // 新建会话壳:无进程、无历史 → locked=false 必须广播出去(此前无推送,渲染层滞留)
+      store.setContext(CWD, null);
+      expect(seen.length).toBe(1);
+      expect(seen[0]?.locked).toBe(false);
+      // 切回有活进程的会话 → 再广播一次,带该会话实况
+      store.setContext(CWD, sessionPath);
+      expect(seen.length).toBe(2);
+      expect(seen[1]?.kernel).toBe("pi");
+    } finally {
+      off();
+    }
+  });
+
+  it("首发送锁定:首个 prompt 落内容后 locked 转真(边沿一次),第二条不重复广播", async () => {
+    const { seen, off } = collectCaps();
+    try {
+      await store.prompt("第一条");
+      const lockedTrue = seen.filter((c) => c.locked === true);
+      expect(lockedTrue.length).toBe(1); // markTouched 边沿广播
+      await store.prompt("第二条");
+      expect(seen.filter((c) => c.locked === true).length).toBe(1); // 不重复广播
+    } finally {
+      off();
+    }
+  });
+
+  it("总线协议流量不锁会话:sendPromptTo 不置 touched(locked 保持 false)", async () => {
+    // 实弹根因:pi spawn 时 fit-pi-extension 的 bus ping 应答经 sendPromptTo 置 touched,
+    // 没发过消息的会话被误锁内核(新会话模型下拉 dsh TAB 锁死)。
+    await store.sendPromptTo(sessionPath, "{\"$bus\":true,\"kind\":\"bus_response\"}", "steer");
+    expect(store.getCapabilities().locked).toBe(false);
+    // 对照:用户真实发送后 locked 转真
+    await store.prompt("用户真发");
+    expect(store.getCapabilities().locked).toBe(true);
+  });
+});

@@ -356,6 +356,10 @@ export class SessionStore implements
     }
     // 提问水合(ask-design §8.1):重投 pending(卡片复活)+ 补投 answered 未 delivered(答案必达)。
     this.rehydrateQuestions();
+    // 能力面随激活切换广播(§7.6 push 收口):会话打开/新建/切换后,kernel/locked 归属换会话——
+    // 不推则渲染层滞留上一会话的能力面(实弹:pi 会话锁后开新会话,dsh TAB 仍按旧锁定置灰,
+    // 「开新会话不能切 dsh 模型」的根因之一;主侧 getCapabilities 本就正确,纯推送缺口)。
+    this.broadcastCapabilities();
   }
 
   /** fs:project IPC 圈禁的锚点(当前激活项目根;shell 的 IPC 边界从这里取)。 */
@@ -397,7 +401,7 @@ export class SessionStore implements
     await this.sync();
     // 能力面就绪(§7.6 push 收口):backend.start 落定后 piExtension/dshExtension 已探测,
     // 广播一次 capabilitiesChanged——renderer 订阅即到位,不再散拉式 refreshCapabilities。
-    this.broadcastCapabilities(proc);
+    this.broadcastCapabilities();
   }
 
   /** 由 pi 派生路径反查 neutralSessionId(§kernel-forkless §12.2):派生路径的文件名就是 ns
@@ -1768,7 +1772,7 @@ export class SessionStore implements
     // 中立层先写 user entry(message + display):展示元数据归中立层,不进后端投影(neutral-first §10)。
     this.appendNeutral(proc, { neutralEntryId: "", message: { role: "user", content: text }, display });
     await proc.backend.sendMessage(text, images);
-    proc.touched = true; // 已落会话内容:多会话并存保护,不再被 setContext 回收
+    this.markTouched(proc); // 已落会话内容:多会话并存保护,不再被 setContext 回收
     // 发送确立"当前会话流":推给 renderer 水合 useUiStore.currentSessionPath
     // (根因修复,勿回退):内核 session_start 是纯扩展事件,永远不会出现在 RPC
     // stdout 流里,renderer 永远等不到内核推出→useUiStore.currentSessionPath
@@ -2138,14 +2142,14 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     await this.asPi(proc).steer(text, images);
-    proc.touched = true;
+    this.markTouched(proc);
   }
 
   async followUp(text: string, images?: ImageInput[]): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
     await this.asPi(proc).followUp(text, images);
-    proc.touched = true;
+    this.markTouched(proc);
   }
 
   async abortRetry(): Promise<void> {
@@ -2829,13 +2833,23 @@ export class SessionStore implements
 
   /** 能力面变化广播(§7.6 push 收口):renderer 订阅 capabilitiesChanged 一次到位,
    *  不再在每个生命周期转变处散拉式 refreshCapabilities(拉式缓存失同步的根因)。
-   *  在会改变 SessionCapabilities 的转变后调用:会话打开/新建、模型切换、内核就绪、首发送锁定。 */
-  private broadcastCapabilities(proc: SessionProc | undefined): void {
+   *  在会改变 SessionCapabilities 的转变后调用:会话打开/新建(setContext)、模型切换/内核就绪
+   *  (start)、首发送锁定(markTouched 的 false→true 边沿)。payload 统一走 getCapabilities()
+   *  (proc 在/不在两态同一真相,不在各调用点各拼一份)。 */
+  private broadcastCapabilities(): void {
     this.dispatchKernel({
       kind: "capabilitiesChanged",
-      sessionKey: proc?.key ?? this.activeProcKey ?? "",
-      capabilities: this.sessionCapabilitiesOf(proc),
+      sessionKey: this.activeProcKey ?? "",
+      capabilities: this.getCapabilities(),
     });
+  }
+
+  /** 「已落会话内容」统一记账:touched false→true 边沿广播一次能力面(locked 转真),
+   *  renderer 内核 TAB 锁定态与主侧同步;重复落内容不重复广播(边沿语义)。 */
+  private markTouched(proc: SessionProc): void {
+    if (proc.touched) return;
+    proc.touched = true;
+    this.broadcastCapabilities();
   }
 
   /** 激活会话持久记录的内核归属(中立层 header.kernel);无记录/无中立层返回 null。 */
@@ -2890,12 +2904,15 @@ export class SessionStore implements
     return { key, sessionPath };
   }
 
-  /** 往指定会话注入一条 prompt(streamingBehavior 由调用方按帧型分派:响应=steer,事件=followUp)。 */
+  /** 往指定会话注入一条 prompt(streamingBehavior 由调用方按帧型分派:响应=steer,事件=followUp)。
+   *  不置 touched:总线流量(bus_response 握手/房间转发)不是用户内容——touched 驱动
+   *  capabilities.locked(内核 TAB 锁定)、setModel 的 hasHistory、setContext 的孤儿回收
+   *  三个消费者,协议帧置位会把「用户从没发过消息的会话」误锁内核(实弹:pi spawn 时
+   *  fit-pi-extension 的 bus ping 应答经此路置 touched,新会话模型下拉的 dsh TAB 锁死)。 */
   async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
     const proc = this.procs.get(sessionKey)?.get(KERNEL_IDS[0]);
     if (!proc || !proc.backend.alive) throw new Error(`会话不在线: ${sessionKey}`);
     await this.asPi(proc).sendMessage(text, undefined, streamingBehavior);
-    proc.touched = true;
   }
 
   /** 按 key 取最后一条 assistant 文本(完成采集主源;进程不在返回空串,调用方回退读文件)。 */
