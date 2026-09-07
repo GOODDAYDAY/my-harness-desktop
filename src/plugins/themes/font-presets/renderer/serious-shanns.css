@@ -1,0 +1,57 @@
+/* Serious Shanns —— 内置打包字体(MIT,见 ../fonts/LICENSE)。
+ * 六个字重/样式共享同一 family 名「Serious Shanns」,按 weight/style 轴匹配:
+ * 代码里的 bold(700)/italic 能正确命中对应字形。
+ *
+ * 为什么用单 family + 显式 weight/style,而不是官方站那种 6 个独立 family 名:
+ * 字体内部 fsSelection 的 italic 位未置、nameID 2(subfamily)六份全为 "Normal"——
+ * 靠字体自身元数据无法区分斜体/粗体。CSS 的 @font-face 匹配只看 descriptor
+ * (font-weight/font-style),不读字体 name 表,所以显式声明即可让单 family 下
+ * bold/italic 正确生效;官方站因未声明 descriptor,才被迫拆成 6 个 family 名。
+ */
+@font-face {
+  font-family: "Serious Shanns";
+  src: url("../fonts/SeriousShanns-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Serious Shanns";
+  src: url("../fonts/SeriousShanns-Italic.otf") format("opentype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Serious Shanns";
+  src: url("../fonts/SeriousShanns-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Serious Shanns";
+  src: url("../fonts/SeriousShanns-BoldItalic.otf") format("opentype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Serious Shanns";
+  src: url("../fonts/SeriousShanns-Light.otf") format("opentype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Serious Shanns";
+  src: url("../fonts/SeriousShanns-LightItalic.otf") format("opentype");
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}

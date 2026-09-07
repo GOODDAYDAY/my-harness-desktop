@@ -44,6 +44,12 @@
         "stack": "ui-monospace, \"SF Mono\", monospace"
       },
       {
+        "id": "serious-shanns",
+        "category": "mono",
+        "labelKey": "fontPresets.mono.seriousShanns",
+        "stack": "\"Serious Shanns\", ui-monospace, \"SF Mono\", \"Menlo\", monospace"
+      },
+      {
         "id": "system",
         "category": "english",
         "labelKey": "fontPresets.english.system",

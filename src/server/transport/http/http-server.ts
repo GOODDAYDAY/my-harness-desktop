@@ -20,6 +20,7 @@ const MIME: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
+  ".otf": "font/otf",
   ".map": "application/json",
 };
 
