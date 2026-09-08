@@ -303,3 +303,11 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 2. 「build 通过」不算运行时验证;UI/链路改动必须附真实运行证据(本文的路径)。
 3. e2e 脚本本身也是代码:选择器锚错、收敛竞态、虚拟化盲区都会让绿变假绿——断言前先问「这个文本此刻真在 DOM 吗」。
 4. 修插件先想槽位:manifest `component` 名必须在 renderer 入口 exports 里(自动匹配),漏了就是静默缺席——守卫:`src/plugins/manifest-exports.test.ts`。
+5. **读设计文档先过「路径迁移映射」**(2026-09-12 实锤:前后端分离重构后 30+ 份 `docs/design/*.md` 残留旧目录路径,100+ 处——按旧路径 grep 会扑空):
+   - `src/core/domain/` → `packages/shared/src/domain/`(圆心)
+   - `src/core/application/` → `src/server/application/`(用例编排)
+   - `src/api/ipc/` → `src/server/controllers/`(网关 handler)
+   - `src/api/renderer/` → `src/web/`(前端);`src/api/renderer/stores/` → `src/server/application/sessions/`(stores 上提 server)
+   - `packages/contract/` → `packages/shared/`(圆心发布面)
+   - `src/client/{pi,dsh}/` → `src/server/kernel/{pi,dsh}/`;`src/client/backend/` → `src/server/kernel/core/`
+   判据:文档里出现这些旧前缀 = 路径漂移(设计文档是真相源,落地后路径随重构改名);改路径要逐条核对目的目录(非 1:1,盲 sed 会把 `stores/` 这类上提项指错地方)。
