@@ -62,6 +62,7 @@ writeFileSync(prefsFile, JSON.stringify({ ...JSON.parse(readFileSync(prefsFile, 
 | `[role=menu]` + `[role=menuitem]` | 模型下拉(Radix) |
 | `[role=menuitem]` | 右键菜单项(会话行右键:重命名/置顶/归档/打开两文件) |
 | `[data-sidepanel-style]` | 右侧面板(**有两个**:图标条 w-12 + 展开面板 h-full,DOM 序展开面板在前且空)——取页签按钮必须用后代选择器 `[data-sidepanel-style] button[aria-label]`(单元素 querySelector 命中空面板得 0 页签,2026-09-08 踩过) |
+| `button[title="分支概览"]` | Tree 面板的 lineage 概览开关(**被 `nodes.length>0` 内核树门禁**——seed-only 会话无运行内核 → 空态 → 按钮不渲染;概览 UI 断言要真内核会话,投影纯逻辑走 getTree 单测 f37045eb) |
 
 **消息行悬停动作钮**:先 `page.mouse.move` 到行中心,等 ~600ms(hover 淡入),再按 title 查。行内按钮 title 全集:复制/分叉/收藏/钉图钉/重试(user 行另有「回退」)。
 
