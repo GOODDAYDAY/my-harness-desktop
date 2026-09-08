@@ -288,7 +288,7 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **修法(87b072d5)**:入口 bundle import 后,直测 `import(pathToFileURL(...))` **全部 151 个 renderer chunk**(Promise.allSettled),让各模块体照跑,后续 `__vitePreload` 的相对 import 命中 ESM 缓存。效果:黑屏全灭 → 151 chunk 零失败、#root/composer/sidebar/sidepanel 皆渲染、页签可点、ping 提交。
 
-**遗留 2 项失败(非阻塞)**:① ping 模型回复——沙箱禁外网,尽力而为项必然失败;② 草稿切会话恢复(`newChatEmpty=false`/`restoredA=false`)——jsdom 下草稿 store 隔离时序(固定 sleep 不足),待查;真 app 草稿隔离是 renderer 面,可补 CDP e2e 验证。
+**遗留 2 项失败(非阻塞)**:① ping 模型回复——沙箱禁外网,尽力而为项必然失败;② 草稿切会话恢复(`newChatEmpty=false`/`restoredA=false`)——**jsdom 合成事件时序问题,非产品 bug**(真 app `composer-draft.e2e.mjs` 6/6 全过:写草稿/新会话空/切回恢复 A/再新会话恢复 B;草稿另有 `use-session-draft.test.tsx` DOM 测试 + `ui-store.composer-drafts.test.ts` 单测)。
 
 ## 6.1 能力面×思考域矩阵(2026-09-07 轮;scripts/demo/kernel-thinking-matrix.e2e.mjs 四幕)
 
