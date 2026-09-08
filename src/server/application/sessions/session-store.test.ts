@@ -1632,3 +1632,22 @@ describe("activeSessionHasHistory 的 pendingSeed 豁免(fork→跨内核切 dsh
     expect(s.getCapabilities().locked).toBe(true);
   });
 });
+
+describe("fork dsh → 切 pi 的 header.kernel 更新(reverse 方向,r24 待查项根因)", () => {
+  it("writeNeutralModelPrefs 在 setModel 应把 header.kernel 从 dsh 改 pi", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "reverse-kernel-neutral-")));
+    const ns = "ns-dsh-fork";
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "dsh", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }),
+      header: { kernel: "dsh", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z", pendingSeed: true, derivedFrom: { kind: "fork", sourceNeutralSessionId: "src", boundaryEntryId: "src:1" } },
+      lineages: [{ lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "prefix" } }] }],
+    });
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    s.setContext(CWD, ns); // dsh 投影路径 = ns
+    // setModel(pi) 应触发 writeNeutralModelPrefs(kernel=pi)
+    await s.setModel("p", "a", "pi");
+    const headerAfter = neutralStore.getHeader(ns)!.header;
+    expect(headerAfter.kernel).toBe("pi");
+  });
+});
