@@ -1584,3 +1584,29 @@ describe("能力面广播(§7.6 push 收口:打开/新建、首发送锁定、�
     expect(store.getCapabilities().locked).toBe(true);
   });
 });
+
+describe("SessionStore.getTree 中立层投影(逐条明细树换中立层投影 ee0798d1 的格式对应守卫)", () => {
+  it("双 lineage(根 + 分叉)→ LineageTree:id 映射 + fork.boundaryEntryId→boundary 字段翻译", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "gettree-neutral-")));
+    const ns = "ns-gettree";
+    const forkNs = "ns-gettree-fork";
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }),
+      lineages: [
+        { lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "hi" } }] },
+        { lineageId: forkNs, fork: { parentLineageId: ns, boundaryEntryId: `${ns}:0` }, entries: [{ neutralEntryId: `${forkNs}:0`, message: { role: "user", content: "forked" } }] },
+      ],
+    });
+    // getTree 中立层命中时不走 backend(catalog.getTree 兜底只在中立层缺失时),dummy 工厂即可
+    const dummyFactory: BackendFactory = { create: () => ({} as unknown as BaseBackend) };
+    const s = new SessionStore(dummyFactory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const tree: LineageTree = await s.getTree(ns);
+    expect(tree.rootId).toBe(ns);
+    expect(tree.lineages).toHaveLength(2);
+    const root = tree.lineages.find((l) => l.id === ns)!;
+    const fork = tree.lineages.find((l) => l.id === forkNs)!;
+    expect(root.fork).toBeNull();
+    // 格式对应关键点:中立层 fork.boundaryEntryId → LineageTree fork.boundary(BoundaryRef)
+    expect(fork.fork).toEqual({ parentLineageId: ns, boundary: `${ns}:0` });
+  });
+});
