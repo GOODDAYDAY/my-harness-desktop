@@ -2876,7 +2876,13 @@ export class SessionStore implements
     const ns = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
     if (!ns || !this.neutralStore) return false;
     const session = this.neutralStore.get(ns);
-    return session ? session.lineages.some((l) => l.entries.length > 0) : false;
+    if (!session) return false;
+    // pendingSeed(§session-neutral:「中立层有内容、内核侧未物化」)不算「历史」——
+    // 未物化的派生会话可自由选目标内核(bookmark-snapshot-fork-unify §8.3 目标内核取
+    // 当前激活内核;seed 由目标内核决定)。派生会话的 prefix 是 seed 不是已落内核的内容,
+    // 把它当历史会锁死内核(fork pi → 切 dsh 被「已固定内核」挡),与 seed 通道语义冲突。
+    if (session.header.pendingSeed === true) return false;
+    return session.lineages.some((l) => l.entries.length > 0);
   }
 
   /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。

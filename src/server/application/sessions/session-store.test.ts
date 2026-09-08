@@ -1610,3 +1610,25 @@ describe("SessionStore.getTree 中立层投影(逐条明细树换中立层投影
     expect(fork.fork).toEqual({ parentLineageId: ns, boundary: `${ns}:0` });
   });
 });
+
+describe("activeSessionHasHistory 的 pendingSeed 豁免(fork→跨内核切 dsh 根因守卫)", () => {
+  it("pendingSeed=true 的派生会话不算历史:fork 后可切目标内核(不锁死源内核)", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "pendingseed-neutral-")));
+    const ns = "ns-pendingseed";
+    // 派生会话:有 prefix entries + pendingSeed=true(未物化)
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }),
+      header: { kernel: "pi", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z", pendingSeed: true, derivedFrom: { kind: "fork", sourceNeutralSessionId: "src", boundaryEntryId: "src:1" } },
+      lineages: [{ lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "prefix" } }] }],
+    });
+    const dummyFactory: BackendFactory = { create: () => ({} as unknown as BaseBackend) };
+    const s = new SessionStore(dummyFactory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    s.setContext(CWD, ns);
+    // pendingSeed=true → 不算历史 → 不锁(可自由选内核)
+    expect(s.getCapabilities().locked).toBe(false);
+    // 对照:物化后(pendingSeed 清除)→ 算历史 → 锁
+    neutralStore.putHeader(ns, { ...neutralStore.get(ns)!.header, pendingSeed: false });
+    s.setContext(CWD, ns);
+    expect(s.getCapabilities().locked).toBe(true);
+  });
+});
