@@ -2,7 +2,7 @@
 
 > **本文是 auxBlock 的唯一真相源**，合并自：`aux-block-mechanism.md` 原版（机制骨架，`1b6a027` 落地）、`aux-block-refine.md`（机制落地后的四处偏差修正 + 一处独立追加）、更早的 `skill-block-hosting.md` 与 `review-fix.md`（已并入 refine 后删除）。后三者的内容全部并入本文，原文件作废删除。
 >
-> 本文同时描述**已落地骨架**与**待实施修正**，落点清单（§10）逐项标注状态；修正全部落地前，以本文 §10 为准判断哪些行为还是旧形态。
+> 本文同时描述**已落地骨架**与**本文修正**（修正批次已全部落地：`AuxBlock` 契约硬化 start/end、skill 引用条迁 skill-manager、review 引用条 matchAll+start/end、echo/`__sendText` 双轨退役）。落点清单（§10）逐项标注状态。**注意：§10 的文件路径是前后端分离重构前的旧目录**，现行映射：`src/core/domain/`→`packages/shared/src/domain/`、`src/api/renderer/stores/`→`src/server/application/sessions/`、`packages/contract/`→`packages/shared/`、`insight/review`→`sessions/review`、`timeline`→`src/plugins/sessions/timeline/`。
 
 判断基准，全文所有决策都从它推出：**会话流（timeline）是机制提供方，review 和 skill 是内容提供方**。机制提供"能挂东西"的能力——块解析汇总、槽位派发、渲染分发；内容提供"挂上去的东西"——某一种块的解析器和渲染器。机制不该认识任何具体块类型，内容不该碰机制的内部。
 
@@ -422,7 +422,7 @@ review 标签化后，评论数据（seq/quote/comment）就在消息文本的�
 | 内容 | review plugin | `buildReviewBlock`、review parser、`ReviewAuxBlock` 折叠卡初版、模板配置退役 |
 | 应用 | `session-store.ts` | echo 镜像全链路退役 |
 
-### 10.2 待实施（本文修正）
+### 10.2 已落地（本文修正批次，路径为重构前旧目录，现行映射见文首）
 
 | 层 | 文件 | 改动 |
 |---|---|---|
