@@ -24,6 +24,9 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 **套件稳定性**:ws-server 闪红根治(r355)瞬态重跑分类(r359/r372)
 **大回归节奏**:r332/r348/r359/r364/r372(每批修复后官方矩阵全跑)
 **能力面×思考域(2026-09-07 轮)**:思考矩阵四幕 e2e(kernel-thinking-matrix)|能力面推送流水插桩(__capsLog)|模型项双禁用态(menuitem aria-disabled/inert div)|空思考帧 wire 级实证|dsh 思考档位补面验证(幕D)|新会话跨内核解锁(幕C)
+**pi dsv4pro 无思考三层根因(r28-r33)**:网关 anthropic 错标 thinking_delta / 网关 openai 拒 developer 角色(桌面可修=supportsDeveloperRole 复选框 3aec332d)/ pi 配置只在 anthropic 协议(已配到 openai)——「同模型 pi 无思考 dsh 有」的逐协议打穿法
+**fork→切内核(r23)**:fork 派生会话 pendingSeed 豁免锁定(pendingSeed=未物化≠历史)——fork pi 后可切 dsh
+**in-mem harness(r19)**:Vite __vitePreload 相对 import 在 Node-ESM 挂起→直测预加载全 chunk 修复(87b072d5)
 
 ## 1 基础设施(现成件,别重造)
 
