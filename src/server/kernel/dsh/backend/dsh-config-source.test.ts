@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DshConfigSource, assertPiAiRouteServiceable } from "./dsh-config-source";
+import { parse as parseYaml } from "yaml";
 
 let dir: string;
 let cordisPath: string;
@@ -196,5 +197,52 @@ describe("DshConfigSource provider 纯自定义(listProviders/setProvider/rename
     expect(s.listProviders()[0].provider).toBe("deepseek-custom");
     await s.removeProvider("deepseek-custom");
     expect(s.listProviders()).toHaveLength(0);
+  });
+});
+
+describe("DshConfigSource 模型 reasoning 标记 → settings.yaml reasoningEfforts(补面配套,dsh-thinking-level.md §5)", () => {
+  // 独立 fixture:setProvider 要写 settings.yaml,需构造带 settingsPath 的实例。
+  let sdir: string;
+  let scordis: string;
+  let ssettings: string;
+  let ssrc: DshConfigSource;
+  beforeEach(() => {
+    sdir = mkdtempSync(join(tmpdir(), "dsh-reasoning-"));
+    scordis = join(sdir, "cordis.yml");
+    ssettings = join(sdir, "settings.yaml");
+    writeFileSync(scordis, "- id: settings-file\n  name: '@deepseek-ai/dsh-settings-file'\n");
+    ssrc = new DshConfigSource(scordis, ssettings);
+  });
+  afterEach(() => { rmSync(sdir, { recursive: true, force: true }); });
+
+  it("reasoning=true 的模型写回 reasoningEfforts(off 缺省 + 低中高同名);reasoning 缺省不写", async () => {
+    await ssrc.setProvider("us-new", {
+      api: "openai-completions",
+      baseURL: "https://gw/",
+      apiKey: "k",
+      models: [
+        { id: "dsv4-pro", name: "dsv4", reasoning: true, contextWindow: 100000, maxTokens: 64000 },
+        { id: "plain", name: "plain", contextWindow: 100000, maxTokens: 64000 },
+      ],
+    });
+    const doc = parseYaml(readFileSync(ssettings, "utf-8")) as Record<string, any>;
+    const models = doc["llm-pi-ai"].providers["us-new"].models;
+    const reasoning = models.find((m: { id: string }) => m.id === "dsv4-pro");
+    const plain = models.find((m: { id: string }) => m.id === "plain");
+    expect(reasoning.reasoningEfforts).toEqual({ off: null, low: "low", medium: "medium", high: "high" });
+    expect(plain.reasoningEfforts).toBeUndefined();
+  });
+
+  it("读回:settings.yaml 有 reasoningEfforts → 模型 reasoning=true;无则缺省", () => {
+    writeFileSync(ssettings, JSON.stringify({
+      "llm-pi-ai": { providers: { "us-new": { models: [
+        { id: "dsv4-pro", reasoningEfforts: { off: null, low: "low", high: "high" } },
+        { id: "plain" },
+      ] } } },
+    }));
+    const provs = ssrc.listProviders();
+    const us = provs.find((p) => p.provider === "us-new")!;
+    expect(us.models.find((m) => m.id === "dsv4-pro")?.reasoning).toBe(true);
+    expect(us.models.find((m) => m.id === "plain")?.reasoning).toBeUndefined();
   });
 });
