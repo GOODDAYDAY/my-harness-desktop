@@ -7,6 +7,12 @@
  * 靠字体自身元数据无法区分斜体/粗体。CSS 的 @font-face 匹配只看 descriptor
  * (font-weight/font-style),不读字体 name 表,所以显式声明即可让单 family 下
  * bold/italic 正确生效;官方站因未声明 descriptor,才被迫拆成 6 个 family 名。
+ *
+ * size-adjust:122.4% —— 光学放大,对齐 SF Mono 的大写高度(cap-height)。
+ * Serious Shanns 字面偏紧凑:cap-height 0.576em / x-height 0.485em,而栈内
+ * 首个具体回退 SF Mono 是 0.705em / 0.526em,同字号下 Serious Shanns 的字
+ * 显得明显小一号。size-adjust 按 0.705/0.576≈1.224 等比放大整个 em(含
+ * advance width,等宽性保持),六个 face 同值,避免某字重/样式漏改而混排不齐。
  */
 @font-face {
   font-family: "Serious Shanns";
@@ -14,6 +20,7 @@
   font-weight: 400;
   font-style: normal;
   font-display: swap;
+  size-adjust: 122.4%;
 }
 
 @font-face {
@@ -22,6 +29,7 @@
   font-weight: 400;
   font-style: italic;
   font-display: swap;
+  size-adjust: 122.4%;
 }
 
 @font-face {
@@ -30,6 +38,7 @@
   font-weight: 700;
   font-style: normal;
   font-display: swap;
+  size-adjust: 122.4%;
 }
 
 @font-face {
@@ -38,6 +47,7 @@
   font-weight: 700;
   font-style: italic;
   font-display: swap;
+  size-adjust: 122.4%;
 }
 
 @font-face {
@@ -46,6 +56,7 @@
   font-weight: 300;
   font-style: normal;
   font-display: swap;
+  size-adjust: 122.4%;
 }
 
 @font-face {
@@ -54,4 +65,5 @@
   font-weight: 300;
   font-style: italic;
   font-display: swap;
+  size-adjust: 122.4%;
 }

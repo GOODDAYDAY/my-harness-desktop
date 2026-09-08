@@ -52,4 +52,16 @@ describe("font-presets 内置字体预设守卫", () => {
     const missing = FONT_FILES.filter((f) => !existsSync(join(DIR, "fonts", f)));
     expect(missing).toEqual([]);
   });
+
+  it("Serious Shanns 六个 @font-face 都带 size-adjust 光学放大(对齐 SF Mono cap-height)", () => {
+    const css = readFileSync(join(DIR, "renderer", "serious-shanns.css"), "utf-8");
+    // 去掉注释再数,避免注释里的说明文字(如 size-adjust:122.4%)被误计。
+    const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    // 六个字重/样式 face 都要各带一份 size-adjust,漏一个就在对应 face 上回落原尺寸(视觉又变回小一号)。
+    const faces = (bare.match(/@font-face\s*\{/g) ?? []).length;
+    expect(faces).toBe(6);
+    const adjusts = (bare.match(/size-adjust:\s*[\d.]+%/g) ?? []).map((s) => s.replace(/\s+/g, ""));
+    expect(adjusts).toHaveLength(6);
+    expect(new Set(adjusts)).toEqual(new Set(["size-adjust:122.4%"]));
+  });
 });
