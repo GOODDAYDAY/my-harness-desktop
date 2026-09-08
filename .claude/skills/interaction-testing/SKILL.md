@@ -23,6 +23,7 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 **架构守卫**:依赖方向审计(r342,audit:deps)| 测试文件 tsc 债(r335)
 **套件稳定性**:ws-server 闪红根治(r355)瞬态重跑分类(r359/r372)
 **大回归节奏**:r332/r348/r359/r364/r372(每批修复后官方矩阵全跑)
+**能力面×思考域(2026-09-07 轮)**:思考矩阵四幕 e2e(kernel-thinking-matrix)|能力面推送流水插桩(__capsLog)|模型项双禁用态(menuitem aria-disabled/inert div)|空思考帧 wire 级实证|dsh 思考档位补面验证(幕D)|新会话跨内核解锁(幕C)
 
 ## 1 基础设施(现成件,别重造)
 
@@ -278,6 +279,20 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 - console/pageerror 全程收集,末尾断言「零报错」并把首条打进失败信息
 - `window.__neutralLog`(渲染端插桩 `window.kernel.sessions.onNeutralChange`)对账写穿回执
 - 事件流插桩 `window.kernel.sessions.onEvent` 记 type 序列(定位「思考中永挂」类)
+
+## 6.1 能力面×思考域矩阵(2026-09-07 轮;scripts/demo/kernel-thinking-matrix.e2e.mjs 四幕)
+
+**思考矩阵四幕(本轮新增官方 e2e,16 断言)**:幕A pi+能思考模型(网关实发 thinking_delta)→思考块展开有正文;幕B pi+空帧模型(Qwen3.8 Max)→「无思考内容」静态提示、无死展开钮;幕C pi 会话在时开新会话→切 dsh 模型→发送出回复(跨内核解锁);幕D dsh 会话思考档位下拉(关/低/中/高)→切档后「思考强度 → low」分隔线落会话流。基线拨 `defaultThinkingLevel:"high"`(setupBaseline 默认种 "off" 演示省 token——验思考必须先拨高,off 会让 pi 不发思考,幕A 假阴性)。
+
+**能力面推送流水插桩(定位能力面滞留的探针法)**:拉起后立即 `window.kernel.sessions.onKernelEvent((e)=>{ if(e?.kind==="capabilitiesChanged") (window).__capsLog.push(e.capabilities) })`,任意时刻读 `__capsLog` 拿**渲染层实际收到过的全部能力面快照序列**——与主侧 `window.kernel.sessions.getCapabilities()`(IPC 直读真相)两端对账:流水末条 ≠ 主侧现值 = 推送缺口(哪个转变点漏广播,转变点清单见 session-store broadcastCapabilities 注释)。实弹:修前流水末条 `{pi,locked:true}` 而主侧(新会话)`{null,false}` → setContext 漏广播坐实。
+
+**模型项的双禁用态(选模型断言必查两样)**:① 隐藏内核清单是 **inert div**(非 active TAB 的内核清单 `visibility:hidden+pointerEvents:none`,**不占 [role=menuitem] 角色**)——menuitem 只含当前 TAB 的项;② 锁内核时可见项也挂 `aria-disabled="true"`(Radix disabled,点了 onSelect 不触发)。pickModel 断言必须同时查 `getBoundingClientRect().width>0 && aria-disabled!=="true"`,只查文本存在会「找到但点了没反应」(实测浪费一轮)。内核 TAB 置灰读 `disabled` + `title`(锁定文案 shell.kernelLocked)。
+
+**空思考帧的 wire 级实证法(「思考内容为空」类投诉的定界)**:先 curl 原始 provider 流(`anthropic-messages` 路径直接 POST /v1/messages 带 thinking 参数,openai 路径查 `reasoning_content`)——**网关只回 content_block_start 空 thinking 帧、零 thinking_delta** = 供应商行为,pi 落盘 `thinking:""` 忠实记录,desktop 管线无截断(pi JSONL 与中立层同空)。定界完成才谈 UI:空正文配可点展开器=「点开有东西」的假装,显式降级静态提示。同网关换上游模型(glm-5.2)实发 delta——「部分模型空帧」是每上游模型行为,不是系统性缺思考。
+
+**dsh 思考档位补面的验证口径(幕D)**:① dsh 会话 composer 档位下拉**存在**(dsh 适配插件补面,清单来自模型 reasoningEfforts 声明,本机种=关/低/中/高);② 切档生效的**留痕断言** = 会话流出现「思考强度 → low」分隔线(dsh request/header 事件派生 thinking_level_change,壳零分支);③ dsh 落盘无 pi 文件,留痕只看视图流分隔线 + dsh 会话日志,别找 pi JSONL。
+
+**新会话跨内核解锁(幕C 三连断言)**:pi 会话(有历史)→「+新会话」(title **startsWith「新会话」**——「刷新会话列表」含子串「新会话」,includes 模糊匹配会先点中刷新钮,实测踩过)→ 开模型下拉读 TAB(disabled 应 false)→ 点 dsh 模型项 → 发送 → dsh 回复到达且无「跨内核/已固定内核/未启动」错误。修后回归锚:`__capsLog` 每个转变点都有新快照(setContext/首发锁定/start 三处广播,见 markTouched 边沿语义)。
 
 ## 7 修复纪律速查(CLAUDE.md 摘录的实操形)
 
