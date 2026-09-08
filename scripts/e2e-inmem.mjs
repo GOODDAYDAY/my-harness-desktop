@@ -442,6 +442,19 @@ try {
 }
 check("前端: renderer bundle 加载", true, entryMatch[1]);
 
+// 修复(2026-09-13 bisect):index.tsx / plugins-host 的动态 import 被 Vite 编译成
+// __vitePreload 包装,其相对 import 在 Node-ESM 混合桥下不完成(app-main/插件 renderer
+// 模块体 60s 不执行)。直测 import 同一 chunk(绝对 file:// URL)秒解——这里在入口
+// import 后直测加载**全部 renderer chunk**,让各模块体照跑,后续 __vitePreload 的相对
+// import 命中 ESM 缓存。副作用:多加载了 diagram 等冷 chunk,但纯模块定义无副作用。
+{
+  const assetsDir = join(ROOT, "out", "renderer", "assets");
+  const chunks = readdirSync(assetsDir).filter((f) => f.endsWith(".js"));
+  const results = await Promise.allSettled(chunks.map((f) => import(pathToFileURL(join(assetsDir, f)).href)));
+  const failed = results.filter((r) => r.status === "rejected");
+  log(`直测加载 renderer chunks: ${chunks.length} 个,失败 ${failed.length} 个${failed[0] ? `: ${String(failed[0].reason).slice(0, 100)}` : ""}`);
+}
+
 // 等 React 挂载 + 插件加载落定
 const deadline = Date.now() + 60000;
 while (Date.now() < deadline) {
