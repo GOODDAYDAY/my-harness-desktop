@@ -21,14 +21,14 @@ export function createPiModelsApi(
       baseUrl: p.baseUrl,
       api: p.api,
       apiKey: p.apiKey,
-      models: (p.models ?? []).map((m) => ({ id: m.id, name: m.name, reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens })),
+      models: (p.models ?? []).map((m) => ({ id: m.id, name: m.name, reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens, supportsDeveloperRole: m.compat?.supportsDeveloperRole })),
     }));
 
   const fromNeutral = (detail: Omit<NeutralProvider, "id">): ProviderConfig => ({
     baseUrl: detail.baseUrl,
     api: detail.api,
     apiKey: detail.apiKey,
-    models: detail.models.map((m) => ({ id: m.id, name: m.name, reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens })),
+    models: detail.models.map((m) => ({ id: m.id, name: m.name, reasoning: m.reasoning, contextWindow: m.contextWindow, maxTokens: m.maxTokens, ...(m.supportsDeveloperRole !== undefined ? { compat: { supportsDeveloperRole: m.supportsDeveloperRole } } : {}) })),
   });
 
   const readDefault = (): KernelModelConfig["default"] => {

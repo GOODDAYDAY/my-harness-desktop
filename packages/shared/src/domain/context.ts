@@ -109,6 +109,11 @@ export interface NeutralModel {
   reasoning?: boolean;
   contextWindow?: number;
   maxTokens?: number;
+  /** 端点是否支持 OpenAI `developer` 角色(系统提示的角色拼写)。部分 OpenAI 兼容网关
+   *  (如 bifrost 的 tencent 路由)只认 `system`,pi-ai 对 reasoning 模型默认发 `developer`
+   *  会被 400 拒——置 false 让 pi-ai 退回 `system`。映射到 pi models.json 的
+   *  `compat.supportsDeveloperRole`。 */
+  supportsDeveloperRole?: boolean;
 }
 
 /** 中性 provider(统一形状)。apiKey 是「API Key 字面值」:pi 内联写 models.json,

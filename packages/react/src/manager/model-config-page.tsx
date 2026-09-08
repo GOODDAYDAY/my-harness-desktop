@@ -518,6 +518,10 @@ function ModelRow({ model, idx, providerId, defaultTarget, testStates, dirty, ca
             reasoning
           </label>
         )}
+        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }} title="部分 OpenAI 兼容网关只认 system 角色,pi-ai 对 reasoning 模型默认发 developer 会被 400 拒——勾选则退回 system。">
+          <input type="checkbox" checked={model.supportsDeveloperRole === false} onChange={(e) => onUpdateModel(idx, { supportsDeveloperRole: e.target.checked ? false : undefined })} />
+          devRole 不兼容
+        </label>
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
           contextWindow
           <input type="number" value={model.contextWindow ?? 0} onChange={(e) => onUpdateModel(idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle(), width: "90px", minWidth: "90px", flexShrink: 0 }} />

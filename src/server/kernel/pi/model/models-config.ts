@@ -12,6 +12,9 @@ export interface ModelConfig {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
+  /** pi-ai 兼容面(壳只透传不解释,具体字段见内核 model-config)——
+   *  supportsDeveloperRole=false 让 pi-ai 对 reasoning 模型用 system 而非 developer 角色。 */
+  compat?: { supportsDeveloperRole?: boolean };
 }
 
 /** pi 内核 models.json 的单个 provider 配置。 */
