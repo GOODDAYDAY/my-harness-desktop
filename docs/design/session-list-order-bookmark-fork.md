@@ -101,7 +101,7 @@ flowchart LR
 
 ### 3.1 打开：已经自动，零代码
 
-`session-store.ts` 的 `forkFromSession` 内部完成两次 `sessionStart` dispatch：一次在 `setContext(cwd, intermediate)`，一次在 fork 对账成功后删中间副本时补播。renderer 侧 `src/api/renderer/stores/session-store.ts` 的 `onEvent` 钩子收到 `sessionStart` 就 `useUiStore.getState().setCurrentSessionPath(sf)`——fork 产物路径最终落在 `currentSessionPath` 上，timeline 重 resync，sessions-list 的 `useEffect`（依赖 `currentSessionPath`）重拉列表、自动高亮到新会话。这一段不需要任何新代码，调研已确认生效。
+`session-store.ts` 的 `forkFromSession` 内部完成两次 `sessionStart` dispatch：一次在 `setContext(cwd, intermediate)`，一次在 fork 对账成功后删中间副本时补播。renderer 侧 `src/web/stores/session-store.ts` 的 `onEvent` 钩子收到 `sessionStart` 就 `useUiStore.getState().setCurrentSessionPath(sf)`——fork 产物路径最终落在 `currentSessionPath` 上，timeline 重 resync，sessions-list 的 `useEffect`（依赖 `currentSessionPath`）重拉列表、自动高亮到新会话。这一段不需要任何新代码，调研已确认生效。
 
 ### 3.2 定位：invoke scrollTo
 
@@ -125,7 +125,7 @@ ctx.events.invoke("timeline:scrollTo", { messageId: bm.entryId });
    ctx.events.emit("timeline:bookmarkRequested", { sessionPath: currentSessionPath!, entryId: message.id!, preview });
    ```
 
-2. **message.id 的来源**（`src/core/domain/events/session-state.ts` 的 `sessionEntryToNeutral`，domain 侧 entry→NeutralMessage 的唯一投影函数，注释原文）：
+2. **message.id 的来源**（`packages/shared/src/domain/events/session-state.ts` 的 `sessionEntryToNeutral`，domain 侧 entry→NeutralMessage 的唯一投影函数，注释原文）：
 
    ```typescript
    // 条目 id(JSONL 行级 / entryAppended.entry.id)提升为 NeutralMessage.id——patch/书签/滚动的稳定锚点。

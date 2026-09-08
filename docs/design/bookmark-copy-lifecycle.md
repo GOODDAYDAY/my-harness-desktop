@@ -14,7 +14,7 @@
 
 为什么搬动会触发：收藏的元数据存在 `<cwd>/.my-harness-desktop/config/session-bookmarks.json`（project 级配置，路径由框架按 pluginId 推导），它跟着目录走、换位置还在；但每条收藏的 `cwd` 字段记录的是**创建那一刻**的项目路径（`src/plugins/sessions/session-bookmarks/renderer/index.tsx`，`createBookmark` 里 `cwd: currentCwd`）。目录搬走后这个字段就成了过期的路径快照：
 
-- 删除副本文件时用的正是这个快照（`deleteBookmark` 里 `bookmarkSessionFile(bm.cwd, bm.id)`），而 `fs:removePath` 的 IPC 把路径圈禁在**当前激活项目根**内（`src/api/ipc/fs-git.ts` 的 `assertProjectPath`，越界直接 throw）。快照路径指向旧位置，和当前根不是一回事，删除第一步就死在 IPC 边界上。
+- 删除副本文件时用的正是这个快照（`deleteBookmark` 里 `bookmarkSessionFile(bm.cwd, bm.id)`），而 `fs:removePath` 的 IPC 把路径圈禁在**当前激活项目根**内（`src/server/controllers/fs-git.ts` 的 `assertProjectPath`，越界直接 throw）。快照路径指向旧位置，和当前根不是一回事，删除第一步就死在 IPC 边界上。
 - git clone 是否触发取决于 `.my-harness-desktop` 的 git 状态，两条路修复后都覆盖：插件注释的设计意图是元数据“git 可追踪、跟随项目”（`<cwd>/.my-harness-desktop/config/session-bookmarks.json`），用户若提交了 `.my-harness-desktop`，clone 会把带过期 `bm.cwd` 的元数据连同副本一起带进新项目，bug 照样触发；用户若 ignore 了 `.my-harness-desktop`，clone 里没有收藏元数据，不涉及。统一 currentCwd 后，clone 带来的副本就在当前根下，删除、fork 照常。
 
 这里有个反直觉的点要先戳破：**"session 文件不存在"不是删不掉的原因**。副本删除的最终实现是 `rmSync(path, { recursive: true, force: true })`（`src/core/application/sessions/session-scanner.ts` 的 `removePath`，fs-git.ts 的 IPC handler 引用的就是它），而 Node 的 `fs.rmSync` 在 `force: true` 时对不存在的路径静默成功、不抛 ENOENT——这是 Node API 文档明说的语义。所以副本被外部删掉（git clean、手动清）的场景，删除其实是成功的。真正让删除断掉的，是 `bm.cwd` 与当前激活项目根不一致——文件存在也好、不存在也好，路径一越界就抛错。
@@ -23,7 +23,7 @@
 
 收藏副本的读写走了两条不同的 IPC 通道，圈禁规则不一样，这是不对称的根源：
 
-- **创建**走 session 通道（`ctx.sessions.copySession`），圈禁只要求路径落在会话相关位置——`~/.pi/agent` 前缀、`~/.my-harness-desktop` 前缀、或含 `.my-harness-desktop` 段（`src/api/ipc/sessions.ts` 的 `assertSessionPathAllowed`）——宽松，任何项目的项目级数据目录都能写。
+- **创建**走 session 通道（`ctx.sessions.copySession`），圈禁只要求路径落在会话相关位置——`~/.pi/agent` 前缀、`~/.my-harness-desktop` 前缀、或含 `.my-harness-desktop` 段（`src/server/controllers/sessions.ts` 的 `assertSessionPathAllowed`）——宽松，任何项目的项目级数据目录都能写。
 - **删除**走 fs 通道（`ctx.fs.removePath`），圈禁要求路径落在当前激活项目根内（`assertProjectPath`）——严格，只认当前项目。
 
 创建时写进元数据的 `bm.cwd` 是"当时那个项目"，删除时却被"现在这个项目"重新校验。项目路径不变时两边一致、相安无事；目录一搬动，创建能写、删除不能删，收藏就成了只能进不能出的死数据。

@@ -67,7 +67,7 @@ session-colors 的图钉目前只能钉会话列表的行。本文把它扩展�
 
 ### 3.1 锚点：messageId
 
-内容钉的锚点是 `NeutralMessage.id`。这个 id 是 JSONL 行级条目 id——`sessionEntryToNeutral`（`src/core/domain/events/session-state.ts`）把条目 id 提升为消息 id，注释里写明它就是"patch/书签/滚动的稳定锚点"。稳定性与书签的 fork 锚点同级：重扫会话文件、重开窗口、切走再切回，id 不变。书签拿它 fork、review 拿它锚评论、timeline 拿它 `scrollToIndex`，内容图钉拿它定位，是同一个锚点的第四种消费。
+内容钉的锚点是 `NeutralMessage.id`。这个 id 是 JSONL 行级条目 id——`sessionEntryToNeutral`（`packages/shared/src/domain/events/session-state.ts`）把条目 id 提升为消息 id，注释里写明它就是"patch/书签/滚动的稳定锚点"。稳定性与书签的 fork 锚点同级：重扫会话文件、重开窗口、切走再切回，id 不变。书签拿它 fork、review 拿它锚评论、timeline 拿它 `scrollToIndex`，内容图钉拿它定位，是同一个锚点的第四种消费。
 
 不钉块（block）级。块级锚点不全——toolCall 块有 `toolCall.id`，thinking、text 块没有稳定 id；块也没有 DOM 锚点，`data-message-id` 在 MessageRow 根元素上，块级定位要给 BlockRenderer 加属性，破坏"timeline 零改动"。消息粒度对"标记位置回来看"够用。
 

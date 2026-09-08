@@ -17,7 +17,7 @@
 
 ### 1.1 一次发送被拆成四条 RPC
 
-renderer 统一写口 `src/api/renderer/stores/session-store.ts` 的 `sendMessage()` 发送前干了四件事：
+renderer 统一写口 `src/web/stores/session-store.ts` 的 `sendMessage()` 发送前干了四件事：
 
 ```ts
 // pending 回灌 / 头对齐 / fallback 三段,每段都是:
@@ -166,13 +166,13 @@ async prompt(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?:
 
 ## 5. 各层实现影响
 
-### 5.1 renderer store（`src/api/renderer/stores/session-store.ts`）
+### 5.1 renderer store（`src/web/stores/session-store.ts`）
 
 `sendMessage()` 的三段回灌收敛为：拼出一个 `prefs: SessionModelPrefs`（pending 优先 → `readHeaderPrefs` → `getFallbackModel`），然后**一次** `window.pi.sessions.prompt(text, images, display, prefs)`。删除 `setModel`/`setThinkingLevel`/`sync` 的逐条调用与 `needSync` 逻辑。
 
 ### 5.2 IPC / preload
 
-- `src/api/ipc/sessions.ts`：`session.prompt` 处理器扩展为接受 `prefs`（或新增 `session.send` 通道，二选一，推荐扩展 `prompt` 签名，避免双通道漂移）。
+- `src/server/controllers/sessions.ts`：`session.prompt` 处理器扩展为接受 `prefs`（或新增 `session.send` 通道，二选一，推荐扩展 `prompt` 签名，避免双通道漂移）。
 - `src/api/preload/ipc-channels.ts` / `preload.ts`：`window.pi.sessions.prompt` 桥签名加 `prefs`。
 - `packages/react/src/plugin-context.ts`：`messaging.prompt` 透传 `prefs`（若有插件直调）。
 

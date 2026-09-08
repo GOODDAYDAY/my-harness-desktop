@@ -1,8 +1,8 @@
 # 右面板板块尺寸模型 + 收起动画
 
 > 状态：已实现 v2（id 键控权重模型；v1 = autoSaveId 位置键控，已废）
-> 关联：`src/api/renderer/components/right-panel.tsx`（`RightPanelContent`）、
-> `src/api/renderer/index.css`（`.sidepanel-panel-enter`）、react-resizable-panels `^2.1.9`
+> 关联：`src/web/components/right-panel.tsx`（`RightPanelContent`）、
+> `src/web/index.css`（`.sidepanel-panel-enter`）、react-resizable-panels `^2.1.9`
 
 ## 1. 尺寸模型：id 键控权重（v2 核心变化）
 

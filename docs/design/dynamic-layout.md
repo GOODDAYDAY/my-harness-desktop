@@ -6,7 +6,7 @@
 
 ### 0.1 现在焊死了什么
 
-主页面（`src/api/renderer/index.tsx` 的 `ChatView`）的三栏结构是一段硬编码 JSX：左 `Sidebar`、中 `MainViewHost`、右 `RightPanelContent`，三个 `Panel` 的次序、折叠动画、宽度约束全部写死在壳的入口文件里。槽位契约让**栏里的内容**是插件贡献的，但**栏本身**——有几个区域、怎么排布、能不能多一个——是壳的私有意见，插件碰不到。
+主页面（`src/web/index.tsx` 的 `ChatView`）的三栏结构是一段硬编码 JSX：左 `Sidebar`、中 `MainViewHost`、右 `RightPanelContent`，三个 `Panel` 的次序、折叠动画、宽度约束全部写死在壳的入口文件里。槽位契约让**栏里的内容**是插件贡献的，但**栏本身**——有几个区域、怎么排布、能不能多一个——是壳的私有意见，插件碰不到。
 
 - 中区更彻底：`MainViewHost` 查 `mainView` 槽后取 `items[0]` 渲染（`main-view-host.tsx`），赢家通吃。timeline 占着这个位置，任何"另一个主视图"连存在的资格都没有——文件预览、diff 视图这类想和会话流并行的内容形态，在机制上没有落点。
 - 面板状态散落在 ui-store 的平铺字段里（`leftPanelOpen` / `rightPanelOpen` / `sidebarWidth`），每个字段都被标题栏、快捷键、设置页多处读写。布局是"一堆互相引用的布尔和数字"，不是"一棵可以整体读写的结构"。
@@ -71,7 +71,7 @@ interface ViewInstance {
 ```
 
 - 视图记录存在布局 store 的注册表（`views: Record<string, ViewInstance>`），树里只放 viewId——树是结构，注册表是内容，改 tab 顺序不动注册表，改视图内容不动树。
-- 组件解析按 `pluginId` 分派：`"shell"` 查壳内部组件表（Sidebar、RightPanelContent 这类机制组件），其余查插件模块注册表——plugins-host（`src/api/renderer/plugins-host.ts`）加载插件 module 后按 `(pluginId, exportName)` 从模块 exports 取组件。动态视图**不需要 manifest 声明**——manifest 的 `component` 匹配是静态贡献的校验便利，运行时打开视图直接以模块 export 为准，两层各管各的。实现上 plugins-host 今天只做"按 manifest 匹配注册"，本设计给它加一个职责：加载后留存 module 引用，暴露 `getPluginComponent(pluginId, name)` 同步访问器——插件加载先于任何组件挂载（pluginsReady 渲染闸门），调用时模块必然已在。
+- 组件解析按 `pluginId` 分派：`"shell"` 查壳内部组件表（Sidebar、RightPanelContent 这类机制组件），其余查插件模块注册表——plugins-host（`src/web/plugins-host.ts`）加载插件 module 后按 `(pluginId, exportName)` 从模块 exports 取组件。动态视图**不需要 manifest 声明**——manifest 的 `component` 匹配是静态贡献的校验便利，运行时打开视图直接以模块 export 为准，两层各管各的。实现上 plugins-host 今天只做"按 manifest 匹配注册"，本设计给它加一个职责：加载后留存 module 引用，暴露 `getPluginComponent(pluginId, name)` 同步访问器——插件加载先于任何组件挂载（pluginsReady 渲染闸门），调用时模块必然已在。
 
 ### 1.3 默认布局树：现有三栏的映射
 

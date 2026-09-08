@@ -169,7 +169,7 @@ API 面短名、落盘长名,是有意的分层:desktop 生态内部(API、类�
 
 - `SessionInfo`(domain/sessions.ts:26-43)加 `custom?: Record<string, unknown>`,注释钉 §2.4 的三条约定;读出映射 `header["custom-my-harness-desktop"]` → `info.custom`。
 
-零改动的链路值得点名,因为它是契约单源的红利清单:`packages/contract/src/index.ts:19` 是 type re-export,domain 类型一变发布面自动跟随;preload.ts:186 的 `updateHeader(patch: HeaderPatch)`、api/ipc/sessions.ts:61 的 handler、session-store.ts:320 的分流,全是 `HeaderPatch` 类型穿透——字段加上去,plugin → IPC → main 三层自动随行,plugin 侧调 updateHeader 传 custom 即刻编译通过。
+零改动的链路值得点名,因为它是契约单源的红利清单:`packages/shared/src/index.ts:19` 是 type re-export,domain 类型一变发布面自动跟随;preload.ts:186 的 `updateHeader(patch: HeaderPatch)`、api/ipc/sessions.ts:61 的 handler、session-store.ts:320 的分流,全是 `HeaderPatch` 类型穿透——字段加上去,plugin → IPC → main 三层自动随行,plugin 侧调 updateHeader 传 custom 即刻编译通过。
 
 ### 3.2 写入:updateSessionHeader 加一个分支
 

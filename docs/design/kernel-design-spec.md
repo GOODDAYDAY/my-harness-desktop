@@ -530,7 +530,7 @@ export interface KernelModelSource {
 
 **LineageTree 的投影纯函数** `projectLineageTree(roots: TreeNode[]): LineageTree`：把 pi 的入口级树投影成 lineage 树——一个 lineage = 沿首子（主干）走到尽头的最大线性链；某节点有 >1 子节点即分叉点，首子延续当前 lineage，其余子各开一条分支 lineage。主干选择（首子）是当前约定；若底座以 `leafId` 定义主干，调用方在投影前先按 leafId 重排 children。
 
-**契约单源**：这些类型只在圆心定义一份。`packages/contract/src/index.ts` 做纯 re-export（`export type { ... } from "domain"`），一行逻辑没有。外层绝不手写「本地版」。
+**契约单源**：这些类型只在圆心定义一份。`packages/shared/src/index.ts` 做纯 re-export（`export type { ... } from "domain"`），一行逻辑没有。外层绝不手写「本地版」。
 
 ### 12.1 SessionEvent 中性事件完整清单
 

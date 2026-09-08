@@ -548,7 +548,7 @@ dsh adapter：resolveModel(ref) → { provider, modelId }    // 查 cordis.yml �
 
 1. 新增 `core/domain/session-neutral.ts`：`NeutralSessionId` / `NeutralAnchor` / `NeutralSession` / `NeutralLineage` / `NeutralEntry` / `NeutralModelRef` / `KernelSessionBinding`（§5–§9 的契约）。
 2. 新增 `core/application/sessions/session-binding-store.ts`：映射表的读写原语（`get`/`put`/`deleteBySession`，JSONL 追加）。
-3. `packages/contract/src/index.ts` re-export 新契约。
+3. `packages/shared/src/index.ts` re-export 新契约。
 
 **验收**：typecheck 通过；新契约单测（映射表 get/put/删除、中立 entryId 生成）；既有 403 测试 + build 全绿（纯增量，无行为变化）。
 
@@ -701,7 +701,7 @@ dsh adapter：resolveModel(ref) → { provider, modelId }    // 查 cordis.yml �
 | core/application | `session-store` 改持 `neutralSessionId` + 中立树 + 映射表；`switchKernel` 按 §19 重写 | `core/application/sessions/session-store.ts` |
 | client/pi | `PiBackend` 双向投影：`getTree/getEntries` 附 `neutralEntryId`/`kernelEntryId`；`bookmark` 返回 `NeutralAnchor`；`seed(NeutralSession)` 重建 parentId 树 | `client/pi/pi-backend.ts` |
 | client/dsh | `DshBackend` 双向投影：同上 + `seed(NeutralSession)` 重建 session forest | `client/dsh/dsh-backend.ts` |
-| 契约发布面 | re-export 七类型 | `packages/contract/src/index.ts` |
+| 契约发布面 | re-export 七类型 | `packages/shared/src/index.ts` |
 
 **验收铁律（三句话）**：
 

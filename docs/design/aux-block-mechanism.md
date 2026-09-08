@@ -2,7 +2,7 @@
 
 > **本文是 auxBlock 的唯一真相源**，合并自：`aux-block-mechanism.md` 原版（机制骨架，`1b6a027` 落地）、`aux-block-refine.md`（机制落地后的四处偏差修正 + 一处独立追加）、更早的 `skill-block-hosting.md` 与 `review-fix.md`（已并入 refine 后删除）。后三者的内容全部并入本文，原文件作废删除。
 >
-> 本文同时描述**已落地骨架**与**本文修正**（修正批次已全部落地：`AuxBlock` 契约硬化 start/end、skill 引用条迁 skill-manager、review 引用条 matchAll+start/end、echo/`__sendText` 双轨退役）。落点清单（§10）逐项标注状态。**注意：§10 的文件路径是前后端分离重构前的旧目录**，现行映射：`src/core/domain/`→`packages/shared/src/domain/`、`src/api/renderer/stores/`→`src/server/application/sessions/`、`packages/contract/`→`packages/shared/`、`insight/review`→`sessions/review`、`timeline`→`src/plugins/sessions/timeline/`。
+> 本文同时描述**已落地骨架**与**本文修正**（修正批次已全部落地：`AuxBlock` 契约硬化 start/end、skill 引用条迁 skill-manager、review 引用条 matchAll+start/end、echo/`__sendText` 双轨退役）。落点清单（§10）逐项标注状态。**注意：§10 的文件路径是前后端分离重构前的旧目录**，现行映射：`packages/shared/src/domain/`→`packages/shared/src/domain/`、`src/web/stores/`→`src/server/application/sessions/`、`packages/shared/`→`packages/shared/`、`insight/review`→`sessions/review`、`timeline`→`src/plugins/sessions/timeline/`。
 
 判断基准，全文所有决策都从它推出：**会话流（timeline）是机制提供方，review 和 skill 是内容提供方**。机制提供"能挂东西"的能力——块解析汇总、槽位派发、渲染分发；内容提供"挂上去的东西"——某一种块的解析器和渲染器。机制不该认识任何具体块类型，内容不该碰机制的内部。
 
@@ -88,7 +88,7 @@ flowchart TB
 ```
 
 - **① 产生**：块诞生在两个地方——skill 块是底座展开用户输入 `/skill:name args` 的产物，review 块是评论篮拼装后随下一条消息发送的附件。块都是**用户消息 content 的一部分**（落盘 + 回放都带着），`message.content` 是唯一数据真相源（§5），渲染层只做识别、剥离、按形态展示，不做存储。
-- **② 解析**：每个块类型贡献一个 parser（纯函数，扫文本提取本类型完整块，并精确给出块在原文中的 `start/end`）。机制侧 `parseUserBlocks`（`src/core/domain/aux-blocks.ts`）汇总所有 parser 的结果，按 `start` 排序，按区间切片剥离得正文 `main`；timeline 的 `decomposeMessage` 调用它，把消息 content 变成块序列。parser 是内容的，汇总剥离是机制的。
+- **② 解析**：每个块类型贡献一个 parser（纯函数，扫文本提取本类型完整块，并精确给出块在原文中的 `start/end`）。机制侧 `parseUserBlocks`（`packages/shared/src/domain/aux-blocks.ts`）汇总所有 parser 的结果，按 `start` 排序，按区间切片剥离得正文 `main`；timeline 的 `decomposeMessage` 调用它，把消息 content 变成块序列。parser 是内容的，汇总剥离是机制的。
 - **③ 派发**：剥离出的块经既有 `blockRenderers` 槽分发——`block: "auxBlock"` 匹配词汇，`names` 匹配块 `type`（skill / review / 未来任意）。查槽、order、覆盖语义全部复用既有机制，机制侧零新增。
 - **④ 渲染**：渲染器是内容的最后一环，也是形态调整的落点。review 和 skill 是**同一渲染抽象的两种数据形态**：共享同一套引用条视觉（muted 小字、右对齐），只是载荷密度不同——review 条逐条摊开（每条 `① ❝quote → comment`，纯展示），skill 条是一行摘要（`🧠 name · args`，正文点击展开）。
 
@@ -414,7 +414,7 @@ review 标签化后，评论数据（seq/quote/comment）就在消息文本的�
 
 | 层 | 文件 | 状态 |
 |---|---|---|
-| 圆心 | `src/core/domain/aux-blocks.ts` | AuxBlock / AuxBlockParser / parseUserBlocks 初版（`raw` 契约，待 §3.1 硬化） |
+| 圆心 | `packages/shared/src/domain/aux-blocks.ts` | AuxBlock / AuxBlockParser / parseUserBlocks 初版（`raw` 契约，待 §3.1 硬化） |
 | 发布面 | `packages/react/src/aux-block-parsers.ts` | 解析器注册表（类型随契约更新） |
 | 发布面 | `packages/react/src/index.ts` | re-export 注册表 + AuxBlock 类型 |
 | 流入适配 | `plugins-host.ts` | 收集 `module.auxParsers` |
@@ -426,10 +426,10 @@ review 标签化后，评论数据（seq/quote/comment）就在消息文本的�
 
 | 层 | 文件 | 改动 |
 |---|---|---|
-| 圆心 | `src/core/domain/aux-blocks.ts` | `AuxBlock` 加 `start/end` 删 `raw`；`parseUserBlocks` 改切片剥离 |
-| 圆心 | `src/core/domain/aux-blocks.test.ts` | 适配新契约；补重复块用例 |
-| 应用 | `src/api/renderer/stores/session-store.ts` | 乐观 content 放全文（§5.2 一行）；**演进**：`__sendText` 双轨匹配第二轨冗余，待后续批次删除 |
-| 应用 | `src/api/renderer/stores/session-store.test.ts` | 补"乐观 content 含块 / 水合保留全文"断言 |
+| 圆心 | `packages/shared/src/domain/aux-blocks.ts` | `AuxBlock` 加 `start/end` 删 `raw`；`parseUserBlocks` 改切片剥离 |
+| 圆心 | `packages/shared/src/domain/aux-blocks.test.ts` | 适配新契约；补重复块用例 |
+| 应用 | `src/web/stores/session-store.ts` | 乐观 content 放全文（§5.2 一行）；**演进**：`__sendText` 双轨匹配第二轨冗余，待后续批次删除 |
+| 应用 | `src/web/stores/session-store.test.ts` | 补"乐观 content 含块 / 水合保留全文"断言 |
 | 内容 | `timeline/renderer/skill-aux.tsx` | **迁出**（→ skill-manager） |
 | 内容 | `timeline/renderer/index.tsx` | 删 skill-aux re-export |
 | 内容 | `timeline/renderer/blocks.ts` | 契约变化对它透明，**无逻辑改动**；若类型报错仅同步 import |
@@ -443,7 +443,7 @@ review 标签化后，评论数据（seq/quote/comment）就在消息文本的�
 | 内容 | `review/renderer/index.tsx` | review parser 改 `matchAll` + start/end + 正则放宽；`ReviewAuxBlock` 引用条形态（逐条可见、无展开、无跳转）；`buildReviewBlock` 加引导语 |
 | 内容 | `review/locales/*/shell.json` | 加 `shell.reviewPromptHeader` |
 | 发布面 | `packages/react/src/aux-block-parsers.ts` | 注册表类型随 `AuxBlock` 契约更新 |
-| 发布面 | `packages/contract/src/index.ts` | `AuxBlock` 类型 re-export 同步 |
+| 发布面 | `packages/shared/src/index.ts` | `AuxBlock` 类型 re-export 同步 |
 | 注释 | 三处"依据 docs/design/aux-block-mechanism.md"代码注释 | 内容指向本文，注释无需改动；涉及契约描述的行（aux-blocks.ts 顶部、skill-aux.tsx 顶部）随代码同步 |
 
 ### 10.3 实施顺序

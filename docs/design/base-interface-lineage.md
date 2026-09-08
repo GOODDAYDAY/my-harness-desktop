@@ -235,7 +235,7 @@ interface BaseBackend {
 
 #### 4.1.3 中性域 + 事件翻译
 
-- 中性域 `src/core/domain/events/session-state.ts` 已经有一套中性事件联合（`messageStart/messageUpdate/messageEnd`、`toolCallStart/Update/End`、`agentStart/End`、`turnStart/End` 等），桌面插件全消费它。它现在由 `event-translator.ts`（pi 事件 → 中性）喂进来。
+- 中性域 `packages/shared/src/domain/events/session-state.ts` 已经有一套中性事件联合（`messageStart/messageUpdate/messageEnd`、`toolCallStart/Update/End`、`agentStart/End`、`turnStart/End` 等），桌面插件全消费它。它现在由 `event-translator.ts`（pi 事件 → 中性）喂进来。
 
 - 要加的是第二条喂入线：`dsh 事件 → 中性事件` 的翻译器。中性域本身不变——这正是它叫「中性」的意义。`context-binding.ts` 同理：它现在把 pi wire 类型投影成中性类型，dsh 后端要写一个平行的「dsh → 中性」投影，但投影的目标是同一套中性类型。
 

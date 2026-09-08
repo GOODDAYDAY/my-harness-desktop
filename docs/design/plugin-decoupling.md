@@ -48,7 +48,7 @@
 
 ### 2.1 手段一：框架 store 订阅——数据归框架、多消费方
 
-状态存在 ui-store / session-store（`src/api/renderer/stores/`，renderer 侧），插件用 `useUiStore((s) => s.currentCwd)` 订阅，框架统一维护更新。两个 store 的分工：ui-store 装界面态（currentCwd、currentSessionPath、布局、通用配置），session-store 装会话投影（messages、stats、快照——每次 resync 后广播的会话全量状态、streaming 等原始流状态）。React 的 store 订阅本身就是事件驱动的一种形态：数据源变了就推给所有订阅者，没变不打扰——这正是 CLAUDE.md §3.6 要的"基线 + 事件增量"。
+状态存在 ui-store / session-store（`src/web/stores/`，renderer 侧），插件用 `useUiStore((s) => s.currentCwd)` 订阅，框架统一维护更新。两个 store 的分工：ui-store 装界面态（currentCwd、currentSessionPath、布局、通用配置），session-store 装会话投影（messages、stats、快照——每次 resync 后广播的会话全量状态、streaming 等原始流状态）。React 的 store 订阅本身就是事件驱动的一种形态：数据源变了就推给所有订阅者，没变不打扰——这正是 CLAUDE.md §3.6 要的"基线 + 事件增量"。
 
 适用条件：状态**归框架所有**（会话列表、当前 cwd、消息流），且**多个消费方**要读。正例是 ContextUsageBar：零 props、自订阅 useSessionStore（commit `3d8b36b` 的"组件与位置解耦"——它把上下文用量条从 titlebar 迁进 composer，组件零 props、自订阅 store，位置变化不动组件）。反例边界：插件私有业务状态（session-colors 的 pin-store）不进框架 store——那不是框架状态，物理隔离下别的插件也 import 不到，天然私有。
 
@@ -132,7 +132,7 @@ flowchart TD
 
 ### 4.2 方案：sessionInfos 框架 store
 
-在 renderer 侧 session-store（`src/api/renderer/stores/session-store.ts`，区别于第 4.1 节的"内核 session-store"——后者是 main 侧的会话管理器）加 `sessionInfos: Record<string, SessionInfo> | null`，由框架统一维护：切 cwd 时拉一次基线，之后从 kernel 事件流增量更新（sessionStart 新增、messageEnd 更新 lastMessage/标题、entryAppended 更新该会话的 lastEntry 字段）。消费方改读 store：
+在 renderer 侧 session-store（`src/web/stores/session-store.ts`，区别于第 4.1 节的"内核 session-store"——后者是 main 侧的会话管理器）加 `sessionInfos: Record<string, SessionInfo> | null`，由框架统一维护：切 cwd 时拉一次基线，之后从 kernel 事件流增量更新（sessionStart 新增、messageEnd 更新 lastMessage/标题、entryAppended 更新该会话的 lastEntry 字段）。消费方改读 store：
 
 - sessions-list 读 `sessionInfos` 渲染列表，删掉自己的 `reload`/`applyList` 和"列表变更 → 重拉"的订阅——phase（会话工作阶段，从事件流推导的派生状态）和未读增量（entryAppended 到达即推进的已读位标）这两件事它保留自己的 onKernelEvent 订阅自己维护，那是它自己的派生状态，不是会话元数据；
 - session-colors 直接读 `sessionInfos[path]` 取 name/icon——挂载拉一次即 stale 的老问题自动消失，零订阅逻辑；

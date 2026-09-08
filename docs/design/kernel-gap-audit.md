@@ -73,7 +73,7 @@
 ## 7. G6 插件层 pi 假设（6 处）
 
 - `src/plugins/sessions/timeline/renderer/index.tsx`：`ctx.models.setThinkingLevel`（1 处）+ `ctx.messaging.abortRetry`（2 处）。
-- `src/api/renderer/stores/session-store.ts`：`window.pi.sessions.getThinkingLevels`（1 处）+ `setThinkingLevel`（2 处）。
+- `src/web/stores/session-store.ts`：`window.pi.sessions.getThinkingLevels`（1 处）+ `setThinkingLevel`（2 处）。
 - **评估**：这几处是「思考档位 + 自动重试」两个 pi 专属能力在 timeline 里的调用。dsh 下缺面。理想：思考档位走「内核能力探测」（dsh 展示 `reasoningEffort`，pi 展示 `thinkingLevel`），`abortRetry` 在 dsh 下隐藏/禁用。
 
 ## 8. G7 内核管理 UI 不对称

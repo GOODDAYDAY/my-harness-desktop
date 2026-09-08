@@ -47,7 +47,7 @@ flowchart LR
 - 六处裸调 `ensureForSend()`：`prompt`、`setThinkingLevel`、`steer`、`followUp`、`cycleModel`、`cycleThinkingLevel`。这六个方法没有一个拿到模型信息，却都敢"按需起进程"，起的当然是 pi。
 - `setModel` 内部的 `ensureForSend(currentKernel ?? "pi")`。当反查不到模型（`target` 为 `undefined`）或当前内核未知时，`?? "pi"` 兜底。
 - `start` 的签名默认值 `kernel: "pi" | "dsh" = "pi"`，以及 `restart` 里写死的 `"pi"`。打开一个历史会话、重启一个进程，内核都不读回，直接 pi。
-- `getFallbackModel`（`src/api/ipc/kernel.ts`）读的是 `kernelModels.pi.readConfig()`，写死了 pi 侧配置，注释里那句"新会话默认内核是 pi"把"默认模型恰好是 pi 的"偷换成了"默认内核是 pi"。
+- `getFallbackModel`（`src/server/controllers/kernel.ts`）读的是 `kernelModels.pi.readConfig()`，写死了 pi 侧配置，注释里那句"新会话默认内核是 pi"把"默认模型恰好是 pi 的"偷换成了"默认内核是 pi"。
 
 其中前四处是真正的"内核默认"——它们不经过模型反查，直接决定用哪个内核，是必须清理的对象。第五处性质不同：它是"模型默认"，不是"内核默认"。新会话用户不选模型时，得有一个模型可用，这个模型今天恰好来自 pi 的 settings.json。要改的只是它被表述成"默认内核"这个错误说法，以及（如果将来想让 dsh 模型也能当默认）它的真相源从 pi 专属改成合流口径。这两件事不能混——把"默认模型"误当"默认内核"来删，会把"新会话没模型可发"这个真实需求一并删掉。
 
@@ -83,7 +83,7 @@ const proc = this.activeProc();
 if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
 ```
 
-这六个方法（`prompt`、`setThinkingLevel`、`steer`、`followUp`、`cycleModel`、`cycleThinkingLevel`）有一个共同特征：它们在正常调用链里，前面必然已经有 `setModel` 把进程起好了。发消息时，renderer 的 `sendMessage`（`src/api/renderer/stores/session-store.ts`）总是先 `setModel`（pending 或 fallback 或 header 偏好）再 `prompt`；pref flush 是 `setModel` 之后再 `setThinkingLevel`。所以断言只在一个异常路径触发——有人绕过 setModel 直接调这些方法——而那个路径今天的行为是"默默起一个 pi"，改后变成"明确报错"，从无声的错变成有声的错，是纯收敛。
+这六个方法（`prompt`、`setThinkingLevel`、`steer`、`followUp`、`cycleModel`、`cycleThinkingLevel`）有一个共同特征：它们在正常调用链里，前面必然已经有 `setModel` 把进程起好了。发消息时，renderer 的 `sendMessage`（`src/web/stores/session-store.ts`）总是先 `setModel`（pending 或 fallback 或 header 偏好）再 `prompt`；pref flush 是 `setModel` 之后再 `setThinkingLevel`。所以断言只在一个异常路径触发——有人绕过 setModel 直接调这些方法——而那个路径今天的行为是"默默起一个 pi"，改后变成"明确报错"，从无声的错变成有声的错，是纯收敛。
 
 这个改动有一个值得说透的连带效果：它把"起进程"这个动作的语义从"六个方法各自负责"变成了"setModel 独有"。今天读 `prompt` 的注释还写着"唯一会起进程的入口"，但实际上起进程的入口散在七处，注释和现实已经脱节。清理之后，注释终于可以回到字面意思：起进程真的只有 setModel 一个入口，其余方法只消费一个已在跑的进程。
 
@@ -151,7 +151,7 @@ if (target.kernel !== currentKernel) {
 
 ### 2.5 getFallbackModel 的定性：模型默认，不是内核默认
 
-这一处要单独拎出来说，因为它最容易被误伤。`getFallbackModel`（`src/api/ipc/kernel.ts`）的职责是：新会话用户没显式选模型时，返回一个"需要显式 set 的兜底模型"（含 kernel——因为内核必须由模型归属决定，不能靠 `setModel` 反查 provider+id 猜）。它读的是 pi 的 `settings.json`（或 dsh 的 agent-default-model），兜底模型恒带一个明确的 kernel 标。
+这一处要单独拎出来说，因为它最容易被误伤。`getFallbackModel`（`src/server/controllers/kernel.ts`）的职责是：新会话用户没显式选模型时，返回一个"需要显式 set 的兜底模型"（含 kernel——因为内核必须由模型归属决定，不能靠 `setModel` 反查 provider+id 猜）。它读的是 pi 的 `settings.json`（或 dsh 的 agent-default-model），兜底模型恒带一个明确的 kernel 标。
 
 关键判断：这是**模型默认**，不是**内核默认**。内核默认是说"不管模型是什么，内核拍死 pi"；而 `getFallbackModel` 返回的 kernel 是"这条兜底模型的归属"，不是写死的"默认 pi"。把 `getFallbackModel` 的写死 pi 当成"内核默认"来删，会错删掉"新会话没选模型也能发"这个真实能力。
 
@@ -195,7 +195,7 @@ flowchart TD
 
 **隐式触发点**在 `setModel` 重构后的那段 `if (proc0 && proc0.backend.alive) throw ...`（§2.3 的 ②）。这是"选了个别家内核的模型"这条隐式路径的入口，把它从"调 switchKernel"改成"抛错"，隐式切换就关掉了。选在这里而不是在 `switchKernel` 内部判断，理由是职责：`setModel` 是"模型 → 内核"的翻译层，它最清楚"现在有没有活跃进程、目标内核是否不同于当前"，由它来决定"这个动作是选择还是切换"，比让 `switchKernel` 自己去猜"我是被选择调来的还是被切换调来的"要干净得多。`switchKernel` 的语义从此纯粹化：它只做"有历史会话的跨内核迁移"，不再承担"空会话起后端"这种它本就不该管的事（那个职责还给 `ensureForSend`）。
 
-**显式调用点**在 `SessionStore.switchKernel` 入口加一个 gate，开头一行 `throw new Error("跨内核切换暂未启用")`。这是给那些绕过模型选择、直接调 `switchKernel` 的入口（IPC channel `session:switchKernel`，`src/api/ipc/sessions.ts`）上的保险。加了 gate 之后，`switchKernel` 这个方法和它的七步编排全部原样保留，只是任何调用都会在第一步被挡回。
+**显式调用点**在 `SessionStore.switchKernel` 入口加一个 gate，开头一行 `throw new Error("跨内核切换暂未启用")`。这是给那些绕过模型选择、直接调 `switchKernel` 的入口（IPC channel `session:switchKernel`，`src/server/controllers/sessions.ts`）上的保险。加了 gate 之后，`switchKernel` 这个方法和它的七步编排全部原样保留，只是任何调用都会在第一步被挡回。
 
 两个禁用点的关系是：隐式点挡住了"选模型触发的切换"这条主路径，显式点挡住了"直接调 API 触发的切换"这条旁路。缺任何一个都有漏——只挡隐式，有人直接 `ctx.sessions.switchKernel("dsh")` 还是能切；只挡显式，用户点一个 dsh 模型照样触发 switchKernel。两个都挡，才真正"暂缓"。
 
@@ -213,7 +213,7 @@ flowchart TD
 把"未来放开"说成"拨两个开关"是准确的，但它不是全部。放开时还有三件连带的事要一并做，否则切换恢复了也会留下毛边。这里把它们列全，既是给未来实现者的一份备忘，也是给"暂缓会不会埋雷"这个担心一个诚实的答案：
 
 - 恢复两个入口之后，要补上 §3.1 末尾点出的那个边界——"有历史但进程不在"的切换。今天的 `switchKernel` 开头是 `if (!proc || !proc.backend.alive) throw new Error("底座未启动")`，它只接受"活跃进程在跑"的切换。放开时，要么显式声明"切换仍只支持活跃进程、有历史但进程不在的场景先起旧内核再切"（需要一个前置编排），要么接受这个限制并写进文档。这不是暂缓造成的，是 `switchKernel` 现有实现本来的边界，放开时必须当面处理，不能假装它会自动变好。
-- UI 层的置灰（如果第二批做了）要取消——模型 TAB 条恢复可点别家内核，`kernelChanged` 事件的触发源也随之恢复，renderer 侧那段监听（`src/api/renderer/stores/session-store.ts` 里 `evt.kind === "kernelChanged"`）自动重新生效，不需要额外接线。
+- UI 层的置灰（如果第二批做了）要取消——模型 TAB 条恢复可点别家内核，`kernelChanged` 事件的触发源也随之恢复，renderer 侧那段监听（`src/web/stores/session-store.ts` 里 `evt.kind === "kernelChanged"`）自动重新生效，不需要额外接线。
 - 测试要回到绿：`switchKernel 五步切换` 和 `失效回退 + 预 seed` 两个用例在暂缓期间被 gate 挡在入口外，放开时把它们重新纳入，并补一条"有历史但进程不在"的用例（对应上面第一点）。
 
 这三件加上两个开关，才是"放开切换"的完整动作。所以更准确的说法是：放开的主体是拨两个开关，尾巴是处理一个既有边界、恢复一段 UI、补一条测试——主体零重写，尾巴是诚实的收尾。
@@ -224,8 +224,8 @@ flowchart TD
 
 - `switchKernel` 的实现（`session-store.ts` 里七步编排）。这是未来放开要直接调用的完整逻辑，删掉等于未来重写一遍最难的部分——中止落定、拓扑快照、边界归一、分内核 seed、失效回退，任何一段重写都是新的 bug 温床。
 - `seed` 契约与两个实现（`BackendFactory.seed`、`piSeedSession`、`DshBackend.seed`）。seed 是"把中立会话树灌进另一个内核"的能力，是切换的硬依赖；同时它也是"空会话以目标内核起后端"这条选择路径在 dsh 侧的首切入口（dsh 首切要走 seed），不是切换专属。
-- `KernelId` 字面量联合与 `KERNEL_IDS`（`src/core/domain/kernel.ts`）。这是内核身份的单源，`"pi" | "dsh"` 的字面量联合让编译器在"加第三个内核"时逼补全所有 switch 分支。把它退化成 `string`，就丢掉了这道编译期防线，未来放开切换乃至加内核时，漏改会静默发生。
-- `capabilities.pi/.dsh` 能力探测面（`BaseBackend.capabilities`，`src/core/domain/backend.ts`）。它是"有则用、无则降级"的机制，切不切换都靠它区分 pi/dsh 的能力差异。删了它，代码就会退回到"按内核身份硬分支"的泄漏。
+- `KernelId` 字面量联合与 `KERNEL_IDS`（`packages/shared/src/domain/kernel.ts`）。这是内核身份的单源，`"pi" | "dsh"` 的字面量联合让编译器在"加第三个内核"时逼补全所有 switch 分支。把它退化成 `string`，就丢掉了这道编译期防线，未来放开切换乃至加内核时，漏改会静默发生。
+- `capabilities.pi/.dsh` 能力探测面（`BaseBackend.capabilities`，`packages/shared/src/domain/backend.ts`）。它是"有则用、无则降级"的机制，切不切换都靠它区分 pi/dsh 的能力差异。删了它，代码就会退回到"按内核身份硬分支"的泄漏。
 
 这四样的共同点：它们都是"多内核架构"的骨架，不是"切换功能"的零件。暂缓切换只关骨架上的一个入口，不动骨架本身——这是"暂缓"和"拆除"的分界线。
 
@@ -251,7 +251,7 @@ flowchart TD
 
 ### 4.2 api/ipc/kernel.ts 与契约层
 
-契约层（`src/core/domain/`）这次一行不动。`SessionsApi.switchKernel`、`BaseBackend.seed`、`BackendFactory.create/seed`、`KernelId`、`capabilities` 全部保留原样——暂缓切换不删接口，只关入口，接口和实现都留着等放开。
+契约层（`packages/shared/src/domain/`）这次一行不动。`SessionsApi.switchKernel`、`BaseBackend.seed`、`BackendFactory.create/seed`、`KernelId`、`capabilities` 全部保留原样——暂缓切换不删接口，只关入口，接口和实现都留着等放开。
 
 `api/ipc/kernel.ts` 只有一处：`getFallbackModel` 上方注释的错误表述（§2.5）。`api/ipc/sessions.ts` 里 `session:switchKernel` 这个 IPC handler 保留不动，因为它转调 `sessionStore.switchKernel`，而那个方法入口的 gate 已经挡死了——handler 层不需要重复判断，gate 放在编排层更内聚，避免"每加一个入口都要记得再 gate 一次"。
 
@@ -259,7 +259,7 @@ flowchart TD
 
 UI 层这次可以不动，但有一个可选的改进值得记下来，留给第二批：模型下拉的内核 TAB 条（`src/plugins/sessions/timeline/renderer/composer.tsx`）现在总是列出所有有模型的内核，用户有历史会话时点别家内核的 TAB、选一个模型，会在 `setModel` 处收到"切换后续支持"的报错——能选但选不生效。更顺的体验是：有历史会话时，别家内核的 TAB 置灰加 tooltip，让用户在选择之前就知道不能切。这属于 timeline 插件的内容层，renderer 已经有 `currentModel?.kernel` 可用，不缺口子，但它是纯 UI 打磨，不阻塞本次清理和暂缓，所以单独列第二批。
 
-还有一个连带点要提一句：`switchKernel` gate 生效后，renderer 侧 `kernelChanged` 事件（`src/api/renderer/stores/session-store.ts` 里监听 `evt.kind === "kernelChanged"` 的那段）暂时不会有触发源了，因为它只在 `switchKernel` 成功收尾时 `dispatchKernel` 广播。这段监听代码留着无害（未来放开切换后它重新生效），不需要现在删，删了反而是把未来的口子顺手堵了一小块。
+还有一个连带点要提一句：`switchKernel` gate 生效后，renderer 侧 `kernelChanged` 事件（`src/web/stores/session-store.ts` 里监听 `evt.kind === "kernelChanged"` 的那段）暂时不会有触发源了，因为它只在 `switchKernel` 成功收尾时 `dispatchKernel` 广播。这段监听代码留着无害（未来放开切换后它重新生效），不需要现在删，删了反而是把未来的口子顺手堵了一小块。
 
 这七处落点各自的测试点，随改动一并列在这里，实现者改完按这个清单补用例，避免"改了对的、漏了验证"：
 

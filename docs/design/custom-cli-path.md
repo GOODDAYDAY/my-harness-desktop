@@ -26,13 +26,13 @@ my-harness-desktop 管理的 pi 底座装在数据根（打包态 `~/.my-harness
 
 具体不够的位置可以指到行号，不是笼统的"不够灵活"：
 
-- 底座定位的唯一事实源是 `resolvePiCli()`（`src/client/pi/subprocess-lifecycle.ts:29`）：数据根 `pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js` 存在就用 `node` 跑它，否则回落 PATH 上的全局 `pi`。两级，写死，纯函数，无配置入口。
+- 底座定位的唯一事实源是 `resolvePiCli()`（`src/server/kernel/pi/subprocess-lifecycle.ts:29`）：数据根 `pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js` 存在就用 `node` 跑它，否则回落 PATH 上的全局 `pi`。两级，写死，纯函数，无配置入口。
 
 - client 层其实预留了替换口子：`PiSubprocessSpawnOptions.cliPath`（`subprocess-lifecycle.ts:17`），且 `PiSubprocessHandle` 构造器已经处理了它的分支（`subprocess-lifecycle.ts:56`——传了就走 `node <cliPath> --mode rpc`）。口子在底层是通的。
 
 - 断点断在类型层：application 层的 `RpcAdapterFactory.create` 的 opts 类型只有 `{ cwd, args, env }`（`src/core/application/sessions/session-store.ts:53`），没有 `cliPath` 字段——`createProc` 想传都没处传。会话进程这条链，从插件到 spawn，配置无立锥之地。
 
-- 第二条 spawn 通道同样焊死：oneshot（`runPiOneshot`，`src/client/pi/pi-oneshot.ts:27`）无参调用 `resolvePiCli()`。这条通道服务 `llm:oneshot` 声明能力（git-review 的 AI commit message、blind-review 的裁判汇总都在用），只修会话链不修它，会话跑自定义底座、oneshot 跑旧底座，行为分裂。
+- 第二条 spawn 通道同样焊死：oneshot（`runPiOneshot`，`src/server/kernel/pi/pi-oneshot.ts:27`）无参调用 `resolvePiCli()`。这条通道服务 `llm:oneshot` 声明能力（git-review 的 AI commit message、blind-review 的裁判汇总都在用），只修会话链不修它，会话跑自定义底座、oneshot 跑旧底座，行为分裂。
 
 一句话：能力在 client 层已经存在，机制面没有把它暴露出来。本设计主要是贯通，不是新建。
 
@@ -84,7 +84,7 @@ flowchart TD
 
 配置值是一个目录路径字符串，存进桌面偏好：
 
-- `Prefs` 加字段 `customCliDir: string`（`src/api/ipc/main-context.ts:16`），`DEFAULT_PREFS` 默认 `""`（空串 = 未设置）。electron-store 的 defaults 机制保证老用户的存量 store 读到默认值，无迁移。
+- `Prefs` 加字段 `customCliDir: string`（`src/server/controllers/main-context.ts:16`），`DEFAULT_PREFS` 默认 `""`（空串 = 未设置）。electron-store 的 defaults 机制保证老用户的存量 store 读到默认值，无迁移。
 
 - 存储落点是现成的：`prefsStore` 的 cwd 已显式纳入数据根 config 树（`src/bootstrap/index.ts:60`），数据根经 `resolveMyHarnessDesktopDir()` 分流——打包态写 `~/.my-harness-desktop/config/`，dev 态写 `~/.my-harness-desktop-dev/config/`。于是得到一个白得的好处：**dev 版可以指向自己 build 的底座，稳定版照常走数据根，两份偏好互不污染**。这正是当初做数据根分流想服务的场景之一。
 
@@ -124,7 +124,7 @@ client 层除此 helper 外零改动——§1.3 说过，`cliPath` 的处理分�
 
 ### 2.5 oneshot 同步：同一份底座，两条 spawn 通道
 
-oneshot 是插件"一次性问底座"的声明能力（`llm:oneshot`，权限门控在 `src/api/ipc/kernel.ts:60`），落点是 `runPiOneshot`（`pi-oneshot.ts:23`）——技术形态是 spawn 一个一次性进程 `pi --print --no-session --no-tools <prompt>`，拿 stdout 文本即销毁，不落会话文件、不带工具。它必须和会话进程用同一份底座，否则出现分裂：会话里聊的是自定义底座的行为，git-review 生成 commit message、blind-review 裁判汇总时跑的却是数据根底座——同一个桌面里两种底座行为，排查问题时会怀疑人生。
+oneshot 是插件"一次性问底座"的声明能力（`llm:oneshot`，权限门控在 `src/server/controllers/kernel.ts:60`），落点是 `runPiOneshot`（`pi-oneshot.ts:23`）——技术形态是 spawn 一个一次性进程 `pi --print --no-session --no-tools <prompt>`，拿 stdout 文本即销毁，不落会话文件、不带工具。它必须和会话进程用同一份底座，否则出现分裂：会话里聊的是自定义底座的行为，git-review 生成 commit message、blind-review 裁判汇总时跑的却是数据根底座——同一个桌面里两种底座行为，排查问题时会怀疑人生。
 
 改动两处：
 
@@ -138,7 +138,7 @@ oneshot 是插件"一次性问底座"的声明能力（`llm:oneshot`，权限门
 
 - `KernelStatus`（`kernel-manager.ts:31`）扩展为：`currentVersion`（语义微调：**生效**底座的版本）、`installedVersion`（新增：数据根安装版本）、`available`、`source: "custom" | "installed"`（新增：生效来源）、`customCliDir`（新增：当前配置值，空串 = 未设置）、`error`。`source` 是给消费者（UI）读的语义字段——UI 拿它决定"生效来源"行显示什么，不是引擎拿它 switch 行为的分支戳；spawn 行为由配置字段的有无和有效性直接决定（图 2），不看 `source`。
 
-- 新函数 `kernelStatus(installDir, customCliDir)` 替代 `currentVersion(installDir)` 成为 `kernel:status` handler 的实现（`src/api/ipc/kernel.ts:20`）：
+- 新函数 `kernelStatus(installDir, customCliDir)` 替代 `currentVersion(installDir)` 成为 `kernel:status` handler 的实现（`src/server/controllers/kernel.ts:20`）：
 
   - `customCliDir` 为空：返回数据根状态，`source: "installed"`，`currentVersion === installedVersion`。
 
@@ -247,7 +247,7 @@ oneshot 是插件"一次性问底座"的声明能力（`llm:oneshot`，权限门
 
 tool-gate 和 bus-extension 两个壳侧底座扩展，与自定义底座天然兼容。先交代它们是什么：tool-gate 是底座的工具权限过滤扩展（tool-manager 插件的工具过滤靠它生效）；bus-extension 是会话总线扩展（subagent 调度的上行帧经它进出底座进程）。两者都是 TypeScript 文件，由壳在启动时安装到底座的扩展目录：
 
-- 它们的落点是 `~/.pi/agent/extensions/`（`src/client/pi/toolgate-installer.ts:16`、`src/client/pi/bus-extension-installer.ts:13`）——底座标准扩展目录，锚定 homedir，不随数据根分流，更不在任何一份底座安装目录里。
+- 它们的落点是 `~/.pi/agent/extensions/`（`src/server/kernel/pi/toolgate-installer.ts:16`、`src/server/kernel/pi/bus-extension-installer.ts:13`）——底座标准扩展目录，锚定 homedir，不随数据根分流，更不在任何一份底座安装目录里。
 
 - 底座的 loader 在 spawn 时扫这个标准目录——无论从哪个路径的 cli.js 启动，扫的是同一个 `~/.pi/agent/extensions/`。所以换自定义底座，tool-gate 的权限过滤、bus-extension 的会话总线都照常就位，安装时机（启动序列里先于任何 pi spawn，`src/bootstrap/index.ts:286`）也与底座来源无关。
 

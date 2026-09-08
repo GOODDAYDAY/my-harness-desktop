@@ -11,7 +11,7 @@
 今天一个插件想读写配置，面前有四条通道，每条的路径构造方式和分层语义都不同：
 
 - `ctx.config.get/set`（ConfigStore，`src/core/application/config/config-store.ts`）——按 pluginId 隔离的 KV，落在 `~/.my-harness-desktop/config/plugins-data/{id}/config.json`。代码里写好了"项目级覆盖用户级"的浅合并语义（`all()` 返回 `{...entry.user, ...entry.project}`——`user` 就是本文说的全局层，`project` 就是项目级），但 bootstrap 注入的 `projectDir` 恒为 `null`（`src/bootstrap/index.ts:65`，代码注释里标注为后续演进预留），项目级从激活那天起就是死代码。
-- `configFile.get/set`——挂在 `window.pi.configFile` 上的 IPC 命名空间，自由 JSON 读写，插件传完整路径，main 校验白名单只放行 `~/.my-harness-desktop/` 和 `~/.pi/agent/` 两个前缀（`src/api/ipc/config.ts:37`）。没有分层的概念。
+- `configFile.get/set`——挂在 `window.pi.configFile` 上的 IPC 命名空间，自由 JSON 读写，插件传完整路径，main 校验白名单只放行 `~/.my-harness-desktop/` 和 `~/.pi/agent/` 两个前缀（`src/server/controllers/config.ts:37`）。没有分层的概念。
 - `configFile.getLayered/setProject/clearProject`——layered-config.md 加的分层 API，项目级 `<cwd>/.my-harness-desktop/<relPath>` 覆盖全局 `~/.my-harness-desktop/<relPath>`。但 cwd 和 relPath 都要插件自己传，fallback 语义要插件自己理解，用不用全看插件自觉。
 - `prefs.get/set`——桌面偏好的 API 面，持久化实现是 electron-store（一个把 KV 落成本地 JSON 文件的 Electron 常用库）。纯全局，不分层。
 
@@ -123,7 +123,7 @@ new ConfigStore({
 });
 ```
 
-`getProjectDir` 由 bootstrap 注入，实现是从 SessionStore 读当前 cwd 再拼 `<cwd>/.my-harness-desktop/config`。选 SessionStore 做 cwd 的事实源，因为它是 main 进程里唯一持有"当前项目"的地方——`session.setContext`（`src/api/ipc/sessions.ts:19`）是 renderer 每次切换项目时必经的 IPC，cwd 天然在那里落脚。ConfigStore 不自己维护 cwd 状态，每次读写时向 getter 要一次，永远是当前值。
+`getProjectDir` 由 bootstrap 注入，实现是从 SessionStore 读当前 cwd 再拼 `<cwd>/.my-harness-desktop/config`。选 SessionStore 做 cwd 的事实源，因为它是 main 进程里唯一持有"当前项目"的地方——`session.setContext`（`src/server/controllers/sessions.ts:19`）是 renderer 每次切换项目时必经的 IPC，cwd 天然在那里落脚。ConfigStore 不自己维护 cwd 状态，每次读写时向 getter 要一次，永远是当前值。
 
 动态 getter 带来两个派生设计：
 
@@ -146,7 +146,7 @@ cwd 切换时插件 UI 怎么刷新？分两类：设置页框架托管的插件
 
 ### 4.1 设置页工具条的两个新按钮
 
-设置页的框架托管（`src/api/renderer/components/settings-page.tsx`）已经管了读、dirty、保存浮层、取消恢复、切 tab 拦截、刷新、打开配置。这里说的"框架托管"指插件在 manifest（即插件的 `plugin.json`）的 settings 贡献里声明了 `configFile`，且 `saveMode` 为 `framework`——`saveMode` 是这个贡献项的可选字段，两个取值：`framework`（默认，框架接管该配置页的读写生命周期）和 `manual`（插件自管读写，框架不介入）。声明 `manual` 或没有设置页贡献的插件自管 UI，不在本节范围——但注意 `saveMode` 管的只是设置页 UI 的生命周期，不影响配置走哪条通道：自管插件的配置照样走统一通道，只是它们的用户界面上不会出现下面这两个框架按钮。统一通道模式下，工具条加两个按钮，框架托管的插件自动获得，插件不写一行代码：
+设置页的框架托管（`src/web/components/settings-page.tsx`）已经管了读、dirty、保存浮层、取消恢复、切 tab 拦截、刷新、打开配置。这里说的"框架托管"指插件在 manifest（即插件的 `plugin.json`）的 settings 贡献里声明了 `configFile`，且 `saveMode` 为 `framework`——`saveMode` 是这个贡献项的可选字段，两个取值：`framework`（默认，框架接管该配置页的读写生命周期）和 `manual`（插件自管读写，框架不介入）。声明 `manual` 或没有设置页贡献的插件自管 UI，不在本节范围——但注意 `saveMode` 管的只是设置页 UI 的生命周期，不影响配置走哪条通道：自管插件的配置照样走统一通道，只是它们的用户界面上不会出现下面这两个框架按钮。统一通道模式下，工具条加两个按钮，框架托管的插件自动获得，插件不写一行代码：
 
 - **设为全局**——把当前生效的整份配置（即两层合并后的结果）写入全局文件。项目级文件保留不动：项目级覆盖过的 key 继续覆盖，没覆盖的 key 从此用刚写入全局的新值。用户如果想彻底回到全局状态，用下面那个按钮。
 - **移除项目覆盖**——仅当项目级文件存在时出现。删除项目级文件，该插件在这个项目的配置整体回退到全局默认。这就是 layered-config.md 里 `clearProject` 的语义，只是触发者从插件代码变成了用户。

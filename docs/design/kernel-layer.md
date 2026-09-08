@@ -112,7 +112,7 @@ export interface KernelModelSource {
 - `BaseBackend` 加 `readonly kernel: KernelId`；新增 `BackendCreateOptions` / `BackendFactory`。
 - `ModelInfo.kernel`、`sessions.ts` 的 `switchKernel` 改用 `KernelId`。
 - `PiBackend` / `DshBackend` 实现 `kernel` 属性。
-- `packages/contract/src/index.ts` re-export 新契约。
+- `packages/shared/src/index.ts` re-export 新契约。
 
 ### 阶段 2：模型源接口化
 - `model-catalog.ts` 定义 `KernelModelSource` 接口，`ModelCatalog` 依赖接口而非 `DshConfigSource`。
@@ -129,7 +129,7 @@ export interface KernelModelSource {
 
 ## 5. 验收标准
 
-- **依赖方向**：`src/core/` 无任何 `import ... client/`；`src/core/domain/` 零 import。
+- **依赖方向**：`src/core/` 无任何 `import ... client/`；`packages/shared/src/domain/` 零 import。
 - **契约单源**：全仓 `"pi" | "dsh"` 字面量只出现在 `core/domain/kernel.ts` 一处。
 - **换内核 = 换适配器**：`session-store.ts` 不感知 pi/dsh 具体类，只认 `BaseBackend` + `BackendFactory`。
 - **单测**：`KernelId` / `BackendFactory` 中性契约有单测；model-catalog 合流测试改走 `KernelModelSource` 接口；pi/dsh 后端测试随文件下沉保持绿。

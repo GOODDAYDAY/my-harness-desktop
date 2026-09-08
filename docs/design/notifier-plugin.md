@@ -21,7 +21,7 @@
 把触发、判定、弹出三件事对着现有代码盘一遍，结论是：**触发信号现成，判定和弹出缺两块**。
 
 - 触发：底座已在会话收敛时发 `agentSettled`，桌面端也已把它翻成中性事件并转发给 renderer（含后台会话、带 `sessionKey`）。这条链路今天就能用，零改动（§2 详述）。
-- 判定：renderer 现在没法问"主窗口是不是前台"——`src/api/ipc/window.ts` 只做了最小化/最大化/关闭，没有焦点查询。缺第一块。
+- 判定：renderer 现在没法问"主窗口是不是前台"——`src/server/controllers/window.ts` 只做了最小化/最大化/关闭，没有焦点查询。缺第一块。
 - 弹出：整个代码库没有操作系统级通知能力，Electron 的 `Notification` 从未被用过。缺第二块。
 
 所以这个插件的新增量很小：内核补两个能力（发通知、查焦点），内容层写一个纯订阅的插件。
@@ -32,7 +32,7 @@
 
 底座在一次回合里推一串事件：`agentStart` → `messageStart`/`messageUpdate`/`messageEnd`（可能多轮，因为有工具调用）→ `agentEnd`/`agentSettled`。要回答"这一轮到底什么时候结束"，候选信号有四个，但只有 `agentSettled` 对得上。
 
-`agentSettled` 的语义就是"agent 收敛了"——LLM 不再产生动作、工具不再执行，这一回合彻底结束。它的中性类型在 `src/core/domain/events/session-state.ts`，就一个字段。桌面端拿它把会话的 busy 态翻成 false（`session-store.ts` 的 `dispatch()`），说明桌面端自己也这么理解这个信号。
+`agentSettled` 的语义就是"agent 收敛了"——LLM 不再产生动作、工具不再执行，这一回合彻底结束。它的中性类型在 `packages/shared/src/domain/events/session-state.ts`，就一个字段。桌面端拿它把会话的 busy 态翻成 false（`session-store.ts` 的 `dispatch()`），说明桌面端自己也这么理解这个信号。
 
 这个信号是跨内核的：pi 后端把 `agent_settled` 翻成它（`core/protocol/event-translator.ts`），dsh 后端把 `turn/end` 翻成它（`client/dsh/dsh-event-translator.ts`）——dsh 的「turn」就是 pi 的「agent loop」，同指「一整轮执行收敛」。两边产出同一中性事件，插件订阅 `agentSettled` 就内核无关；内核差异消在翻译层，壳子不感知 pi/dsh。
 
@@ -41,7 +41,7 @@
 renderer 侧有两条会话事件流，名字容易混，分工很清楚：
 
 - 视图流 `ctx.sessions.onEvent`：只转**激活会话**（当前打开在看的那一个）的事件，不给 `sessionKey`。它给时间线渲染用——别的会话的事件绝不能污染当前视图（`session-store.ts` 的 `dispatch()` 末尾 `if (key !== this.activeProcKey) return`）。
-- 全量流 `ctx.sessions.onKernelEvent`：转**所有会话**的事件，`KernelEvent` 联合里 `kind: "session"` 那支带 `sessionKey` 归属（`src/core/domain/events/kernel-event.ts` 的 `SessionMessageEvent`）。后台会话的 `agentSettled` 就在这条流的转发白名单里（`session-store.ts` 的 `dispatch()` 里 `isBackgroundEvent` 含 `agentSettled`）。
+- 全量流 `ctx.sessions.onKernelEvent`：转**所有会话**的事件，`KernelEvent` 联合里 `kind: "session"` 那支带 `sessionKey` 归属（`packages/shared/src/domain/events/kernel-event.ts` 的 `SessionMessageEvent`）。后台会话的 `agentSettled` 就在这条流的转发白名单里（`session-store.ts` 的 `dispatch()` 里 `isBackgroundEvent` 含 `agentSettled`）。
 
 通知要盯全量流，不是视图流。理由：用户切去别的应用后，激活会话照常跑、它的 `agentSettled` 视图流也照常到——这个案例视图流够用；但只要同时有第二个会话在后台跑（并行会话、restart 会话、未来子 agent 落成的独立会话），视图流就漏了。用全量流一次覆盖"任何一个会话完成"，成本为零（内核已现成），符合"选最完整的那一个"。
 
@@ -93,7 +93,7 @@ ipcMain.handle(IPC.notification.show, (e, { title, body, silent }) => {
 
 窗口关闭不在覆盖范围。关闭销毁 renderer 进程，插件跟着死，连订阅都不存在，判定链根本不会执行——这不是"查焦点查不到"，是"执行通知的人没了"。要覆盖这个场景得把触发逻辑搬到 main 进程（main 侧经 `onAnySessionEvent` 也能拿到 agentSettled 全量流），那时"内容和机制谁负责"要重新划，超出本文范围。
 
-实现上加一个 `window:isFocused` 查询 handler 到 `src/api/ipc/window.ts`，renderer 侧经 `window.pi.window.isFocused()` 走。为什么是"发之前查一下"而不是"订阅焦点变化事件"：通知是一次性动作，只在回合完成那一刻需要知道焦点状态，查询比维护一个焦点订阅状态机便宜，也不引入竞态。
+实现上加一个 `window:isFocused` 查询 handler 到 `src/server/controllers/window.ts`，renderer 侧经 `window.pi.window.isFocused()` 走。为什么是"发之前查一下"而不是"订阅焦点变化事件"：通知是一次性动作，只在回合完成那一刻需要知道焦点状态，查询比维护一个焦点订阅状态机便宜，也不引入竞态。
 
 ### 3.3 通知算"核心默认能力"还是"需声明权限"
 
@@ -107,7 +107,7 @@ ipcMain.handle(IPC.notification.show, (e, { title, body, silent }) => {
 
 notifier 没有任何可见 UI——它不挂 sidebar、不挂 sidePanel、没有设置页组件（设置项走纯 JSON 声明，见 4.3）。那一个"什么都不显示"的插件怎么被加载、怎么执行订阅逻辑？
 
-答案是既有机制 Overlay。插件在 renderer 入口 export 一个叫 `Overlay` 的组件，框架的 `PluginOverlays` 宿主（`packages/react/src/plugin-overlays.tsx`，挂在 `src/api/renderer/index.tsx` 根树里）把每个已加载插件的 Overlay 渲染进主树，外面套 `PluginIdContext.Provider` 注入 pluginId，所以 Overlay 里能直接 `usePluginContext()`。`Overlay` 是固定 export 名，不在 manifest 里声明，框架按名字自动匹配（`plugin-modules.ts` 的 `getPluginOverlay` 直接读 `module["Overlay"]`），与组件自动匹配同一规则。keybindings、key-hints、session-colors、review 几个零可见/后台插件都走这个挂载点，notifier 照抄这条，不新开槽。
+答案是既有机制 Overlay。插件在 renderer 入口 export 一个叫 `Overlay` 的组件，框架的 `PluginOverlays` 宿主（`packages/react/src/plugin-overlays.tsx`，挂在 `src/web/index.tsx` 根树里）把每个已加载插件的 Overlay 渲染进主树，外面套 `PluginIdContext.Provider` 注入 pluginId，所以 Overlay 里能直接 `usePluginContext()`。`Overlay` 是固定 export 名，不在 manifest 里声明，框架按名字自动匹配（`plugin-modules.ts` 的 `getPluginOverlay` 直接读 `module["Overlay"]`），与组件自动匹配同一规则。keybindings、key-hints、session-colors、review 几个零可见/后台插件都走这个挂载点，notifier 照抄这条，不新开槽。
 
 Overlay 组件本身 `return null`，只跑 `useEffect` 订阅、卸载时退订。下面这条链就写在它的 effect 里。
 

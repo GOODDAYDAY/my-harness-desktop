@@ -681,14 +681,14 @@ interface ToolCallBlock {
 ### 11.1 P0：pi ask 闭环
 
 - 新建 `packages/ask-extension/index.ts`（§5）。
-- 新建 `src/client/pi/ask-extension-installer.ts`（抄 toolgate 模板）。
+- 新建 `src/server/kernel/pi/ask-extension-installer.ts`（抄 toolgate 模板）。
 - 新建 `src/plugins/sessions/ask/`（`AskQuestionCard` + plugin.json）。
 - 验收：模型调 `ask_user_question` → 壳弹出选项 → 用户选 → 答案回填 → 模型续写。
 
 ### 11.2 P1：pi goal 闭环
 
 - 新建 `packages/goal-extension/`（`index.ts` + `goal-fold.ts` + `goal-store.ts`）。
-- 新建 `src/client/pi/goal-extension-installer.ts`。
+- 新建 `src/server/kernel/pi/goal-extension-installer.ts`。
 - 新建 `src/plugins/sessions/goal/`（`GoalCard` + plugin.json）。
 - 验收：模型 `create_goal` → 头行落快照 → `get_goal` 读到 → `update_goal(complete)` CAS 通过；陈旧 revision 被拒。
 
@@ -800,4 +800,4 @@ gantt
 
 - DSH：`packages/interaction/tool-ask-user/src/index.ts`、`packages/interaction/user-questions/src/index.ts`、`packages/goal/tool-goal/src/index.ts`、`packages/goal/tool-goal/src/authority.ts`、`packages/goal/tool-goal/src/wrapup.ts`、`packages/goal/goal/src/domain.ts`、`packages/goal/goal/src/fold.ts`、`packages/goal/goal/src/index.ts`、`packages/goal/goal-round-driver/src/index.ts`、`packages/goal/command-goal/src/index.ts`。
 - pi：`packages/coding-agent/src/core/extensions/types.ts`、`packages/coding-agent/src/core/extensions/loader.ts`、`packages/coding-agent/src/modes/rpc/rpc-types.ts`、`packages/coding-agent/examples/extensions/question.ts`、`questionnaire.ts`、`todo.ts`、`packages/coding-agent/examples/rpc-extension-ui.ts`。
-- 桌面壳：`src/client/pi/rpc-adapter.ts`、`src/client/pi/toolgate-installer.ts`、`src/client/pi/known-tools.ts`、`src/core/domain/backend.ts`、`src/core/domain/events/kernel-event.ts`、`src/core/domain/sessions.ts`、`src/plugins/sessions/timeline/renderer/block-renderer.tsx`、`src/plugins/sessions/message-blocks/plugin.json`、`src/client/dsh/dsh-config-source.ts`、`src/client/dsh/dsh-event-translator.ts`、`src/client/dsh/dsh-backend.ts`。
+- 桌面壳：`src/server/kernel/pi/rpc-adapter.ts`、`src/server/kernel/pi/toolgate-installer.ts`、`src/server/kernel/pi/known-tools.ts`、`packages/shared/src/domain/backend.ts`、`packages/shared/src/domain/events/kernel-event.ts`、`packages/shared/src/domain/sessions.ts`、`src/plugins/sessions/timeline/renderer/block-renderer.tsx`、`src/plugins/sessions/message-blocks/plugin.json`、`src/server/kernel/dsh/dsh-config-source.ts`、`src/server/kernel/dsh/dsh-event-translator.ts`、`src/server/kernel/dsh/dsh-backend.ts`。

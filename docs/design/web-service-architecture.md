@@ -40,7 +40,7 @@ renderer 与 main 之间只有一条缝：`window.kernel`。
 
 - 类型：`KernelApi`，定义在 `packages/react/src/index.ts`（`declare global { interface Window { kernel: KernelApi } }`，约 :264）。
 - 实现：`src/api/preload/preload.ts`（624 行对象字面量），`contextBridge.exposeInMainWorld("pi", pi)`。
-- 消费：`src/api/renderer/**` 内 `window.kernel.*` 调用 84+ 处；壳插件经 `usePluginContext()` 间接消费同一对象。
+- 消费：`src/web/**` 内 `window.kernel.*` 调用 84+ 处；壳插件经 `usePluginContext()` 间接消费同一对象。
 
 ### 2.2 通道名单源：ipc-channels
 
@@ -48,7 +48,7 @@ renderer 与 main 之间只有一条缝：`window.kernel`。
 
 ### 2.3 handler 层：api/ipc
 
-`src/api/ipc/*.ts` 按能力域分文件：`appearance.ts`、`app-info.ts`、`broadcast.ts`、`slots-dialog.ts`、`bus.ts`、`extensions.ts`、`fs-git.ts`、`main-context.ts`、`notification.ts`、`window.ts`、`skills.ts`、`kernel.ts`、`config.ts`、`sessions.ts`、`plugins.ts`。它们接收 `MainContext`（`api/ipc/main-context.ts`），直接调 `sessionStore`/`modelCatalog`/`kernelManagers` 等。
+`src/server/controllers/*.ts` 按能力域分文件：`appearance.ts`、`app-info.ts`、`broadcast.ts`、`slots-dialog.ts`、`bus.ts`、`extensions.ts`、`fs-git.ts`、`main-context.ts`、`notification.ts`、`window.ts`、`skills.ts`、`kernel.ts`、`config.ts`、`sessions.ts`、`plugins.ts`。它们接收 `MainContext`（`api/ipc/main-context.ts`），直接调 `sessionStore`/`modelCatalog`/`kernelManagers` 等。
 
 ### 2.4 应用编排层本来就是纯 Node
 

@@ -25,7 +25,7 @@
 
 手写一条成品会话 JSONL，种子阶段写入隔离 HOME 的 `~/.pi/agent/sessions/<bucket>/<file>.jsonl`，让主区 timeline 和侧栏会话列表一进来就是满的。
 
-- **文件与路径**：bucket 名按 `cwdToBucketName`（`src/core/domain/sessions.ts`）由 fixture 项目路径生成；文件名沿用生产格式 `<ISO 时间戳>_<uuid>.jsonl`——文件名不是随意取的，它同时决定 4.9 请求记录的落盘对齐（见下）。会话名存 `session_info` 条目；`session-scanner` 扫描到即出现在侧栏列表，零新增契约。
+- **文件与路径**：bucket 名按 `cwdToBucketName`（`packages/shared/src/domain/sessions.ts`）由 fixture 项目路径生成；文件名沿用生产格式 `<ISO 时间戳>_<uuid>.jsonl`——文件名不是随意取的，它同时决定 4.9 请求记录的落盘对齐（见下）。会话名存 `session_info` 条目；`session-scanner` 扫描到即出现在侧栏列表，零新增契约。
 - **头行字段**：`{"type":"session","version":3,"id","timestamp","cwd"}` 五项齐全。`timestamp` 是排序依据——侧栏按会话末条 entry 的 timestamp 降序排，不是文件 mtime。
 - **时间戳预算**：主线会话时间戳设为"刚干完"（录制时刻附近）；todo 旧会话"修复重复项 bug"设为几天前；另一项目的会话也设几天前——三条会话排序稳定，不退化。
 - **删改契约**：从一条真实会话 JSONL 复制结构、替换内容，不凭空手写。删改时保持三类一致性：消息 `parentId` 链（每条 entry 指向链上前一条）、toolCall 的 `id` 与 toolResult 的 `toolCallId` 配对、消息 `timestamp`（毫秒）单调递增。toolCall 的 `arguments` 在真实数据里是对象不是字符串，别写错。assistant 消息上的 `provider/model/stopReason/responseId` 等字段照抄模板，不删。

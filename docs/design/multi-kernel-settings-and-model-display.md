@@ -200,7 +200,7 @@
 
 ### 3.2 模型身份：`ModelInfo.kernel`，来源派生
 
-- 圆心 `ModelInfo`（`src/core/domain/events/session-state.ts` 第 8 行）加一个字段 `kernel: "pi" | "dsh"`。这是中性判别子，不进任何配置文件，由扫描器在「从哪个来源扫出来」时赋值（pi 源 → `"pi"`，dsh 源 → `"dsh"`）。
+- 圆心 `ModelInfo`（`packages/shared/src/domain/events/session-state.ts` 第 8 行）加一个字段 `kernel: "pi" | "dsh"`。这是中性判别子，不进任何配置文件，由扫描器在「从哪个来源扫出来」时赋值（pi 源 → `"pi"`，dsh 源 → `"dsh"`）。
 
 - 现状 `ModelInfo` 字段：`provider / id / name / reasoning? / contextWindow? / maxTokens? / input?`。加 `kernel` 后，`provider + id` 仍是一个内核内的唯一键，`kernel + provider + id` 才是全局唯一键。全文所有「按模型查找」的地方，从「`provider`+`id` 匹配」升级为「`kernel`+`provider`+`id` 匹配」（§3.3 展开同名冲突）。
 
@@ -855,7 +855,7 @@
 | 概念 | 位置 |
 |---|---|
 | 三个设置插件 | `src/plugins/manager/{pi-manager,extension-manager,pi-model-manager}/` |
-| `ModelInfo` 定义 | `src/core/domain/events/session-state.ts` |
+| `ModelInfo` 定义 | `packages/shared/src/domain/events/session-state.ts` |
 | 模型扫描（现状只 pi） | `src/plugins/sessions/timeline/renderer/index.tsx` `toModelInfos` |
 | 模型下拉 | `src/plugins/sessions/timeline/renderer/composer.tsx` |
 | 空态 PiLogo | `src/plugins/sessions/timeline/renderer/index.tsx:882` |
