@@ -282,6 +282,10 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 - `window.__neutralLog`(渲染端插桩 `window.kernel.sessions.onNeutralChange`)对账写穿回执
 - 事件流插桩 `window.kernel.sessions.onEvent` 记 type 序列(定位「思考中永挂」类)
 
+## 6.2 已知缺口:e2e-inmem 挂载红(React 18 应用树在 Node-ESM+jsdom 混合桥不 commit,测试基建非产品)
+
+`node scripts/e2e-inmem.mjs` 目前红:`#root` 渲染 0 子节点、零报错、零 React 标记。定界边界(2026-09-08~12 多轮):① 服务端全绿(50 插件 active、assembler、fallback 模型);② `window.kernel` 已构建(bootstrap 跑完);③ 埋点实证 `createRoot().render(...)` **确被调用**但**不 commit**;④ 最小 React 18(`createRoot().render(<div>hello</div>)`)在**同一 jsdom 环境能 commit**——差异在应用树(ThemeProvider>Tooltip.Provider>ErrorBoundary>App),非调度器;⑤ 已排除:React.lazy/Suspense 无、`use()` 钩子无、Promise-suspension 无、MessageChannel/setImmediate 回退 setTimeout 无效、VirtualConsole 抓不到页面报错。**结论**:测试基建的 jsdom 桥接缺口,真 app 经 CDP 全绿(所有 puppeteer e2e)。要修需对应用树做组件级 bisect(逐组件在 jsdom 里 render 定位谁不 commit),属专项任务;期间用真实 CDP e2e 矩阵当无 token 全链路的地面真值。
+
 ## 6.1 能力面×思考域矩阵(2026-09-07 轮;scripts/demo/kernel-thinking-matrix.e2e.mjs 四幕)
 
 **思考矩阵四幕(本轮新增官方 e2e,16 断言)**:幕A pi+能思考模型(网关实发 thinking_delta)→思考块展开有正文;幕B pi+空帧模型(Qwen3.8 Max)→「无思考内容」静态提示、无死展开钮;幕C pi 会话在时开新会话→切 dsh 模型→发送出回复(跨内核解锁);幕D dsh 会话思考档位下拉(关/低/中/高)→切档后「思考强度 → low」分隔线落会话流。基线拨 `defaultThinkingLevel:"high"`(setupBaseline 默认种 "off" 演示省 token——验思考必须先拨高,off 会让 pi 不发思考,幕A 假阴性)。
