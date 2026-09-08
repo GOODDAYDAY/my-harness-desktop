@@ -123,6 +123,11 @@ try {
   ok(opened, "会话列表点开种子会话 + 两条 assistant 消息渲染");
   await waitForDomIdle(page, { quietMs: 500, timeoutMs: 8000 }).catch(() => {});
 
+  // ⓪ 消息元信息徽标(MessageMeta)在种子消息上渲染(确定性:种子条目带数值 timestamp,
+  //   buildMessageMeta 必出 clock)——顺带验 DOM 组装,回归 aria-label="message-meta" 锚点。
+  const metaCount = await page.evaluate(() => document.querySelectorAll("[aria-label='message-meta']").length);
+  ok(metaCount >= 2, `消息元信息徽标渲染(${metaCount} 个,aria-label=message-meta)`);
+
   // ① 空思考块:显式降级——「无思考内容」提示在,且它不在任何 button 里(无展开器)
   const emptyState = await page.evaluate(() => {
     const body = document.body.innerText;

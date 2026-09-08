@@ -123,13 +123,21 @@ async function main() {
   ok(!body.includes("生成失败"), "无「生成失败」");
 
   // 落盘核对:同会话、kernel=dsh、两轮都有 assistant 回复、上下文连续
+  // 落盘核对:同会话、kernel=dsh、两轮都有 assistant 回复、上下文连续
+  // 中立存储是 header/entries 拆分双文件(f723a9bb):<ns>.entries.json 带 lineages,
+  // <ns>.header.json 带 header(kernel/cwd)——按共享 <ns> 前缀配对读取,不再读单文件整树。
+  const readNeutralPair = (nsPrefix) => {
+    const entriesFile = JSON.parse(readFileSync(join(SESSIONS_DIR, `${nsPrefix}.entries.json`), "utf-8"));
+    const headerFile = JSON.parse(readFileSync(join(SESSIONS_DIR, `${nsPrefix}.header.json`), "utf-8"));
+    return { header: headerFile?.header, entries: (entriesFile.lineages ?? []).flatMap((l) => l.entries ?? []) };
+  };
   let found = null;
   for (const f of readdirSync(SESSIONS_DIR)) {
-    if (!f.endsWith(".json")) continue;
+    if (!f.endsWith(".entries.json")) continue;
     try {
-      const s = JSON.parse(readFileSync(join(SESSIONS_DIR, f), "utf-8"));
-      if (s?.header?.cwd !== CWD) continue;
-      const entries = (s.lineages ?? []).flatMap((l) => l.entries);
+      const nsPrefix = f.slice(0, -".entries.json".length);
+      const { header, entries } = readNeutralPair(nsPrefix);
+      if (header?.cwd !== CWD) continue;
       if (entries.some((e) => String(e.message?.content).includes(fact))) {
         const flatten = (c) => {
           if (typeof c === "string") return c;
@@ -137,7 +145,7 @@ async function main() {
           return "";
         };
         const asstTexts = entries.filter((e) => e.message.role === "assistant").map((e) => flatten(e.message?.content));
-        found = { id: f.slice(0, 8), kernel: s.header.kernel, asst: asstTexts.length, remembers: asstTexts.some((t) => t.includes(fact)) };
+        found = { id: nsPrefix.slice(0, 8), kernel: header.kernel, asst: asstTexts.length, remembers: asstTexts.some((t) => t.includes(fact)) };
       }
     } catch { /* 跳过不可读 */ }
   }
@@ -147,19 +155,22 @@ async function main() {
   ok(found?.remembers === true, `第 2 轮回复含代号 ${fact}(上下文连续)`);
 
   // 展示层 best-effort:时间徽标(若消息行未渲染则警告,不硬失败)
-  const timeBadges = await page.evaluate(() => document.querySelectorAll("[aria-label='message-time']").length);
+  // 锚点名 aria-label="message-meta"(MessageMeta 组件;旧名 message-time 已随组件重构失效)。
+  const timeBadges = await page.evaluate(() => document.querySelectorAll("[aria-label='message-meta']").length);
   if (timeBadges >= 1) ok(true, `消息行时间徽标出现(${timeBadges} 个)`);
   else warn(`时间徽标未出现(渲染层可能未渲染消息行,WIP 状态)`);
 
-  // 清理测试会话
+  // 清理测试会话(同样按拆分双文件:内容在 .entries.json,删除时成对清理 header+entries)
   try {
     for (const f of readdirSync(SESSIONS_DIR)) {
-      if (!f.endsWith(".json")) continue;
+      if (!f.endsWith(".entries.json")) continue;
       try {
         const s = JSON.parse(readFileSync(join(SESSIONS_DIR, f), "utf-8"));
-        const entries = (s.lineages ?? []).flatMap((l) => l.entries);
+        const entries = (s.lineages ?? []).flatMap((l) => l.entries ?? []);
         if (entries.some((e) => String(e.message?.content).includes(fact))) {
+          const nsPrefix = f.slice(0, -".entries.json".length);
           rmSync(join(SESSIONS_DIR, f), { force: true });
+          rmSync(join(SESSIONS_DIR, `${nsPrefix}.header.json`), { force: true });
         }
       } catch { /* 跳过 */ }
     }
