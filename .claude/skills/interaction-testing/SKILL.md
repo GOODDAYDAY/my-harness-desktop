@@ -282,9 +282,13 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 - `window.__neutralLog`(渲染端插桩 `window.kernel.sessions.onNeutralChange`)对账写穿回执
 - 事件流插桩 `window.kernel.sessions.onEvent` 记 type 序列(定位「思考中永挂」类)
 
-## 6.2 已知缺口:e2e-inmem 挂载红(React 18 应用树在 Node-ESM+jsdom 混合桥不 commit,测试基建非产品)
+## 6.2 e2e-inmem 修复记录(Vite `__vitePreload` 相对 import 在 Node-ESM 混合桥挂起 → 直测预加载全 chunk,已修 87b072d5)
 
-`node scripts/e2e-inmem.mjs` 目前红:`#root` 渲染 0 子节点、零报错、零 React 标记。定界边界(2026-09-08~12 多轮):① 服务端全绿(50 插件 active、assembler、fallback 模型);② `window.kernel` 已构建(bootstrap 跑完);③ 埋点实证 `createRoot().render(...)` **确被调用**但**不 commit**;④ 最小 React 18(`createRoot().render(<div>hello</div>)`)在**同一 jsdom 环境能 commit**——差异在应用树(ThemeProvider>Tooltip.Provider>ErrorBoundary>App),非调度器;⑤ 已排除:React.lazy/Suspense 无、`use()` 钩子无、Promise-suspension 无、MessageChannel/setImmediate 回退 setTimeout 无效、VirtualConsole 抓不到页面报错。**结论**:测试基建的 jsdom 桥接缺口,真 app 经 CDP 全绿(所有 puppeteer e2e)。要修需对应用树做组件级 bisect(逐组件在 jsdom 里 render 定位谁不 commit),属专项任务;期间用真实 CDP e2e 矩阵当无 token 全链路的地面真值。
+**根因(bisect 实锤)**:`index.tsx`/`plugins-host` 的动态 `import("./x.js")` 被 Vite 编译成 `__vitePreload(() => import("./x.js").then(n => n.xx), deps, import.meta.url)`——该包装的**相对 import 在 Node-ESM+jsdom 混合桥下不完成**(app-main/插件 renderer 模块体 60s 不执行;定界手段:模块体顶部写 `globalThis.__appMainLoaded=true`,e2e-inmem 直测 import 同一 chunk 前后各读一次——「直测前未置位、直测后置位」= 动态 import 挂起而非模块体报错)。
+
+**修法(87b072d5)**:入口 bundle import 后,直测 `import(pathToFileURL(...))` **全部 151 个 renderer chunk**(Promise.allSettled),让各模块体照跑,后续 `__vitePreload` 的相对 import 命中 ESM 缓存。效果:黑屏全灭 → 151 chunk 零失败、#root/composer/sidebar/sidepanel 皆渲染、页签可点、ping 提交。
+
+**遗留 2 项失败(非阻塞)**:① ping 模型回复——沙箱禁外网,尽力而为项必然失败;② 草稿切会话恢复(`newChatEmpty=false`/`restoredA=false`)——jsdom 下草稿 store 隔离时序(固定 sleep 不足),待查;真 app 草稿隔离是 renderer 面,可补 CDP e2e 验证。
 
 ## 6.1 能力面×思考域矩阵(2026-09-07 轮;scripts/demo/kernel-thinking-matrix.e2e.mjs 四幕)
 
