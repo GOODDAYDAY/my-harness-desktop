@@ -1,6 +1,6 @@
 # web 服务化：去 IPC、纯前后端分离、Electron-free 后端
 
-> 状态：终态设计（待落地）。本文描述把 my-harness-desktop 从「Electron 桌面壳」改造成「web 服务」的完整方案：渲染层零 Electron、前后端只走 HTTP/WebSocket、后端从 Electron 独立出来。远程访问不是外挂功能，而是这套架构的天然属性。
+> 状态：终态设计（**已实施**——前后端分离、HTTP/WS 传输、双宿主入口已落地，见 CLAUDE.md §6.1 物理分区与 §8.1 通信机制；落点 `src/server/transport` + `src/server/host` + `src/server/remote` + `src/server/bootstrap/{assemble,electron,server}.ts` + `src/web`，`window.kernel` 由 `buildKernel(wsTransport(...))` 经 WS 构建）。本文保留完整设计推演（§2 现状 → §3 终态）作为落地依据。
 
 ## 0. 一句话
 
