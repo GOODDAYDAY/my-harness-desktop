@@ -61,6 +61,7 @@ writeFileSync(prefsFile, JSON.stringify({ ...JSON.parse(readFileSync(prefsFile, 
 | `button[title]` | 图标按钮的唯一可达名(收藏/分叉/重试/复制/钉图钉/回退;侧栏图标条的 Review/Tree/统计 等) |
 | `[role=menu]` + `[role=menuitem]` | 模型下拉(Radix) |
 | `[role=menuitem]` | 右键菜单项(会话行右键:重命名/置顶/归档/打开两文件) |
+| `[data-sidepanel-style]` | 右侧面板(**有两个**:图标条 w-12 + 展开面板 h-full,DOM 序展开面板在前且空)——取页签按钮必须用后代选择器 `[data-sidepanel-style] button[aria-label]`(单元素 querySelector 命中空面板得 0 页签,2026-09-08 踩过) |
 
 **消息行悬停动作钮**:先 `page.mouse.move` 到行中心,等 ~600ms(hover 淡入),再按 title 查。行内按钮 title 全集:复制/分叉/收藏/钉图钉/重试(user 行另有「回退」)。
 
