@@ -290,6 +290,8 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **空思考帧的 wire 级实证法(「思考内容为空」类投诉的定界)**:先 curl 原始 provider 流(`anthropic-messages` 路径直接 POST /v1/messages 带 thinking 参数,openai 路径查 `reasoning_content`)——**网关只回 content_block_start 空 thinking 帧、零 thinking_delta** = 供应商行为,pi 落盘 `thinking:""` 忠实记录,desktop 管线无截断(pi JSONL 与中立层同空)。定界完成才谈 UI:空正文配可点展开器=「点开有东西」的假装,显式降级静态提示。同网关换上游模型(glm-5.2)实发 delta——「部分模型空帧」是每上游模型行为,不是系统性缺思考。
 
+**「同模型 pi 无思考、dsh 有」的逐层打穿法(2026-09-08 实锤真凶=网关错标块型)**:这类跨内核差异投诉要**逐段排除**,别先怪内核:① 裸 curl 网关(带 pi 的精确请求形状——thinking 参数 + anthropic-beta 头)——看 `content_block_start` 的 `content_block.type`;**网关把思考块开成 `type:"text"` 却往里流 `thinking_delta` = 违 Anthropic 规范**(thinking_delta 必须进 thinking 块),pi-ai 按规范丢弃块型不匹配的 delta → pi 落盘无思考。② 本地透明代理抓 pi 真实请求(pi 发没发 thinking 参数/头)→ 排除「pi 不发思考」的误判:实测 pi 发了 `thinking:{type:"enabled",budget_tokens:16384}` + `anthropic-beta: interleaved-thinking`,请求侧无责。③ 同模型换 openai-completions 路径条目:网关发干净的 `reasoning_content` → pi-ai 正常捕获(pi headless 实测 320 字思考块)。④ 对照组:同一网关 glm-5.2 正确开 `thinking` 块(桌面有思考)——**逐模型错标,不是系统性缺思考**。结论落点:网关(bifrost ai-router)逐模型 bug,桌面/pi 无可修点(pi-ai 按规范丢错标块是对的),可用路径 = openai 条目。回归守卫 scripts/demo/pi-openai-thinking.e2e.mjs 锁「pi+openai 路径思考可用」。
+
 **dsh 思考档位补面的验证口径(幕D)**:① dsh 会话 composer 档位下拉**存在**(dsh 适配插件补面,清单来自模型 reasoningEfforts 声明,本机种=关/低/中/高);② 切档生效的**留痕断言** = 会话流出现「思考强度 → low」分隔线(dsh request/header 事件派生 thinking_level_change,壳零分支);③ dsh 落盘无 pi 文件,留痕只看视图流分隔线 + dsh 会话日志,别找 pi JSONL。
 
 **新会话跨内核解锁(幕C 三连断言)**:pi 会话(有历史)→「+新会话」(title **startsWith「新会话」**——「刷新会话列表」含子串「新会话」,includes 模糊匹配会先点中刷新钮,实测踩过)→ 开模型下拉读 TAB(disabled 应 false)→ 点 dsh 模型项 → 发送 → dsh 回复到达且无「跨内核/已固定内核/未启动」错误。修后回归锚:`__capsLog` 每个转变点都有新快照(setContext/首发锁定/start 三处广播,见 markTouched 边沿语义)。
