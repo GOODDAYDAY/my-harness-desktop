@@ -11,7 +11,7 @@
 // ref 有真实 key(桌面端模型配置页写入)。测试会话结束清理,不污染用户数据。
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
-import { readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -69,7 +69,10 @@ async function main() {
   });
   ok(true, "ping 已发送");
 
-  // 等结果:最多 60s。失败信号(MISSING_CREDENTIAL/生成失败)= 硬失败;pong/回复 = 通过。
+  // 等结果:最多 60s。失败信号(MISSING_CREDENTIAL/生成失败)= 硬失败。
+  // 回复判据走**数据层**(中立层/会话日志),不赌 DOM 文本——此前扫 body.innerText 末尾 800
+  // 字,回复到达与否取决于侧栏预览/会话内容谁在尾巴上,是「文件对应」纪律里的经典假阴性。
+  // 回复证据 = 最新会话的 session.jsonl 出现 assistant/message(明文,桌面强制 compression:'none')。
   let outcome = "timeout";
   for (let i = 0; i < 30; i++) {
     await sleep(2000);
@@ -78,12 +81,17 @@ async function main() {
       return {
         missingCred: /MISSING_CREDENTIAL|no credential for provider route/.test(b),
         genFailed: /生成失败/.test(b),
-        answered: /pong|在的|就绪|收到/i.test(b.slice(-800)),
       };
     });
     if (st.missingCred) { outcome = "MISSING_CREDENTIAL"; break; }
     if (st.genFailed) { outcome = "GEN_FAILED"; break; }
-    if (st.answered) { outcome = "answered"; break; }
+    // 数据层:最新会话目录的 session.jsonl 出现 assistant/message 即回复到达
+    const dirs = readdirSyncSafe(DSH_BUCKET).filter((d) => existsSync(join(DSH_BUCKET, d, "session.jsonl")));
+    const newestDir = dirs.sort().pop();
+    if (newestDir) {
+      const log = readFileSync(join(DSH_BUCKET, newestDir, "session.jsonl"), "utf8");
+      if (/"type":"assistant\/message"/.test(log)) { outcome = "answered"; break; }
+    }
   }
   ok(outcome !== "MISSING_CREDENTIAL", "无 MISSING_CREDENTIAL(凭证从凭证库读到了)");
   ok(outcome !== "GEN_FAILED", "无「生成失败」红条");
@@ -94,7 +102,13 @@ async function main() {
   const newest = after.filter((d) => !readdirSyncSafe(DSH_BUCKET).includes(d)).concat(after).pop();
   ok(!!newest, "dsh 会话目录存在");
   if (newest) {
-    const log = execSync(`zstd -dc "${join(DSH_BUCKET, newest, "session.jsonl.zstd")}" 2>/dev/null || true`, { encoding: "utf8" });
+    // 桌面管控的 dsh 会话是明文 session.jsonl(cordis 强制 compression:'none' 明文诊断模式,
+    // 见 dsh-session 注释);旧的 .jsonl.zstd 是用户手跑 dsh 的压缩形态——明文优先、压缩兜底。
+    const dir = join(DSH_BUCKET, newest);
+    const plain = join(dir, "session.jsonl");
+    const log = existsSync(plain)
+      ? readFileSync(plain, "utf8")
+      : execSync(`zstd -dc "${join(dir, "session.jsonl.zstd")}" 2>/dev/null || true`, { encoding: "utf8" });
     ok(!/MISSING_CREDENTIAL/.test(log), "内核日志无 MISSING_CREDENTIAL");
     ok(/"kind":"completed"/.test(log), "内核日志有 turn/end completed");
   }
