@@ -1,7 +1,12 @@
 # dsh 运行时思考深度切换——补面设计
 
-> 状态：设计待实施。前置事实已全部实测（2026-09-07，kernel-thinking-matrix e2e + dsh 源码对读）。
-> 已落地的部分：composer 对 dsh 会话的思考开关挂诚实提示（`shell.thinkingSwitchUnsupported`，显式降级 §7.6）——那是降级态，不是本设计的完成态。
+> 状态：**已实施**（2026-09-08 `a79a3e76` 全量落地）。前置事实已全部实测（2026-09-07，kernel-thinking-matrix e2e + dsh 源码对读）。
+>
+> 落地与验证：① `src/server/kernel/dsh/extension/dsh-extension/index.mjs` 给 `handleRequest` 补丁拦截 `session/setThinkingLevel`（经 `ctx.get("llm").resolveCallConfig` 校验）+ `session/getThinkingLevels`（`resolveModelInfo(...).reasoning?.efforts`），并 `installModelSelection(agent.ctx, ref)` 原地热切 `{provider, model, reasoningEffort}`；② `DshBackend.setThinkingLevel` override（懒探测缺面 no-op + 未知会话 stash `pendingThinkingLevel`）+ `capabilities.dsh.getThinkingLevels`；③ 配套 §5：`dsh-config-source.ts` 的 `setProvider` 写 `reasoningEfforts`（`off:null/low:low/medium:medium/high:high`）+ `toModelSpec` 读回 `reasoning:true`；④ 呈现面：composer `levels = capabilities.dshExtension ? thinkingLevels : []`（dsh 档位清单来自 `getThinkingLevels`，非 pi 的 DEFAULT_LEVELS）。
+>
+> 运行时证据：kernel-thinking-matrix 幕D（dsh 会话档位下拉存在 + 切档后「思考强度 → low」分隔线落会话流）、`scripts/demo/dsh-model-reasoning.e2e.mjs`（模型页 reasoning 复选框 → settings.yaml 落 reasoningEfforts，6 断言）、`dsh-config-source.test.ts`（写盘/读回双向守卫）。
+>
+> 早期（a79a3e76 之前）的降级态：composer 对 dsh 会话的思考开关挂诚实提示（`shell.thinkingSwitchUnsupported`，显式降级 §7.6）——那是补面前的过渡态，本设计落地后已替换为真实档位下拉。
 
 ## 1 问题
 
@@ -53,12 +58,11 @@ renderer composer 选档
 
 ## 6 呈现面（composer）
 
-- `levels` 的生产今天绑 `capabilities.piExtension`。补面后改为能力探测：`capabilities.dsh?.thinkingLevels === true`（dsh 能力面加一位，扩展装上即真）时也给出档位清单。dsh 档位清单不需要 RPC 拉取（词汇与 pi 同源），用 `DEFAULT_LEVELS` 即可。
+- `levels` 的生产绑 `capabilities.piExtension`（pi 档位清单：`thinkingLevels.length>0 ? thinkingLevels : DEFAULT_LEVELS`）。补面后 dsh 分支改为能力探测：`capabilities.dshExtension`（=`backend.capabilities.dsh != null`）为真时用 `thinkingLevels`（该数组由 `capabilities.dsh.getThinkingLevels` 拉取——清单来自模型 `reasoningEfforts` 声明，非 pi 的 DEFAULT_LEVELS 硬编码；旧版适配插件无 `session/getThinkingLevels` → 懒探测记缺面 → `thinkingLevels` 空 → 档位控件不渲染 + 诚实提示）。落地实现见 `src/server/application/sessions/session-store.ts` 的 `getThinkingLevels()`。
 - 模型不支持思考（无 reasoning 面）时切档会抛错——错误 toast 显形（既有 send 失败通道），不伪造成功。
 - pi 侧行为不变（回归位）。
 
-## 7 验收（三级）
+## 7 验收（三级，已落地）
 
-- unittest：`dsh-extension` 的 setThinkingLevel 拦截（ref.current 写入正确三元组）；`DshBackend.setThinkingLevel` 发 RPC + 缺面降级。
-- DOM test：composer 对「dsh 且支持切档」的能力面渲染可用档位下拉。
-- e2e（kernel-thinking-matrix 幕D 升级）：dsh 会话切档 → `request/header` 分隔线出现 → 下一发生效。
+- unittest（已落地）：`dsh-backend.test.ts` 的 `setThinkingLevel` 三连（发 RPC 热切 / unknown session 暂存 pending 补发 / 旧插件缺面 no-op）+ `dsh-config-source.test.ts` 的 reasoningEfforts 写盘/读回双向守卫。
+- e2e（已落地）：kernel-thinking-matrix 幕D（dsh 会话切档 → `request/header` 分隔线出现）、`scripts/demo/dsh-model-reasoning.e2e.mjs`（模型页 reasoning 复选框 UI 全链写盘）。
