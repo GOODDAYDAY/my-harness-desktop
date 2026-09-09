@@ -7,13 +7,12 @@ import type { KernelModelsApi, KernelModelConfig, NeutralProvider } from "@my-ha
 import type { ModelsConfig, ProviderConfig } from "../model/models-config";
 import type { ModelsStore } from "../model/models-store";
 import type { PiSettingsStore } from "../model/pi-settings-store";
-import type { SessionStore } from "../../../application/sessions/session-store";
 
 /** pi 模型配置 → 中性 KernelModelsApi。 */
 export function createPiModelsApi(
   modelsStore: ModelsStore,
   piSettingsStore: PiSettingsStore,
-  sessionStore: SessionStore,
+  testModel: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>,
 ): KernelModelsApi {
   const toNeutral = (cfg: ModelsConfig): NeutralProvider[] =>
     Object.entries(cfg.providers).map(([id, p]) => ({
@@ -74,7 +73,7 @@ export function createPiModelsApi(
       await piSettingsStore.set({ defaultProvider: sel.provider, defaultModel: sel.model });
       return sel;
     },
-    test: (cwd, provider, modelId) => sessionStore.test(cwd, provider, modelId, "pi"),
+    test: (cwd, provider, modelId) => testModel(cwd, provider, modelId),
     readConfig,
     async saveConfig(config) {
       // models.json 的 providers 是整份 dict,直接重建整份写(等价于逐 provider set 的收敛)。

@@ -10,7 +10,7 @@ import { Plus, Mic, ArrowUp, Square, ChevronDown, Check, Brain } from "lucide-re
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTranslation } from "react-i18next";
 import { PluginIcon, type ModelInfo, type CommandItem, matchComposerCommandName } from "@my-harness-desktop/react";
-import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
+import { type KernelId } from "@my-harness-desktop/shared";
 
 /** 思考强度 level 值 → i18n key 后缀。 */
 const LEVEL_KEY: Record<string, string> = {
@@ -188,11 +188,11 @@ export function Composer({
   // 模型下拉的内核 TAB 状态:null = 跟随当前模型内核/首个内核(打开下拉时重置为 null)。
   const [modelKernel, setModelKernel] = useState<KernelId | null>(null);
 
-  // 有模型的内核列表(固定序 KERNEL_IDS),用于模型下拉顶部的 TAB 条。
+  // 有模型的内核列表(注册表序 window.kernel.kernelIds),用于模型下拉顶部的 TAB 条。
   const kernels = useMemo((): KernelId[] => {
     const present = new Set<KernelId>();
     for (const m of models ?? []) present.add(m.kernel);
-    return (KERNEL_IDS as readonly KernelId[]).filter((k) => present.has(k));
+    return window.kernel.kernelIds.filter((k) => present.has(k));
   }, [models]);
   const byKernel = useMemo(() => groupByKernel(models ?? []), [models]);
   // 当前生效的内核 TAB:显式点选 → 当前模型内核 → 首个内核。

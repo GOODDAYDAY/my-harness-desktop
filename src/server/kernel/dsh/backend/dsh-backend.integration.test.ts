@@ -168,7 +168,7 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
       await r1;
       // 热切:同 provider 换模型——补丁(或原生)应答成功,不记缺面、能力位保持 true
       await backend.setModel("us-new", "bifrost/dashscope/kimi-k3");
-      expect(backend.capabilities.dsh?.missing.has("session/setModel")).toBe(false);
+      expect(backend.capabilities.thinking?.missing.has("session/setModel")).toBe(false);
       expect(backend.supportsRuntimeSetModel).toBe(true);
       // 进程不死(热切不重启:桌面侧可观察的边界就是进程/传输不动)
       expect(backend.alive).toBe(true);

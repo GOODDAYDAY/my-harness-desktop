@@ -7,13 +7,12 @@
 // 可扩展点(用户要求「为后续写插件/改插件预留」):「扫描 → 判缺 → 补装/更新」三步是通用形状,
 // 后续插件安装/更新扫描可复用同一形状(把 entry 从内核换成插件,manager 换成对应的扩展管理器)。
 // 本函数只处理「缺失补装」;「有新版可更新」留演进(更新语义需产品决策,不在此静默升级)。
-import type { KernelId } from "@my-harness-desktop/shared";
-import type { KernelManager } from "./kernel-manager";
+import type { KernelId, KernelVersionApi } from "@my-harness-desktop/shared";
 
-/** 一条待对账的内核:内核身份 + 其版本管理器实例。 */
+/** 一条待对账的内核:内核身份 + 其版本管理中性面(插件 createVersionApi 产出)。 */
 export interface KernelReconcileEntry {
   kernel: KernelId;
-  manager: KernelManager;
+  versionApi: KernelVersionApi;
 }
 
 /** 对账结果状态:已装(跳过) / 已补装 / 失败。 */
@@ -39,18 +38,18 @@ export async function reconcileMissingKernels(
   onProgress: (kernel: KernelId, line: string) => void,
   onSettled: (result: KernelReconcileResult) => void,
 ): Promise<void> {
-  for (const { kernel, manager } of entries) {
-    if (manager.currentVersion().available) {
+  for (const { kernel, versionApi } of entries) {
+    if ((await versionApi.status()).available) {
       onSettled({ kernel, outcome: "already" });
       continue;
     }
     try {
-      const { latest } = await manager.listVersions();
+      const { latest } = await versionApi.listVersions();
       if (!latest) {
         onSettled({ kernel, outcome: "failed", error: "registry 无 dist-tag 版本" });
         continue;
       }
-      const result = await manager.install(latest, (line) => onProgress(kernel, line));
+      const result = await versionApi.install(latest, (line) => onProgress(kernel, line), () => {});
       onSettled({
         kernel,
         outcome: result.ok ? "installed" : "failed",

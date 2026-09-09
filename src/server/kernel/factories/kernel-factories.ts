@@ -24,10 +24,17 @@ import { piDerivedSessionPath } from "../pi/backend/pi-catalog";
 import { DshBackend } from "../dsh/backend/dsh-backend";
 import { PiSessionCatalog } from "../pi/backend/pi-catalog";
 import { DshSessionCatalog } from "../dsh/backend/dsh-catalog";
+import { MinimalBackend } from "../minimal/backend/minimal-backend";
+import { MinimalCatalog, minimalDerivedSessionPath, minimalSeedSession } from "../minimal/backend/minimal-catalog";
+import { createMinimalSubprocess } from "../minimal/backend/subprocess-lifecycle";
+import { MinimalTransport } from "../minimal/backend/minimal-transport";
 import type { BaseBackend, BackendCreateOptions, SessionCatalog } from "@my-harness-desktop/shared";
 
 /** pi 的 seed 投影纯函数 re-export:bootstrap 的 BackendFactory.seed 用(§4.5)。 */
 export { piSeedSession };
+
+/** minimal 的 seed 投影纯函数 re-export:bootstrap 的 BackendFactory.seed 用(§8.2.2 预 seed)。 */
+export { minimalSeedSession };
 
 /** pi 工厂入参:中性 BackendCreateOptions + pi 专属 spawn 注入(cliPath 由 bootstrap 闭包捕获)。 */
 export interface PiFactoryOptions extends BackendCreateOptions {
@@ -122,4 +129,36 @@ export function createDshCatalog(opts: DshCatalogFactoryOptions): SessionCatalog
       return transport;
     },
   });
+}
+
+/** minimal 工厂入参:中性 BackendCreateOptions + minimal 专属 spawn 注入(cliPath 由 bootstrap 闭包捕获)。 */
+export interface MinimalFactoryOptions extends BackendCreateOptions {
+  /** minimal-cli.mjs 绝对路径。 */
+  cliPath: string;
+}
+
+/** minimal 工厂:文件态内核(§8.2.2 预 seed),会话 id 由 lineageId ?? neutralSessionId 派生,
+ *  与 pi 同源(分支重 spawn 按分支 lineageId 派生,避免写回根文件)。spawn 独立 CLI + JSONL transport。 */
+export function createMinimalBackend(opts: MinimalFactoryOptions): BaseBackend {
+  const lineageId = opts.lineageId ?? opts.neutralSessionId;
+  const sessionId = minimalDerivedSessionPath(opts.agentDir, opts.cwd, lineageId);
+  const handle = createMinimalSubprocess({
+    cliPath: opts.cliPath,
+    agentDir: opts.agentDir,
+    cwd: opts.cwd,
+    sessionId: lineageId,
+  });
+  const transport = new MinimalTransport(handle);
+  return new MinimalBackend(transport, {
+    cwd: opts.cwd,
+    agentDir: opts.agentDir,
+    sessionId,
+    provider: opts.provider,
+    model: opts.model,
+  });
+}
+
+/** minimal 目录:minimal 的 SessionCatalog(读 minimal 线性会话文件,agentDir 注入)。 */
+export function createMinimalCatalog(agentDir: string): SessionCatalog {
+  return new MinimalCatalog(agentDir);
 }

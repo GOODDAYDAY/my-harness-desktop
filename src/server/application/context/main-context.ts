@@ -3,14 +3,14 @@
 import type { JsonPrefsStore } from "../config/json-prefs";
 import type { ConfigStore } from "../config/config-store";
 import type { ModelCatalog } from "../models/model-catalog";
-import type { DshConfigApi, PiSettingsApi, ModelsConfigApi, KernelModelsRegistry, KernelConfigApi } from "@my-harness-desktop/shared";
+import type { PiSettingsApi, ModelsConfigApi, KernelModelsRegistry, KernelConfigApi } from "@my-harness-desktop/shared";
 import type { KernelManager } from "../../kernel/core/kernel-manager";
 import type { PluginRegistry } from "../loader/registry";
 import type { SessionStore } from "../sessions/session-store";
 import type { SessionBus } from "../sessions/session-bus";
 import type { RestartCoordinatorImpl } from "../restart/restart-coordinator";
 import type { KernelExtensionSource } from "@my-harness-desktop/shared";
-import type { KernelId, KernelLogo } from "@my-harness-desktop/shared";
+import type { KernelId, KernelLogo, KernelVersionApi } from "@my-harness-desktop/shared";
 import type { SkillAggregator } from "../skills/skill-aggregator";
 import type { I18nResource } from "../i18n/merge";
 import type { PluginLifecycleDeps } from "../lifecycle";
@@ -89,25 +89,16 @@ export interface MainPaths {
 export interface MainContext {
   paths: MainPaths;
   prefsStore: JsonPrefsStore<Prefs>;
-  /** 当前生效的自定义内核 cli.js 绝对路径(读 prefs + resolveCustomCli 归一化;
-   *  未设置/已失效返回 undefined → spawn 回落数据根 > PATH)。
-   *  bootstrap 组装一次,SessionStore 与 kernel IPC 共用(单源,不各处自读 prefs)。 */
-  customCliPath: () => string | undefined;
   configStore: ConfigStore;
-  /** pi 内核 settings.json 中性面(bootstrap 绑定实现,含 .d.ts schema 解析)。 */
-  piSettings: PiSettingsApi;
-  /** pi 内核 models.json 中性面(bootstrap 绑定实现)。 */
-  modelsConfig: ModelsConfigApi;
   modelCatalog: ModelCatalog;
-  dshConfigSource: DshConfigApi;
   /** 内核模型配置中性 API(pi/dsh 各一个),bootstrap 组装注入。 */
   kernelModels: KernelModelsRegistry;
   /** 内核原生配置中性 API(pi/dsh 各一个,配置 TAB 用),bootstrap 组装注入。 */
   kernelConfig: Record<KernelId, KernelConfigApi>;
-  /** pi 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */
-  piKernelManager: KernelManager;
-  /** dsh 内核版本管理(装/查/自定义目录),bootstrap 组装注入。基类面,不依赖具体内核。 */
-  dshKernelManager: KernelManager;
+  /** 内核版本管理中性 API(每内核一个,从插件 registry 遍历 createVersionApi),bootstrap 组装注入。 */
+  kernelVersionApis: Record<KernelId, KernelVersionApi>;
+  /** 已注册内核 id 清单(运行时注册表顺序,替代 KERNEL_IDS 字面量数组)。 */
+  kernelIds: KernelId[];
   registry: PluginRegistry;
   /** 技能聚合器(聚合 pi/dsh 的 SkillProvider),bootstrap 组装注入。 */
   skillAggregator: SkillAggregator;
@@ -120,8 +111,8 @@ export interface MainContext {
   kernelLogos: Record<KernelId, KernelLogo>;
   /** tool-gate 内核扩展可用性探测(pi 专属;bootstrap 绑定实现)。 */
   fitPiExtensionAvailable: () => boolean;
-  /** 一次性问内核(llm:oneshot;pi 专属;bootstrap 绑定实现,cwd/cliPath 已闭包)。 */
-  llmOneshot: (prompt: string) => Promise<string>;
+  /** 一次性问内核能力(从 registry 遍历 createOneshot;pi 有、dsh/minimal 无 → undefined)。 */
+  kernelOneshots: Record<KernelId, ((prompt: string, cwd?: string) => Promise<string>) | undefined>;
   /** 内置 skills 挂/摘(pi settings.json skills[];bootstrap 绑定实现)。 */
   ensureBundledSkills: (enabled: boolean) => Promise<boolean>;
   /** 插件技能挂/摘 hooks(pi settings.json skills[];bootstrap 绑定实现)。 */

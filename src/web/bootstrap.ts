@@ -3,6 +3,7 @@
 // window.kernel.platform(§16.2),ES import 先于模块体执行,故引导须独立成模块先跑。
 import { wsTransport } from "./transport/ws-transport";
 import { buildKernel } from "./kernel/build-kernel";
+import { IPC, type KernelId } from "@my-harness-desktop/shared";
 
 // crypto.randomUUID 补齐(第 17 项真凶):浏览器只在安全上下文(https/localhost)暴露
 // randomUUID——经局域网 http 地址访问时它是 undefined,发消息等一切生成 id 的操作全炸。
@@ -71,4 +72,8 @@ function showDisconnectedBanner(): void {
 }
 
 const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/rpc`);
-window.kernel = buildKernel(wsTransport(ws, { token: lt ?? urlToken, onDisconnect: showDisconnectedBanner }), platform);
+const transport = wsTransport(ws, { token: lt ?? urlToken, onDisconnect: showDisconnectedBanner });
+// 内核清单(boot 时从后端 kernel.list IPC 拿,替代 KERNEL_IDS 字面量数组):buildKernel 同步构造
+// 需要清单,故 top-level await 等一次 IPC(hello 鉴权由传输层收口,invoke 自动排队)。
+const kernelList = await transport.invoke(IPC.kernel.list) as { id: KernelId }[];
+window.kernel = buildKernel(transport, platform, kernelList.map((e) => e.id));

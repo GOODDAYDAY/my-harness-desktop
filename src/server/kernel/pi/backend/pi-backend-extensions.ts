@@ -3,7 +3,7 @@
 // 依据 docs/design/kernel-design-spec.md §26 阶段 D / §28.6：这些 pi 专属能力
 // （steer/followUp/cycleModel/getThinkingLevels/…）不该定义在圆心 core/domain/backend.ts
 // ——那是 pi 专属形状泄漏进中性契约。这里收成接口，PiBackend implements；
-// 壳（core/application）经 `backend.capabilities.pi` 探测「有则用、无则降级」，
+// 壳（core/application）经 `backend.capabilities.extensions` 探测「有则用、无则降级」，
 // 类型经本接口（type-only import，§28.6「core 只 import 接口不 import 类」）。
 //
 // 需要壳读回结果的方法返回中性类型（ModelInfo[]/SessionStats/NeutralMessage[] 等），
@@ -17,7 +17,7 @@ import type { Question } from "@my-harness-desktop/shared";
 import type { ImageInput, BashResult } from "@my-harness-desktop/shared";
 import type { ProcessExitInfo } from "@my-harness-desktop/shared";
 
-export interface PiBackendExtensions {
+export interface BackendExtensions {
   /** pi 专属 RPC 通道(命令透传/就绪探测)。 */
   send(command: unknown, opts?: { timeoutMs?: number }): Promise<unknown>;
   /** pi 版 sendMessage 多一个 streamingBehavior(steer/followUp 多路并发档)。 */
@@ -46,8 +46,9 @@ export interface PiBackendExtensions {
   onBusFrame(cb: (frame: Record<string, unknown>) => void): () => void;
   /** 中性提问投递(pi extension_ui 帧翻译)。 */
   onQuestion(cb: (req: { requestId: string; questions: Question[] }) => void): () => void;
-  /** 进程退出回调(可赋值字段)。 */
-  onProcessExit: ((exit: ProcessExitInfo, expected: boolean) => void) | null;
+  /** 进程退出回调(可赋值字段)。已改名 onExit——onProcessExit 让位给 BaseBackend 的中性
+   *  崩溃收尾方法(§4.6.3),pi 扩展面字段与契约方法同名的冲突由此化解。 */
+  onExit: ((exit: ProcessExitInfo, expected: boolean) => void) | null;
   /** stderr 调试串。 */
   readonly stderr: string;
 }

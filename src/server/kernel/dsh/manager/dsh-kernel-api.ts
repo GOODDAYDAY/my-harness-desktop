@@ -4,13 +4,12 @@
 // 翻译成中性 KernelModelsApi。纯自定义 provider：apiKey 字面值经 DshConfigSource 写
 // dsh 凭证库（~/.dsh/.credentials.yaml），不落 settings.yaml、不注入进程 env。
 import type { KernelModelsApi, KernelModelConfig, NeutralProvider, DshConfigApi } from "@my-harness-desktop/shared";
-import type { SessionStore } from "../../../application/sessions/session-store";
 import { assertPiAiRouteServiceable } from "../backend/dsh-config-source";
 
 /** dsh 模型配置 → 中性 KernelModelsApi。 */
 export function createDshModelsApi(
   dshConfigSource: DshConfigApi,
-  sessionStore: SessionStore,
+  testModel: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>,
 ): KernelModelsApi {
   const toNeutral = (): NeutralProvider[] =>
     dshConfigSource.listProviders().map((p) => ({
@@ -61,7 +60,7 @@ export function createDshModelsApi(
       await dshConfigSource.setDefaultModel(sel);
       return sel;
     },
-    test: (cwd, provider, modelId) => sessionStore.test(cwd, provider, modelId, "dsh"),
+    test: (cwd, provider, modelId) => testModel(cwd, provider, modelId),
     readConfig,
     async saveConfig(config) {
       // 全量 reconcile:删缺 + 增改 + 设默认。

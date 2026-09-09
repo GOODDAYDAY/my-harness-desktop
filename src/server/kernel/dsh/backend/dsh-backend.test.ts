@@ -46,7 +46,7 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     const { t, b } = makeBackend();
     t.errors.set("session/seed", unknownMethod("session/seed"));
     await expect(b.seed([], { neutralSessionId: "ns", lineageId: "root", header: session.header })).rejects.toThrow(/缺少 session\/seed/);
-    expect(b.capabilities.dsh.missing.has("session/seed")).toBe(true);
+    expect(b.capabilities.thinking.missing.has("session/seed")).toBe(true);
   });
 
   it("已知缺面的方法不再重调,直接抛清晰错误", async () => {
@@ -62,9 +62,9 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     const { t, b } = makeBackend();
     t.errors.set("session/setModel", unknownMethod("session/setModel"));
     const onMissing = vi.fn();
-    b.capabilities.dsh.onMissing = onMissing;
+    b.capabilities.thinking.onMissing = onMissing;
     await expect(b.setModel("p", "m")).resolves.toBeUndefined();
-    expect(b.capabilities.dsh.missing.has("session/setModel")).toBe(true);
+    expect(b.capabilities.thinking.missing.has("session/setModel")).toBe(true);
     expect(onMissing).toHaveBeenCalledWith("session/setModel");
   });
 
@@ -73,7 +73,7 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     expect(b.supportsRuntimeSetModel).toBe(true);
     t.errors.set("session/setModel", unknownMethod("session/setModel"));
     await b.setModel("p", "m2");
-    expect(b.capabilities.dsh.missing.has("session/setModel")).toBe(true);
+    expect(b.capabilities.thinking.missing.has("session/setModel")).toBe(true);
     expect(b.supportsRuntimeSetModel).toBe(false); // 壳据此把模型失配回落成停旧起新
   });
 
@@ -81,7 +81,7 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
     const { t, b } = makeBackend();
     t.errors.set("session/getTree", new DshRpcError("bad boundary", -1, "session/getTree"));
     await expect(b.getTree("s")).rejects.toThrow("bad boundary");
-    expect(b.capabilities.dsh.missing.has("session/getTree")).toBe(false);
+    expect(b.capabilities.thinking.missing.has("session/getTree")).toBe(false);
   });
 
   it("setSessionName 走 session/rename RPC(中立命名意图)", async () => {
@@ -193,9 +193,9 @@ describe("dsh 思考深度补面(dsh-thinking-level.md)", () => {
     const { t, b } = makeBackend();
     t.errors.set("session/setThinkingLevel", unknownMethod("session/setThinkingLevel"));
     const onMissing = vi.fn();
-    b.capabilities.dsh.onMissing = onMissing;
+    b.capabilities.thinking.onMissing = onMissing;
     await expect(b.setThinkingLevel("high")).resolves.toBeUndefined();
-    expect(b.capabilities.dsh.missing.has("session/setThinkingLevel")).toBe(true);
+    expect(b.capabilities.thinking.missing.has("session/setThinkingLevel")).toBe(true);
     expect(onMissing).toHaveBeenCalledWith("session/setThinkingLevel");
   });
 
@@ -208,10 +208,10 @@ describe("dsh 思考深度补面(dsh-thinking-level.md)", () => {
   it("getThinkingLevels 补面查询:答档位清单;缺面 → 空清单(壳藏控件)", async () => {
     const { t, b } = makeBackend();
     t.results.set("session/getThinkingLevels", { levels: ["off", "low", "high"] });
-    await expect(b.capabilities.dsh.getThinkingLevels!()).resolves.toEqual(["off", "low", "high"]);
+    await expect(b.capabilities.thinking.getThinkingLevels!()).resolves.toEqual(["off", "low", "high"]);
     // 缺面:unknown method → 空清单,不抛
     t.errors.set("session/getThinkingLevels", unknownMethod("session/getThinkingLevels"));
     const b2 = new DshBackend(t as unknown as JsonRpcTransport, { cwd: "/proj", provider: "p", model: "m", sessionId: "s-2" });
-    await expect(b2.capabilities.dsh.getThinkingLevels!()).resolves.toEqual([]);
+    await expect(b2.capabilities.thinking.getThinkingLevels!()).resolves.toEqual([]);
   });
 });

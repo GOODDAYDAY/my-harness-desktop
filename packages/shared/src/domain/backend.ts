@@ -124,7 +124,7 @@ export interface BaseBackend {
   setThinkingLevel(level: string): Promise<void>;
 
   /** 命名当前会话(中立命名意图,§2.4 之外的第七意图——会话元数据)。
-   *  pi=set_session_name RPC,dsh=session/rename RPC。壳经此命名,不再经 pi 扩展面(capabilities.pi)。 */
+   *  pi=set_session_name RPC,dsh=session/rename RPC。壳经此命名,不再经 pi 扩展面(capabilities.extensions)。 */
   setSessionName(name: string): Promise<void>;
 
   /** §kernel-forkless §21:seed 单线投影——把「活跃 lineage 的完整线性内容」物化到内核,
@@ -135,15 +135,29 @@ export interface BaseBackend {
    *  pi=known-tools 播报文件读取,dsh=将来经 SDK server session/listTools。 */
   listTools?(): Promise<KnownToolInfo[] | null>;
 
+  /** 切工具集(可缺面):把壳下发的工具配置(§5.6.1)热应用到活跃会话。缺面(未实现)时
+   *  壳经 SessionToolConfig 文件投影(updateHeader)落盘、下次 spawn 生效——热切是补面。
+   *  翻译归内核(enabledToolIds → 自己的工具集语义),壳不感知内核的工具集名。
+   *  minimal=setTools 协议命令(适配器翻译);pi/dsh 无此面(缺面)。 */
+  setTools?(config: SessionToolConfig): Promise<void>;
+
+  /** 崩溃收尾(可缺面,§4.6.3 壳的机制):注册进程退出回调,壳经此广播 processExit、
+   *  清理 session-bus、允许重开。缺面(未实现)时壳走降级——下次发送查 alive 检测死进程。
+   *  pi/minimal 实现;dsh 可补面。命名避让 pi 扩展面的 onProcessExit 属性(已改名 onExit)。 */
+  onProcessExit?(cb: (exit: ProcessExitInfo, expected: boolean, stderr: string) => void): void;
+
   /** 回答一次交互式提问(可缺面):把用户答案回填给内核。questionId 由内核铸造。
    *  pi=extension_ui_response 帧翻译,dsh=文件侧车(阶段一)/session/answer(阶段二)。 */
   answerQuestion?(questionId: string, answers: QuestionAnswer[]): Promise<void>;
 
-  /** 内核专属能力探测面(§7.6):按内核分桶。pi 给 { pi: PiBackendExtensions }，dsh 给 { dsh: DshCapabilities }。
-   *  壳经 backend.capabilities.pi / backend.capabilities.dsh 探测「有则用、无则降级」，
+  /** 内核专属能力探测面(§7.6):按内核分桶。pi 给 { pi: BackendExtensions }，dsh 给 { dsh: DshCapabilities }。
+   *  壳经 backend.capabilities.extensions / backend.capabilities.dsh 探测「有则用、无则降级」，
    *  不按内核身份硬分支。pi 槽对圆心是 opaque(unknown)——pi 扩展面形状定义在 client/pi
-   *  (PiBackendExtensions)，core/application 经 type-only import 收窄(§28.6)。 */
-  readonly capabilities: { pi?: unknown; dsh?: DshCapabilities };
+   *  (BackendExtensions)，core/application 经 type-only import 收窄(§28.6)。
+   *  fileBacked=会话是壳要跟踪的文件(boundSessionPath 指向会话文件):pi/minimal 声明 true,
+   *  dsh 无(会话是 RPC 服务端 forest,壳不持文件)。曾用 capabilities.extensions 当文件态代理,
+   *  minimal(文件态但无 pi 面)被误判——多内核下「文件态」是独立轴,须显式声明(§minimal-kernel)。 */
+  readonly capabilities: { extensions?: unknown; thinking?: ThinkingCapabilities; fileBacked?: boolean };
 
   /** 内核 spawn 时读取的配置文件绝对路径清单——这些文件变了壳需重建进程
    *  (内核模型/配置快照 spawn 时定型,运行中不重读)。pi=models.json/settings.json;
@@ -158,11 +172,11 @@ export interface ProcessExitInfo {
 }
 
 /**
- * dsh 能力面(§7.6)：dsh 内核的运行时能力探测面，pi 无此面(capabilities.dsh = undefined)。
- * 懒探测：装上的 dsh 版本可能缺某些 session/* 方法，首次调用失败(unknown method)时
+ * 思考档位能力面(§7.6)：内核的思考档位运行时能力探测面，无此面的内核 = undefined。
+ * 懒探测：装上的内核版本可能缺某些 session/* 方法，首次调用失败(unknown method)时
  * 记录进 missing，之后壳据此显式降级——不静默、不伪造成功(docs/design/dsh-capability-gate.md)。
  */
-export interface DshCapabilities {
+export interface ThinkingCapabilities {
   /** 已探明的缺失方法名(session/xxx)。懒探测首次「unknown method」时记录。 */
   readonly missing: ReadonlySet<string>;
   /** 新缺面发现回调(壳绑定后广播降级事件，驱动 UI 置灰入口)。 */

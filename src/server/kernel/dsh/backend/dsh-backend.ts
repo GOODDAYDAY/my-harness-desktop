@@ -14,7 +14,7 @@
 
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "../protocol/json-rpc";
-import type { Anchor, BoundaryRef, LineageTree, DshCapabilities, SeedOptions, NeutralSession } from "@my-harness-desktop/shared";
+import type { Anchor, BoundaryRef, LineageTree, ThinkingCapabilities, SeedOptions, NeutralSession } from "@my-harness-desktop/shared";
 import { AbstractBackend, type BackendContext } from "../../core/abstract-backend";
 import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
@@ -94,8 +94,8 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
    *  getThinkingLevels:思考档位清单查询(补面,dsh-thinking-level.md)——桌面适配插件
    *  拦截 session/getThinkingLevels 提供;旧版插件无此面 → 懒探测记缺面 + 空清单,
    *  壳据此藏档位控件(显式降级,不伪造可切)。 */
-  override readonly capabilities: { dsh: DshCapabilities } = {
-    dsh: { missing: this.missingMethods, onMissing: null, getThinkingLevels: () => this.fetchThinkingLevels() },
+  override readonly capabilities: { thinking: ThinkingCapabilities } = {
+    thinking: { missing: this.missingMethods, onMissing: null, getThinkingLevels: () => this.fetchThinkingLevels() },
   };
 
   /** 能力轴(docs/model-switching.md §11.2):运行时切模型 = session/setModel 不缺面。
@@ -175,6 +175,11 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     }
   }
 
+  /** 崩溃收尾(§4.6.3 壳的机制):注册进程退出回调,壳经此广播 processExit。 */
+  onProcessExit(cb: (exit: { code: number | null; signal: string | null }, expected: boolean, stderr: string) => void): void {
+    this.transport.onExit = cb;
+  }
+
   /** 订阅中性事件流:session.event 通知 → 翻译成中性(§4.3)。一个 dsh 事件可能产多个中性事件。 */
   onEvent(cb: (event: SessionEvent) => void): () => void {
     return this.transport.onNotification((method, params) => {
@@ -188,7 +193,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   private recordMissing(method: string): void {
     if (this.missingMethods.has(method)) return;
     this.missingMethods.add(method);
-    this.capabilities.dsh.onMissing?.(method);
+    this.capabilities.thinking.onMissing?.(method);
   }
 
   /** 判定是否为「方法不存在」错误(sdk server handleRequest default 分支)。 */

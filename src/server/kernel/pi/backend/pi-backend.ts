@@ -15,7 +15,7 @@ import { join, dirname } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "./subprocess-handle";
 import type { Anchor, BoundaryRef, LineageTree, SeedOptions } from "@my-harness-desktop/shared";
-import type { PiBackendExtensions } from "./pi-backend-extensions";
+import type { BackendExtensions } from "./pi-backend-extensions";
 import { AbstractBackend, type BackendContext } from "../../core/abstract-backend";
 import { resync } from "./resync";
 import { toModelInfo, toSessionStats } from "../protocol/context-binding";
@@ -97,7 +97,7 @@ export async function piSeedSession(agentDir: string, cwd: string, lineage: Neut
 }
 
 /** pi 后端:把 RpcAdapter + 命令构造 + 会话文件编排收编成一个 BaseBackend 实现。 */
-export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBackendExtensions {
+export class PiBackend extends AbstractBackend<PiBackendContext> implements BackendExtensions {
   constructor(
     private readonly adapter: RpcAdapter,
     ctx: PiBackendContext,
@@ -105,8 +105,8 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     super(ctx);
   }
 
-  /** pi 扩展面(§7.6):壳经 capabilities.pi 探测,不按内核身份硬分支。 */
-  override readonly capabilities = { pi: this as PiBackendExtensions };
+  /** pi 扩展面(§7.6):壳经 capabilities.extensions 探测,不按内核身份硬分支。fileBacked=true:pi 会话是壳要跟踪的文件。 */
+  override readonly capabilities = { extensions: this as BackendExtensions, fileBacked: true };
 
   /** pi spawn 时读取的配置文件(models.json/settings.json;变了壳重建进程)。 */
   override get configDepPaths(): string[] {
@@ -194,7 +194,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
   // ===== pi 专属命令(§2.4「留在后端内部」;非 BaseBackend 契约,SessionStore 经类型守卫调用)=====
 
   /** 命名当前会话(中立命名意图 §BaseBackend.setSessionName):pi 发 set_session_name 命令。
-   *  返回 void(同时满足 PiBackendExtensions 的 Promise<unknown> 与 BaseBackend 的 Promise<void>)。 */
+   *  返回 void(同时满足 BackendExtensions 的 Promise<unknown> 与 BaseBackend 的 Promise<void>)。 */
   async setSessionName(name: string): Promise<void> {
     await this.adapter.send(buildSetSessionNameCommand(name));
   }
@@ -381,12 +381,17 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements PiBa
     return this.adapter.stderr;
   }
 
-  /** 进程退出回调透传(可赋值字段)。 */
-  get onProcessExit(): ((exit: ProcessExit, expected: boolean) => void) | null {
-    return this.adapter.onProcessExit;
+  /** 进程退出回调透传(可赋值字段,已改名 onExit)。 */
+  get onExit(): ((exit: ProcessExit, expected: boolean) => void) | null {
+    return this.adapter.onExit;
   }
-  set onProcessExit(v: ((exit: ProcessExit, expected: boolean) => void) | null) {
-    this.adapter.onProcessExit = v;
+  set onExit(v: ((exit: ProcessExit, expected: boolean) => void) | null) {
+    this.adapter.onExit = v;
+  }
+
+  /** 中性崩溃收尾(§4.6.3):壳经此注册退出回调,pi 翻译成自己的 onExit 字段 + stderr。 */
+  onProcessExit(cb: (exit: ProcessExit, expected: boolean, stderr: string) => void): void {
+    this.onExit = (exit, expected) => cb(exit, expected, this.stderr);
   }
 
 

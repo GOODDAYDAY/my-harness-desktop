@@ -290,7 +290,7 @@ export interface PluginContext {
   messaging: MessagingApi;
   models: ModelApi;
   tree: SessionTreeApi;
-  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.piExtension 探测「有则用、无则降级」。 */
+  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensionsExtension 探测「有则用、无则降级」。 */
   pi: PiExtensions;
   i18n: I18nApi;
   fs?: FsApi;
@@ -309,27 +309,14 @@ export interface PluginContext {
   /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各交一个 KernelVersionApi。
    *  pi 多 fitPiExtensionAvailable,dsh 缺面(工具发现经 sessions.listTools 契约)。 */
   kernels: Record<KernelId, KernelVersionApi>;
-  /** dsh 模型配置(读写 settings.yaml 的多 provider 路由 models + 默认模型)。 */
-  dshModels: {
-    get: () => Promise<DshProvider[]>;
-    set: (provider: string, detail: Omit<DshProvider, "provider">) => Promise<DshProvider[]>;
-    removeProvider: (provider: string) => Promise<DshProvider[]>;
-    renameProvider: (oldId: string, newId: string) => Promise<DshProvider[]>;
-    getDefault: () => Promise<DshDefaultModel | null>;
-    setDefault: (sel: DshDefaultModel) => Promise<DshDefaultModel | null>;
-    test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
-  };
-  /** 中性内核管理 API(pi/dsh 各一个适配器;settings 三 TAB 共享 base 消费,kernel-design-spec §12.4/§12.5/§12.6)。 */
-  kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
+  /** 中性内核管理 API(pi/dsh/minimal 各一个适配器;settings 三 TAB 共享 base 消费,kernel-design-spec §12.4/§12.5/§12.6)。 */
+  kernelModels: KernelModelsRegistry;
   /** 模型探测(发现 + ping;核心默认,零权限):对 OpenAI 兼容端点的纯 HTTP 探测,
    *  内核无关,不起内核进程。设置页模型列表「从 Base URL 发现」区块消费。 */
   modelsProbe: ModelProbeApi;
-  /** 中性内核原生配置 API(pi/dsh 各交一个适配器;settings 配置 TAB 用,读=JSON 出、写=JSON 入)。 */
-  kernelConfig: { pi: KernelConfigApi; dsh: KernelConfigApi };
-  /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
-  dshSettings: { get: () => Promise<Record<string, unknown>>; set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>> };
-  modelsConfig: { get: <T>() => Promise<T>; set: <T>(config: T) => Promise<T>; list: () => Promise<ModelInfo[]>; getFallbackModel: () => Promise<{ provider: string; model: string; kernel: KernelId } | null> };
-  piSettings: { get: () => Promise<Record<string, unknown>>; set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>; schema: () => Promise<{ key: string; type: string }[]> };
+  /** 中性内核原生配置 API(pi/dsh/minimal 各交一个适配器;settings 配置 TAB 用,读=JSON 出、写=JSON 入)。 */
+  kernelConfig: Record<KernelId, KernelConfigApi>;
+  modelsConfig: { list: () => Promise<ModelInfo[]>; getFallbackModel: () => Promise<{ provider: string; model: string; kernel: KernelId } | null> };
   /** 只读旧数据迁移窄口(读白名单内 JSON):一次性搬迁专用——常规配置读写走 ctx.config,新代码勿用。
    *  append 是 JSONL 追加原语的透传(docs/design/session-jsonl-append.md §5.3,通用 JSONL 追加是
    *  桌面插件的合理能力):服务 session 文件等 append-only 文件;entry 开放形状,原语中性。 */

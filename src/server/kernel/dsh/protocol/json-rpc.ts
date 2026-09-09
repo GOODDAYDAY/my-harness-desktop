@@ -54,6 +54,10 @@ export class JsonRpcTransport {
   private notificationListeners = new Set<(method: string, params: unknown) => void>();
   private started = false;
   private exitError: Error | null = null;
+  private stderrBuf = "";
+  private stopping = false;
+  /** 崩溃收尾回调(§4.6.3):backend.onProcessExit 注册,onceExit 时调用。 */
+  onExit: ((exit: { code: number | null; signal: string | null }, expected: boolean, stderr: string) => void) | null = null;
 
   constructor(
     private readonly handle: SubprocessHandle,
@@ -75,6 +79,7 @@ export class JsonRpcTransport {
       this.exitError = err;
       for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(err); }
       this.pending.clear();
+      this.onExit?.({ code: exit.code, signal: exit.signal }, this.stopping, this.stderrBuf);
     });
     this.handle.onceError((error: Error) => {
       const err = this.exitError ?? error;
@@ -82,9 +87,11 @@ export class JsonRpcTransport {
       for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(err); }
       this.pending.clear();
     });
-    // 运行时 stderr(启动失败/缺依赖/认证错)打到主进程日志,否则静默吞掉无法排查。
+    // 运行时 stderr(启动失败/缺依赖/认证错)打到主进程日志 + 累积调试串(崩溃收尾用)。
     this.handle.onStderr((chunk) => {
-      console.error(`[dsh-json-rpc stderr] ${chunk.toString().trimEnd()}`);
+      const text = chunk.toString();
+      this.stderrBuf += text;
+      console.error(`[dsh-json-rpc stderr] ${text.trimEnd()}`);
     });
 
     attachLineReader(this.handle.stdout!, (line) => this.handleLine(line));
@@ -125,6 +132,7 @@ export class JsonRpcTransport {
     for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(new Error("dsh 已停止")); }
     this.pending.clear();
     this.started = false;
+    this.stopping = true;
     await this.handle.stop();
   }
 

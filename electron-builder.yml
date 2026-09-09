@@ -41,6 +41,11 @@ extraResources:
     to: pi-my-harness-fit-pi-extension
   - from: src/client/dsh/dsh-extension
     to: my-harness-desktop-dsh-extension
+  # minimal 内核本体(.mjs 独立 CLI + 模型/工具/插件模块,spawn 用;相对 import 须整目录同层拷贝)
+  - from: src/server/kernel/minimal/kernel
+    to: minimal-kernel
+    filter:
+      - "**/*.mjs"
 
 mac:
   category: public.app-category.developer-tools

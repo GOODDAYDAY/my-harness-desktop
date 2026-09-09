@@ -64,7 +64,7 @@ describe("startNewChat → 清空中立主键 + 叠加层(防止新会话锚到�
       kernel: {
         sessions: {
           setContext: async () => {},
-          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
         },
       },
     });
@@ -213,7 +213,7 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
             promptPrefs.push(prefs);
           },
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
         },
         kernel: { fitPiExtensionAvailable: async () => true },
       },
@@ -297,7 +297,7 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
             promptPrefs.push(prefs);
           },
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
         },
         kernel: { fitPiExtensionAvailable: async () => true },
       },
@@ -350,7 +350,7 @@ describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {
           setContext: async () => {},
           prompt: async () => {},
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
         },
         kernel: { fitPiExtensionAvailable: async () => true },
       },
@@ -446,7 +446,7 @@ describe("sendMessage → 新会话草稿清账(「enter 后要清理」根因�
           setContext: async () => {},
           prompt: async () => {},
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
         },
         kernel: { fitPiExtensionAvailable: async () => true },
       },
@@ -467,7 +467,7 @@ describe("sendMessage → 新会话草稿清账(「enter 后要清理」根因�
           setContext: async () => {},
           prompt: async () => {},
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
         },
       },
     });

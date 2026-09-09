@@ -63,7 +63,7 @@ export class RpcAdapter {
   private exitError: Error | null = null;
   private stopping = false;
   private started = false;
-  onProcessExit: ((exit: ProcessExit, expected: boolean) => void) | null = null;
+  onExit: ((exit: ProcessExit, expected: boolean) => void) | null = null;
   stderr = "";
 
   constructor(handle: SubprocessHandle, options: RpcAdapterOptions = {}) {
@@ -134,7 +134,7 @@ export class RpcAdapter {
         this.exitError = err;
         this.correlator.rejectAll(err);
       }
-      this.onProcessExit?.(exit, expected);
+      this.onExit?.(exit, expected);
     });
 
     // error 事件

@@ -53,37 +53,19 @@ export interface KernelApi {
     codeBlockRenderers: () => Promise<{ id: string; languages: string[]; component: string; order?: number; pluginId: string }[]>;
     settingsGroups: () => Promise<(SettingsGroupContribution & { pluginId: string })[]>;
   };
+  /** 已注册内核 id 清单(运行时注册表顺序,boot 时从后端 kernel.list 拿,替代 KERNEL_IDS)。 */
+  kernelIds: KernelId[];
   /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各一个 KernelVersionApi。 */
   kernels: Record<KernelId, KernelVersionApi>;
   /** 内核身份标(logo)取回:每个内核在自己适配器声明,壳经此取回渲染(不硬编码)。 */
   kernelLogos: { get: (kernel: KernelId) => Promise<KernelLogo> };
-  dshModels: {
-    get: () => Promise<DshProvider[]>;
-    set: (provider: string, detail: Omit<DshProvider, "provider">) => Promise<DshProvider[]>;
-    removeProvider: (provider: string) => Promise<DshProvider[]>;
-    renameProvider: (oldId: string, newId: string) => Promise<DshProvider[]>;
-    getDefault: () => Promise<DshDefaultModel | null>;
-    setDefault: (sel: DshDefaultModel) => Promise<DshDefaultModel | null>;
-    test: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
-  };
   /** 中性内核管理 API：模型页(kernel-design-spec.md §12.5)。 */
-  kernelModels: { pi: KernelModelsApi; dsh: KernelModelsApi };
+  kernelModels: Record<KernelId, KernelModelsApi>;
   /** 模型探测(发现 + ping;domain ModelProbeApi):纯 HTTP,内核无关。 */
   modelsProbe: ModelProbeApi;
-  /** 中性内核原生配置 API(kernel 配置 TAB 用):pi/dsh 各一个适配器。 */
-  kernelConfig: { pi: KernelConfigApi; dsh: KernelConfigApi };
-  dshSettings: {
-    get: () => Promise<Record<string, unknown>>;
-    set: (obj: Record<string, unknown>) => Promise<Record<string, unknown>>;
-  };
-  piSettings: {
-    get: () => Promise<Record<string, unknown>>;
-    set: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>;
-    schema: () => Promise<{ key: string; type: string }[]>;
-  };
+  /** 中性内核原生配置 API(kernel 配置 TAB 用):pi/dsh/minimal 各一个适配器。 */
+  kernelConfig: Record<KernelId, KernelConfigApi>;
   models: {
-    get: <T>() => Promise<T>;
-    set: <T>(config: T) => Promise<T>;
     list: () => Promise<ModelInfo[]>;
     getFallbackModel: () => Promise<{ provider: string; model: string; kernel: KernelId } | null>;
   };
@@ -133,7 +115,7 @@ export interface KernelApi {
     resume: (snapshotId: string) => Promise<string>;
     deleteBookmark: (snapshotId: string) => Promise<void>;
     switchKernel: (target: KernelId) => Promise<void>;
-    getCapabilities: () => Promise<{ kernel: KernelId | null; locked: boolean; piExtension: boolean; dshExtension: boolean }>;
+    getCapabilities: () => Promise<{ kernel: KernelId | null; locked: boolean; extension: boolean; thinking: boolean }>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
     /** 列表行变更推送(归档/置顶/改名/删除/复制,第 21 项):payload 自带补丁,本地打行不重拉(copy 例外)。 */
     onHeaderChanged: (cb: (info: SessionHeaderChangedEvent) => void) => () => void;

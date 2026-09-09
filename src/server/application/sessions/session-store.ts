@@ -14,8 +14,8 @@ import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import type { BaseBackend, BackendFactory, LineageTree, SessionCatalog, SessionCatalogFactory } from "@my-harness-desktop/shared";
 import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnapshot } from "@my-harness-desktop/shared";
-import type { PiBackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
-import { KERNEL_IDS, type KernelId } from "@my-harness-desktop/shared";
+import type { BackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
+import { type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader, NeutralChange } from "@my-harness-desktop/shared";
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, resolveForkBoundary, reprojectEntries, neutralMessagesOfSession, neutralSessionToTree } from "@my-harness-desktop/shared";
 import { NeutralSessionStore } from "./neutral-session-store";
@@ -157,7 +157,7 @@ export class SessionStore implements
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi, SessionStoreForRestart
 {
   /** pi 内核专属扩展面(§7.6):SessionStore 聚合实现全部 pi 专属命令,经此面向插件暴露。
-   *  插件经 capabilities.piExtension 探测「有则用、无则降级」。 */
+   *  插件经 capabilities.extensionsExtension 探测「有则用、无则降级」。 */
   get pi(): PiExtensions {
     return this;
   }
@@ -191,9 +191,9 @@ export class SessionStore implements
   private activeProcKey: string = "";
   /** 跨内核切换进行中标记(§15.1 互斥):切换期间再点切 / 发消息 / setContext 由它拦截。 */
   private switching = false;
-  /** 跨内核切换暂缓开关(§3.2):false = switchKernel 入口 gate 抛错,七步编排原样保留。
-   *  未来放开切换 = 置 true(或删掉字段 + gate 判断)。 */
-  private switchKernelEnabled = false;
+  /** 跨内核切换开关(§3.2):true = 七步编排启用(三过渡已验:文件态→文件态/→RPC/RPC→文件态,
+   *  session-store.test.ts 的「switchKernel 五步切换」+「switchKernel 七步」测试内翻 gate 验证)。 */
+  private switchKernelEnabled = true;
   /** 当前激活内核(多槽位并存):空会话 null(未选模型);setModel 选模型时设。
    *  一个会话 pi/dsh 进程槽位并存,activeKernel 只决定「哪个槽位参与会话流」,
    *  不是「替换另一个槽位」。 */
@@ -229,6 +229,9 @@ export class SessionStore implements
     modelCatalog?: ModelCatalog,
     bookmarkDir?: (cwd: string) => string,
     questionStore?: PendingQuestionStore,
+    /** 默认内核 id(无模型/无会话头时兜底;bootstrap 传注册表首个内核,替代 this.defaultKernelId)。
+     *  迁移期默认 "pi" 保持向后兼容(测试/未迁移调用方),bootstrap 显式传 registry.ids()[0] 覆盖。 */
+    defaultKernelId: KernelId = "pi",
   ) {
     this.factory = factory;
     this.catalogFactory = catalogFactory;
@@ -238,11 +241,13 @@ export class SessionStore implements
     this.modelCatalog = modelCatalog ?? null;
     this.bookmarkDir = bookmarkDir ?? null;
     this.questionStore = questionStore ?? null;
+    this.defaultKernelId = defaultKernelId;
   }
 
   /** 目录/CRUD 按内核懒缓存(§1.5 多内核默认):统一经 Map<KernelId, SessionCatalog> 查,
    *  不在调用方写 kernel === "pi" 二选一。pi/dsh 别名保留给已有文件类方法。 */
   private catalogCache = new Map<KernelId, SessionCatalog>();
+  private readonly defaultKernelId: KernelId;
   private catalogFor(kernel: KernelId): SessionCatalog {
     let c = this.catalogCache.get(kernel);
     if (!c) {
@@ -399,7 +404,7 @@ export class SessionStore implements
     // 上下文已切或内核已切换则跳过视图同步(进程保留给多会话/多槽位并存),由调用方校验激活态。
     if (this.activeProcKey !== key || this.activeKernel !== resolvedKernel) return;
     await this.sync();
-    // 能力面就绪(§7.6 push 收口):backend.start 落定后 piExtension/dshExtension 已探测,
+    // 能力面就绪(§7.6 push 收口):backend.start 落定后 extension/thinking 已探测,
     // 广播一次 capabilitiesChanged——renderer 订阅即到位,不再散拉式 refreshCapabilities。
     this.broadcastCapabilities();
   }
@@ -481,7 +486,7 @@ export class SessionStore implements
       // capabilities 在 backend 构造时即定(PiBackend/DshBackend 字段初始化),createProc 时可用。
       materializedLineageId: this.neutralStore?.getHeader(ns)?.header.pendingSeed === true
         ? ""
-        : (backend.capabilities.pi ? ns : "") };
+        : (backend.capabilities.fileBacked ? ns : "") };
     this.bindProcEvents(proc);
     return proc;
   }
@@ -504,14 +509,23 @@ export class SessionStore implements
     // 闭包按 proc.key 路由(不捕获创建期 key):fork/clone 对账 rekeyProc 迁移条目后,
     // 事件仍按当前 key 进 dispatch,归属不漂。
     proc.backend.onEvent((event) => this.dispatch(proc.key, event, proc.kernel));
+    // 中性崩溃收尾(§4.6.3 壳的机制):pi/minimal 经 backend.onProcessExit 广播 processExit;
+    // 缺面(dsh 未实现)走降级——下次发送查 alive 检测死进程。
+    proc.backend.onProcessExit?.((exit, expected, stderr) => {
+      this.dispatchKernel({
+        kind: "processExit",
+        code: exit.code, signal: exit.signal, expected,
+        stderr: stderr.slice(-500), sessionKey: proc.key,
+      });
+    });
     // dsh 懒探测的缺面回调:发现新缺面方法时广播降级事件(§dsh-capability-gate §4)。
-    const dsh = proc.backend.capabilities.dsh;
+    const dsh = proc.backend.capabilities.thinking;
     if (dsh) {
       dsh.onMissing = (method) => {
         this.dispatchKernel({ kind: "capabilityDegraded", sessionKey: proc.key, method });
       };
     }
-    const pi = proc.backend.capabilities.pi as PiBackendExtensions | undefined;
+    const pi = proc.backend.capabilities.extensions as BackendExtensions | undefined;
     if (!pi) return;
     pi.onBusFrame((frame) => {
       for (const cb of this.busFrameListeners) {
@@ -535,13 +549,6 @@ export class SessionStore implements
         try { cb(questionEvent); } catch (err) { console.error("[session-store] 提问监听器抛错已隔离:", err); }
       }
     });
-    pi.onProcessExit = (exit, expected) => {
-      this.dispatchKernel({
-        kind: "processExit",
-        code: exit.code, signal: exit.signal, expected,
-        stderr: pi.stderr.slice(-500), sessionKey: proc.key,
-      });
-    };
   }
 
   /** fork/clone 对账:进程条目从旧 key 迁到新会话文件路径,恢复"key === boundSessionPath"
@@ -627,7 +634,7 @@ export class SessionStore implements
     const modelMismatch = !!(provider && model && (!existing?.model
       || existing.model.provider !== provider || existing.model.modelId !== model));
     // 模型失配的重启判据(docs/model-switching.md §11.2:两根正交的轴,勿回退为读
-    // capabilities.pi——那是「pi 扩展面」的桶探测,不是「能不能热切」的轴):
+    // capabilities.extensions——那是「pi 扩展面」的桶探测,不是「能不能热切」的轴):
     // ① 运行时切模轴缺面(后端自报 supportsRuntimeSetModel=false,如 dsh 旧运行时缺
     //    session/setModel)→ 只能停旧起新;
     // ② 未物化的惰性内核会话(从没发过消息,服务端还没有会话可热切)→ 握手是唯一
@@ -808,7 +815,7 @@ export class SessionStore implements
    *  (tool-gate 内核扩展进程内读头行)。 */
   private async projectHeaderToKernel(sessionPath: string, patch: HeaderPatch): Promise<void> {
     const ns = this.neutralSessionIdFromPath(sessionPath);
-    const kernel: KernelId = (ns && this.neutralStore?.getHeader(ns)?.header.kernel) || "pi";
+    const kernel: KernelId = (ns && this.neutralStore?.getHeader(ns)?.header.kernel) || this.defaultKernelId;
     const catalog = this.catalogFor(kernel);
     try {
       // 名字下沉:dsh 的 updateHeader 面不含 name,走 session/rename;pi 的 rename 就是
@@ -861,15 +868,19 @@ export class SessionStore implements
     this.dispatchViewDivider({ type: "session_info", name });
   }
   async updateHeader(sessionPath: string, patch: HeaderPatch): Promise<void> {
-    if (patch.name && sessionPath === this.activeSessionPath && this.alive) {
+    // 活跃会话热路径:name + toolConfig 经 backend 热应用(缺面时静默跳过,文件投影照旧落盘)。
+    const isActive = sessionPath === this.activeSessionPath && this.alive;
+    if (isActive) {
       const proc = this.activeProc()!;
-      await proc.backend.setSessionName(patch.name);
-      const rest = { ...patch };
-      delete rest.name;
-      if (Object.keys(rest).length > 0) await this.projectHeaderToKernel(sessionPath, rest);
-    } else {
-      await this.projectHeaderToKernel(sessionPath, patch);
+      if (patch.name) await proc.backend.setSessionName(patch.name);
+      if (patch.toolConfig !== undefined && proc.backend.setTools) {
+        await proc.backend.setTools(patch.toolConfig ?? {}); // §5.6.1 补面:工具集热切换(null=删配置 → 空 → read-only)
+      }
     }
+    // 文件投影:name 已热应用则删(避免双写),toolConfig 照旧走 catalog.updateHeader 落盘(§5.6.1 翻译)。
+    const rest = { ...patch };
+    if (isActive && patch.name) delete rest.name;
+    if (Object.keys(rest).length > 0) await this.projectHeaderToKernel(sessionPath, rest);
     // toolConfig 的落点(HeaderPatch 文档注释:「落 custom-my-harness-desktop.toolConfig 保留键」):
     // 中立层 custom.toolConfig 是**真相源**,内核文件(pi 头行/dsh RPC)只是投影——
     // 此前这里只转 name/pinned/archived,toolConfig 从不进中立头:pi 会话下靠
@@ -1318,16 +1329,22 @@ export class SessionStore implements
           console.warn(`[session-store] 目标内核 ${target} 无对应档位模型(${proc.lastModelRef.ref}),回落默认`);
         }
       }
-      // 6. 重绑
+      // 6. 重绑 + 重挂槽位(§8):proc 从旧内核槽移到目标内核槽,activeKernel 跟随——
+      //  否则 proc.kernel=target 却留在旧槽,后续 ensureForSend(target) 查不到 → 双 spawn(门禁休眠时未暴露)。
+      const oldKernel = proc.kernel;
       proc.backend = newBackend;
       proc.kernel = target;
+      const slot = this.procs.get(key);
+      slot?.delete(oldKernel);
+      slot?.set(target, proc);
+      this.activeKernel = target;
       proc.nonce = randomUUID(); // 换绑即换出生证:旧进程的提问永不误入新进程(ask-design §4.3)
-      proc.boundSessionPath = newBackend.capabilities.pi ? newSessionId : null;
+      proc.boundSessionPath = newBackend.capabilities.fileBacked ? newSessionId : null;
       proc.configSnapshot = this.captureConfigSnapshot(proc.backend.configDepPaths ?? []);
       this.bindProcEvents(proc);
       // 7. 周边收尾(§9.2/§9.3)
       await this.writeKernelToHeader(proc).catch(() => {});
-      this.latestSnapshot = newBackend.capabilities.pi ? await this.sync().catch(() => null) : null;
+      this.latestSnapshot = newBackend.capabilities.extensions ? await this.sync().catch(() => null) : null;
       this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target, capabilities: this.sessionCapabilitiesOf(proc) });
     } finally {
       this.switching = false;
@@ -1393,7 +1410,7 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("内核未启动");
     const messages = this.neutralMessagesOf(proc);
-    if (!proc.backend.capabilities.pi) {
+    if (!proc.backend.capabilities.extensions) {
       // dsh(无 pi 扩展面=无快照面):基线照常产出——内容来自中立层,状态由壳记账组装。
       // 此前 sync 对 dsh 降级为返回旧基线/空,渲染层无基线可用;中立层单源后两内核同等待遇。
       const base = this.latestSnapshot ?? emptySnapshot();
@@ -1755,13 +1772,13 @@ export class SessionStore implements
     }
     // §atomic-send 修订:强度对齐只对「支持运行时切档」的内核生效(能力探测,非内核身份硬分支)。
     // 根因:composer 的 pickModel 无条件把默认档位盖进 pending,而 setThinkingLevel 已从
-    // PiBackendExtensions 提升进契约、dsh 继承缺面默认抛错——dsh 每次带 pending 发送都被它打断成
+    // BackendExtensions 提升进契约、dsh 继承缺面默认抛错——dsh 每次带 pending 发送都被它打断成
     // 「当前内核不支持思考强度切换」。dsh 侧:适配插件补面后(dsh-thinking-level.md,
-    //  capabilities.dsh.getThinkingLevels 在 = session/setThinkingLevel 热切面在)走对齐;
+    //  capabilities.thinking.getThinkingLevels 在 = session/setThinkingLevel 热切面在)走对齐;
     //  补面缺席(旧插件)时 DshBackend.setThinkingLevel 懒探测记缺面 + no-op,发送不炸。
     if (prefs?.thinkingLevel) {
       const be = this.activeProc()?.backend;
-      const canSwitchThinking = !!be && (be.capabilities.pi != null || be.capabilities.dsh?.getThinkingLevels != null);
+      const canSwitchThinking = !!be && (be.capabilities.extensions != null || be.capabilities.thinking?.getThinkingLevels != null);
       if (canSwitchThinking) await this.setThinkingLevel(prefs.thinkingLevel);
     }
     const proc = this.activeProc();
@@ -1917,7 +1934,9 @@ export class SessionStore implements
     // 从 dsh 会话切回有历史的 pi 会话时 fixedKernel 取到残留的 dsh,误判「跨内核切换」挡发。
     const fixedKernel = this.activeSessionKernel() ?? this.activeKernel;
     if (hasHistory && fixedKernel && targetKernel !== fixedKernel) {
-      throw new Error("当前会话已固定内核，跨内核切换后续支持");
+      // §8 已启用:有历史会话跨内核选模型 → 七步切换(rebind + 重挂槽位 + 模型中立化),
+      // 随后 setModel 差量执行把用户新选的模型设到重绑后的 proc(缺面/同名才重启)。
+      await this.switchKernel(targetKernel);
     }
     // 选模型 = 激活对应内核的槽位(并存,不替换其他内核)
     const currentKernel = this.activeKernel;
@@ -1951,7 +1970,7 @@ export class SessionStore implements
     // 勿回退读它(旧判据恒「未生效」→ 每次发送都重发 session/setModel,该方法在旧运行时
     // 是坏面,第二发起每次发送都被打断,即「dsh 不能发送第二条语句」的根因;
     // docs/model-switching.md §11.3)。
-    if (!alreadyEffective && !proc.backend.capabilities.pi) {
+    if (!alreadyEffective && !proc.backend.capabilities.extensions) {
       if (prevEffectiveModel && prevEffectiveModel.provider === provider && prevEffectiveModel.modelId === modelId) alreadyEffective = true;
     }
     if (!alreadyEffective) {
@@ -1980,7 +1999,7 @@ export class SessionStore implements
     const level = this.latestSnapshot?.state.thinkingLevel ?? "";
     if (this.activeSessionPath) {
       await this.writeNeutralModelPrefs(this.activeSessionPath, { provider, modelId, thinkingLevel: level, kernel: targetKernel });
-      if (level && proc.backend.capabilities.pi) {
+      if (level && proc.backend.capabilities.extensions) {
         await this.writeModelPrefsToHeader(this.activeSessionPath, { provider, modelId, thinkingLevel: level, kernel: targetKernel });
       }
     }
@@ -2092,14 +2111,14 @@ export class SessionStore implements
   }
 
   /** 当前模型可用的思考档位清单(能力驱动,§7.6):pi 走扩展面 RPC;dsh 走补面查询
-   *  (capabilities.dsh.getThinkingLevels,桌面适配插件提供,docs/design/dsh-thinking-level.md);
+   *  (capabilities.thinking.getThinkingLevels,桌面适配插件提供,docs/design/dsh-thinking-level.md);
    *  无活进程/两面皆缺 → 空清单(调用方/renderer 藏档位控件,显式降级,不抛错刷屏)。 */
   async getThinkingLevels(): Promise<string[]> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) return [];
-    const pi = proc.backend.capabilities.pi as PiBackendExtensions | undefined;
+    const pi = proc.backend.capabilities.extensions as BackendExtensions | undefined;
     if (pi) return pi.getThinkingLevels();
-    const dshLevels = proc.backend.capabilities.dsh?.getThinkingLevels;
+    const dshLevels = proc.backend.capabilities.thinking?.getThinkingLevels;
     if (dshLevels) return dshLevels();
     return [];
   }
@@ -2135,7 +2154,7 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("内核未启动");
     const local = { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn, turns: proc.turns, steps: proc.steps };
-    const pi = proc.backend.capabilities.pi as PiBackendExtensions | undefined;
+    const pi = proc.backend.capabilities.extensions as BackendExtensions | undefined;
     if (!pi) return shellSessionStats(local);
     const stats = await pi.getSessionStats(local);
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
@@ -2286,9 +2305,9 @@ export class SessionStore implements
     const seedFn = this.factory.seed;
     // RPC seed 面(现进程直接 seed,不 stop+重建=双 spawn 浪费;seed 按 lineageId 幂等):
     // ① factory 无预 seed 函数(测试简化工厂 / 无预 seed 内核)→ 恒现进程 seed;
-    // ② factory.seed 对本内核返 null(生产 dsh,能力面探测 !capabilities.pi)→ 现进程 seed。
-    // 预 seed 内核(生产 pi,factory.seed 返路径 + capabilities.pi)才走下方 stop+预 seed+spawn。
-    if (proc.backend.alive && (seedFn == null || !proc.backend.capabilities.pi)) {
+    // ② factory.seed 对本内核返 null(生产 dsh,能力面探测 !capabilities.extensions)→ 现进程 seed。
+    // 预 seed 内核(生产 pi,factory.seed 返路径 + capabilities.extensions)才走下方 stop+预 seed+spawn。
+    if (proc.backend.alive && (seedFn == null || !proc.backend.capabilities.fileBacked)) {
       await proc.backend.seed(lineage, seedOpts);
       proc.materializedLineageId = proc.activeLineageId;
       this.clearPendingSeed(proc); // RPC seed 返回即内核认同(§6.5),清标记
@@ -2336,7 +2355,7 @@ export class SessionStore implements
     }
     proc.backend = newBackend;
     proc.nonce = randomUUID(); // 换绑即换出生证(materialize 重建进程,旧提问走续路)
-    proc.boundSessionPath = newBackend.capabilities.pi ? newSessionId : null;
+    proc.boundSessionPath = newBackend.capabilities.fileBacked ? newSessionId : null;
     proc.configSnapshot = this.captureConfigSnapshot(newBackend.configDepPaths ?? []);
     this.bindProcEvents(proc);
     proc.materializedLineageId = proc.activeLineageId;
@@ -2507,7 +2526,7 @@ export class SessionStore implements
 
   /** pi 专属命令发送 + rpcError 上报(语义收编后:pi 专属命令经此助手,中性操作走 proc.backend)。
    *  作用于激活会话(activeProc);失败统一上报 rpcError 运维事件后外抛。 */
-  private piSend<T>(fn: (pi: PiBackendExtensions) => Promise<T>): Promise<T> {
+  private piSend<T>(fn: (pi: BackendExtensions) => Promise<T>): Promise<T> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
     const key = this.activeKey;
@@ -2521,12 +2540,12 @@ export class SessionStore implements
   }
 
   /** 能力探测:取当前后端的 pi 扩展面(pi 专属命令的前提)。dsh 无此面 → 抛错降级。
-   *  经 backend.capabilities.pi 探测,不按内核身份硬分支;type-only import 接口、
+   *  经 backend.capabilities.extensions 探测,不按内核身份硬分支;type-only import 接口、
    *  不 import 具体内核类(§28.6)。 */
-  private asPi(proc: SessionProc): PiBackendExtensions {
-    const pi = proc.backend.capabilities.pi;
+  private asPi(proc: SessionProc): BackendExtensions {
+    const pi = proc.backend.capabilities.extensions;
     if (!pi) throw new Error("当前后端不支持 pi 专属命令");
-    return pi as PiBackendExtensions;
+    return pi as BackendExtensions;
   }
 
   /** 事件路由(多会话并存的核心纪律):
@@ -2806,14 +2825,14 @@ export class SessionStore implements
   }
 
   /** 按 key 取 pi 扩展面(进程不在或非 pi 内核返回 undefined)。 */
-  getAdapter(sessionKey: string): PiBackendExtensions | undefined {
-    return this.procs.get(sessionKey)?.get(KERNEL_IDS[0])?.backend.capabilities.pi as PiBackendExtensions | undefined;
+  getAdapter(sessionKey: string): BackendExtensions | undefined {
+    return this.procs.get(sessionKey)?.get(this.defaultKernelId)?.backend.capabilities.extensions as BackendExtensions | undefined;
   }
 
   /** 按 key 取中性后端(bus 会话恒为 pi 槽位——spawnSession/reopenSession 显式以 pi 建;
    *  不读全局 activeKernel,避免主会话是 dsh 时 bus 落空)。进程不在返回 undefined。 */
   getBackend(sessionKey: string): BaseBackend | undefined {
-    return this.procs.get(sessionKey)?.get(KERNEL_IDS[0])?.backend;
+    return this.procs.get(sessionKey)?.get(this.defaultKernelId)?.backend;
   }
 
   /** 当前激活会话后端的扩展能力面 + 内核归属(renderer 据以显式降级)。
@@ -2825,8 +2844,8 @@ export class SessionStore implements
     return {
       kernel: this.activeSessionKernel(),
       locked: this.activeSessionHasHistory(),
-      piExtension: false,
-      dshExtension: false,
+      extension: false,
+      thinking: false,
     };
   }
 
@@ -2837,8 +2856,8 @@ export class SessionStore implements
     return {
       kernel: proc?.kernel ?? null,
       locked: !!(proc?.backend.alive && proc?.touched),
-      piExtension: proc?.backend.capabilities.pi != null,
-      dshExtension: proc?.backend.capabilities.dsh != null,
+      extension: proc?.backend.capabilities.extensions != null,
+      thinking: proc?.backend.capabilities.thinking != null,
     };
   }
 
@@ -2927,14 +2946,14 @@ export class SessionStore implements
    *  三个消费者,协议帧置位会把「用户从没发过消息的会话」误锁内核(实弹:pi spawn 时
    *  fit-pi-extension 的 bus ping 应答经此路置 touched,新会话模型下拉的 dsh TAB 锁死)。 */
   async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
-    const proc = this.procs.get(sessionKey)?.get(KERNEL_IDS[0]);
+    const proc = this.procs.get(sessionKey)?.get(this.defaultKernelId);
     if (!proc || !proc.backend.alive) throw new Error(`会话不在线: ${sessionKey}`);
     await this.asPi(proc).sendMessage(text, undefined, streamingBehavior);
   }
 
   /** 按 key 取最后一条 assistant 文本(完成采集主源;进程不在返回空串,调用方回退读文件)。 */
   async getLastAssistantTextFor(sessionKey: string): Promise<string> {
-    const proc = this.procs.get(sessionKey)?.get(KERNEL_IDS[0]);
+    const proc = this.procs.get(sessionKey)?.get(this.defaultKernelId);
     if (!proc || !proc.backend.alive) return "";
     // 内核命令级失败(backend reject)同样回退空串——本方法是采集主源,读文件兜底在调用方
     return this.asPi(proc).getLastAssistantText().catch(() => "");

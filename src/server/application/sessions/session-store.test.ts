@@ -294,6 +294,7 @@ class MockBackend {
   alive = true;
   capabilities = {};
   calls: string[] = [];
+  sessionId = "dsh-s1"; // RPC 内核的会话标识(switchKernel 空会话分支的「身份不变量」依赖)
   async start(): Promise<void> { this.calls.push("start"); this.alive = true; }
   async stop(): Promise<void> { this.calls.push("stop"); this.alive = false; }
   onEvent(): () => void { return () => {}; }
@@ -310,7 +311,7 @@ class MockBackend {
 }
 
 // 暂缓切换(kernel-follows-model.md §3.2):入口 gate 挡住七步编排,以下用例未来放开切换时重新启用。
-describe.skip("switchKernel 五步切换", () => {
+describe("switchKernel 五步切换(测试内翻 gate,验证 pi→dsh「文件态→RPC」过渡,生产 gate 仍关)", () => {
   it("pi → dsh(空会话):新后端 start、跳过 seed,旧后端 abort + stop", async () => {
     const mock = new MockBackend();
     const factory: BackendFactory = {
@@ -319,6 +320,7 @@ describe.skip("switchKernel 五步切换", () => {
         : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
     };
     const s = new SessionStore(factory, catalogFactory, dir);
+    (s as unknown as { switchKernelEnabled: boolean }).switchKernelEnabled = true;
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
     adapter.sent = [];
@@ -333,8 +335,65 @@ describe.skip("switchKernel 五步切换", () => {
   });
 });
 
+describe("switchKernel 七步(测试内翻 gate,验证 minimal 侧就绪,生产 gate 仍关)", () => {
+  it("pi → minimal:fileBacked 走预 seed 重 spawn(seed 返派生路径 + start 新后端 + 旧 pi abort/stop)", async () => {
+    const minimalMock = new MockBackend();
+    // minimal 是文件态内核:capabilities.fileBacked=true(无 pi 面)——区别于 dsh 的 RPC。
+    (minimalMock as unknown as { capabilities: { fileBacked?: boolean } }).capabilities = { fileBacked: true };
+    const seededKernels: string[] = [];
+    const factory: BackendFactory = {
+      create: (opts) => opts.kernel === "minimal"
+        ? minimalMock as unknown as BaseBackend
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+      seed: async (_lineage, opts) => { seededKernels.push(opts.kernel); return (opts.kernel === "minimal" ? "minimal-derived-s1" : null); },
+    };
+    const s = new SessionStore(factory, catalogFactory, dir);
+    (s as unknown as { switchKernelEnabled: boolean }).switchKernelEnabled = true;
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    adapter.sent = [];
+
+    await s.switchKernel("minimal");
+
+    // 旧 pi:abort(step 1)+ stop(step 3)
+    expect(adapter.sent).toContain("abort");
+    expect(adapter.alive).toBe(false);
+    // 新 minimal:fileBacked → factory.seed 返派生路径 + start 新后端(step 4 预 seed 分支)
+    expect(seededKernels).toContain("minimal");
+    expect(minimalMock.calls).toContain("start");
+  });
+
+  it("dsh → minimal(RPC → 文件态):seed 返派生路径 + start 新后端 + 旧 dsh abort/stop", async () => {
+    const dshMock = new MockBackend();
+    const minimalMock = new MockBackend();
+    (minimalMock as unknown as { capabilities: { fileBacked?: boolean } }).capabilities = { fileBacked: true };
+    const seededKernels: string[] = [];
+    const factory: BackendFactory = {
+      create: (opts) => opts.kernel === "minimal"
+        ? minimalMock as unknown as BaseBackend
+        : opts.kernel === "dsh"
+          ? dshMock as unknown as BaseBackend
+          : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+      seed: async (_lineage, opts) => { seededKernels.push(opts.kernel); return (opts.kernel === "minimal" ? "minimal-derived-s1" : null); },
+    };
+    const s = new SessionStore(factory, catalogFactory, dir);
+    (s as unknown as { switchKernelEnabled: boolean }).switchKernelEnabled = true;
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath, undefined, false, "dsh", "us-new", "dsh-model"); // 起 dsh(RPC)
+
+    await s.switchKernel("minimal");
+
+    // 旧 dsh:abort(step 1)+ stop(step 3)
+    expect(dshMock.calls).toContain("abort");
+    expect(dshMock.alive).toBe(false);
+    // 新 minimal:RPC → 文件态,factory.seed 返派生路径 + start 新后端
+    expect(seededKernels).toContain("minimal");
+    expect(minimalMock.calls).toContain("start");
+  });
+});
+
 describe("setModel 跨内核路由(中间转换层)", () => {
-  it("模型属于 dsh 而当前是 pi(有历史,发过消息):暂缓切换,显式降级抛错,不把 dsh 模型发到 pi", async () => {
+  it("模型属于 dsh 而当前是 pi(有历史,发过消息):七步切换(switchKernel),dsh 模型不落到 pi", async () => {
     const dshSource: KernelModelSource = {
       listModels: () => [{ kernel: "dsh", provider: "us-new", id: "bifrost/tencent/deepseek-v4-pro", name: "deepseek-v4-pro" }],
     };
@@ -352,14 +411,13 @@ describe("setModel 跨内核路由(中间转换层)", () => {
     adapter.sent = [];
     mock.calls = [];
 
-    // 暂缓切换(kernel-follows-model.md §2.3):有历史 pi 进程选 dsh 模型 → 显式降级,不走 switchKernel
-    await expect(s.setModel("us-new", "bifrost/tencent/deepseek-v4-pro", "dsh")).rejects.toThrow("跨内核切换后续支持");
+    // §8 已启用:有历史 pi 进程选 dsh 模型 → 七步切换(不再显式降级抛错)
+    await s.setModel("us-new", "bifrost/tencent/deepseek-v4-pro", "dsh");
 
-    // 关键断言:pi 后端没有收到 set_model(dsh 模型 id 绝不落到 pi),也没有 abort/stop 切换动作
-    expect(adapter.sent).not.toContain("set_model");
-    expect(adapter.sent).not.toContain("abort");
-    expect(adapter.alive).toBe(true);
-    expect(mock.calls).toEqual([]);
+    // 切换动作:pi abort + stop(step 1/3),dsh mock start(step 4 RPC 分支)
+    expect(adapter.sent).toContain("abort");
+    expect(adapter.alive).toBe(false);
+    expect(mock.calls).toContain("start");
   });
 
   it("setModel 固定内核取会话自身 header.kernel 而非全局 activeKernel:切回有历史的 pi 会话不被误拦(根因守卫)", async () => {
@@ -403,9 +461,9 @@ describe("setModel 跨内核路由(中间转换层)", () => {
 });
 
 
-describe("内核跟随模型(清理默认 pi + 暂缓切换,kernel-follows-model.md)", () => {
-  it("switchKernel gate:直接调用抛「跨内核切换暂未启用」", async () => {
-    await expect(store.switchKernel("dsh")).rejects.toThrow("跨内核切换暂未启用");
+describe("内核跟随模型(清理默认 pi + 跨内核切换,kernel-follows-model.md)", () => {
+  it("switchKernel gate 已开:不再抛「暂未启用」,七步编排运行", async () => {
+    await expect(store.switchKernel("dsh")).rejects.not.toThrow("跨内核切换暂未启用");
   });
 
   it("setModel 查不到模型:抛「模型不在清单」,不回落 pi", async () => {
@@ -716,7 +774,7 @@ describe("prompt 强度对齐只对支持运行时切档的内核生效(§atomic
     async abort(): Promise<void> {}
   }
 
-  it("dsh(无 capabilities.pi)prompt 带 thinkingLevel:跳过 setThinkingLevel,不抛错、正常发送", async () => {
+  it("dsh(无 capabilities.extensions)prompt 带 thinkingLevel:跳过 setThinkingLevel,不抛错、正常发送", async () => {
     const dsh = new FakeDshBackend();
     const createdKernels: string[] = [];
     const factory: BackendFactory = {
@@ -734,7 +792,7 @@ describe("prompt 强度对齐只对支持运行时切档的内核生效(§atomic
     expect(dsh.calls).not.toContain("setThinkingLevel");
   });
 
-  it("pi(有 capabilities.pi)prompt 带 thinkingLevel:仍走 setThinkingLevel,不回归", async () => {
+  it("pi(有 capabilities.extensions)prompt 带 thinkingLevel:仍走 setThinkingLevel,不回归", async () => {
     // store(pi 后端 + FakeAdapter)已由 beforeEach 起好,latestSnapshot = {p/a @ high}。
     await store.prompt("hi", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "low", kernel: "pi" });
     expect(adapter.sent).toContain("set_thinking_level"); // pi 路径不被能力探测误伤
@@ -1120,7 +1178,7 @@ describe("dsh 热切与缺面回落(docs/model-switching.md §11,断言落在机
    *  会被它永久遮蔽(缺面回落用例的坑)。 */
   class FakeDshHotBackend {
     alive = false;
-    capabilities = { dsh: { missing: new Set<string>(), onMissing: null as null | ((m: string) => void) } };
+    capabilities = { thinking: { missing: new Set<string>(), onMissing: null as null | ((m: string) => void) } };
     get supportsRuntimeSetModel(): boolean { return true; }
     calls: string[] = [];
     constructor(public opts?: { neutralSessionId?: string }) {}
@@ -1188,10 +1246,10 @@ describe("dsh 热切与缺面回落(docs/model-switching.md §11,断言落在机
     class FakeDshMissingBackend extends FakeDshHotBackend {
       override async setModel(): Promise<void> {
         this.calls.push("setModel");
-        this.capabilities.dsh.missing.add("session/setModel");
+        this.capabilities.thinking.missing.add("session/setModel");
       }
       override get supportsRuntimeSetModel(): boolean {
-        return !this.capabilities.dsh.missing.has("session/setModel");
+        return !this.capabilities.thinking.missing.has("session/setModel");
       }
     }
     const created: { kernel: string; model?: string }[] = [];
@@ -1421,7 +1479,7 @@ describe("三会话跨内核切换(pi/dsh/pi,会话对应进程不串)", () => {
 describe("fork/clone 派生会话首发物化(内核私有 id 派生自新会话根 lineageId,§12.2 + unify §6.5)", () => {
   class LineageBackend {
     alive = false;
-    capabilities = { pi: { onBusFrame: () => {}, onQuestion: () => {}, onProcessExit: null, stderr: "", resync: async () => ({ messages: [], state: { isStreaming: false }, tree: { rootId: "", lineages: [] } }) } }; // 有 pi 面 → 走预 seed 重 spawn 路径
+    capabilities = { pi: { onBusFrame: () => {}, onQuestion: () => {}, onExit: null, stderr: "", resync: async () => ({ messages: [], state: { isStreaming: false }, tree: { rootId: "", lineages: [] } }) }, fileBacked: true }; // 有 pi 面 + 文件态 → 走预 seed 重 spawn 路径
     calls: string[] = [];
     async start(): Promise<void> { this.alive = true; }
     async stop(): Promise<void> { this.alive = false; }
@@ -1501,7 +1559,7 @@ describe("fork/clone 派生会话首发物化(内核私有 id 派生自新会话
   });
 
   it("clone 产物同样强制物化(根因守卫:克隆前缀进新内核文件,不拿空文件起进程)", async () => {
-    // 根因:clone 派生的新会话内核文件尚不存在,而 createProc 曾按 capabilities.pi 把
+    // 根因:clone 派生的新会话内核文件尚不存在,而 createProc 曾按 capabilities.extensions 把
     // materializedLineageId 标成 ns(已物化)→ materializeActiveLineage 提前 return →
     // pi 拿不存在的 <newNs>.jsonl 起空会话,克隆内容永不进内核。pendingSeed(§6.5)是修复载体。
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "clone-seed-")));

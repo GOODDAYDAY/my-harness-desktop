@@ -6,11 +6,9 @@
 //
 // 本文件零依赖:不 import 任何 domain 内外的类型,是圆心最内层的原子。
 
-/** 内核标识(pi / dsh)。会话头、模型清单、后端工厂、跨内核切换共用这一份。 */
-export type KernelId = "pi" | "dsh";
-
-/** 全部已注册内核 id(运行时枚举;KernelSpec 注册 / 模型下拉分组 / 内核标渲染共用)。 */
-export const KERNEL_IDS = ["pi", "dsh"] as const;
+/** 内核标识(不透明字符串)——内核 id 由内核插件声明,核心不硬编码任何具体内核名。
+ *  会话头、模型清单、后端工厂、跨内核切换共用这一份。加内核 = 写插件 + 注册,此处零改动。 */
+export type KernelId = string;
 
 /** 内核身份标(logo)的序列化形态——每个内核在自己的适配器(client/{kernel})声明这份
  *  SVG 数据,壳只做通用渲染,不硬编码任何内核的 logo path(机制与内容分离)。

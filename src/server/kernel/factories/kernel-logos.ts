@@ -8,11 +8,13 @@
 import type { KernelId, KernelLogo } from "@my-harness-desktop/shared";
 import { PI_LOGO } from "../pi/manager/pi-logo";
 import { DSH_LOGO } from "../dsh/manager/dsh-logo";
+import { MINIMAL_LOGO } from "../minimal/manager/minimal-logo";
 
-/** 全部内核的 logo,按 KernelId 键控(pi/dsh)。 */
+/** 全部内核的 logo,按 KernelId 键控(pi/dsh/minimal)。 */
 export const KERNEL_LOGOS: Record<KernelId, KernelLogo> = {
   pi: PI_LOGO,
   dsh: DSH_LOGO,
+  minimal: MINIMAL_LOGO,
 };
 
 /** 按内核 id 取 logo(未知 id 无对应——但 KernelId 是字面量联合,穷尽)。 */

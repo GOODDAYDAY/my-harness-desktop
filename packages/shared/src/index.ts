@@ -25,6 +25,7 @@ export * from "./domain/file-icons";
 export * from "./domain/host";
 export * from "./domain/kernel-manager";
 export * from "./domain/kernel";
+export * from "./domain/kernel-plugin";
 export * from "./domain/layout";
 export * from "./domain/model-probe";
 export * from "./domain/path-utils";

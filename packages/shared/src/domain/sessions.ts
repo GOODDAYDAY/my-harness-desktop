@@ -13,7 +13,7 @@
 //   PiExtensions(pi 内核专属扩展面 §7.6:steer/followUp/abortRetry/cycleModel/
 //     getThinkingLevels/cycleThinkingLevel/compact/setAutoCompaction/setAutoRetry/
 //     exportHtml/getLastAssistantText/setSteeringMode/setFollowUpMode
-//     —— 经 capabilities.piExtension 探测,有则用无则降级)
+//     —— 经 capabilities.extensionsExtension 探测,有则用无则降级)
 //
 // SessionsApi(会话生命周期:start/stop/setContext/list/openSession/rename/updateHeader/onEvent/onSnapshot/getSnapshot/sync/getStats + pi 扩展面)
 //   不继承 RpcOps —— 它管的是进程和文件,不是"发命令到内核"。
@@ -24,7 +24,7 @@
 import type { SessionEvent, SyncSnapshot, ModelInfo, NeutralMessage, SessionStats, ProjectStats } from "./events/session-state";
 import type { KernelEvent, QuestionAnswer, QuestionRequestEvent, PendingQuestionRecord } from "./events/kernel-event";
 import type { LineageTree } from "./backend";
-import { KERNEL_IDS, type KernelId } from "./kernel";
+import { type KernelId } from "./kernel";
 import type { DisplayMeta } from "./session-neutral";
 import type { BookmarkSnapshot } from "./bookmark-snapshot";
 import { truncateSessionName } from "./text";
@@ -228,13 +228,10 @@ export function parseSessionModelPrefs(custom: Record<string, unknown> | undefin
   return { provider: o.provider, modelId: o.modelId, thinkingLevel: o.thinkingLevel, kernel };
 }
 
-/** 值是否为合法内核 id(字面量联合窄化;契约单源,读写两侧共用同一判断)。
- *  收敛到 KERNEL_IDS(minimal-kernel §7.8.2):此前手写 v === "pi" || v === "dsh" 是
- *  字面量谓词漂移——KernelId 联合扩第三个内核时这里不报编译错,新内核的会话头
- *  kernel 字段会被静默剥成 undefined(模型偏好读回断链)。改用 KERNEL_IDS 单源,
- *  加内核只改 kernel.ts 一处,这里自动跟上。导出供 resolveSessionKernel 等读回侧共用。 */
+/** 值是否为内核 id(不透明字符串;KernelId = string,任何 string 都是内核 id)。
+ *  内核 id 由内核插件声明、经 KernelRegistry 运行时注册,不再有字面量联合可窄化。 */
 export function isKernelId(v: unknown): v is KernelId {
-  return (KERNEL_IDS as readonly string[]).includes(v as string);
+  return typeof v === "string";
 }
 
 /** Bash 执行结果。 */
@@ -306,7 +303,7 @@ export interface SessionTreeApi extends RpcOps {
   getForkMessages(entryId: string): Promise<NeutralMessage[]>;
 }
 
-/** pi 内核专属扩展面(§7.6 内核扩展面):dsh 无此面,壳插件经 capabilities.piExtension
+/** pi 内核专属扩展面(§7.6 内核扩展面):dsh 无此面,壳插件经 capabilities.extensionsExtension
  *  探测「有则用、无则降级」。这些方法都是 pi 命令的投影,返回中性类型,pi 协议翻译
  *  收进 client/pi。终态随「会话身份中性化」进一步下沉,此处是插件可引用的 pi 扩展面契约。 */
 export interface PiExtensions {
@@ -416,7 +413,7 @@ export interface SessionsApi {
   deleteBookmark(snapshotId: string): Promise<void>;
   /** 跨内核切换(§3.6):把激活会话切到目标内核(五步编排)。dsh 侧 seed 未接线时降级报错。 */
   switchKernel(target: KernelId): Promise<void>;
-  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.piExtension 探测「有则用、无则降级」。
+  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensionsExtension 探测「有则用、无则降级」。
    *  dsh 下这些入口隐藏/置灰,调用抛「当前内核不支持」。 */
   pi: PiExtensions;
 }

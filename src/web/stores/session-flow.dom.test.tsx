@@ -28,7 +28,7 @@ function mockWindow(): void {
       sync: async () => ({}),
       list: async () => [],
       getStats: async () => null,
-      getCapabilities: async () => ({ kernel: "pi", locked: false, piExtension: true, dshExtension: false }),
+      getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
       getNeutral: async () => baseline,
       onEvent: (cb: EventHandler) => { eventCb = cb; return () => {}; },
       onNeutralChange: (cb: (c: NeutralChange) => void) => { neutralCb = cb; return () => {}; },

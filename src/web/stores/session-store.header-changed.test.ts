@@ -18,7 +18,7 @@ function stubKernel() {
   const sessions = {
     setContext: async () => {},
     list: async (cwd: string) => { shared.listCalls.push(cwd); return []; },
-    getCapabilities: async () => ({ kernel: null, locked: false, piExtension: false, dshExtension: false }),
+    getCapabilities: async () => ({ kernel: null, locked: false, extension: false, thinking: false }),
     getStats: async () => null,
     sync: async () => { throw new Error("no-kernel"); },
     onEvent: () => () => {},

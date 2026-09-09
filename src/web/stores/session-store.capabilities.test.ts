@@ -32,7 +32,7 @@ describe("能力面 push(capabilitiesChanged 事件)", () => {
   beforeEach(() => {
     useUiStore.setState({ currentCwd: "/proj", currentSessionPath: null });
     useSessionStore.setState({
-      capabilities: { kernel: null, locked: false, piExtension: false, dshExtension: false },
+      capabilities: { kernel: null, locked: false, extension: false, thinking: false },
     });
   });
 
@@ -41,23 +41,23 @@ describe("能力面 push(capabilitiesChanged 事件)", () => {
     let pulls = 0;
     stubKernel(capture, async () => {
       pulls += 1;
-      return { kernel: "pi", locked: false, piExtension: false, dshExtension: false };
+      return { kernel: "pi", locked: false, extension: false, thinking: false };
     });
     initSessionStore();
     await new Promise((r) => setTimeout(r, 0));
-    expect(useSessionStore.getState().capabilities.piExtension).toBe(false);
+    expect(useSessionStore.getState().capabilities.extension).toBe(false);
 
-    // main 在 proc 就绪后推 capabilitiesChanged(带完整快照,piExtension 已转真)
+    // main 在 proc 就绪后推 capabilitiesChanged(带完整快照,extension 已转真)
     capture.kernelCb?.({
       kind: "capabilitiesChanged",
       sessionKey: "k",
-      capabilities: { kernel: "pi", locked: false, piExtension: true, dshExtension: false },
+      capabilities: { kernel: "pi", locked: false, extension: true, thinking: false },
     });
     await new Promise((r) => setTimeout(r, 0));
 
     // 能力面直接从事件 payload 落,不再触发 getCapabilities 重拉(拉式刷新点已删)
     expect(pulls).toBe(1); // 只有 init 拉一次
-    expect(useSessionStore.getState().capabilities.piExtension).toBe(true);
+    expect(useSessionStore.getState().capabilities.extension).toBe(true);
   });
 
   it("静态守卫:refreshCapabilities 只允许冷启动一次(防退化回拉式刷新点)", () => {

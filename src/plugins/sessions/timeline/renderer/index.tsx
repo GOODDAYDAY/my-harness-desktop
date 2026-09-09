@@ -234,7 +234,7 @@ export function TimelineView(): React.ReactNode {
   // 内核可用性探测:返回可用性供发送门判(读取失败按可用放行——状态通道故障不该误伤
   // 发送,真实失败由 RPC 错误链兜底)。不传内核 = 探当前模型归属内核。
   const refreshKernelStatus = useCallback(async (kernel?: KernelId): Promise<boolean> => {
-    const k = kernel ?? currentKernelRef.current ?? "pi";
+    const k = kernel ?? currentKernelRef.current ?? (Object.keys(ctx.kernels)[0] as KernelId);
     try {
       const s = await ctx.kernels[k].status();
       setKernelAvailable(s.available);
@@ -259,7 +259,7 @@ export function TimelineView(): React.ReactNode {
     void refreshKernelStatus();
     // models 走合流清单(model-catalog:pi + dsh,带 kernel 标)而非只扫 pi models.json(§3.3)。
     const [settingsRes, modelsRes, fallbackRes] = await Promise.allSettled([
-      ctx.piSettings.get(),
+      ctx.kernelConfig["pi"].get(),
       ctx.modelsConfig.list(),
       ctx.modelsConfig.getFallbackModel(),
     ]);
@@ -346,9 +346,9 @@ export function TimelineView(): React.ReactNode {
   //   空清单 = 模型无推理元数据/补面缺席 → 不渲染下拉(显式降级,诚实提示由
   //   thinkingUnavailableHint 承担),不拿 DEFAULT_LEVELS 伪造可切;
   // - 两面皆无:空(不渲染)。
-  const levels = capabilities.piExtension
+  const levels = capabilities.extension
     ? (thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS)
-    : capabilities.dshExtension
+    : capabilities.thinking
       ? thinkingLevels
       : [];
 
@@ -686,7 +686,7 @@ export function TimelineView(): React.ReactNode {
   };
 
   const handleRewindStop = (): void => {
-    if (retrying && capabilities.piExtension) {
+    if (retrying && capabilities.extension) {
       void ctx.pi.abortRetry();
     } else {
       void ctx.messaging.abort();
@@ -1066,7 +1066,7 @@ export function TimelineView(): React.ReactNode {
         allowEmptySubmit={hasAttachments || pendingFiles.length > 0 || !!composerImage}
         maxLines={composerMaxLines}
         onStop={() => {
-          if (retrying && capabilities.piExtension) {
+          if (retrying && capabilities.extension) {
             void ctx.pi.abortRetry();
           } else {
             void ctx.messaging.abort();
@@ -1080,7 +1080,7 @@ export function TimelineView(): React.ReactNode {
         onPickLevel={pickLevel}
         // 显式降级(§7.6,能力探测非内核身份分支):当前后端有 dsh 扩展面而无 pi 面 →
         // 运行时切档不可用,思考开关置灰并悬浮真实原因(此前只挂「思考已关闭」误导文案)。
-        thinkingUnavailableHint={capabilities.dshExtension && !capabilities.piExtension ? t("shell.thinkingSwitchUnsupported") : undefined}
+        thinkingUnavailableHint={capabilities.thinking && !capabilities.extension ? t("shell.thinkingSwitchUnsupported") : undefined}
         commands={allCommands}
         currentKernel={capabilities.kernel}
         kernelLocked={capabilities.locked}

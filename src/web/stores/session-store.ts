@@ -172,10 +172,10 @@ export interface SessionStoreState {
    *  [] = 未运行(新会话/文件读历史会话),消费方按展示策略兜底。
    *  生命周期随投影基线:openSession/startNewChat 置 [],snapshot/modelSelect 框架刷新。 */
   thinkingLevels: string[];
-  /** 当前会话后端的扩展能力面 + 内核归属(main 侧 capabilities 投影;piExtension=false 时
+  /** 当前会话后端的扩展能力面 + 内核归属(main 侧 capabilities 投影;extension=false 时
    *  steer/followUp/thinkingLevel/队列/导出等 pi 专属入口置灰,§7.6 显式降级;
    *  kernel/locked 供内核 TAB 置灰:locked 且非 kernel 的 TAB 不可切)。 */
-  capabilities: { kernel: KernelId | null; locked: boolean; piExtension: boolean; dshExtension: boolean };
+  capabilities: { kernel: KernelId | null; locked: boolean; extension: boolean; thinking: boolean };
   streaming: boolean;
   /** 切换会话中(乐观 UI:骨架/旧内容淡出) */
   switching: boolean;
@@ -358,7 +358,7 @@ function refreshStats(): void {
  *  与 stats 的 catch 兜底同语义。 */
 function refreshThinkingLevels(): void {
   const caps = useSessionStore.getState().capabilities;
-  if (!caps.piExtension && !caps.dshExtension) return;
+  if (!caps.extension && !caps.thinking) return;
   const gen = sessionGen;
   void window.kernel.sessions.pi.getThinkingLevels()
     .then((ls) => { if (gen === sessionGen && ls.length > 0) useSessionStore.setState({ thinkingLevels: ls }); })
@@ -378,7 +378,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   overlay: [],
   stats: null,
   thinkingLevels: [],
-  capabilities: { kernel: null, locked: false, piExtension: false, dshExtension: false },
+  capabilities: { kernel: null, locked: false, extension: false, thinking: false },
   streaming: false,
   switching: false,
   syncNonce: 0,
@@ -730,7 +730,7 @@ export function initSessionStore(): void {
     if (event.type === "sessionStart") {
       hydrateSessionStart(event);
       // 能力面随 capabilitiesChanged 事件推送(setContext→proc.start 就绪即广播),
-      // 首发时 piExtension 转真由该事件带到,此处不散拉 refreshCapabilities。
+      // 首发时 extension 转真由该事件带到,此处不散拉 refreshCapabilities。
     }
     if (event.type === "compactionEnd") {
       void window.kernel.sessions.sync();

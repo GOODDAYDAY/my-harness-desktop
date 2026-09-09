@@ -3,18 +3,42 @@
 //   server 宿主:  src/server/bootstrap/server.ts  → out/main/server.js(node out/main/server.js)
 //   renderer:    src/web/index.html(由后端 HTTP 服务)
 import { defineConfig } from "electron-vite";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { copyFileSync, mkdirSync } from "node:fs";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+// 内核插件 manifest(plugin.json)是运行时资产,vite 不自动复制。做成 vite 插件,
+// 在 writeBundle(每次 main 编译完成,含 dev watch 重编译)复制——避免只靠 build 脚本
+// (electron-vite dev 清空 out/ 后不跑 build 脚本的 copy → plugin.json 缺失 → registry 空 → 白屏)。
+function copyKernelManifests() {
+  const KERNELS = ["pi", "dsh", "minimal"];
+  return {
+    name: "copy-kernel-manifests",
+    writeBundle() {
+      for (const k of KERNELS) {
+        const src = resolve(__dirname, "src/server/kernel", k, "plugin.json");
+        const dstDir = resolve(__dirname, "out/main/server/kernel", k);
+        mkdirSync(dstDir, { recursive: true });
+        copyFileSync(src, join(dstDir, "plugin.json"));
+      }
+    },
+  };
+}
+
 export default defineConfig({
   main: {
+    plugins: [copyKernelManifests()],
     build: {
       rollupOptions: {
         input: {
           index: resolve(__dirname, "src/server/bootstrap/electron.ts"),
           server: resolve(__dirname, "src/server/bootstrap/server.ts"),
           preload: resolve(__dirname, "src/server/preload.ts"),
+          // 内核插件工厂独立打包(物理插件:动态 require 的 plugin.js;入口名对齐运行时扫描路径)。
+          "server/kernel/pi/plugin": resolve(__dirname, "src/server/kernel/pi/plugin.ts"),
+          "server/kernel/dsh/plugin": resolve(__dirname, "src/server/kernel/dsh/plugin.ts"),
+          "server/kernel/minimal/plugin": resolve(__dirname, "src/server/kernel/minimal/plugin.ts"),
         },
         output: { format: "cjs", entryFileNames: "[name].js" },
         external: ["tar"],

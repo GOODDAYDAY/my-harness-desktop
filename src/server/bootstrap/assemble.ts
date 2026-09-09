@@ -7,19 +7,8 @@ import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { JsonPrefsStore } from "../application/config/json-prefs";
 import { ConfigStore } from "../application/config/config-store";
-import { PiSettingsStore, parseSettingsSchema } from "../kernel/pi/model/pi-settings-store";
-import { ModelsStore } from "../kernel/pi/model/models-store";
 import { ModelCatalog } from "../application/models/model-catalog";
-import { PiModelSource } from "../kernel/pi/model/pi-model-source";
-import { DshConfigSource } from "../kernel/dsh/backend/dsh-config-source";
-import { migrateZstdSessionArtifacts } from "../kernel/dsh/backend/dsh-artifact-migration";
 import { writeApiKey } from "../kernel/dsh/backend/dsh-credentials-store";
-import { createPiModelsApi } from "../kernel/pi/manager/pi-kernel-api";
-import { createDshModelsApi } from "../kernel/dsh/manager/dsh-kernel-api";
-import { createPiConfigApi } from "../kernel/pi/manager/pi-kernel-config";
-import { createDshConfigApi } from "../kernel/dsh/manager/dsh-kernel-config";
-import { runPiOneshot } from "../kernel/pi/extension/pi-oneshot";
-import { DshQuestionBridge } from "../kernel/dsh/manager/dsh-question-bridge";
 import { discoverPlugins } from "../application/loader/discover";
 import { PluginRegistry } from "../application/loader/registry";
 import {
@@ -33,17 +22,14 @@ import { SessionStore } from "../application/sessions/session-store";
 import { NeutralSessionStore } from "../application/sessions/neutral-session-store";
 import { PendingQuestionStore } from "../application/sessions/pending-question-store";
 import type { BackendFactory, SessionCatalogFactory } from "@my-harness-desktop/shared";
-import type { PiSettingsApi, KernelModelsRegistry, KernelConfigApi } from "@my-harness-desktop/shared";
+import type { KernelModelsRegistry, KernelConfigApi, KernelExtensionSource, KernelVersionApi, SkillProvider } from "@my-harness-desktop/shared";
 import type { KernelId } from "@my-harness-desktop/shared";
 import type { PluginLifecycleDeps } from "../application/lifecycle";
-import { createPiBackend, createDshBackend, createPiCatalog, createDshCatalog, piSeedSession } from "../kernel/factories/kernel-factories";
-import { createPiKernelManager, createDshKernelManager } from "../kernel/factories/kernel-managers";
 import { KERNEL_LOGOS } from "../kernel/factories/kernel-logos";
+import { KernelRegistry } from "../kernel/core/kernel-registry";
+import { loadKernelPlugin, scanKernelPlugins } from "../kernel/core/kernel-plugin-loader";
 import { mirrorBundledSkills } from "../application/skills/bundled-skills";
-import { ensureBundledSkillsEntry, ensurePluginSkillsEntry, migrateLegacySkillPatterns } from "../kernel/pi/extension/pi-bundled-skills";
 import { SkillAggregator } from "../application/skills/skill-aggregator";
-import { PiSkillProvider } from "../kernel/pi/extension/pi-skill-provider";
-import { DshSkillProvider } from "../kernel/dsh/extension/dsh-skill-provider";
 import { installFitPiExtension, fitPiExtensionAvailable } from "../kernel/pi/extension/my-harness-fit-pi-extension-installer";
 import { mirrorManagedDir } from "../application/bundled/mirror";
 import { initKernelRuntime } from "../kernel/core/kernel-manager";
@@ -51,8 +37,6 @@ import { reconcileMissingKernels } from "../kernel/core/kernel-reconcile";
 import { importLegacyPiSessions } from "../application/sessions/neutral-migration";
 import { RestartCoordinatorImpl } from "../application/restart/restart-coordinator";
 import { createNpmKernelRuntime } from "../client/npm/kernel-runtime";
-import { PiExtensionManager } from "../kernel/pi/extension/pi-extension-manager";
-import { DshExtensionManager } from "../kernel/dsh/extension/dsh-extension-manager";
 import { DEFAULT_PREFS, type MainContext, type Prefs } from "../application/context/main-context";
 import { broadcastSettingsChanged, broadcastRefreshRequested } from "../routing/broadcast";
 import { registerConfig } from "../controllers/config";
@@ -69,8 +53,7 @@ import { registerWindow } from "../controllers/window";
 import { registerAppInfo } from "../controllers/app-info";
 import { registerNotification } from "../controllers/notification";
 import { registerRemote } from "../controllers/remote";
-import { reconcilePluginPiExtensions, syncPluginPiExtension, removePluginPiExtension } from "../kernel/pi/extension/pi-extension-installer";
-import { reconcilePluginDshExtensions, syncPluginDshExtension, removePluginDshExtension, syncFitDshExtension, FIT_DSEXTENSION_ID } from "../kernel/dsh/extension/dsh-extension-installer";
+import { FIT_DSEXTENSION_ID } from "../kernel/dsh/extension/dsh-extension-installer";
 import { SessionBus } from "../application/sessions/session-bus";
 import { resolveMyHarnessDesktopDir } from "../application/config/paths";
 import { createGateway } from "../routing/gateway";
@@ -115,14 +98,12 @@ const gateway = createGateway(auth.createTokenVerifier());
 const PI_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "pi");
 // dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh);dsh 原生配置(cordis.yml/settings.yaml)在 ~/.dsh。
 const DSH_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "dsh");
-// dsh 会话持久化根(稳定单源):活跃后端与目录 transport 必须共享同一根,目录才列得出会话。
-// 不再用 cordis.yml 默认的 './.sessions'(相对进程 cwd)——后端 cwd=项目目录、目录 transport
-// cwd=process.cwd(),两处根不同,目录永远列不到活跃后端的会话(根因)。
-const DSH_SESSION_ROOT = join(MY_HARNESS_DESKTOP_DIR, "dsh", "sessions");
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 内核配置目录(~/.pi/agent,内核标准,非 ~/.my-harness-desktop)。pi-settings 插件读写它。
 const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
-
+// 内置 skills:仓库顶级 .claude/skills/ 随壳分发(pkg 拷贝到 resources/my-harness-desktop-skills,
+// 与 my-harness-desktop-builtin 同批),启动时镜像到 ~/.my-harness-desktop/skills(强制覆盖,受管目录)
+const BUNDLED_SKILLS_DIR = join(MY_HARNESS_DESKTOP_DIR, "skills");
 // 桌面偏好走 electron-store,显式 cwd 纳入数据根 config 树(跨重启持久,与插件配置同根)
 const prefsStore = new JsonPrefsStore<Prefs>(join(CONFIG_DIR, "config.json"), DEFAULT_PREFS);
 
@@ -143,83 +124,54 @@ const prefsStore = new JsonPrefsStore<Prefs>(join(CONFIG_DIR, "config.json"), DE
 }
 
 initKernelRuntime(createNpmKernelRuntime());
-// 内核版本管理组装:pi/dsh 各一个实例,spec 值 + postInstall 差异封装在各自实现
-// (client/pi、client/dsh),此处只绑 installDir。注入 MainContext 供 kernel IPC 使用。
-const piKernelManager = createPiKernelManager(PI_INSTALL_DIR);
-const dshKernelManager = createDshKernelManager(DSH_INSTALL_DIR);
 
-const piSettingsStore = new PiSettingsStore({ agentDir: PI_AGENT_DIR });
-const modelsStore = new ModelsStore({ agentDir: PI_AGENT_DIR });
-// 解析内核 settings-manager.d.ts 的全局回退路径(shell 注入,application 不读 process 环境)。
-const PI_SETTINGS_RESOLVE_PATHS = [
-  process.cwd(),
-  join(HOME_DIR, ".npm-global"),
-  "/usr/local/lib",
-];
-// dsh 原生配置:cordis.yml(插件组成 + base,路径取 DSH_CORDIS_CONFIG 或 ~/.dsh/cordis.yml)
-// + settings.yaml(用户覆盖 namespace,~/.dsh/settings.yaml)。读不到 → 空,不炸应用(§6.2)。
-// DSH_CORDIS_PATH 单源:配置读写(DshConfigSource)与 spawn(DSH_CORDIS_CONFIG env)共用同一路径。
-const DSH_CORDIS_PATH = process.env.DSH_CORDIS_CONFIG ?? join(HOME_DIR, ".dsh", "cordis.yml");
-// DSH_HOME 钉住到 cordis.yml 所在目录:dsh 运行时 resolveDshHome 优先吃 DSH_HOME env——
-// 宿主 shell 若导出了指向别处的 DSH_HOME,dsh 会读那份 settings.yaml 而桌面写这份,
-// 模型/推理配置静默分裂(实测:桌面给模型落了 reasoningEfforts,运行时读另一份 →
-// 思考档位清单恒空)。钉住后两边恒同根,与 DSH_CORDIS_PATH 同一来源。
-const DSH_HOME = dirname(DSH_CORDIS_PATH);
-const dshConfigSource = new DshConfigSource(
-  DSH_CORDIS_PATH,
-  join(HOME_DIR, ".dsh", "settings.yaml"),
-  DSH_INSTALL_DIR,
-);
-// 首次运行:缺 cordis.yml 写默认 JSON-RPC 组合(否则 spawn dsh-jsonrpc-agent 报 usage 退出)。
-dshConfigSource.ensureDefaultCordis();
-// 内核形状:中立化 agent-core 自带的 skill-filesystem(改名 + 清空发现根),让统一适配插件的
-// fork provider 独占 "filesystem" 名——duplicate provider 会让 dsh 启动即崩。
-dshConfigSource.ensureAgentCoreSkillForkBase();
-// 凭证服务:llm-pi-ai 的 resolveApiKey 经 ctx.credentials 读 ~/.dsh/.credentials.yaml——
-// 缺了 credentials-local 插件,桌面端写进凭证库的 key 永远读不到(实测 MISSING_CREDENTIAL)。
-dshConfigSource.ensureCredentialsPlugin();
-// ask 续问前提(docs/design/ask-design.md §5.2):sessions 持久化插件跑明文诊断模式
-// (compression:'none' + packChunks:false),壳才能在进程死亡窗口往会话日志追加 tool/result。
-dshConfigSource.ensurePlainSessionLog();
-// 明文部署的历史欠账收编(同 §5.2):配置落地前同一根里已写出的 zstd 工件,会触发持久化层
-// 的根编码守卫(ensureRootEncoding:list/append 前扫全根,遇混合编码抛 encodingMismatch)——
-// 有一个遗留 zstd,所有 dsh 会话的创建/列举/续跑全挂(「生成失败 session artifact …zstd」)。
-// 启动时一次性迁成明文(幂等;zstd 是同一明文字节流的确定性压缩,字节 1:1);
-// 只在明文部署下做——用户手改回 zstd 时尊重其部署选择,不反向打架。
-if (dshConfigSource.sessionsCompression() === "none") {
-  try {
-    const mig = migrateZstdSessionArtifacts(DSH_SESSION_ROOT);
-    if (mig.migrated + mig.deduped + mig.quarantined > 0) {
-      console.log(`[dsh-migration] zstd 工件转明文: 迁移 ${mig.migrated},去重 ${mig.deduped},隔离 ${mig.quarantined}`);
-    }
-  } catch (err) {
-    // 迁移失败不挡启动(幂等,下次启动再试);但显形,不静默。
-    console.warn("[dsh-migration] 工件编码迁移失败:", err instanceof Error ? err.message : String(err));
-  }
-}
-// 清理悬空默认:agent-default-model 可能指向已删路由(如废弃的 deepseek-official 官方路由)
-// → 清掉指针,回落首个 provider/模型。fire-and-forget,不阻断启动(与 dshDefaultProviderModel 的
-// 运行时校验双保险:即便这里没清掉,spawn 兜底也不会再落到死路由)。
-void (async () => {
-  const def = dshConfigSource.getDefaultModel();
-  if (def && !dshConfigSource.listProviders().some((p) => p.provider === def.provider)) {
-    await dshConfigSource.clearDefaultModel().catch(() => {});
-  }
-})();
+// dsh 首次运行准备(ensure* 写 cordis.yml/凭证插件/明文会话日志 + zstd 迁移 + 悬空默认清理 +
+//  tool-skill 启用)已收进 dshKernelPlugin 工厂(§kernel-plugin),此处不再重复构造——加第四个内核零改动。
 // 统一 dsh 适配插件源目录(合并 ask/goal/read-claude-md/skill-manager 四个随插件携带的
 // dsh cordis 插件为一块 my-harness-fit-dsh-extension)。dev: __dirname=out/main →
 // ../../src/server/kernel/dsh/extension/dsh-extension;pkg: resources/my-harness-desktop-dsh-extension(extraResources 随壳分发)。
 const DSH_FIT_EXTENSION_SOURCE = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-dsh-extension")
   : resolve(process.cwd(), "src/server/kernel/dsh/extension/dsh-extension");
-// 启用 dsh 技能消费方(模型可调 skill);发现侧 fork 插件已并入统一适配插件(上方 syncFitDshExtension)。
-// 幂等:addPlugin 见同名块跳过。写失败只 warn 不炸启动(技能是可选能力)。
-try {
-  dshConfigSource.addPlugin("@deepseek-ai/dsh-tool-skill");
-} catch (err) {
-  console.warn("[dsh-skill] 启用 tool-skill 失败:", err instanceof Error ? err.message : String(err));
+// 内核插件注册(§kernel-plugin):唯一 import 具体内核插件并注册的地方。加第四个内核 = 在此加一行。
+// 提前到 modelCatalog 之前(modelSource 从 registry 遍历),testModel/markSessionsPendingRestart 用延迟
+// 闭包引用后赋值的 sessionStore/restartCoordinator(运行时才求值,那时已赋值)。
+const kernelRegistry = new KernelRegistry();
+let sessionStore!: SessionStore;
+let restartCoordinator!: RestartCoordinatorImpl;
+const pluginCtx = {
+  isPackaged: opts.isPackaged,
+  homedir: HOME_DIR,
+  dataRoot: MY_HARNESS_DESKTOP_DIR,
+  prefs: {
+    get: <T>(key: string): T | undefined => prefsStore.get(key as keyof Prefs) as T | undefined,
+    set: <T>(key: string, value: T): void => { prefsStore.set(key as keyof Prefs, value as Prefs[keyof Prefs]); },
+  },
+  markSessionsPendingRestart: (reason: string) => {
+    const keys = sessionStore.getRunningSessionKeys();
+    restartCoordinator.markPendingAll(keys, reason);
+  },
+  broadcastRefresh: () => broadcastRefreshRequested(gateway),
+  builtinSkillsDir: BUNDLED_SKILLS_DIR,
+  getCwd: () => sessionStore.getActiveCwd(),
+};
+// 内核插件动态加载(§kernel-plugin 物理插件):扫描内核插件目录(有 plugin.json 的子目录),
+// 读 manifest → 同步 require 工厂 → register。加第四个内核 = 加一个目录 + manifest;
+// 卸载 = 删目录/禁 manifest,壳照常启动(modelCatalog 从 registry 遍历,未注册内核自动缺面)。
+// 内核插件目录(物理插件:rollup 把 plugin.ts 独立打包到 out/main/server/kernel/*/plugin.js)。
+// assemble 可能被 rollup 拆进 chunks/(import.meta.url 是 chunk 路径),故用 process.cwd() 定位:
+// dev/build(electron-vite 输出到 out/):process.cwd() = 项目根 → out/main/server/kernel/;
+// packaged(electron-builder):asar 内 → process.resourcesPath/app.asar/out/main/server/kernel/。
+const KERNEL_PLUGINS_DIR = opts.isPackaged
+  ? join(process.resourcesPath, "app.asar", "out", "main", "server", "kernel")
+  : join(process.cwd(), "out", "main", "server", "kernel");
+for (const { dir, manifest } of scanKernelPlugins(KERNEL_PLUGINS_DIR)) {
+  loadKernelPlugin(kernelRegistry, dir, manifest, {
+    ...pluginCtx,
+    testModel: (cwd, p, m) => sessionStore.test(cwd, p, m, manifest.id),
+  });
 }
-const modelCatalog = new ModelCatalog([new PiModelSource(modelsStore), dshConfigSource]);
+const modelCatalog = new ModelCatalog(kernelRegistry.all().map((p) => p.createModelSource()));
 
 // ---- 加载器:发现 builtin/installed/user/project 四目录插件,按优先级注册(低到高) ----
 // 开发期扫 src/plugins;打包后扫 process.resourcesPath/my-harness-desktop-builtin。
@@ -230,9 +182,6 @@ const builtinDir = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-builtin")
   : resolve(process.cwd(), "src/plugins");
 const userPluginsDir = join(MY_HARNESS_DESKTOP_DIR, "plugins");
-// 内置 skills:仓库顶级 .claude/skills/ 随壳分发(pkg 拷贝到 resources/my-harness-desktop-skills,
-// 与 my-harness-desktop-builtin 同批),启动时镜像到 ~/.my-harness-desktop/skills(强制覆盖,受管目录)
-const BUNDLED_SKILLS_DIR = join(MY_HARNESS_DESKTOP_DIR, "skills");
 const bundledSkillsSource = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-skills")
   : resolve(process.cwd(), ".claude/skills");
@@ -259,78 +208,32 @@ const languageContributions = registry.languageContributions();
 const i18nResources = mergeLanguageContributions(languageContributions);
 
 // ---- 会话核心(SessionStore 单持;插件能力 sessions.* 的实现)----
-// 依赖倒置:BackendFactory(圆心契约)由 shell 注入实现,SessionStore 不 new client 具体类、
-// 不感知 spawn。内核专属 spawn 参数(cliPath/cordisConfig/apiKey)在此闭包捕获,不进契约。
-// kernel 缺省 "pi"(迁移期兼容);"dsh" 走 createDshBackend(provider/model 有兜底默认)。
+// 依赖倒置:BackendFactory(圆心契约)由 shell 注入实现,SessionStore 不 new 具体内核、
+// 不感知 spawn。内核插件经 KernelRegistry 注册(见 modelCatalog 之前的 registerKernelPlugins),
+// create/seed 按 opts.kernel 查插件、调其 createBackend/seed——加第四个内核 = 加插件 + 注册。
 const baseBackendFactory: BackendFactory = {
   create: (opts) => {
-    if (opts.kernel !== "dsh") return createPiBackend({ ...opts, cliPath: customCliPath() });
-    // 纯自定义 provider:密钥字面值已由 DshConfigSource 写进 dsh 凭证库(~/.dsh/.credentials.yaml),
-    // settings.yaml 的 route 写 apiKeyEnv(派生 ref)供 dsh 运行时解析——spawn 不再注入任何进程 env。
-    // 兜底模型取 settings.yaml 的 agent-default-model,再回落首个 provider/模型(不再写死 deepseek-official)。
-    const fallback = dshDefaultProviderModel();
-    const provider = opts.provider ?? fallback.provider;
-    const model = opts.model ?? fallback.model;
-    return createDshBackend({
-      ...opts,
-      provider,
-      model,
-      cliPath: dshCliPath(),
-      cordisConfig: DSH_CORDIS_PATH,
-      env: { DSH_SESSION_ROOT, DSH_HOME },
-    });
+    const plugin = kernelRegistry.get(opts.kernel);
+    if (!plugin) throw new Error(`未注册的内核: ${opts.kernel}`);
+    return plugin.createBackend(opts);
   },
-  // 预 seed(§4.5 生命周期不对称):pi 的 seed 是纯文件写,先 seed 得路径、再以路径 spawn;
-  // dsh 的 seed 是 RPC(需进程),返回 null,由 create → start → backend.seed 处理。
-  seed: async (lineage, { kernel, cwd, agentDir, lineageId, header }) => {
-    if (kernel === "pi") return piSeedSession(agentDir, cwd, lineage, { lineageId, header });
-    return null;
+  // 预 seed(§4.5 生命周期不对称):文件态内核(pi/minimal)= 纯文件写,先 seed 得路径再以该路径
+  //  spawn;RPC 内核(dsh)= 返回 null,走 create → start → backend.seed。缺面(无 seed)同样返回 null。
+  seed: async (lineage, opts) => {
+    const plugin = kernelRegistry.get(opts.kernel);
+    return plugin?.seed?.(lineage, opts) ?? null;
   },
-};
-// 自定义内核指针(docs/design/custom-cli-path.md §2.4):读 prefs + resolveCustomCli 归一化,
-// 组装一次单源——SessionStore(spawn 链)与 kernel IPC(oneshot)共用;未设置/失效返回
-// undefined,spawn 回落数据根 > PATH(与 kernelStatus 状态标注同一判定函数,行为一致)。
-const customCliPath = (): string | undefined => {
-  const dir = prefsStore.get("customCliDir");
-  if (!dir) return undefined;
-  return piKernelManager.resolveCustomCli(dir)?.cliJs;
-};
-// dsh CLI 入口(与 customCliPath 同构):自定义 dsh 目录优先,否则回落数据根安装
-// (~/.my-harness-desktop/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js)。dsh 装在独立目录,
-// 不在 PATH 上,不注入 cliPath 则 spawn `dsh` 会 command-not-found 直接退出。
-const dshCliPath = (): string | undefined => {
-  const custom = prefsStore.get("dshCustomCliDir");
-  if (custom) {
-    const resolved = dshKernelManager.resolveCustomCli(custom);
-    if (resolved) return resolved.cliJs;
-  }
-  return dshKernelManager.resolveCustomCli(DSH_INSTALL_DIR)?.cliJs;
-};
-// dsh 默认 provider/模型(纯自定义):agent-default-model → 首个 provider/模型 → 空串。
-// baseBackendFactory(spawn 会话进程)与 sessionCatalogFactory(目录 transport)共用同源兜底,
-// 不再写死 deepseek-official。dsh 模型在 initialize 握手定;运行时热切由内核插件补丁提供
-// (installModelSelection 原地热切,docs/model-switching.md §11.1),补丁缺席的旧运行时
-// 缺 session/setModel → 壳按 supportsRuntimeSetModel 回落停旧起新。
-// 校验:agent-default-model 可能指向已删路由(如旧 deepseek-official 官方路由已废弃),此时回落首个 provider。
-const dshDefaultProviderModel = (): { provider: string; model: string } => {
-  const providers = dshConfigSource.listProviders();
-  const first = providers[0];
-  const defaultModel = dshConfigSource.getDefaultModel();
-  const defaultValid = defaultModel !== null
-    && providers.some((p) => p.provider === defaultModel.provider);
-  return {
-    provider: defaultValid ? defaultModel!.provider : (first?.provider ?? ""),
-    model: defaultValid ? defaultModel!.model : (first?.models[0]?.id ?? ""),
-  };
 };
 // 目录/CRUD 工厂(依赖倒置):目录/CRUD 是内核专属存储操作,壳经 SessionCatalog 委托;
-// dsh 目录:dsh 会话真相源在 dsh 进程内,目录/CRUD 经懒 spawn 的 dsh transport 走 JSON-RPC。
+// 按 kernel 查插件、调其 createCatalog——加第四个内核 = 加插件 + 注册,此处零改动。
 const sessionCatalogFactory: SessionCatalogFactory = {
-  create: (kernel) => (kernel === "dsh"
-    ? createDshCatalog({ cliPath: dshCliPath(), cordisConfig: DSH_CORDIS_PATH, env: { DSH_SESSION_ROOT, DSH_HOME }, ...dshDefaultProviderModel() })
-    : createPiCatalog(PI_AGENT_DIR)),
+  create: (kernel) => {
+    const plugin = kernelRegistry.get(kernel);
+    if (!plugin) throw new Error(`未注册的内核: ${kernel}`);
+    return plugin.createCatalog();
+  },
 };
-const sessionStore = new SessionStore(
+sessionStore = new SessionStore(
   baseBackendFactory,
   sessionCatalogFactory,
   PI_AGENT_DIR,
@@ -341,6 +244,8 @@ const sessionStore = new SessionStore(
   (cwd) => join(cwd, ".my-harness-desktop", "bookmarks"),
   // 挂起提问请求单(ask-design §4.3):壳持有的持久存储,进程生死不影响其存续。
   new PendingQuestionStore(join(MY_HARNESS_DESKTOP_DIR, "pending-questions")),
+  // 默认内核 id:注册表首个内核(无模型/无会话头时兜底)。
+  kernelRegistry.ids()[0] ?? "",
 );
 sessionStore.onEvent((event) => {
   gateway.broadcast("session:event", event);
@@ -360,93 +265,85 @@ sessionStore.onNeutralChange((change) => {
 });
 
 // ---- 内核专属适配器组装(注入 MainContext,api/ipc 不直连 client/{kernel})----
-// 模型配置中性 API:pi(models.json/settings.json)与 dsh(settings.yaml + prefs 密钥)各交一个适配器。
-const kernelModels: KernelModelsRegistry = {
-  pi: createPiModelsApi(modelsStore, piSettingsStore, sessionStore),
-  dsh: createDshModelsApi(dshConfigSource, sessionStore),
-};
-// pi 内核 settings.json 中性面(get/set 委托 store,schema 解析 .d.ts 由 shell 绑定解析路径)。
-const piSettings: PiSettingsApi = {
-  get: () => piSettingsStore.get(),
-  set: (patch) => piSettingsStore.set(patch),
-  replace: (obj) => piSettingsStore.replace(obj),
-  schema: async () => parseSettingsSchema(PI_INSTALL_DIR, PI_SETTINGS_RESOLVE_PATHS),
-};
-// 内核原生配置中性 API(配置 TAB 用):pi(settings.json 表单)+ dsh(settings.yaml 非模型段)。
-const kernelConfig: Record<KernelId, KernelConfigApi> = {
-  pi: createPiConfigApi(piSettings, { installDir: PI_INSTALL_DIR, homeDir: HOME_DIR }),
-  dsh: createDshConfigApi(dshConfigSource),
-};
-// 一次性问内核(cwd 取激活项目根,cliPath 与会话进程同源——自定义内核生效时 oneshot 不分裂)。
-const llmOneshot = (prompt: string): Promise<string> =>
-  runPiOneshot(prompt, {
-    cwd: sessionStore.getActiveCwd() ?? undefined,
-    cliPath: customCliPath(),
-  });
-// 内置 skills 挂/摘(pi settings.json skills[];shell 不碰 pi 存储格式,经适配器函数)。
+// 模型配置中性 API:从 registry 遍历 createModelsApi(加第四个内核 = 加插件 + 注册,此处零改动)。
+const kernelModels: KernelModelsRegistry = Object.fromEntries(
+  kernelRegistry.all().map((p) => [p.id, p.createModelsApi()]),
+) as KernelModelsRegistry;
+// pi settings.json 中性面已由 pi 插件的 createConfigApi 提供(插件内部构造 PiSettingsApi),
+// 壳不再单独构造 piSettings 注入 MainContext。
+// 内核原生配置中性 API(配置 TAB 用):从 registry 遍历 createConfigApi(加第四个内核零改动)。
+const kernelConfig: Record<KernelId, KernelConfigApi> = Object.fromEntries(
+  kernelRegistry.all().map((p) => [p.id, p.createConfigApi()]),
+) as Record<KernelId, KernelConfigApi>;
+// 内核版本管理中性 API:从 registry 遍历 createVersionApi(加第四个内核零改动)。
+const kernelVersionApis: Record<KernelId, KernelVersionApi> = Object.fromEntries(
+  kernelRegistry.all().map((p) => [p.id, p.createVersionApi()]),
+) as Record<KernelId, KernelVersionApi>;
+// 已注册内核 id 清单(运行时注册表顺序;替代 KERNEL_IDS 字面量数组,前端经 kernel.list IPC 拿)。
+const kernelIds: KernelId[] = kernelRegistry.all().map((p) => p.id);
+// 一次性问内核能力(从 registry 遍历 createOneshot;pi 有、dsh/minimal 无此面 → undefined)。
+const kernelOneshots: Record<KernelId, ((prompt: string, cwd?: string) => Promise<string>) | undefined> = Object.fromEntries(
+  kernelRegistry.all().map((p) => [p.id, p.createOneshot?.()]),
+) as Record<KernelId, ((prompt: string, cwd?: string) => Promise<string>) | undefined>;
+// 内置 skills 挂/摘 + 旧命名迁移(从 registry 遍历 ensureSkills/migrateSkills;pi 有、dsh/minimal 无)。
+const skillsPlugins = kernelRegistry.all().filter((p) => p.ensureSkills);
 const ensureBundledSkills = (enabled: boolean): Promise<boolean> =>
-  ensureBundledSkillsEntry({
-    settingsPath: join(PI_AGENT_DIR, "settings.json"),
-    targetDir: BUNDLED_SKILLS_DIR,
-    enabled,
-    homeDir: HOME_DIR,
-  });
-// 插件携带 skills 目录的挂/摘 hooks(生命周期 activate/deactivate 触发)。
+  skillsPlugins[0]?.ensureSkills?.(enabled) ?? Promise.resolve(false);
+const migrateSkills = (): Promise<boolean> =>
+  skillsPlugins[0]?.migrateSkills?.() ?? Promise.resolve(false);
+// 壳插件生命周期钩子(从 registry 遍历 createLifecycle;pi 有 skillsEnsure/piExtensionEnsure,
+// dsh/minimal 无)。onActivate/onDeactivate 返回 changed 供壳广播刷新。
+const lifecycles = kernelRegistry.all().map((p) => p.createLifecycle?.()).filter((l) => !!l);
 const pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]> = {
   async onActivate(pluginId, pluginPath, source) {
-    const skillsDir = join(pluginPath, "skills");
-    if (!existsSync(skillsDir) || readdirSync(skillsDir).length === 0) return;
-    const settingsPath = source === "project"
-      ? join(process.cwd(), ".pi", "settings.json")
-      : join(PI_AGENT_DIR, "settings.json");
-    const changed = await ensurePluginSkillsEntry({
-      settingsPath, skillsDir, active: true, homeDir: HOME_DIR,
-    });
-    if (changed) broadcastSettingsChanged(gateway);
+    for (const l of lifecycles) {
+      const changed = await l.skillsEnsure?.onActivate(pluginId, pluginPath, source);
+      if (changed) broadcastSettingsChanged(gateway);
+    }
   },
   async onDeactivate(pluginId, pluginPath, source) {
-    const skillsDir = join(pluginPath, "skills");
-    if (!existsSync(skillsDir)) return;
-    const settingsPath = source === "project"
-      ? join(process.cwd(), ".pi", "settings.json")
-      : join(PI_AGENT_DIR, "settings.json");
-    const changed = await ensurePluginSkillsEntry({
-      settingsPath, skillsDir, active: false, homeDir: HOME_DIR,
-    });
-    if (changed) broadcastSettingsChanged(gateway);
+    for (const l of lifecycles) {
+      const changed = await l.skillsEnsure?.onDeactivate(pluginId, pluginPath, source);
+      if (changed) broadcastSettingsChanged(gateway);
+    }
   },
 };
 // 插件携带 pi 内核扩展的挂/摘 hooks(写 ~/.pi/agent/extensions 是流出适配)。
 const pluginPiExtensionEnsure: NonNullable<PluginLifecycleDeps["piExtensionEnsure"]> = {
   onActivate(pluginId, pluginPath, piExtension) {
-    syncPluginPiExtension(pluginId, join(pluginPath, piExtension));
+    for (const l of lifecycles) l.piExtensionEnsure?.onActivate(pluginId, pluginPath, piExtension);
   },
   onDeactivate(pluginId) {
-    removePluginPiExtension(pluginId);
+    for (const l of lifecycles) l.piExtensionEnsure?.onDeactivate(pluginId);
   },
 };
 // 插件携带 dsh cordis 扩展的挂/摘 hooks(同步目录 + 挂 cordis.yml 块)。
+// 从 registry 遍历 createExtensionSync(dsh 有、pi/minimal 无此面)。
+const extensionSyncs = kernelRegistry.all().map((p) => p.createExtensionSync?.()).filter((s) => !!s);
 const pluginDshExtensionEnsure: NonNullable<PluginLifecycleDeps["dshExtensionEnsure"]> = {
   onActivate(pluginId, pluginPath, dshExtension) {
-    syncPluginDshExtension(pluginId, join(pluginPath, dshExtension), dshConfigSource);
+    for (const s of extensionSyncs) s.onActivate?.(pluginId, pluginPath, dshExtension);
   },
   onDeactivate(pluginId) {
-    removePluginDshExtension(pluginId, dshConfigSource);
+    for (const s of extensionSyncs) s.onDeactivate?.(pluginId);
   },
 };
 
-// dsh 提问桥(文件侧车桥在适配器层的收编):监听问句目录 → 投中性提问事件 → 汇入统一通道。
-// 全局单例,经 sessionStore.injectQuestion 与 pi 的 onQuestion 汇聚到同一批监听器。
-const dshQuestionBridge = new DshQuestionBridge();
-dshQuestionBridge.start();
-dshQuestionBridge.onQuestion((req) => {
-  sessionStore.injectQuestion({
-    kind: "question",
-    requestId: req.requestId,
-    sessionKey: req.sessionId,
-    questions: req.questions,
+// 提问桥(从 registry 遍历 createQuestionBridge;dsh 有、pi/minimal 无此面)。
+// 监听问句目录 → 投中性提问事件 → 经 sessionStore.injectQuestion 汇入统一通道。
+for (const p of kernelRegistry.all()) {
+  const bridge = p.createQuestionBridge?.();
+  if (!bridge) continue;
+  bridge.start();
+  bridge.onQuestion((req) => {
+    sessionStore.injectQuestion({
+      kind: "question",
+      requestId: req.requestId,
+      sessionKey: req.sessionId,
+      questions: req.questions,
+    });
   });
-});
+}
 
 // 统一项目级配置通道(unified-project-config.md):全局层 ~/.my-harness-desktop/config/,
 // 项目级经 getProjectDir 动态解析当前项目(sessionStore.getActiveCwd 是 main 侧 cwd 事实源)。
@@ -482,43 +379,22 @@ sessionStore.onKernelEvent((event) => {
 });
 
 // ---- restart-coordinator + extension-store(§6.4/§6.7) ----
-const restartCoordinator = new RestartCoordinatorImpl(sessionStore);
+restartCoordinator = new RestartCoordinatorImpl(sessionStore);
 restartCoordinator.onStateChange((sessionKey, state) => {
   gateway.broadcast("restart:state", sessionKey, state);
 });
 // 内核拓展源(中性契约 KernelExtensionSource):pi/dsh 各一个,基类管排序/标签/受保护,
 // 子类填数据源 + 落盘机制;onConfigChanged 统一接线 restartCoordinator(§extension-management §0)。
-const markPendingAll = (reason: string): void => {
-  const keys = sessionStore.getRunningSessionKeys();
-  restartCoordinator.markPendingAll(keys, reason);
-};
-const piExtensionManager = new PiExtensionManager({
-  agentDir: PI_AGENT_DIR,
-  piSettings: piSettingsStore,
-  onConfigChanged: markPendingAll,
-});
-const dshExtensionManager = new DshExtensionManager({
-  dshConfigSource,
-  dshKernelManager,
-  installDir: DSH_INSTALL_DIR,
-  onConfigChanged: markPendingAll,
-});
-const kernelExtensions = {
-  pi: piExtensionManager,
-  dsh: dshExtensionManager,
-};
+// 内核拓展源(中性契约 KernelExtensionSource):从 registry 遍历 createExtensionSource
+// (加第四个内核 = 加插件 + 注册,此处零改动)。
+const kernelExtensions = Object.fromEntries(
+  kernelRegistry.all().map((p) => [p.id, p.createExtensionSource()]),
+) as Record<KernelId, KernelExtensionSource>;
 
-// 技能聚合器:壳不读内核存储,只聚合 pi/dsh 的 SkillProvider(内核各自读自己的存储、回报)。
-// pi 扩展(读 settings.json + 扫目录 + 播报)、dsh 适配器(读 dsh fork 插件播报 + 写 disabled 名单)。
-const skillAggregator = new SkillAggregator([
-  new PiSkillProvider({
-    agentDir: PI_AGENT_DIR,
-    homeDir: HOME_DIR,
-    builtinSkillsDir: BUNDLED_SKILLS_DIR,
-    getCwd: () => sessionStore.getActiveCwd(),
-  }),
-  new DshSkillProvider({ dshHome: join(HOME_DIR, ".dsh") }),
-]);
+// 技能聚合器:壳不读内核存储,只聚合各内核插件的 createSkillProvider(内核各自读自己的存储、回报)。
+const skillAggregator = new SkillAggregator(
+  kernelRegistry.all().map((p) => p.createSkillProvider?.()).filter((s): s is SkillProvider => !!s),
+);
 
 const ctx: MainContext = {
   paths: {
@@ -537,16 +413,10 @@ const ctx: MainContext = {
     installedDir,
   },
   prefsStore,
-  customCliPath,
   configStore,
-  piSettings,
-  modelsConfig: modelsStore,
   modelCatalog,
-  dshConfigSource,
   kernelModels,
   kernelConfig,
-  piKernelManager,
-  dshKernelManager,
   registry,
   skillAggregator,
   sessionStore,
@@ -554,8 +424,10 @@ const ctx: MainContext = {
   restartCoordinator,
   kernelExtensions,
   kernelLogos: KERNEL_LOGOS,
+  kernelVersionApis,
+  kernelIds,
+  kernelOneshots,
   fitPiExtensionAvailable,
-  llmOneshot,
   ensureBundledSkills,
   pluginSkillsEnsure,
   pluginPiExtensionEnsure,
@@ -616,40 +488,25 @@ registerRemote(gateway, auth, {
   // 放在启动序列而非等 IPC:"用 my-harness-desktop 就有"不依赖用户先打开设置页。
   mirrorBundledSkills(bundledSkillsSource, BUNDLED_SKILLS_DIR);
   // 改名迁移:旧数据根 ~/.pi-desktop* 的 +/- 条目重写到新数据根,先迁移后注入、串行。
-  void migrateLegacySkillPatterns(join(PI_AGENT_DIR, "settings.json"))
+  void migrateSkills()
     .then((changed) => { if (changed) broadcastSettingsChanged(gateway); })
     .catch((e) => console.error("[bundled-skills] 改名迁移失败:", e));
   // 内置表情包启动同步:镜像到数据根受管目录,stickers 插件按只读 builtin 层读它。
   mirrorManagedDir(bundledStickersSource, BUNDLED_STICKERS_DIR);
-  void ensureBundledSkillsEntry({
-    settingsPath: join(PI_AGENT_DIR, "settings.json"),
-    targetDir: BUNDLED_SKILLS_DIR,
-    enabled: prefsStore.get("bundledSkillsEnabled"),
-    homeDir: HOME_DIR,
-  }).then((changed) => { if (changed) broadcastSettingsChanged(gateway); })
+  void ensureBundledSkills(prefsStore.get("bundledSkillsEnabled"))
+    .then((changed) => { if (changed) broadcastSettingsChanged(gateway); })
     .catch((e) => console.error("[bundled-skills] 启动同步失败:", e));
 
   void (async () => {
     let anyChanged = false;
-    for (const [, plugin] of registry.allPlugins()) {
-      const skillsDir = join(plugin.path, "skills");
-      if (!existsSync(skillsDir)) continue;
-      try {
-        if (readdirSync(skillsDir).length === 0) continue;
-      } catch { continue; }
-      const settingsPath = plugin.source === "project"
-        ? join(process.cwd(), ".pi", "settings.json")
-        : join(PI_AGENT_DIR, "settings.json");
-      try {
-        const changed = await ensurePluginSkillsEntry({
-          settingsPath,
-          skillsDir,
-          active: true,
-          homeDir: HOME_DIR,
-        });
-        if (changed) anyChanged = true;
-      } catch (e) {
-        console.error(`[plugin-skills] ensure 失败 (${plugin.manifest.id}):`, e);
+    for (const [id, plugin] of registry.allPlugins()) {
+      for (const l of lifecycles) {
+        try {
+          const changed = await l.skillsEnsure?.onActivate(id, plugin.path, plugin.source);
+          if (changed) anyChanged = true;
+        } catch (e) {
+          console.error(`[plugin-skills] ensure 失败 (${plugin.manifest.id}):`, e);
+        }
       }
     }
     if (anyChanged) broadcastSettingsChanged(gateway);
@@ -665,10 +522,10 @@ registerRemote(gateway, auth, {
       for (const [id, plugin] of registry.allPlugins()) {
         const rel = plugin.manifest.piExtension;
         if (!rel || disabled.includes(id)) continue;
-        syncPluginPiExtension(id, resolve(plugin.path, rel));
+        for (const l of lifecycles) l.piExtensionEnsure?.onActivate(id, resolve(plugin.path, rel), rel);
         active.add(id);
       }
-      reconcilePluginPiExtensions(active);
+      for (const l of lifecycles) l.piExtensionEnsure?.reconcile?.(active);
     } catch (e) {
       console.error("[pi-extension] 启动同步失败:", e);
     }
@@ -680,17 +537,17 @@ registerRemote(gateway, auth, {
     try {
       const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
       // 统一适配插件:bootstrap 常驻,先于任何 dsh spawn(合并后的单一块)。
-      syncFitDshExtension(DSH_FIT_EXTENSION_SOURCE, dshConfigSource);
+      for (const s of extensionSyncs) s.syncFit?.(DSH_FIT_EXTENSION_SOURCE);
       const active = new Set<string>([FIT_DSEXTENSION_ID]);
       // 第三方插件仍可经 manifest.dshExtension 携带 dsh cordis 插件(通用通道,随插件启停)。
       for (const [id, plugin] of registry.allPlugins()) {
         const rel = plugin.manifest.dshExtension;
         if (!rel || disabled.includes(id)) continue;
-        syncPluginDshExtension(id, resolve(plugin.path, rel), dshConfigSource);
+        for (const s of extensionSyncs) s.onActivate?.(id, resolve(plugin.path, rel), rel);
         active.add(id);
       }
       // 对账:PLUGINS_ROOT 下带 marker 但不在 active 的目录(含旧 ask/goal/read-claude-md/skill-manager)摘除。
-      reconcilePluginDshExtensions(active, dshConfigSource);
+      for (const s of extensionSyncs) s.reconcile?.(active);
     } catch (e) {
       console.error("[dsh-extension] 启动同步失败:", e);
     }
@@ -744,10 +601,7 @@ registerRemote(gateway, auth, {
   // dist-tag 最新版自动补装。fire-and-forget,不阻断启动;失败只 warn 不崩。进度不进 UI(后台静默),
   // 装完广播 refresh 让「未安装」只读条消失;进度/结果回调为后续插件安装/更新扫描预留同一形状。
   void reconcileMissingKernels(
-    [
-      { kernel: "pi", manager: piKernelManager },
-      { kernel: "dsh", manager: dshKernelManager },
-    ],
+    kernelRegistry.all().map((p) => ({ kernel: p.id, versionApi: p.createVersionApi() })),
     (_kernel, _line) => { /* 后台静默,进度仅日志(不打扰用户) */ },
     (result) => {
       if (result.outcome === "installed") {

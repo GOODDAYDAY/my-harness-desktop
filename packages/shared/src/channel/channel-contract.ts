@@ -88,52 +88,32 @@ export const IPC = {
     resources: "i18n:resources",
   },
   kernel: {
-    install: "kernel:install",
-    installDone: "kernel:install-done",
-    installProgress: "kernel:install-progress",
-    listVersions: "kernel:listVersions",
-    status: "kernel:status",
-    setCustomCliDir: "kernel:setCustomCliDir",
-    fitPiExtensionAvailable: "kernel:fitPiExtensionAvailable",
+    // 内核清单(id + logo),从运行时注册表动态提供(替代 KERNEL_IDS 字面量数组)
+    list: "kernel:list",
+  },
+  // 内核版本管理中性端点(带 kernel 参数,替代原 kernel 与 dshKernel 两套独立端点)。
+  kernelVersion: {
+    status: "kernel-version:status",
+    setCustomCliDir: "kernel-version:setCustomCliDir",
+    listVersions: "kernel-version:listVersions",
+    install: "kernel-version:install",
+    installProgress: "kernel-version:install-progress",
+    installDone: "kernel-version:install-done",
+    fitPiExtensionAvailable: "kernel-version:fitPiExtensionAvailable",
   },
   misc: {
     openFile: "open-file",
     revealPath: "reveal-path",
   },
   models: {
-    get: "models:get",
-    set: "models:set",
+    // 合流模型清单(modelCatalog) + 兜底模型,中性能力;pi models.json 整份读写已收敛到 kernelModels["pi"].readConfig/saveConfig。
     list: "models:list",
     getFallbackModel: "models:getFallbackModel",
   },
   notification: {
     show: "notification:show",
   },
-  piSettings: {
-    get: "pi-settings:get",
-    schema: "pi-settings:schema",
-    set: "pi-settings:set",
-  },
-  dshKernel: {
-    status: "dsh-kernel:status",
-    setCustomCliDir: "dsh-kernel:setCustomCliDir",
-    listVersions: "dsh-kernel:listVersions",
-    install: "dsh-kernel:install",
-  },
-  dshModels: {
-    get: "dsh-models:get",
-    set: "dsh-models:set",
-    removeProvider: "dsh-models:removeProvider",
-    renameProvider: "dsh-models:renameProvider",
-    getDefault: "dsh-models:getDefault",
-    setDefault: "dsh-models:setDefault",
-    test: "dsh-models:test",
-  },
 
-  dshSettings: {
-    get: "dsh-settings:get",
-    set: "dsh-settings:set",
-  },
   kernelModels: {
     list: "kernel-models:list",
     set: "kernel-models:set",

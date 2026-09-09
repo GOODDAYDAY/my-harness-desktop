@@ -7,11 +7,12 @@ import type { RemoteTransport } from "../transport/ws-transport";
 import { IPC } from "@my-harness-desktop/shared";
 import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry, SessionHeaderChangedEvent } from "@my-harness-desktop/shared";
 import type { DshProvider, DshDefaultModel } from "@my-harness-desktop/shared";
-import type { KernelId, KernelLogo, KernelStatusView } from "@my-harness-desktop/shared";
+import type { KernelId, KernelLogo, KernelStatusView, KernelVersionApi } from "@my-harness-desktop/shared";
 
 
-/** 从 RemoteTransport + 平台值构建完整 kernel API(§15.3)。Core 方法走 transport,platform 注入。 */
-export function buildKernel(transport: RemoteTransport, platform: string): KernelApi {
+/** 从 RemoteTransport + 平台值构建完整 kernel API(§15.3)。Core 方法走 transport,platform 注入。
+ *  kernelIds = 已注册内核清单(boot 时从 kernel.list IPC 拿,替代 KERNEL_IDS 字面量数组)。 */
+export function buildKernel(transport: RemoteTransport, platform: string, kernelIds: KernelId[]): KernelApi {
 /** 中性模型配置 API 的 preload 桥（pi/dsh 共用一个形状）。 */
 function kernelModelsFor(kernel: KernelId) {
   return {
@@ -37,8 +38,47 @@ function kernelConfigFor(kernel: KernelId) {
   };
 }
 
+/** 内核版本管理的中性桥(带 kernel 参数):status/setCustomCliDir/listVersions/install。
+ *  install 的进度/完成事件带 kernel 首参,按 kernel 过滤(避免多内核并发安装串扰)。 */
+function kernelVersionFor(kernel: KernelId): KernelVersionApi {
+  return {
+    status: (): Promise<KernelStatusView> => transport.invoke(IPC.kernelVersion.status, kernel),
+    setCustomCliDir: (dir: string) => transport.invoke(IPC.kernelVersion.setCustomCliDir, kernel, dir),
+    listVersions: (forceRefresh = false) => transport.invoke(IPC.kernelVersion.listVersions, kernel, forceRefresh),
+    install: (version, onProgress, onDone) => {
+      const progListener = (k: KernelId, line: string): void => { if (k === kernel) onProgress(line); };
+      let cleaned = false;
+      const doneListener = (k: KernelId, r: { ok: boolean; error: string | null }): void => {
+        if (k !== kernel) return;
+        try { onDone(r); } catch (e) { console.error("[my-harness-desktop] kernel install onDone threw", e); }
+        resolveFn?.(r);
+        setTimeout(() => cleanup(), 0);
+      };
+      const cleanup = (): void => {
+        if (cleaned) return;
+        cleaned = true;
+        transport.off(IPC.kernelVersion.installProgress, progListener);
+        transport.off(IPC.kernelVersion.installDone, doneListener);
+      };
+      transport.on(IPC.kernelVersion.installProgress, progListener);
+      transport.on(IPC.kernelVersion.installDone, doneListener);
+      let resolveFn: ((r: { ok: boolean; error: string | null }) => void) | null = null;
+      const invokeP = transport.invoke(IPC.kernelVersion.install, kernel, version) as Promise<{ ok: boolean; error: string | null }>;
+      invokeP.catch(() => cleanup());
+      return new Promise((resolve) => {
+        resolveFn = resolve;
+        setTimeout(() => { if (!cleaned) { cleanup(); resolveFn?.({ ok: false, error: "安装超时" }); } }, 300000);
+      });
+    },
+    // tool-gate 扩展可用性探测(能力探测,带 kernel 参数;后端 pi 有、dsh/minimal 无 → false)。
+    fitPiExtensionAvailable: (): Promise<boolean> => transport.invoke(IPC.kernelVersion.fitPiExtensionAvailable, kernel),
+  };
+}
+
 /** 暴露到 renderer 的 kernel 全局对象(window.kernel)。 */
 const kernel = {
+  /** 已注册内核 id 清单(boot 时从 kernel.list IPC 拿,替代 KERNEL_IDS 字面量数组)。 */
+  kernelIds,
   /** 插件配置:统一项目级配置通道(项目级 <cwd>/.my-harness-desktop/config/{id}.json 默认,
    *  全局 ~/.my-harness-desktop/config/{id}.json 兜底)。renderer 不直接写,经此 → main → ConfigStore。 */
   config: {
@@ -132,125 +172,10 @@ const kernel = {
     settingsGroups: (): Promise<{ id: string; titleKey: string; order?: number; fields: { key: string; type: "boolean" | "enum" | "int"; default?: boolean | string | number; titleKey: string; descKey?: string; options?: Array<number | { value: string; labelKey?: string }> }[]; pluginId: string }[]> =>
       transport.invoke(IPC.slots.settingsGroups),
   },
-  /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各一个,同构 status/setCustomCliDir/
-   *  listVersions/install;pi 多 fitPiExtensionAvailable。 */
-  kernels: {
-    pi: {
-    status: (): Promise<KernelStatusView> => transport.invoke(IPC.kernel.status),
-    /** 设置/清除自定义内核目录(docs/design/custom-cli-path.md):空串=清除;
-     *  校验不过不写入,返回 error;成功返回新 status + 被标 restart pending 的会话数。 */
-    setCustomCliDir: (dir: string): Promise<{
-      ok: boolean;
-      error: string | null;
-      pendingCount: number;
-      status: KernelStatusView | null;
-    }> => transport.invoke(IPC.kernel.setCustomCliDir, dir),
-    fitPiExtensionAvailable: (): Promise<boolean> => transport.invoke(IPC.kernel.fitPiExtensionAvailable),
-    listVersions: (forceRefresh = false): Promise<{
-      versions: string[];
-      latest: string | null;
-    }> => transport.invoke(IPC.kernel.listVersions, forceRefresh),
-    /** 安装/切换 pi 版本到 ~/.my-harness-desktop/pi(覆盖式:装新=更新、装旧=降级)。
-     *  进度经 onProgress,完成经 onDone。完成信号以 onDone 为准(main send done),
-     *  不靠 invoke 返回值(invoke reply 与 done 事件顺序不保证,曾致 onDone 不触发卡住)。 */
-    install: (
-      version: string,
-      onProgress: (line: string) => void,
-      onDone: (r: { ok: boolean; error: string | null }) => void,
-    ): Promise<{ ok: boolean; error: string | null }> => {
-      const progListener = (line: string) => onProgress(line);
-      transport.on("kernel:install-progress", progListener);
-      let cleaned = false;
-      const cleanup = (): void => {
-        if (cleaned) return;
-        cleaned = true;
-        transport.off("kernel:install-progress", progListener);
-        transport.off("kernel:install-done", doneListener);
-      };
-      let resolveFn: ((r: { ok: boolean; error: string | null }) => void) | null = null;
-      const doneListener = (r: { ok: boolean; error: string | null }) => {
-        // 先调 onDone 再延迟 cleanup:在监听器内同步移除 off2(自己)会中断后续
-        // onDone 调用,故 onDone 先执行、cleanup 延迟到当前监听器返回后(setTimeout 0)
-        try {
-          onDone(r);
-        } catch (e) {
-          console.error("[my-harness-desktop] kernel install onDone threw", e);
-        }
-        resolveFn?.(r);
-        setTimeout(() => cleanup(), 0);
-      };
-      transport.on("kernel:install-done", doneListener);
-      const invokeP = transport.invoke(IPC.kernel.install, version) as Promise<{ ok: boolean; error: string | null }>;
-      // invoke reject/异常时也清(兜底,正常路径 onDone 触发 cleanup)
-      invokeP.catch(() => cleanup());
-      return new Promise((resolve) => {
-        resolveFn = resolve;
-        // 兜底:onDone 5 分钟未到(安装卡死)也 resolve,避免 Promise 永悬
-        setTimeout(() => { if (!cleaned) { cleanup(); resolveFn?.({ ok: false, error: "安装超时" }); } }, 300000);
-      });
-    },
-    },
-    dsh: {
-    status: (): Promise<KernelStatusView> => transport.invoke(IPC.dshKernel.status),
-    setCustomCliDir: (dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }> =>
-      transport.invoke(IPC.dshKernel.setCustomCliDir, dir),
-    listVersions: (forceRefresh = false): Promise<{ versions: string[]; latest: string | null }> =>
-      transport.invoke(IPC.dshKernel.listVersions, forceRefresh),
-    install: (
-      version: string,
-      onProgress: (line: string) => void,
-      onDone: (r: { ok: boolean; error: string | null }) => void,
-    ): Promise<{ ok: boolean; error: string | null }> => {
-      const progListener = (line: string) => onProgress(line);
-      transport.on("kernel:install-progress", progListener);
-      let cleaned = false;
-      const cleanup = (): void => {
-        if (cleaned) return;
-        cleaned = true;
-        transport.off("kernel:install-progress", progListener);
-      };
-      let resolveFn: ((r: { ok: boolean; error: string | null }) => void) | null = null;
-      const doneListener = (r: { ok: boolean; error: string | null }) => {
-        cleanup();
-        onDone(r);
-        resolveFn?.(r);
-      };
-      transport.on("kernel:install-done", doneListener);
-      const invokeP = transport.invoke(IPC.dshKernel.install, version) as Promise<{ ok: boolean; error: string | null }>;
-      invokeP.catch(() => cleanup());
-      return new Promise((resolve) => {
-        resolveFn = resolve;
-        setTimeout(() => { if (!cleaned) { cleanup(); resolveFn?.({ ok: false, error: "安装超时" }); } }, 300000);
-      });
-    },
-    },
-  },
-  /** dsh 模型配置(读写 settings.yaml 的多 provider 路由详情 + 默认模型)。 */
-  dshModels: {
-    get: (): Promise<DshProvider[]> => transport.invoke(IPC.dshModels.get),
-    set: (provider: string, detail: Omit<DshProvider, "provider">): Promise<DshProvider[]> =>
-      transport.invoke(IPC.dshModels.set, provider, detail),
-    removeProvider: (provider: string): Promise<DshProvider[]> =>
-      transport.invoke(IPC.dshModels.removeProvider, provider),
-    renameProvider: (oldId: string, newId: string): Promise<DshProvider[]> =>
-      transport.invoke(IPC.dshModels.renameProvider, oldId, newId),
-    getDefault: (): Promise<DshDefaultModel | null> =>
-      transport.invoke(IPC.dshModels.getDefault),
-    setDefault: (sel: DshDefaultModel): Promise<DshDefaultModel | null> =>
-      transport.invoke(IPC.dshModels.setDefault, sel),
-    test: (cwd: string, provider: string, modelId: string): Promise<{ ok: boolean; error?: string }> =>
-      transport.invoke(IPC.dshModels.test, cwd, provider, modelId),
-  },
-  /** dsh 配置(整份 ~/.dsh/settings.yaml 读写)。 */
-  dshSettings: {
-    get: (): Promise<Record<string, unknown>> => transport.invoke(IPC.dshSettings.get),
-    set: (obj: Record<string, unknown>): Promise<Record<string, unknown>> => transport.invoke(IPC.dshSettings.set, obj),
-  },
-  /** 中性内核管理 API：模型页(kernel-design-spec.md §12.5):pi/dsh 各一个适配器。 */
-  kernelModels: {
-    pi: kernelModelsFor("pi"),
-    dsh: kernelModelsFor("dsh"),
-  },
+  /** 内核版本管理(中性,从 KERNEL_IDS 注册清单遍历):status/setCustomCliDir/listVersions/install。 */
+  kernels: Object.fromEntries(kernelIds.map((k) => [k, kernelVersionFor(k)])) as KernelApi["kernels"],
+  /** 中性内核管理 API：模型页(kernel-design-spec.md §12.5):从 KERNEL_IDS 注册清单遍历。 */
+  kernelModels: Object.fromEntries(kernelIds.map((k) => [k, kernelModelsFor(k)])) as KernelApi["kernelModels"],
   /** 模型探测(发现 + ping;domain ModelProbeApi):纯 HTTP,内核无关。 */
   modelsProbe: {
     discover: (input: { baseUrl: string; apiKey?: string; api?: string }): Promise<unknown> =>
@@ -258,23 +183,13 @@ const kernel = {
     ping: (input: { baseUrl: string; apiKey?: string; api?: string; model: string }): Promise<unknown> =>
       transport.invoke(IPC.modelProbe.ping, input),
   },
-  /** 中性内核原生配置 API(kernel 配置 TAB 用):pi/dsh 各一个适配器。 */
-  kernelConfig: {
-    pi: kernelConfigFor("pi"),
-    dsh: kernelConfigFor("dsh"),
-  },
+  /** 中性内核原生配置 API(kernel 配置 TAB 用):从 KERNEL_IDS 注册清单遍历。 */
+  kernelConfig: Object.fromEntries(kernelIds.map((k) => [k, kernelConfigFor(k)])) as KernelApi["kernelConfig"],
   /** 内核身份标(logo)取回:每个内核在自己适配器声明,壳经此取回渲染(不硬编码)。 */
   kernelLogos: {
     get: (kernel: KernelId): Promise<KernelLogo> => transport.invoke(IPC.kernelLogos.get, kernel),
   },
-  /** pi 内核 settings(读写 ~/.pi/agent/settings.json,内核标准契约)。 */
-  piSettings: {
-    get: (): Promise<Record<string, unknown>> => transport.invoke(IPC.piSettings.get),
-    set: (patch: Record<string, unknown>): Promise<Record<string, unknown>> =>
-      transport.invoke(IPC.piSettings.set, patch),
-    /** 解析内核 .d.ts 拿当前版本所有字段(未知字段兜底用) */
-    schema: (): Promise<{ key: string; type: string }[]> => transport.invoke(IPC.piSettings.schema),
-  },
+  /** pi settings 经中性面 kernelConfig["pi"] 访问,不再暴露专属 piSettings 桥。 */
   /** i18n:语言槽合并后给 renderer init + locale 列表 + 检测(05-plugin-i18n)。 */
   i18n: {
     resources: (): Promise<{
@@ -285,10 +200,8 @@ const kernel = {
     list: (): Promise<{ id: string; name: string }[]> => transport.invoke(IPC.i18n.list),
     detect: (navigatorLanguage: string): Promise<string> => transport.invoke(IPC.i18n.detect, navigatorLanguage),
   },
-  /** pi 内核模型配置(读写 ~/.pi/agent/models.json)。 */
+  /** 中性模型面:合流清单 + 兜底模型;pi models.json 整份读写经 kernelModels["pi"].readConfig/saveConfig。 */
   models: {
-    get: <T>(): Promise<T> => transport.invoke(IPC.models.get),
-    set: <T>(config: T): Promise<T> => transport.invoke(IPC.models.set, config),
     /** 合流模型清单(pi + dsh,带 kernel 标;会话流模型下拉用)。 */
     list: (): Promise<unknown[]> => transport.invoke(IPC.models.list),
     /** 中性「默认或首项模型」(新会话无显式选择时的发送兜底;不直读 pi models.json)。 */
@@ -333,7 +246,7 @@ const kernel = {
     getSnapshot: (): Promise<unknown> => transport.invoke(IPC.session.getSnapshot),
     sync: (): Promise<unknown> => transport.invoke(IPC.session.sync),
     switchKernel: (target: KernelId): Promise<void> => transport.invoke(IPC.session.switchKernel, target),
-    getCapabilities: (): Promise<{ kernel: KernelId | null; locked: boolean; piExtension: boolean; dshExtension: boolean }> => transport.invoke(IPC.session.getCapabilities),
+    getCapabilities: (): Promise<{ kernel: KernelId | null; locked: boolean; extension: boolean; thinking: boolean }> => transport.invoke(IPC.session.getCapabilities),
     openSession: (sessionPath: string): Promise<unknown> =>
       transport.invoke(IPC.session.open, sessionPath),
     readToolConfig: (sessionPath: string): Promise<SessionToolConfig | null> =>
@@ -422,7 +335,7 @@ const kernel = {
     runBash: (command: string, excludeFromContext?: boolean): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
       transport.invoke(IPC.session.runBash, command, excludeFromContext),
     abortBash: (): Promise<void> => transport.invoke(IPC.session.abortBash),
-    // pi 内核专属扩展面(§7.6):壳插件经 capabilities.piExtension 探测「有则用、无则降级」
+    // pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensionsExtension 探测「有则用、无则降级」
     pi: {
       steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
         transport.invoke(IPC.session.steer, text, images),

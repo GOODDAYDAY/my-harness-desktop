@@ -1,0 +1,5 @@
+{
+  "id": "dsh",
+  "factory": "./plugin.js",
+  "order": 2
+}

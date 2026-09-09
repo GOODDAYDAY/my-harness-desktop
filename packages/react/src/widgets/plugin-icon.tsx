@@ -75,9 +75,10 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 export function PluginIcon({ name, className, style }: { name: string; className?: string; style?: React.CSSProperties }): ReactNode {
-  // 内核身份标("pi"/"dsh")委托 KernelLogo:logo path 由内核自己在适配器里声明,
-  // 壳不硬编码(机制与内容分离)。其余按 lucide 图标表解析,未知回落 Puzzle。
-  if (name === "pi" || name === "dsh") return <KernelLogo kernel={name} className={className} style={style} />;
+  // 内核身份标委托 KernelLogo:logo path 由内核自己在适配器里声明,壳不硬编码(机制与内容分离)。
+  // 判据用 window.kernel.kernelIds(注册表清单),不写死 name === "pi" || "dsh"——加第四个内核不用改这里。
+  // 其余按 lucide 图标表解析,未知回落 Puzzle。
+  if (window.kernel.kernelIds.includes(name)) return <KernelLogo kernel={name} className={className} style={style} />;
   const Icon = ICONS[name] ?? Puzzle;
   return <Icon className={className ?? "size-4"} style={style} />;
 }
