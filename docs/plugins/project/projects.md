@@ -185,6 +185,7 @@ if (dir === currentCwd) {
 - `activeName = currentCwd ? pathBasename(currentCwd) : undefined`：当前项目的目录名（`pathBasename` 是圆心纯函数，同时按 `/` 与 `\` 切分，见 `packages/shared/src/domain/path-utils.ts:13-16`）。
 - `setSectionOpen(open)`：折叠态反转并落盘 `sectionCollapsed`。
 - 渲染：`<Section title={t("projects.title")} open={!collapsed} onOpenChange={...} collapsedSuffix={...} actions={<button onClick={openDirectory}><Plus/></button>}>`。`Section` 是 `packages/react/src/widgets/section.tsx:24` 的受控折叠容器——`collapsedSuffix` 是折叠时贴在标题旁的项目名 chip（第 100-132 行那个 `role="button"` 的 span，点击即展开、全路径放 `title` 提示），`actions` 是右侧「+」按钮。
+- **收起会把腾出的高度让给会话区**：projects 只提供折叠态（自己的 `sectionCollapsed`），联动由壳完成——`Section` 挂 `data-section-collapsed` / `data-section-header` 两个声明式锚点，左栏壳据此把整组 Panel 塌缩到折叠头高度、空间交给后面的组（机制与实测数字见 `docs/sidebar.md` §5.4）。插件不感知、也不需要为它写任何代码。
 
 ### 5.8 `ProjectRow`（第 158-206 行）：单条项目行
 

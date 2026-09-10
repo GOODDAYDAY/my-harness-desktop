@@ -31,9 +31,14 @@ export function Section({ title, actions, defaultOpen = true, open: controlledOp
     onOpenChange?.(next);
   };
   return (
-    <div className="flex flex-col min-h-0 shrink-0">
+    // 两个声明式锚点(壳消费,不是样式契约):
+    //   data-section-collapsed —— 收起态。左栏壳据此把"整组都收起"的分隔面板塌到折叠头高度,
+    //     把腾出的高度让给后面的组(旧版同处一个 Panel 时由 flex 自动让位,分家后要靠这个信号)。
+    //   data-section-header    —— 折叠头元素。壳量它的高度作为塌缩目标高度(展开态也能量,
+    //     不必等收起动画落定)。
+    <div className="flex flex-col min-h-0 shrink-0" data-section-collapsed={open ? undefined : "true"}>
       {/* 头部:整行可点——button flex-1 撑满到右侧 actions 为止,点击行内空白也折叠 */}
-      <div className="flex items-center select-none shrink-0 whitespace-nowrap">
+      <div className="flex items-center select-none shrink-0 whitespace-nowrap" data-section-header="">
         <button
           aria-expanded={open}
           onClick={toggle}

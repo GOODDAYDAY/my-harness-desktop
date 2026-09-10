@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // 左栏面板分隔线 e2e —— 真实产物 + 隔离 HOME,验"项目区 / 会话区之间能不能上下拉"。
 //
-// 覆盖三件事(§5.6 第 3 级:jsdom 测不了的都在这里验——真实排版才有像素高度):
+// 覆盖四件事(§5.6 第 3 级:jsdom 测不了的都在这里验——真实排版才有像素高度):
 //   A) 两个 group → 两个 Panel + 一条可拖拽分隔线;首屏比例 = defaultSize 提示(25/75),不是均分;
+//   A2) 折叠联动:收起项目分组 → 项目面板塌到折叠头高度、会话面板跟上来(空间让位);
+//       再展开 → 比例复位。回归守卫:分组分家后折叠只塌内容、面板份额不动,原地留一块空白
+//       (旧版三居民同处一个 Panel 时靠 flex 自动让位);
 //   B) 真实鼠标拖分隔线 → 高度比随拖动改变,reload 后保持(autoSaveId 持久化);
 //   C) 隐藏分割线的侧栏风格(card)下,手柄热区仍在、照样能拖
 //      —— 回归守卫:旧实现"热区与线共用一个 token",card/minimal/glass 三种风格里
@@ -46,7 +49,7 @@ const shot = async (page, name) => {
   await page.screenshot({ path: join(shotsDir, `${String(shotN).padStart(2, "0")}-${name}.png`) });
 };
 
-/** 左栏几何:两个 Panel 的高度 + 分隔线手柄(热区/内线/光标)的实测样式。
+/** 左栏几何:两个 Panel 的高度 + 分隔线手柄(热区/内线/光标)的实测样式 + 项目分组折叠头。
  *  注意根元素筛选:`data-sidebar-style` 属性在两处出现——框架左栏(sidebar.tsx)与设置页
  *  自己的左列表(settings-page.tsx,activeView=chat 时 visibility:hidden 但仍挂载)。
  *  querySelector 撞上后者会量到设置页的面板(实测就踩过:比例断言读到 30.3% 而非 25%)。
@@ -65,9 +68,14 @@ const SIDEBAR_GEOM = () => {
   const h = sidebar.querySelector('[role="separator"]');
   const line = h?.firstElementChild ?? null;
   const hr = h?.getBoundingClientRect() ?? null;
+  // 折叠头(data-section-header):收起后它必须还在且可见(唯一的展开入口)
+  const header = sidebar.querySelector("[data-section-header]");
+  const hdr = header?.getBoundingClientRect() ?? null;
   return {
     rootCandidates: candidates.length,
     panels,
+    headerExpanded: header?.querySelector("button[aria-expanded]")?.getAttribute("aria-expanded") ?? null,
+    headerH: hdr ? Math.round(hdr.height) : 0,
     handle: h && hr ? {
       x: Math.round(hr.x + hr.width / 2),
       y: Math.round(hr.y + hr.height / 2),
@@ -82,6 +90,21 @@ const SIDEBAR_GEOM = () => {
 const geom = (page) => page.evaluate(SIDEBAR_GEOM);
 const ratio = (g) => g.panels[0].h / (g.panels[0].h + g.panels[1].h);
 
+/** 点左栏第一个分组头(项目)的折叠按钮 —— 真实鼠标,走 CDP 命中测试。 */
+async function clickGroupHeader(page, label) {
+  const rect = await page.evaluate((text) => {
+    const sidebar = document.querySelector("[data-sidebar-style]");
+    const btn = [...sidebar.querySelectorAll("[data-section-header] button[aria-expanded]")]
+      .find((b) => (b.textContent || "").includes(text));
+    if (!btn) return null;
+    const r = btn.getBoundingClientRect();
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  }, label);
+  if (!rect) throw new Error(`未找到分组「${label}」的折叠按钮`);
+  await page.mouse.click(rect.x, rect.y);
+  return rect;
+}
+
 let app = null;
 try {
   app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18461" }, timeoutMs: 90000 });
@@ -92,13 +115,14 @@ try {
   await page.waitForSelector("[data-sidebar-style]", { timeout: 30000 });
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 25000 });
 
-  // 首屏比例断言要求"库里还没有已存比例",但 react-resizable-panels 把它存在 localStorage,
-  // 而 localStorage 是**按 origin(MHD_PORT)共享**的:隔离 HOME 只管应用自己的配置目录
-  // (数据根/.pi agentDir),管不到渲染进程的 origin 存储——用户数据目录在 POSIX 上没被隔离
-  // (仅 win32 分支加了 --user-data-dir)。于是同一端口的上一轮运行(本脚本自己拖过分隔线)
-  // 会把比例留给下一轮:实测第二轮首屏读到 30.3% 而非 25%,断言假失败。
-  // 故这里清一次本地存储并重载,拿到真正的"首次渲染";生产语义不受影响(用户拖出的比例
-  // 本来就该持久化,这是产品行为,不是缺陷)。
+  // 首屏比例断言要求"库里还没有已存比例",而 react-resizable-panels 把比例存在 localStorage,
+  // 它是**按 origin(MHD_PORT)共享**的渲染进程存储:隔离 HOME 只覆盖应用自己的配置目录
+  // (Node 侧读 $HOME),管不到 Chromium profile——macOS 上 profile 走 NSHomeDirectory(),
+  // 永远是真实 ~/Library/Application Support/<App>。同一端口的上一轮运行(本脚本自己拖过
+  // 分隔线)会把比例留给下一轮:实测第二轮首屏读到 30.3% 而非 25%,断言假失败。
+  // 现在两道保险:① app.mjs 所有平台都传 --user-data-dir 落隔离 HOME(每次运行干净 profile);
+  // ② 这里再主动清一次本地存储并重载——防"复用 profile"的跑法(手工 --keep 复跑、同端口
+  // 复跑)与将来端口复用。生产语义不受影响(用户拖出的比例本来就该持久化)。
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("[data-sidebar-style]", { timeout: 30000 });
@@ -116,8 +140,47 @@ try {
   const r0 = ratio(g);
   const lsDump = await page.evaluate(() => localStorage.getItem("react-resizable-panels:sidebar-v"));
   ok(Math.abs(r0 - 0.25) < 0.05, `首屏比例 ≈ defaultSize 25%(实际 ${(r0 * 100).toFixed(1)}%,均分会是 50%;几何=${JSON.stringify(g.panels)} 候选根=${g.rootCandidates} localStorage=${lsDump})`);
+  const projectsH = g.panels[0].h;
+  const sessionsH = g.panels[1].h;
+
+  // ── A2) 折叠联动:收起项目分组 → 项目面板塌到折叠头高度,会话区跟上来;再展开 → 复位 ──
+  await clickGroupHeader(page, "项目");
+  // 面板尺寸由库直接改(无动画),内容折叠是 CSS 动画;等"项目面板确实变小"这个事实落定
+  await page.waitForFunction(
+    (h0) => {
+      const sb = document.querySelector("[data-sidebar-style]");
+      const p = sb?.querySelector('[data-panel=""]');
+      return !!p && p.getBoundingClientRect().height < h0 - 60;
+    },
+    { timeout: 6000, polling: 200 },
+    projectsH,
+  ).catch(() => {});
+  let gc = await geom(page);
+  await shot(page, "collapsed-projects");
+  ok(gc.panels[0].h < projectsH - 60, `收起项目分组 → 项目面板塌下去(${projectsH}px → ${gc.panels[0].h}px)`);
+  ok(gc.panels[1].h > sessionsH + 60, `跟着一起长高的是会话面板(${sessionsH}px → ${gc.panels[1].h}px)——不再原地留白`);
+  ok(gc.headerExpanded === "false", `项目分组确实是收起态(aria-expanded=${gc.headerExpanded})`);
+  ok(gc.headerH >= 20, `收起后折叠头仍可见(${gc.headerH}px)——塌缩目标含折叠头,没把展开入口收掉`);
+  const sumBefore = projectsH + sessionsH;
+  ok(Math.abs(gc.panels[0].h + gc.panels[1].h - sumBefore) <= 2, `两面板总高不变(${sumBefore}px)——空间是让位,不是挤压`);
+
+  await clickGroupHeader(page, "项目");
+  await page.waitForFunction(
+    (h0) => {
+      const sb = document.querySelector("[data-sidebar-style]");
+      const p = sb?.querySelector('[data-panel=""]');
+      return !!p && Math.abs(p.getBoundingClientRect().height - h0) <= 4;
+    },
+    { timeout: 6000, polling: 200 },
+    projectsH,
+  ).catch(() => {});
+  const ge = await geom(page);
+  await shot(page, "expanded-projects");
+  ok(Math.abs(ge.panels[0].h - projectsH) <= 6, `再展开 → 比例复位(${projectsH}px → ${ge.panels[0].h}px,恢复折叠前尺寸)`);
+  ok(ge.headerExpanded === "true", "分组回到展开态");
 
   // ── B) 真实鼠标拖分隔线 → 比例改变;reload 后保持 ──
+  g = ge;
   const beforeH = g.panels[0].h;
   await page.mouse.move(g.handle.x, g.handle.y);
   await page.mouse.down();
