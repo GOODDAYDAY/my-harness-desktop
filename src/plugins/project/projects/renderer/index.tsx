@@ -138,7 +138,10 @@ export function ProjectsSection(): React.ReactNode {
     >
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={cwds} strategy={verticalListSortingStrategy}>
-          <div style={{ maxHeight: "calc(3 * 54px + 2 * var(--sidebar-row-gap))", overflowY: cwds.length > 3 ? "auto" : "visible" }}>
+          {/* 不自带高度上限:本组独占一个 Panel(与 sessions-list 不同 group),槽壳已把
+              「最后一个有内容的项」当滚动容器(flex-1 min-h-0 overflow-y-auto),这里再压
+              「最多 3 行」就等于给用户拖出来的高度留一块永远填不上的空白。滚动交给槽壳。 */}
+          <div>
             {cwds.map((dir) => (
               <ProjectRow
                 key={dir}

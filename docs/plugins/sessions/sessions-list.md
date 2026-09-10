@@ -5,7 +5,7 @@
 - sessions-list 是左栏（sidebar）"对话"分组的内容插件——把"某个 cwd 桶下有哪些会话、每个会话此刻处于什么状态"这件事，从文件系统层面提升到 UI 层面。
   - 它的 manifest 在 `src/plugins/sessions/sessions-list/plugin.json`，`id` 为 `sessions-list`，`tier` 为 `official`，`renderer` 指向 `./renderer/index.tsx`。
   - 它贡献的唯一一个交互槽位是 `sidebar`：`{ id: "sessions", title: "对话", component: "SessionsSection", order: 10, group: "main" }`——即壳左栏会多出一个标题为"对话"的可折叠分组，其内容由 `SessionsSection` 组件渲染。
-  - `group: "main"` 表示它和 `projects`（`order: 5`，标题"项目"）、`sub-agent`（`order: 20`，标题"子 Agent"）、`ask`（`order: 99`，标题"提问"）共享同一个 Panel 区域，`order: 10` 决定它排在项目列表之下、子 Agent 列表之上。
+  - `group: "main"` 表示它和 `sub-agent`（`order: 20`，标题"子 Agent"）共享同一个 Panel 区域，`order: 10` 决定会话列表排在子 Agent 列表之上；`projects`（`order: 5`，标题"项目"）已拆到自己的 `group: "projects"`，因此它与会话列表之间有一条**可拖拽分隔线**（用户可调两块的高度比）。两个居民必须同组、projects 必须独立成组，这两条由静态守卫 `src/plugins/sidebar-groups.test.ts` 钉住。
 
 - 它不是内核，也不拥有会话数据——它只消费框架维护好的会话元数据，自己决定怎么分组、怎么排序、怎么渲染交互。
   - 它的数据源是 `useSessionStore((s) => s.sessionInfos)`，而不是自己调 `ctx.sessions.list()`（`renderer/index.tsx` 第 51 行注释明确写"本插件不再 ctx.sessions.list"）。
@@ -290,8 +290,8 @@
   - goal 贡献 `blockRenderers`（`set_goal` / `achieve_goal` 工具卡）与 `composerTop`（GoalBar），并带 `piExtension` / `dshExtension` 给内核补能力；它 export `goal:state` channel，但 sessions-list 不订阅。
   - 两者唯一共享的是 sessions 域（都在 `src/plugins/sessions/` 分组下）与框架 store，无槽位或 channel 关联。
 
-- 与 `projects` 的交互：同在 `sidebar` 槽 `group: "main"`，靠 `order` 决定上下位置，无数据交互。
-  - `projects`（`order: 5`）在上、sessions-list（`order: 10`）居中、`sub-agent`（`order: 20`）、`ask`（`order: 99`）在下。
+- 与 `projects` 的交互：同在 `sidebar` 槽，但**不同 group**（`projects` / `main`），靠 `order` 决定上下位置，无数据交互。
+  - `projects`（`order: 5`）在上，sessions-list（`order: 10`）与 `sub-agent`（`order: 20`）在下方的同一个 Panel 里。
   - projects 切换 cwd 会写 `useUiStore.currentCwd`，从而触发框架 `loadForCwd()` 重拉会话列表——这是**经框架 store 的间接连锁**，sessions-list 不感知 projects 的存在。
 
 - 一个反直觉但重要的结论：sessions-list 的"对其他插件的可见影响"主要是**被动的、经框架中介的**，而不是主动的 channel 通信。

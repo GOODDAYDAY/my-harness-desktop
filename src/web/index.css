@@ -297,7 +297,10 @@ html, body, #root {
   --sidebar-section-pt: 6px;
   --sidebar-section-pb: 6px;
   --sidebar-arrow-display: inline-flex;
-  --sidebar-divider-display: flex;
+  /* 只控制"分割线"这根线的显隐——面板之间的拖拽热区恒定 8px,不受此 token 影响。
+     (旧名 --sidebar-divider-display 同时管了手柄的 display,于是 card/minimal/glass
+      三种"隐藏分割线"的风格连拖拽热区一起没了 —— 组分开也照样拖不动。) */
+  --sidebar-divider-visual-display: flex;
   --sidebar-row-bg: transparent;
   --sidebar-row-bg-hover: var(--color-surface);
   --sidebar-row-bg-active: var(--color-surface);
@@ -319,7 +322,7 @@ html, body, #root {
   --sidebar-section-pt: 16px;
   --sidebar-section-pb: 6px;
   --sidebar-arrow-display: none;
-  --sidebar-divider-display: none;
+  --sidebar-divider-visual-display: none;
   --sidebar-row-bg: transparent;
   --sidebar-row-bg-hover: var(--color-surface);
   --sidebar-row-bg-active: var(--color-surface);
@@ -341,7 +344,7 @@ html, body, #root {
   --sidebar-section-pt: 16px;
   --sidebar-section-pb: 4px;
   --sidebar-arrow-display: none;
-  --sidebar-divider-display: none;
+  --sidebar-divider-visual-display: none;
   --sidebar-row-bg: transparent;
   --sidebar-row-bg-hover: transparent;
   --sidebar-row-bg-active: var(--color-surface);
@@ -363,7 +366,7 @@ html, body, #root {
   --sidebar-section-pt: 12px;
   --sidebar-section-pb: 6px;
   --sidebar-arrow-display: inline-flex;
-  --sidebar-divider-display: flex;
+  --sidebar-divider-visual-display: flex;
   --sidebar-row-bg: transparent;
   --sidebar-row-bg-hover: transparent;
   --sidebar-row-bg-active: var(--color-surface);
@@ -385,7 +388,7 @@ html, body, #root {
   --sidebar-section-pt: 10px;
   --sidebar-section-pb: 6px;
   --sidebar-arrow-display: inline-flex;
-  --sidebar-divider-display: none;
+  --sidebar-divider-visual-display: none;
   --sidebar-row-bg: color-mix(in srgb, var(--color-surface) 50%, transparent);
   --sidebar-row-bg-hover: color-mix(in srgb, var(--color-surface) 70%, transparent);
   --sidebar-row-bg-active: color-mix(in srgb, var(--color-primary) 15%, transparent);

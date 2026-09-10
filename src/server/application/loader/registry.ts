@@ -232,8 +232,10 @@ export class PluginRegistry {
       .map(({ order: _order, ...rest }) => rest);
   }
 
-  /** 列 sidebar 槽所有贡献项(左栏分组用,按 order 升序,缺省 100)。 */
-  sidebarItems(): { id: string; title: string; component: string; pluginId: string; group?: string }[] {
+  /** 列 sidebar 槽所有贡献项(左栏分组用,按 order 升序,缺省 100)。
+   *  defaultSize 是组级高度提示——字段白名单在这里必须显式带上,漏了就是静默丢
+   *  (壳侧只会看到 undefined,首屏退化成各组均分,没有任何报错)。 */
+  sidebarItems(): { id: string; title: string; component: string; pluginId: string; group?: string; defaultSize?: number }[] {
     return this.sidebar.all()
       .map((s) => ({
         id: s.contribution.id,
@@ -242,9 +244,14 @@ export class PluginRegistry {
         pluginId: s.pluginId,
         order: s.contribution.order ?? 100,
         group: s.contribution.group,
+        defaultSize: s.contribution.defaultSize,
       }))
       .sort((a, b) => a.order - b.order)
-      .map(({ order: _order, group, ...rest }) => (group ? { ...rest, group } : rest));
+      .map(({ order: _order, group, defaultSize, ...rest }) => ({
+        ...rest,
+        ...(group ? { group } : {}),
+        ...(defaultSize != null ? { defaultSize } : {}),
+      }));
   }
 
   /** 列 mainView 槽所有贡献项(按 order 升序选第一个,壳的中区渲染用)。 */

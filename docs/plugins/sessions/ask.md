@@ -45,10 +45,10 @@ src/plugins/sessions/ask/
 
 ## 4 plugin.json 与贡献的槽
 
-- 槽位契约 `SidebarContribution`（`packages/shared/src/domain/contributions.ts` 第 110 行）定义了 `sidebar` 贡献项：`{ id, title, component, order?, group? }`，`group: "main"` 使 `AskHost` 与 sub-agent 的 `SubAgentSection` 同组共享一个 Panel。ask 选 `order: 99` 排到 main 组末尾。
-- `AskHost` 挂在 `sidebar` 槽的"常驻"手法（`ask-host.tsx` 第 4 行注释明说"挂在 sidebar 槽常驻（sub-agent 的 SubAgentSection 同款手法）：无请求时 return null，不占左栏"）是关键设计：组件永远挂载、`useEffect` 里的 `onQuestion` 订阅永远活着，但没有待答问题时渲染 `null`——提问是低频且异步到达的，若按需挂载，问题到达时组件可能还没起来，订阅就漏了。
-- 槽位契约 `BlockRendererContribution`（contributions.ts 第 465 行）定义了 `blockRenderers` 贡献项：`{ id, block, names?, component, order? }`，`block: "toolCall"` + `names: ["ask_user_question"]` 表示"只认工具名为 `ask_user_question` 的工具卡"。这是特化层（声明 `names` 精确命中）优先于通用层的语义——`ask_user_question` 这个工具卡不再走 timeline 的通用工具卡渲染，改由 `AskQuestionCard` 呈现摘要。
-- `AskQuestionCard` 与 DSH 的 `AskQuestionRow` 同语义（`ask-question-card.tsx` 第 2 行注释）：摘要展示交互结果而非 args 全文；运行中显示 `waiting`，结算后展示 `N/M answered` 或 `cancelled`。交互收集由 `AskHost` 承担，卡片只做时间线上的"事后可读摘要"，不做交互——交互发生在当下（模态框），摘要发生在回看（时间线），两条路径互补。
+- **ask 不贡献 `sidebar`**（历史形状，已退役）：早期版本用一个挂在 `sidebar` 槽的常驻宿主 `AskHost`（`SidebarContribution`，`group: "main"`、`order: 99`）收问题——组件永远挂载、`onQuestion` 订阅永远活着、无请求时 `return null`，收到问题再弹模态框。提问交互并入时间线卡片后，这个宿主连同 `ask-host.tsx` 一起删除，`renderer/index.tsx` 现在只 `export { AskQuestionCard }`。
+- 这条退役也让 ask 与左栏彻底脱钩：左栏的 group 归并、Panel 占位、滚动容器分配都不再牵涉它（左栏分组语义见 `docs/sidebar.md`）。代价是"问题到达时组件是否已挂载"不再靠常驻宿主保证——改由时间线卡片的按需渲染承担（问题本身就是会话流里的一条工具卡，会话流在，卡片就在）。
+- 槽位契约 `BlockRendererContribution`（contributions.ts 第 465 行）定义了 `blockRenderers` 贡献项：`{ id, block, names?, component, order? }`，`block: "toolCall"` + `names: ["ask_user_question"]` 表示"只认工具名为 `ask_user_question` 的工具卡"。这是特化层（声明 `names` 精确命中）优先于通用层的语义——`ask_user_question` 这个工具卡不再走 timeline 的通用工具卡渲染，改由 `AskQuestionCard` 呈现。
+- `AskQuestionCard` 现在是**交互与摘要合一**的卡片（`ask-question-card.tsx` 第 2 行注释）：问题气泡 + 选项 chips 直接在会话流里点选（单选/多选/自定义输入），运行中显示 `waiting`，结算后展示 `N/M answered` 或 `cancelled`。早期"交互在模态框（`AskHost`）、时间线只做事后摘要"的双路径已合并为一条——回看时的摘要与当下交互是同一张卡片的两个状态。
 
 ## 5 渲染/事件流：pi 路径（extension_ui 帧翻译）
 
@@ -124,11 +124,10 @@ src/plugins/sessions/ask/
 
 ## 10 与其他插件/槽位交互（专节）
 
-- **贡献的槽位名**：`sidebar`（`AskHost`，`group: "main"`，`order: 99`）与 `blockRenderers`（`AskQuestionCard`，`block: "toolCall"`，`names: ["ask_user_question"]`）。两个槽都是"本插件供、别的插件消费"：`sidebar` 由壳前端左栏渲染（`AskHost` 常驻），`blockRenderers` 由 timeline 插件查槽后渲染（timeline 是 `blockRenderers` 的消费方）。
-- **不贡献、但强依赖的槽位关系**：ask 不贡献 `mainView`，但它依赖 timeline 的 `blockRenderers` 消费链——若 timeline 被删，`ask_user_question` 工具卡会退回 timeline 缺省时的通用工具卡渲染（`blockRenderers` 无人查槽），但 `AskHost` 的提问模态框仍照常（它挂在 `sidebar`，不依赖 timeline）。所以 ask **不声明 `dependsOn: ["timeline"]`**：它对 timeline 的缺席是静默降级（摘要卡退化为通用卡），不是功能失效，把生命周期绑死换来的是"卡片更好看"这个非关键收益，不值得（与 session-colors 的 QA 论证同构）。
+- **贡献的槽位名**：只有一个——`blockRenderers`（`AskQuestionCard`，`block: "toolCall"`，`names: ["ask_user_question"]`）。它是"本插件供、别的插件消费"的槽：由 timeline 插件查槽后渲染（timeline 是 `blockRenderers` 的消费方）。早期还贡献 `sidebar`（常驻宿主 `AskHost`），已随交互并入时间线卡片而退役。
+- **不贡献、但强依赖的槽位关系**：ask 不贡献 `mainView`，但它依赖 timeline 的 `blockRenderers` 消费链——若 timeline 被删，`ask_user_question` 工具卡会退回 timeline 缺省时的通用工具卡渲染（`blockRenderers` 无人查槽），此时提问卡片的点选交互也一起消失（它本身就活在那张卡里）。ask **仍不声明 `dependsOn: ["timeline"]`**：这是"槽无人消费则降级"的正常路径（§7.6 显式降级），把生命周期绑死换来的是"卡片更好看"这个非关键收益，不值得（与 session-colors 的 QA 论证同构）。
 - **消费的框架 API（非事件总线 channel）**：`ctx.sessions.onQuestion` / `ctx.sessions.answerQuestion`。这两个是 `SessionsApi`（`packages/shared/src/domain/sessions.ts` 第 349 / 351 行）的成员，底层经 `window.kernel.sessions.onQuestion` / `answerQuestion` 走 HTTP/WS 到壳后端，**不是** `packages/react/src/event-bus.ts` 的插件间事件通道。容易混淆的是 `channel-contract.ts` 里的 `session.question: "session:question"` 与 `session.answerQuestion: "session:answerQuestion"`（`packages/shared/src/channel/channel-contract.ts` 第 200 / 218 行）——它们是 `window.kernel` RPC 的**线通道名**，不是插件间事件总线 channel，ask 的 renderer 不直接触碰这些字符串，它只调 `ctx.sessions.*` 类型化的 API。
 - **事件总线上零交互**：ask 的 `renderer/index.tsx` 不 export `channels`，不 `emit` / `invoke` / `on` 任何插件 channel。它是纯"内核会话 API 消费方"，与其它壳插件之间没有事件耦合——这是它的隔离性来源，也是它能不声明 `dependsOn` 的根本原因。
-- **与 sub-agent 的松散并列**：`AskHost` 挂在 `sidebar` 的 `group: "main"`，与 sub-agent 的 `SubAgentSection` 同组（`ask-host.tsx` 第 4 行注释明说"sub-agent 的 SubAgentSection 同款手法"）。这不是依赖，是同一槽位同一分组下两个常驻消费方的并列——两者都"无内容时 return null"，互不感知对方。
 
 ## 11 QA
 

@@ -118,6 +118,11 @@ export interface SidebarContribution {
   /** 同 group 的贡献项共享一个 Panel(非末项 shrink-0、末项 flex-1 填满剩余空间)。
    *  不同 group 或无 group 各占独立 Panel(向后兼容)。 */
   group?: string;
+  /** 本组 Panel 的初始高度占比(1–99 的百分比;缺省 = 各组均分)。
+   *  只认组内**首个声明者**(order 最小的那项);同组多项都写时取第一个遇到的。
+   *  用户拖拽出的比例由壳的 autoSaveId 持久化,此值只决定"首次渲染 / 布局记录失配"时的初值——
+   *  典型场景:会话组要占大头、项目组只要几行,靠它避免首屏被均分成两半。 */
+  defaultSize?: number;
 }
 
 /**

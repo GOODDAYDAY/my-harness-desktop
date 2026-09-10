@@ -22,21 +22,23 @@ sidebar 是**数组类槽**——允许多个插件各自贡献一项，壳把�
 
 ```ts
 export interface SidebarContribution {
-  id: string;        // 贡献项标识，注册表去重靠它
-  title: string;     // 分组标题（如 "对话"/"项目"）
-  component: string; // renderer 侧组件名，经 registerSidebarComponent 注册后按名查
-  order?: number;    // 排序，小的在上；缺省 100
-  group?: string;    // 同 group 的贡献项共享一个 Panel；不同 group 各占独立 Panel
+  id: string;          // 贡献项标识，注册表去重靠它
+  title: string;       // 分组标题（如 "对话"/"项目"）
+  component: string;   // renderer 侧组件名，经 registerSidebarComponent 注册后按名查
+  order?: number;      // 排序，小的在上；缺省 100
+  group?: string;      // 同 group 的贡献项共享一个 Panel；不同 group 各占独立 Panel
+  defaultSize?: number;// 本组 Panel 的首屏高度占比（1–99 百分比；缺省各组均分）
 }
 ```
 
-五个字段各自钉死一个语义：
+六个字段各自钉死一个语义：
 
 - **`id`**：贡献项在 `ArraySlot` 里的去重键。覆盖语义是 `removeById`——后注册的高优先级 source 清掉同 id 旧项再 push。这意味着把内置居民复制到 `~/.my-harness-desktop/plugins/`（user 级）并保持 `id` 不变，就覆盖内置版；删掉内置居民，壳照常启动，只是少了那块内容。这是"壳插件无特权"纪律在 sidebar 槽上的直接表达。
 - **`title`**：分组标题，是**写死的值而非 i18n key**。注意它和 `sidePanel` 槽的 `label`、`fileActions` 槽的 `labelKey` 不同——sidebar 的 `title` 直接进渲染，不经过 `t()`。当前三个内置居民的 title 都是中文原文（"对话"/"项目"/"子 Agent"），这是契约的历史形状，不属于本文要收敛的内容但值得指出。
 - **`component`**：renderer 模块里的导出名。框架加载插件 renderer module 后，在 `contributes.sidebar[].component` 里读这个名字，去 module 的 exports 里找同名组件自动注册。插件**不手动调**任何 `registerSidebarComponent` 函数——这是 `plugins-host.ts` → `registerPluginComponents()` 的自动流程。找不到同名导出时 `console.warn` 告警但不崩；壳渲染时 `getSidebarComponent()` 查不到则显示 i18n key `shell.componentNotRegistered` 的兜底文案。
 - **`order`**：决定垂直顺序。`sidebarItems()` 按 order 升序排序（缺省 100）。内置居民 projects(5) → sessions-list(10) → sub-agents(20)，就是数字大小，没有别的规则。order 是纯排序契约，不参与 Panel 归并。
-- **`group`**：sidebar 槽区别于其它数组类槽的独有字段，见 §5 详述。同 `group` 值的多个贡献项共享同一个 `react-resizable-panels` 的 `Panel`，不同 group 各占独立 Panel；未声明 `group` 时默认按 `id` 各自独立。
+- **`group`**：sidebar 槽区别于其它数组类槽的独有字段，见 §5 详述。同 `group` 值的多个贡献项共享同一个 `react-resizable-panels` 的 `Panel`，不同 group 各占独立 Panel；未声明 `group` 时默认按 `id` 各自独立。**这个字段决定"用户能不能在两块之间上下拖"**：手柄只在组之间渲染，同组的项只能靠 CSS flex 分高度、拖不动——所以"项目区 / 会话区之间要能拉"这件事只能靠分组表达。
+- **`defaultSize`**：本组 Panel 的**首屏高度占比**（1–99，百分比）。组内**首个声明者**（order 最小那项）生效；同组多项都写时取第一个遇到的（静态守卫禁止多写，避免"谁在定高度"的歧义）。它只在"首次渲染 / localStorage 里的比例记录失配"时起作用——用户拖出来的比例由 `autoSaveId="sidebar-v"` 持久化，优先级高于它。缺省不给则各组均分（两个组就是 50/50）。典型用法：会话组吃大头、项目组只要几行（`projects` 声明 `25`）。
 
 契约的挂载点在 `PluginContributes`（`contributions.ts` 413 行）：`sidebar?: SidebarContribution[]`。`SlotName` 联合里 `"sidebar"` 是其中之一（383 行），而 `derivePluginTags`（554–560 行）明确把 sidebar 列为"无语义槽"——不推导 tag（不像 themes→"theme"、languages→"i18n"、settings→"management"），需插件在 `manifest.tags` 显式声明。这条注释直接点明：sidebar 是纯机制挂载点，框架不猜它"属于什么域"。
 
@@ -46,11 +48,16 @@ export interface SidebarContribution {
 
 当前内置有三个插件往 `sidebar` 槽贡献内容（旧文档只记了两个，`sub-agent` 是后来加入的第三个）：
 
-- **`projects`**（`src/plugins/project/projects/plugin.json`）：贡献 `id:"projects"` / `title:"项目"` / `component:"ProjectsSection"` / `order:5` / `group:"main"`。renderer 是 `ProjectsSection`（`src/plugins/project/projects/renderer/index.tsx`），维护最近工作目录清单（存 `ctx.config` 的 `recentCwds`，上限 10 个，dnd-kit 拖拽排序），点项目切目录。
+- **`projects`**（`src/plugins/project/projects/plugin.json`）：贡献 `id:"projects"` / `title:"项目"` / `component:"ProjectsSection"` / `order:5` / `group:"projects"` / `defaultSize:25`。renderer 是 `ProjectsSection`（`src/plugins/project/projects/renderer/index.tsx`），维护最近工作目录清单（存 `ctx.config` 的 `recentCwds`，上限 10 个，dnd-kit 拖拽排序），点项目切目录。
 - **`sessions-list`**（`src/plugins/sessions/sessions-list/plugin.json`）：贡献 `id:"sessions"` / `title:"对话"` / `component:"SessionsSection"` / `order:10` / `group:"main"`。renderer 是 `SessionsSection`（`src/plugins/sessions/sessions-list/renderer/index.tsx`），当前工作目录下全部会话的列表：搜索、新建、分组、置顶、归档、运行态/未读标识、子会话嵌套。
 - **`sub-agent`**（`src/plugins/sessions/sub-agent/plugin.json`）：贡献 `id:"sub-agents"` / `title:"子 Agent"` / `component:"SubAgentSection"` / `order:20` / `group:"main"`。这个插件同时是 **`sessionGroupings` 槽的贡献方**——它贡献的策略（`parentPathKey:"subagent.parent_session"`）让 sessions-list 把子 Agent 会话嵌套到父会话下。一个插件同时填 sidebar 槽和 sessionGroupings 槽，两个槽的消费方（Sidebar 组件 / sessions-list）分别不认识它，这是双向解耦的样板。
 
-三个居民都声明 `group:"main"`，因此共享同一个 Panel——这正是 §5 要讲的 group 归并语义。sidebar 槽本身**没有**内置的"第零项"或占位内容：壳不贡献任何 sidebar 内容，全由插件填。
+拓扑现状（2026-02 起）：**两个 Panel、一条可拖拽分隔线**——`projects` 独占 `group:"projects"`（会话区之上，首屏 25%），`sessions-list` 与 `sub-agent` 同处 `group:"main"`（会话列表 + 运行中子 Agent 列表，共用一个 Panel）。这两个的分组不是随意选的：
+
+- 项目区与会话区**必须不同组**——否则两者之间没有手柄，"项目拖小一点、会话看多一点"这件事用户做不到（这正是分组拆分要修的根因）。
+- 会话列表与子 Agent 列表**必须同组**——`sub-agent` 无运行中子 Agent 时组件 `return null`，而 Panel 是**按份额占位**的：一旦让它独占一组，它就会稳定占掉一份高度、留一块永远填不满的空白。静态守卫 `src/plugins/sidebar-groups.test.ts` 把这两条都钉成了断言（含"渲染 null 的贡献项不得独占一组"）。
+
+sidebar 槽本身**没有**内置的"第零项"或占位内容：壳不贡献任何 sidebar 内容，全由插件填。
 
 ### 3.2 消费方：Sidebar 组件（壳）+ sessions-list（插件间）
 
@@ -124,7 +131,7 @@ window.kernel.slots.sidebar() ◄───── Sidebar 组件 ─────�
 
 ### 5.2 滚动容器的"末项"判定（contentMap + lastVisibleIndex）
 
-`group:"main"` 的三居民共处一个 Panel 后，壳要保证"长列表能吃满剩余高度、短列表只占内容高度"。这不是插件自己算的，是壳的机制：
+`group:"main"` 的会话列表 + 子 Agent 列表共处一个 Panel（`group:"projects"` 的项目列表在另一个 Panel），壳要保证"长列表能吃满剩余高度、短列表只占内容高度"。这不是插件自己算的，是壳的机制：
 
 - `SidebarItemSlot`（58–111 行）给每个居民包一个 div，用 `MutationObserver` 观察它内部有没有真实元素子节点（`el.firstElementChild != null`），把结果写回父组件的 `contentMap`（124 行，`item.id → hasContent`）。渲染 `null` 的项（如没有运行中子 Agent 时的 `SubAgentSection`）被判为"无内容"。
 - `Sidebar()` 渲染每个 Panel 时算 `lastVisibleIndex`（155–158 行）：组内最后一个 `contentMap[id] !== false` 的项。这个项拿 `flex-1 min-h-0 overflow-y-auto` 吃满剩余空间当滚动容器，其余项拿 `shrink-0 max-h-[50%] overflow-y-auto` 固定内容高度、超高限一半自己滚。
@@ -132,7 +139,14 @@ window.kernel.slots.sidebar() ◄───── Sidebar 组件 ─────�
 
 ### 5.3 Panel 之间的可拖拽分隔
 
-`PanelGroup direction="vertical"` 把每个 group 渲成一个 `Panel`（161–164 行），相邻 group 之间一条 `PanelResizeHandle`（180–205 行），高 8px、拖拽时变色到 `--color-primary`、`autoSaveId="sidebar-v"` 让 react-resizable-panels 记住比例。三个内置居民都在 `group:"main"`，所以默认只有**一个** Panel、零条分隔线；一旦有人把 group 改成别的值或去掉 group，就会多出一个 Panel 和一条可拖的分隔线。这条 chrome 也是壳的机制，插件不感知。
+`PanelGroup direction="vertical"` 把每个 group 渲成一个 `Panel`（161–167 行），相邻 group 之间一条 `PanelResizeHandle`（189–228 行），高 8px、拖拽时变色到 `--color-primary`、`autoSaveId="sidebar-v"` 让 react-resizable-panels 记住比例。当前两个 group（`projects` / `main`）因此渲染出**两个 Panel、一条可拖的分隔线**：项目区与会话区的高度比由用户拖定，重启后保持。这条 chrome 也是壳的机制，插件不感知。
+
+三个细节决定了它"真的能拖"，每个都踩过坑：
+
+- **手柄只在组间渲染**：同组项再多也只是一条 CSS flex 分配，没有任何手柄。所以"要能上下拉"必须表达成"不同 group"——这不是样式问题，是布局语义问题。
+- **Panel 显式带 `id={group key}`**：库的持久化记录按"组内各 Panel 的 id 拼串"作 key。不给 id 时库退化成用**约束串**（`minSize`/`maxSize` 等）当 id——组数一变或用例一变，key 就变，用户拖好的比例会被静默重置回默认。显式 id 让"加组 / 改约束"不再动已存比例。
+- **热区与"线"的视觉解耦**（`--sidebar-divider-visual-display`）：手柄热区恒为 `display:flex` + `cursor:row-resize`（8px 透明条），只有内线的显隐随风格变。旧实现两者共用一个 token（`--sidebar-divider-display`），而 card/minimal/glass 三种风格把它设成 `none`——于是这三种风格里手柄连热区一起消失，"分组拆开了也依然拖不动"。另外拖拽中内线一律显形，保证"无分隔线"的风格拖起来也有反馈。
+- **组级初值 `defaultSize`**：首个声明者生效（`projects` 给 25），避免首次渲染（localStorage 还没有记录时）被均分成 50/50——项目区只有几行内容，吃一半高度就是一块空白。
 
 ## 6 sessionGroupings：会话分组策略
 
@@ -206,20 +220,20 @@ sidebar 与 sidePanel 是布局树里的对称兄弟（`left` / `right` 组）�
 左栏的视觉全走 token，壳不写死任何颜色值或文案值：
 
 - **`data-sidebar-style` 属性 + CSS 选择器块**：`Sidebar` 组件根节点设 `data-sidebar-style={sidebarStyle}`（`sidebar.tsx` 139 行）。`sidebarStyle` 是 `SidebarStyle = StylePresetId`（`"default"|"card"|"minimal"|"outline"|"glass"`，`packages/shared/src/contract/style-presets.ts` 14/17 行）。真正的样式值是 `src/web/index.css` 里 `[data-sidebar-style="card"]` 等选择器块（293 行起）——契约清单（style-presets.ts）只存 id + labelKey，样式值唯一真源在 CSS。预览卡挂同一个 data attribute，与生产同一条 CSS 路径，漂移物理上不可能。
-- **`--sidebar-row-*` token 族**：`--sidebar-row-py`、`--sidebar-row-px`、`--sidebar-row-radius`、`--sidebar-icon-size`、`--sidebar-divider-display` 等（`index.css` 273–369 行）由各风格块覆写。居民组件（projects / sessions-list）统一用这些 token 画行（如 `SessionRow` 的 `padding: "var(--sidebar-row-py) var(--sidebar-row-px)"`），换风格只改 CSS 块、插件零改动。
+- **`--sidebar-row-*` token 族**：`--sidebar-row-py`、`--sidebar-row-px`、`--sidebar-row-radius`、`--sidebar-icon-size`、`--sidebar-divider-visual-display` 等（`index.css` 273–399 行）由各风格块覆写。居民组件（projects / sessions-list）统一用这些 token 画行（如 `SessionRow` 的 `padding: "var(--sidebar-row-py) var(--sidebar-row-px)"`），换风格只改 CSS 块、插件零改动。注意 `--sidebar-divider-visual-display` **只管"线"的显隐**：手柄热区是壳写死的 8px，不受风格 token 影响（否则隐藏线的风格会连带把拖拽能力一起关掉）。
 - **背景与边框**：容器 `background: "var(--color-chrome)"`、`border-right: 1px solid var(--color-border)"`（`sidebar.tsx` 140–142 行），`--color-chrome` / `--color-border` 由主题插件贡献（themes 槽），壳只查 token key 不写 token 值。
 - **字体倍率**：`--sidebar-font-scale`（prefs 键 `sidebarFontScale`，默认 1.0）由 `theme-context.tsx` 84 行 `root.style.setProperty("--sidebar-font-scale", ...)` 注入根节点，`Sidebar` 容器内联把 `--font-size-{xs,sm,base,lg}-raw` 乘上它算出渲染字号（`sidebar.tsx` 143–147 行）。这是左栏独立的字号缩放，与右面板（`--sidepanel-*`）、timeline（`--timeline-*`）三区独立。
 - **多端同步白名单**：`app-main.tsx` 223–228 行的 `SYNCED_PREF_KEYS` 里含 `sidebarStyle` / `sidebarFontScale`，但不含 `sidebarWidth`——左栏风格和字号多端同步，宽度各端独立导航。这是"操作独立、状态同步"边界的精确体现。
 
 ## 8 QA
 
-**Q：如果把 sessions-list 的 `group:"main"` 去掉（或改成别的值），左栏会变成什么样？**
+**Q：如果把 `sub-agent` 的 `group:"main"` 改成别的值（或删掉），左栏会变成什么样？**
 
-projects 和 sub-agents 仍在 `group:"main"` 共享一个 Panel，sessions-list 独占另一个 Panel，中间多一条可拖拽分隔线。两个 Panel 默认各 50% 高度（`autoSaveId="sidebar-v"` 初始均分），用户可拖到任意比例——但 sessions-list 不再自动吃满剩余空间，它和 projects 平权。这正是 `group` 字段"共享 Panel vs 独立 Panel"的语义边界。
+sessions-list 独占 `main` 组、sub-agent 独占自己的新组，中间再多一条可拖拽分隔线——但 sub-agent 无运行中子 Agent 时组件渲染 `null`，而它的 Panel 仍按份额占着高度（无 `defaultSize` 时与兄弟组均分），于是左栏稳定多出一块**永远填不满的空白**。这就是"渲染 null 的贡献项不得独占一组"这条不变量的由来（静态守卫 `src/plugins/sidebar-groups.test.ts` 拦它）。反过来把 `projects` 与 sessions-list 并回同组，两块之间那条分隔线就消失、用户再也调不了两者高度比——两个方向都是回归。
 
-**Q：三个居民都在 `group:"main"`，谁当滚动容器？**
+**Q：三个居民在同一侧栏，谁当滚动容器？**
 
-按"最后**有内容**的项"判定（`lastVisibleIndex`），不是数组末项。sub-agents(order 20) 是数组末项，但它无运行中子 Agent 时渲染 null、被判"无内容"，滚动容器自动移交到它前面第一个有内容的项（通常是 sessions-list）。这就是 `sidebar.tsx` 里 `contentMap` + `MutationObserver` 存在的全部理由——滚动能力不随贡献项是否为空漂移。
+按"最后**有内容**的项"判定（`lastVisibleIndex`），不是数组末项——而且**判定发生在组内**。`main` 组里 sub-agents(order 20) 是数组末项，但它无运行中子 Agent 时渲染 null、被判"无内容"，滚动容器自动移交到它前面第一个有内容的项（通常是 sessions-list）；`projects` 独占一组，它自己就是该组的"最后有内容项"，于是吃满项目区高度并自带滚动（这也是它在 renderer 里不再写 `maxHeight: calc(3 * 54px …)` 的原因——面板已经能给高度，再压一个内部上限就等于给用户拖出来的高度留一块填不上的空白）。这就是 `sidebar.tsx` 里 `contentMap` + `MutationObserver` 存在的全部理由——滚动能力不随贡献项是否为空漂移。
 
 **Q：内置居民被第三方覆盖后，被覆盖的组件还在内存里吗？**
 

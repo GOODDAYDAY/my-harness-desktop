@@ -41,7 +41,7 @@ subagent 和普通会话在物理层是同一种东西——都是经 `session-s
 
 `plugin.json` 的 `contributes` 八组，逐组看形状与语义：
 
-- **`sidebar`**：`{id:"sub-agents", title:"子 Agent", component:"SubAgentSection", order:20, group:"main"}`。这是编排宿主，不是普通列表——`SubAgentSection` 组件在 `renderer/index.tsx` 里 `useEffect` 挂 `ctx.bus.onMessage((msg) => void orch.handleFrame(msg))`，把「渲染 UI」和「驱动编排」两件事塞进同一个常驻挂载点。无活跃子时组件 `return null`，不占左栏。
+- **`sidebar`**：`{id:"sub-agents", title:"子 Agent", component:"SubAgentSection", order:20, group:"main"}`。这是编排宿主，不是普通列表——`SubAgentSection` 组件在 `renderer/index.tsx` 里 `useEffect` 挂 `ctx.bus.onMessage((msg) => void orch.handleFrame(msg))`，把「渲染 UI」和「驱动编排」两件事塞进同一个常驻挂载点。无活跃子时组件 `return null`，不占左栏。这个贡献项**必须与 sessions-list 同组**（`group:"main"`）：Panel 是按份额占位的，一旦让它独占一组，无活跃子 Agent 时它那块高度照样占着，左栏会稳定多出一块填不满的空白（静态守卫 `src/plugins/sidebar-groups.test.ts` 的「渲染 null 的贡献项不得独占一组」拦这个回归；`docs/sidebar.md` §5.2 讲滚动容器归属怎么随之移交）。
 - **`sidePanel`**：两项。`SubAgentPanel`（`id:"sub-agents-panel"`，order 60）是状态列表；`SubAgentDialog`（`id:"sub-agent-dialog"`，order 70）是对话面板，带 `revealOn:"subagent:dialog"`——见 §10 的声明式揭示。
 - **`messageRenderers`**：`{role:"subagent_spawned", component:"SpawnCard"}` 与 `{role:"subagent_done", component:"SpawnDoneCard"}`。契约类型 `MessageRendererContribution`（`packages/shared/src/domain/contributions.ts`）只有 `role` + `component` 两个字段；`role` 是 `NeutralMessage.role`，组件收 `MessageRendererProps = { message: NeutralMessage; streaming: boolean }`（`packages/react/src/index.ts`）。
 - **`sessionGroupings`**：`{id:"subagent", parentPathKey:"subagent.parent_session", childLabelKey:"sub-agent.childLabel", childIcon:"git-fork"}`。契约类型 `SessionGroupingContribution` 的字段语义：`parentPathKey` 是 `custom` 域平铺键，值=父会话路径；有此键的 session 被嵌套在父会话下。详见 §8.1 与 §9.1。

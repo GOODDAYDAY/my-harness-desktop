@@ -4,8 +4,15 @@
 // 分组组件经 @my-harness-desktop/react 注册中心按 component 名查(插件自注册)。
 // 对话/项目分组都是插件(sidebar 槽);设置入口是壳的(设置框架是核心)。
 //
-// 纵向布局:每个分组一个 Panel(react-resizable-panels vertical),相邻分组间一条
-// 可拖拽 PanelResizeHandle —— 改高度比(非整体滚动)。
+// 纵向布局:一次 group = 一个 Panel(react-resizable-panels vertical),相邻 group 之间一条
+// 可拖拽 PanelResizeHandle —— 改高度比(非整体滚动)。**"两个板块之间能不能上下拉"由
+// group 决定**:同 group 的贡献项挤在同一个 Panel 里,只靠 CSS flex 分高度、没有手柄,
+// 用户无法调整——这正是历史上"项目区/会话区之间拖不动"的根因(三个 sidebar 贡献项
+// 都写了 group:"main",于是整个左栏只有 1 个 Panel、0 条手柄)。
+// 组级初值:组内**首个声明 defaultSize 的项**决定该 Panel 的首屏占比(缺省各组均分);
+// 用户拖出来的比例由 autoSaveId="sidebar-v" 持久化,二者只在"首次渲染/布局记录失配"时生效。
+// Panel 显式带 id=group key:react-resizable-panels 的持久化记录按"组内各 Panel 的 id 拼串"
+// 作键,不给 id 时键由约束串推出——约束一变/组数一变旧记录就失配、比例被重置。
 // 组内滚动分配:最后一个渲染出实际内容的项 flex-1 吃剩余空间当滚动容器(会话列表),
 // 其余项 shrink-0 内容自适应固定(项目列表,不随其它项滑动),超高时 max-h 限一半
 // 自己滚——防线:任何插件加进同组都不会再有"某板块内容多了不能滚动"。渲染 null 的
@@ -14,6 +21,9 @@
 // 历史:sub-agents 曾把会话列表挤出滚动位(会话多了不能上下滑);空项也踩过同一坑
 // (空末项占着"末项"名分把滚动容器藏了,会话被 max-h 限一半,下方留白)——滚动容器
 // 按"最后可见项"分配而非数组末项。
+// 手柄热区与"线"的视觉解耦(2026-02):热区恒定 8px(display:flex + cursor:row-resize),
+// 只有内线显隐走 --sidebar-divider-visual-display。此前两者共用一个 token,card/minimal/
+// glass 三种侧栏风格把 display 设成 none 时把手柄热区一起干掉了——组分开也依然拖不动。
 // 复用壳横向三栏(index.tsx)同库,纵向分支零新依赖;handle 拖拽态显 primary 色。
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Settings } from "lucide-react";
@@ -28,6 +38,8 @@ interface SidebarItem {
   component: string;
   pluginId: string;
   group?: string;
+  /** 组级首屏高度占比(组内首个声明者生效);见 SidebarContribution.defaultSize。 */
+  defaultSize?: number;
 }
 
 interface PanelGroup_ {
@@ -159,7 +171,11 @@ export function Sidebar(): React.ReactNode {
             return (
               <Fragment key={pg.key}>
                 <Panel
+                  // id 进持久化键:不给 id 时库用"约束串"当 id,约束/组数一变旧比例就失配被重置
+                  id={pg.key}
                   minSize={10}
+                  // 组级初值只认组内首个声明者(item 已按 order 排好序)
+                  defaultSize={pg.items[0]?.defaultSize}
                   className="min-h-0"
                 >
                   <div className="h-full flex flex-col px-2.5 pt-3 pb-2">
@@ -180,11 +196,14 @@ export function Sidebar(): React.ReactNode {
                 {!isLast && (
                   <PanelResizeHandle
                     onDragging={setHandleDragging}
+                    // 热区恒在(display:"flex"):风格差异只作用在内线,不再像旧版那样
+                    // 用同一个 token 把热区一起 display:none —— 那会让"隐藏分割线"的
+                    // card/minimal/glass 三种风格彻底拖不动(有手柄但点不到)。
                     style={{
                       height: "8px",
                       cursor: "row-resize",
                       background: "transparent",
-                      display: "var(--sidebar-divider-display)",
+                      display: "flex",
                       alignItems: "center",
                       transition: "background 0.15s",
                     }}
@@ -199,6 +218,10 @@ export function Sidebar(): React.ReactNode {
                           : "var(--divider-color)",
                         borderRadius: "var(--radius-sm)",
                         transition: "background 0.15s",
+                        // 线可隐藏,但拖拽中一律显形——否则"无分隔线"的风格拖起来没有反馈
+                        display: handleDragging
+                          ? "flex"
+                          : "var(--sidebar-divider-visual-display)",
                       }}
                     />
                   </PanelResizeHandle>

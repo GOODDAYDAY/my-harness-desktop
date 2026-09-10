@@ -21,7 +21,7 @@ projects 是 my-harness-desktop 内置的项目域壳插件，物理位置 `src/
 
 - **顶层字段**：`id: "projects"`、`version: "0.4.9"`、`tier: "official"`（对应圆心 `PluginTier` 联合的 official 档，内置官方件）、`displayName: "项目"`、`description: "左栏项目列表,快速切换工作目录"`、`tags: ["project"]`、`renderer: "./renderer/index.tsx"`。
   - `renderer` 是唯一代码入口：框架加载器按它 import 模块、读模块 exports、据 `contributes.*[].component` 字段自动匹配同名导出组件。projects 的入口模块只 export 一个 `ProjectsSection`。
-- **`contributes.sidebar`（1 条）**：`{ "id": "projects", "title": "项目", "component": "ProjectsSection", "order": 5, "group": "main" }`。这是全插件唯一的「UI 挂载」贡献——它只填 `sidebar` 这一个槽，别的槽（sidePanel/settings/mainView/titlebar 等）一概不碰。§4 展开这条贡献项的完整契约与注册链。
+- **`contributes.sidebar`（1 条）**：`{ "id": "projects", "title": "项目", "component": "ProjectsSection", "order": 5, "group": "projects", "defaultSize": 25 }`。这是全插件唯一的「UI 挂载」贡献——它只填 `sidebar` 这一个槽，别的槽（sidePanel/settings/mainView/titlebar 等）一概不碰。§4 展开这条贡献项的完整契约与注册链。
 - **`contributes.languages`（8 条）**：4 个 locale（`zh-CN`/`zh-TW`/`en`/`de`）× 2 个命名空间（`projects.projects` + `projects.plugin`）。
   - `projects.projects` → `./locales/{locale}/projects.json`，只有 3 个 key：`projects.title`（项目/專案/Projects/Projekte）、`projects.add`、`projects.remove`。
   - `projects.plugin` → `./locales/{locale}/plugin.json`，2 个 key：`plugin.projects.displayName`、`plugin.projects.description`，供插件管理页显示。
@@ -65,20 +65,22 @@ export interface SidebarContribution {
   id: string;
   title: string;
   component: string;
-  order?: number;   // 小的在上；缺省 100
-  group?: string;   // 同 group 共享一个 Panel；不同 group/无 group 各占独立 Panel
+  order?: number;      // 小的在上；缺省 100
+  group?: string;      // 同 group 共享一个 Panel；不同 group/无 group 各占独立 Panel
+  defaultSize?: number;// 本组 Panel 首屏高度占比（1–99 百分比；组内首个声明者生效）
 }
 ```
 
-projects 填了五个字段全量：`id="projects"`、`title="项目"`、`component="ProjectsSection"`、`order=5`、`group="main"`。
+projects 填了六个字段全量：`id="projects"`、`title="项目"`、`component="ProjectsSection"`、`order=5`、`group="projects"`、`defaultSize=25`。
 
-- **`order=5` 的含义**：`sidebarItems()`（`src/server/application/loader/registry.ts:236-248`）把贡献项按 `order` 升序排。当前全仓往 `sidebar` 槽挂东西的只有 4 个插件：projects（order 5）、sessions-list（order 10，标题「对话」）、sub-agent（order 20，标题「子 Agent」）、ask（order 99，标题「提问」）。所以 projects 排在左栏最上，是「项目在上、对话在下」的布局来源——这个顺序是**贡献项数据**，不是壳写死的。
-- **`group="main"` 的含义**：前端 `sidebar.tsx:38-52` 的 `groupItems()` 用 `item.group ?? item.id` 作 key 分组；同组的贡献项进同一个 `Panel`（react-resizable-panels 的 vertical PanelGroup 里的一个 Panel），不同组或无组各占独立 Panel。四个 sidebar 插件全都声明了 `group="main"`，所以它们被塞进同一个 Panel，纵向共享一条可拖拽分隔线的空间。§4.3 展开滚动容器分配对这个组的影响。
+- **`order=5` 的含义**：`sidebarItems()`（`src/server/application/loader/registry.ts:236-254`）把贡献项按 `order` 升序排。当前全仓往 `sidebar` 槽挂东西的只有 3 个插件：projects（order 5）、sessions-list（order 10，标题「对话」）、sub-agent（order 20，标题「子 Agent」）。所以 projects 排在左栏最上，是「项目在上、对话在下」的布局来源——这个顺序是**贡献项数据**，不是壳写死的。
+- **`group="projects"` 的含义**：前端 `sidebar.tsx` 的 `groupItems()` 用 `item.group ?? item.id` 作 key 分组；同组的贡献项进同一个 `Panel`（react-resizable-panels 的 vertical PanelGroup 里的一个 Panel），不同组或无组各占独立 Panel。**壳只在组之间渲染拖拽手柄**——projects 从 `group:"main"` 拆到自己的组，正是为了让「项目区 / 会话区之间能上下拖」成立：原先三个居民同处 `main`，整个左栏只有 1 个 Panel、0 条手柄，高度比怎么都调不了。会话列表与子 Agent 列表仍同处 `main`（`docs/sidebar.md` §5.3 解释 sub-agent 为什么不能独占一组）。
+- **`defaultSize=25` 的含义**：组级首屏高度提示。分组一变，库的持久化记录 key 也变（旧记录失配），首屏退回默认布局——缺省是各组**均分**（项目区吃 50% 高度、下面一大块空白）。25 是「标题 + 三行项目」的量级；用户拖过之后以用户拖的比例为准（`autoSaveId="sidebar-v"` 持久化），这个值只在没有记录时兜底。
 
 ### 4.2 注册链（壳后端 → 前端）
 
 - **壳后端聚合**：`PluginRegistry.registerOne`（`registry.ts:136-163`）遍历 `arraySlots` 映射，把 `p.manifest.contributes.sidebar` 里的每条贡献项 push 进 `sidebar` 这个 `ArraySlot`。push 前先按 `contribution.id` 调 `removeById(id)`——这是「后注册者覆盖同名贡献项」的覆盖语义：`bootstrap` 按 `builtin → installed → user → project` 顺序注册，把内置 projects 复制到项目目录就能覆盖它（无特权差异检验方式二）。
-- **壳后端查询**：`registry.sidebarItems()`（`registry.ts:236-248`）返回 `{ id, title, component, pluginId, group? }[]`，按 order 升序，缺省 100。
+- **壳后端查询**：`registry.sidebarItems()`（`registry.ts:236-254`）返回 `{ id, title, component, pluginId, group?, defaultSize? }[]`，按 order 升序，缺省 100。`defaultSize` 是**字段白名单**里的一项——投影是显式列举，漏了字段不会报错，只会让壳拿到 `undefined`（首屏退化成均分），所以契约加字段时这里必须同步。
 - **IPC 暴露**：`src/server/controllers/slots-dialog.ts` 的 `IPC.slots.sidebar` handler 返回 `registry.sidebarItems()`。
 - **前端拉取**：`src/web/components/sidebar.tsx:126-128` 的 `useEffect` 在 `pluginsNonce` 变化时调 `window.kernel.slots.sidebar().then(setItems)`——`pluginsNonce` 是 `useUiStore` 里插件启用/禁用/安装后 +1 的世代号（`bumpPlugins`），所以热加载后左栏自动重拉。
 
@@ -86,7 +88,7 @@ projects 填了五个字段全量：`id="projects"`、`title="项目"`、`compon
 
 - **组件自动匹配**：`packages/react/src/index.ts:510-530` 的 `registerPluginComponents()` 读 `contributes.sidebar[].component`，在模块 exports 里 `asReactComponent(module[item.component])` 找到同名组件，写进 `sidebarComponents` Map。projects 的 renderer export 了 `ProjectsSection`，所以框架自动把它登记为 component 名 `"ProjectsSection"`——插件**不调任何 register 函数**（`registerSidebarComponent` 这类手动注册在现行代码里已不存在，老文档里提到的它已被自动匹配取代）。
 - **渲染**：`sidebar.tsx:58-111` 的 `SidebarItemSlot` 用 `getSidebarComponent(item.component)` 取组件，外面包 `<PluginIdContext.Provider value={item.pluginId}>`——所以 `ProjectsSection` 组件树里的 `usePluginId()` 返回 `"projects"`，`usePluginContext()` 拿到的 `pluginId` 绑定层（`config`）自动落到 projects 的配置命名空间。组件拿不到就没法写自己的 config，这正是「pluginId 由框架注入、插件不手写」的落地。
-- **滚动容器分配**：`SidebarItemSlot` 里用 MutationObserver 探测每个槽位内容是否为空（渲染 null 即空），滚动容器（`flex-1 overflow-y-auto`）分配给「最后一个有内容的项」，其余项 `shrink-0 max-h-[50%]` 自己滚。projects 的 `ProjectsSection` 恒渲染 `<Section>`（不会渲染 null），所以它恒占一个非空槽；但它不是 `group="main"` 的末项（sessions-list 才是），故它是 `shrink-0` 固定高度项、内容超过 3 行时自己内部滚（`maxHeight: calc(3 * 54px + 2 * var(--sidebar-row-gap))`，见 renderer 第 141 行）——这解释了「项目列表超高时它自己滚、不挤压会话列表」的行为。
+- **滚动容器分配**：`SidebarItemSlot` 里用 MutationObserver 探测每个槽位内容是否为空（渲染 null 即空），滚动容器（`flex-1 overflow-y-auto`）分配给「组内最后一个有内容的项」，其余项 `shrink-0 max-h-[50%]` 自己滚。projects 的 `ProjectsSection` 恒渲染 `<Section>`（不会渲染 null），且它**独占 `group="projects"`**——于是它天然就是该组的「最后有内容的项」，吃满项目区高度并自带滚动。所以 renderer 里**不再**给列表加内部高度上限（旧代码的 `maxHeight: calc(3 * 54px + 2 * var(--sidebar-row-gap))` 已删）：面板已经能给高度，再压一个内部上限等于给用户拖出来的高度留一块永远填不满的空白。项目多到超出面板高度时，滚动发生在槽壳那层（与 sessions-list 同机制）。
 
 ---
 
@@ -265,7 +267,7 @@ startNewChat: async (cwd) => {
 
 ### 8.1 sessions-list（会话列表）：经框架 `sessionInfos` 刷新
 
-sessions-list 是 `group="main"` 里 projects 的「邻居」，也是项目切换最直接的下游。它的刷新**不是** projects 直接触发的，而是框架 `initSessionStore` 维护的 `sessionInfos` 字段自动更新的结果。
+sessions-list 是 projects 在左栏里的「上/下邻居」（前者在 `group="projects"`、后者在 `group="main"`，两者之间一条可拖拽分隔线），也是项目切换最直接的下游。它的刷新**不是** projects 直接触发的，而是框架 `initSessionStore` 维护的 `sessionInfos` 字段自动更新的结果。
 
 - **数据源已收敛为 store**：`sessions-list/renderer/index.tsx` 读 `useSessionStore((s) => s.sessionInfos)`（不再 `ctx.sessions.list` 自己拉），`loading = sessionInfos === null`。
 - **框架唯一拉取口**：`src/web/stores/session-store.ts:627-638` 里，`initSessionStore` 手动维护 `lastCwd` 变量、`useUiStore.subscribe` 比对 `state.currentCwd !== lastCwd`，变化即调 `loadForCwd()` → `loadSessionInfos(cwd)`。`loadSessionInfos`（第 394-411 行）调 `window.kernel.sessions.list(cwd)`，写 `sessionInfos` 前先查 `useUiStore.getState().currentCwd !== cwd` 防竞态（切了两次项目时旧响应丢弃）。

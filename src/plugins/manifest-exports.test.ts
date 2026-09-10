@@ -6,26 +6,11 @@
 // composer 快速入口长期不渲染,无任何报错信号。本守卫把「manifest 声明的每个组件名
 // 必须能从 renderer 入口导出(含相对路径 re-export 链)」钉成 CI 断言。
 import { describe, expect, it } from "vitest";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { walkPluginDirs } from "./manifest-scan";
 
 const PLUGINS_ROOT = resolve(__dirname, ".");
-
-/** 递归找所有 plugin.json 所在目录(i18n 语言资源 plugin.json 无 id,被滤掉)。 */
-function* walkPluginDirs(dir: string): Generator<string> {
-  for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name.startsWith(".")) continue;
-    const p = join(dir, name);
-    if (!statSync(p).isDirectory()) continue;
-    if (existsSync(join(p, "plugin.json"))) {
-      try {
-        const m = JSON.parse(readFileSync(join(p, "plugin.json"), "utf-8")) as { id?: unknown };
-        if (typeof m.id === "string" && m.id) { yield p; continue; }
-      } catch { /* 损坏 manifest 由 loader 侧报 */ }
-    }
-    yield* walkPluginDirs(p);
-  }
-}
 
 /** 收集一个 TS/TSX 模块的具名导出(含相对路径 re-export 递归,循环引用安全)。 */
 function collectExports(file: string, seen = new Set<string>()): Set<string> {
