@@ -145,7 +145,7 @@ window.kernel.slots.sidebar() ◄───── Sidebar 组件 ─────�
 
 - **手柄只在组间渲染**：同组项再多也只是一条 CSS flex 分配，没有任何手柄。所以"要能上下拉"必须表达成"不同 group"——这不是样式问题，是布局语义问题。
 - **Panel 显式带 `id={group key}`**：库的持久化记录按"组内各 Panel 的 id 拼串"作 key。不给 id 时库退化成用**约束串**（`minSize`/`maxSize` 等）当 id——组数一变或用例一变，key 就变，用户拖好的比例会被静默重置回默认。显式 id 让"加组 / 改约束"不再动已存比例。
-- **热区与"线"的视觉解耦**（`--sidebar-divider-visual-display`）：手柄热区恒为 `display:flex` + `cursor:row-resize`（8px 透明条），只有内线的显隐随风格变。旧实现两者共用一个 token（`--sidebar-divider-display`），而 card/minimal/glass 三种风格把它设成 `none`——于是这三种风格里手柄连热区一起消失，"分组拆开了也依然拖不动"。另外拖拽中内线一律显形，保证"无分隔线"的风格拖起来也有反馈。
+- **热区与"线"的视觉解耦**（`--sidebar-divider-visual-display`）：手柄热区恒为 `display:flex` + `cursor:row-resize`（8px 透明条），只有内线的显隐随风格变。旧实现两者共用一个 token（`--sidebar-divider-display`），而 card/minimal/glass 三种风格把它设成 `none`——于是这三种风格里手柄连热区一起消失，"分组拆开了也依然拖不动"。另外拖拽中内线一律显形，保证"无分隔线"的风格拖起来也有反馈。**右面板 `right-panel.tsx` 是同一形态、同一修法**（`--sidepanel-divider-visual-display`），两侧共用一套命名约定与守卫：静态守卫 `src/web/components/divider-token.test.ts`（任何非 visual 的 `--*-divider-display` 声明/消费即报警）+ 两侧各自的 DOM 交互 test。
 - **组级初值 `defaultSize`**：首个声明者生效（`projects` 给 25），避免首次渲染（localStorage 还没有记录时）被均分成 50/50——项目区只有几行内容，吃一半高度就是一块空白。
 
 ## 6 sessionGroupings：会话分组策略

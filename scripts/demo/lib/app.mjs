@@ -37,10 +37,22 @@ export async function launchApp({ appDir, port = 9222, timeoutMs = 40000, env: e
   // Windows:os.homedir() 读 USERPROFILE(非 HOME)——隔离只覆盖 HOME 时 Node 侧数据根
   // 落回真实 profile(会话/扩展/路径泄漏进录制,剧本状态也不匹配)。同设两变量。
   const args = [appDir, `--remote-debugging-port=${port}`];
-  if (extraEnv?.HOME && platform() === "win32") {
-    env.USERPROFILE = extraEnv.HOME;
-    // 实测:USERPROFILE 覆盖后 Electron 的 userData 解析失败(启动即退,"Failed to get
-    // 'userData' path")——--user-data-dir 强制 userData 落隔离区(不经 USERPROFILE)。
+  if (extraEnv?.HOME) {
+    if (platform() === "win32") {
+      // Windows:os.homedir() 读 USERPROFILE(非 HOME)——隔离只覆盖 HOME 时 Node 侧数据根
+      // 落回真实 profile(会话/扩展/路径泄漏进录制,剧本状态也不匹配)。同设两变量。
+      env.USERPROFILE = extraEnv.HOME;
+      // 实测:USERPROFILE 覆盖后 Electron 的 userData 解析失败(启动即退,"Failed to get
+      // 'userData' path")——--user-data-dir 强制 userData 落隔离区(不经 USERPROFILE)。
+    }
+    // 所有平台都强制 userData 落隔离区(HOME 隔离管不到它)。macOS 实测:HOME 只覆盖了
+    // 应用自己的配置目录(Node 侧读 $HOME),而 Chromium 的 profile(含 **localStorage**)
+    // 走 NSHomeDirectory() → 永远是真实 ~/Library/Application Support/<App>。
+    // 后果:同一 MHD_PORT(= 同 origin)的不同运行共享 localStorage——react-resizable-panels
+    // 的 autoSaveId 比例、主题/偏好等渲染侧持久态跨运行残留,依赖"首屏是默认布局"的 e2e
+    // 会假失败(实测:sidebar-panel.e2e.mjs 第二轮读到上一轮拖出的 30.3% 而非 25%)。
+    // 应用代码自身不读 userData(配置全在 HOME 派生目录),故这里只影响 Chromium 侧,
+    // 隔离后每次运行都是干净 profile——正是 home.mjs 声明的"一次性 HOME,录完即弃"本意。
     args.push(`--user-data-dir=${join(extraEnv.HOME, "electron-userdata")}`);
   }
   const child = spawn(electronPath, args, {

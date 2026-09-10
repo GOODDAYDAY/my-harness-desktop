@@ -510,11 +510,16 @@ export function RightPanelContent(): React.ReactNode {
               {i < renderIds.length - 1 && (
                 <PanelResizeHandle
                   onDragging={setHandleDragging}
+                  // 热区恒在(display:"flex"):风格差异只作用在内线。旧版把
+                  // var(--sidepanel-divider-display) 挂在手柄本身,card/minimal/glass 三个
+                  // 风格把它设成 none 时,"不要分割线"被物理地翻译成了"取消这个交互点"
+                  // ——那三种风格下堆叠 Tab 的高度比彻底调不了(左栏 sidebar.tsx 同款,
+                  // 已一并收口;热区是壳的机制,不许被风格 token 关掉)。
                   style={{
                     height: "8px",
                     cursor: "row-resize",
                     background: "transparent",
-                    display: "var(--sidepanel-divider-display)",
+                    display: "flex",
                     alignItems: "center",
                     transition: "background 0.15s",
                   }}
@@ -527,6 +532,8 @@ export function RightPanelContent(): React.ReactNode {
                       background: handleDragging ? "var(--color-primary)" : "var(--sidepanel-divider-color)",
                       borderRadius: "var(--radius-sm)",
                       transition: "background 0.15s",
+                      // 线可隐藏,但拖拽中一律显形——否则"无分隔线"的风格拖起来没有反馈
+                      display: handleDragging ? "flex" : "var(--sidepanel-divider-visual-display)",
                     }}
                   />
                 </PanelResizeHandle>

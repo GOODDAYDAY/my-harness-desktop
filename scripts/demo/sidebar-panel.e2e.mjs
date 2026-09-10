@@ -46,9 +46,17 @@ const shot = async (page, name) => {
   await page.screenshot({ path: join(shotsDir, `${String(shotN).padStart(2, "0")}-${name}.png`) });
 };
 
-/** 左栏几何:两个 Panel 的高度 + 分隔线手柄(热区/内线/光标)的实测样式。 */
+/** 左栏几何:两个 Panel 的高度 + 分隔线手柄(热区/内线/光标)的实测样式。
+ *  注意根元素筛选:`data-sidebar-style` 属性在两处出现——框架左栏(sidebar.tsx)与设置页
+ *  自己的左列表(settings-page.tsx,activeView=chat 时 visibility:hidden 但仍挂载)。
+ *  querySelector 撞上后者会量到设置页的面板(实测就踩过:比例断言读到 30.3% 而非 25%)。
+ *  故按"可见且含分隔线"挑根,并回报候选数,便于失败时一眼看出选错根。 */
 const SIDEBAR_GEOM = () => {
-  const sidebar = document.querySelector("[data-sidebar-style]");
+  const candidates = [...document.querySelectorAll("[data-sidebar-style]")];
+  const sidebar = candidates.find((el) => {
+    const cs = getComputedStyle(el);
+    return cs.visibility !== "hidden" && cs.display !== "none" && el.querySelector('[role="separator"]');
+  }) ?? candidates[0];
   if (!sidebar) return null;
   const panels = [...sidebar.querySelectorAll('[data-panel=""]')].map((p) => {
     const r = p.getBoundingClientRect();
@@ -58,6 +66,7 @@ const SIDEBAR_GEOM = () => {
   const line = h?.firstElementChild ?? null;
   const hr = h?.getBoundingClientRect() ?? null;
   return {
+    rootCandidates: candidates.length,
     panels,
     handle: h && hr ? {
       x: Math.round(hr.x + hr.width / 2),
@@ -82,6 +91,18 @@ try {
 
   await page.waitForSelector("[data-sidebar-style]", { timeout: 30000 });
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 25000 });
+
+  // 首屏比例断言要求"库里还没有已存比例",但 react-resizable-panels 把它存在 localStorage,
+  // 而 localStorage 是**按 origin(MHD_PORT)共享**的:隔离 HOME 只管应用自己的配置目录
+  // (数据根/.pi agentDir),管不到渲染进程的 origin 存储——用户数据目录在 POSIX 上没被隔离
+  // (仅 win32 分支加了 --user-data-dir)。于是同一端口的上一轮运行(本脚本自己拖过分隔线)
+  // 会把比例留给下一轮:实测第二轮首屏读到 30.3% 而非 25%,断言假失败。
+  // 故这里清一次本地存储并重载,拿到真正的"首次渲染";生产语义不受影响(用户拖出的比例
+  // 本来就该持久化,这是产品行为,不是缺陷)。
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector("[data-sidebar-style]", { timeout: 30000 });
+  await waitForDomIdle(page, { quietMs: 900, timeoutMs: 25000 });
   await shot(page, "default-first-paint");
 
   // ── A) 两个 Panel + 一条手柄;首屏比例 = defaultSize(25),不是均分 ──
@@ -93,7 +114,8 @@ try {
   ok(g.handle.cursor === "row-resize", `手柄光标 row-resize(实际 ${g.handle.cursor})`);
   ok(g.handle.lineDisplay !== "none", `default 风格下分割线可见(实际 display=${g.handle.lineDisplay})`);
   const r0 = ratio(g);
-  ok(Math.abs(r0 - 0.25) < 0.05, `首屏比例 ≈ defaultSize 25%(实际 ${(r0 * 100).toFixed(1)}%,均分会是 50%)`);
+  const lsDump = await page.evaluate(() => localStorage.getItem("react-resizable-panels:sidebar-v"));
+  ok(Math.abs(r0 - 0.25) < 0.05, `首屏比例 ≈ defaultSize 25%(实际 ${(r0 * 100).toFixed(1)}%,均分会是 50%;几何=${JSON.stringify(g.panels)} 候选根=${g.rootCandidates} localStorage=${lsDump})`);
 
   // ── B) 真实鼠标拖分隔线 → 比例改变;reload 后保持 ──
   const beforeH = g.panels[0].h;

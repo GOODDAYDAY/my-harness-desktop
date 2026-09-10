@@ -420,7 +420,11 @@ html, body, #root {
   --sidepanel-icon-active-indicator-height: 20px;
   --sidepanel-icon-gap: 6px;
   --sidepanel-icon-size: 20px;
-  --sidepanel-divider-display: flex;
+  /* 只控制右面板"分割线"这根线的显隐——面板之间的拖拽热区恒定 8px,不受此 token 影响。
+     (与左栏 --sidebar-divider-visual-display 同款:旧名 --sidepanel-divider-display 同时
+      管了手柄的 display,card/minimal/glass 三个风格里连拖拽热区一起被 display:none 干掉,
+      堆叠 Tab 的高度比彻底调不了。) */
+  --sidepanel-divider-visual-display: flex;
   --sidepanel-divider-color: var(--divider-color);
   --sidepanel-row-py: 4px;
   --sidepanel-row-px: 8px;
@@ -476,7 +480,7 @@ html, body, #root {
   --sidepanel-icon-btn-border: none;
   --sidepanel-icon-active-indicator: none;
   --sidepanel-icon-gap: 8px;
-  --sidepanel-divider-display: none;
+  --sidepanel-divider-visual-display: none;
   --sidepanel-row-py: 10px;
   --sidepanel-row-px: 12px;
   --sidepanel-row-gap: 8px;
@@ -519,7 +523,7 @@ html, body, #root {
   --sidepanel-icon-btn-border: none;
   --sidepanel-icon-gap: 2px;
   --sidepanel-icon-size: 18px;
-  --sidepanel-divider-display: none;
+  --sidepanel-divider-visual-display: none;
   --sidepanel-row-py: 6px;
   --sidepanel-row-px: 10px;
   --sidepanel-row-gap: 2px;
@@ -588,7 +592,7 @@ html, body, #root {
   --sidepanel-icon-btn-bg-hover: var(--color-surface);
   --sidepanel-icon-btn-bg-active: var(--color-surface);
   --sidepanel-icon-btn-border: none;
-  --sidepanel-divider-display: none;
+  --sidepanel-divider-visual-display: none;
   --sidepanel-divider-color: color-mix(in srgb, var(--color-border) 40%, transparent);
   --sidepanel-row-py: 8px;
   --sidepanel-row-px: 10px;
