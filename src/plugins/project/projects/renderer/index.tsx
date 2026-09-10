@@ -1,7 +1,8 @@
 // projects 插件 renderer —— 左栏"项目"分组:最近工作目录。
 //
 // 最近目录存自己的插件 config("recentCwds",插件配置能力的示范),
-// 切目录 = sessions.start(dir)(停旧起新由 SessionStore 管)+ 清会话上下文 + nonce。
+// 切目录 = useSessionStore.switchCwd(dir)(壳动作:落 cwd + 恢复该项目上次看的会话,
+// 无记录/文件已删则退新会话壳)+ 驱 UI 重 resync——插件不自己拼"清会话上下文"序列。
 // 顺序语义:点项目只切换、不重排(置顶只由"新增/拖拽"触发);
 // 新增从顶部加;dnd-kit 拖拽改序写回 config(自带 transform 过渡动画)。
 import { useEffect, useState } from "react";
@@ -21,9 +22,7 @@ import { pathBasename } from "@my-harness-desktop/shared";
 export function ProjectsSection(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const {
-    currentCwd, setCurrentCwd, setCurrentSessionPath, setCurrentNeutralSessionId, setSessionTitle, bumpSession,
-  } = useUiStore();
+  const { currentCwd, setCurrentCwd, clearSessionContext } = useUiStore();
   const [cwds, setCwds] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -40,12 +39,11 @@ export function ProjectsSection(): React.ReactNode {
 
   const switchCwd = async (dir: string): Promise<void> => {
     try {
-      setCurrentCwd(dir);
-      setCurrentSessionPath(null);
-      setCurrentNeutralSessionId(null);
-      setSessionTitle(null);
-      await useSessionStore.getState().startNewChat(dir);
-      bumpSession();
+      // 切项目 = 落 cwd + 恢复该项目上次看的会话(无记录/文件已删 → 新会话壳)。
+      // 语义收在壳动作 session-store.switchCwd 里:openSession 的上下文对齐/水合/失败兜底
+      // 只在 store 一处,插件不手抄一遍(此前插件自己 startNewChat 是无条件新会话的根因)。
+      // 点当前已激活项目是幂等 no-op(判定也在壳动作里)。
+      await useSessionStore.getState().switchCwd(dir);
     } catch (err) {
       console.error("[projects] 切换目录失败:", err);
     }
@@ -66,12 +64,11 @@ export function ProjectsSection(): React.ReactNode {
       return next;
     });
     // 摘掉的是当前挂接:清 cwd/会话上下文,回无项目空态——否则列表删光了
-    // cwd 还残留(lastCwd 随 prefs 持久化,重启又拉回来,"删不干净"的根因)
+    // cwd 还残留(lastCwd 随 prefs 持久化,重启又拉回来,"删不干净"的根因)。
+    // 会话记忆(lastSessionByCwd)不删:同路径再加回来时能直接恢复到上次那个会话。
     if (dir === currentCwd) {
       setCurrentCwd("");
-      setCurrentSessionPath(null);
-      setCurrentNeutralSessionId(null);
-      setSessionTitle(null);
+      clearSessionContext();
     }
   };
 

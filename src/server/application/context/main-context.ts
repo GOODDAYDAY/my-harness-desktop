@@ -37,6 +37,11 @@ export interface Prefs {
    *  与 activeSidePanelTabs 同域(曾误落 general.json 项目级,按项目漂移,全局化迁回)。 */
   sidePanelOrder: string[];
   lastCwd: string;
+  /** 每个项目上次打开的会话(键=cwd,值=中立主键 ns;老会话无 ns 时回落投影路径)。
+   *  导航状态,与 lastCwd 同域——各端独立导航,进不了多端同步白名单(SYNCED_PREF_KEYS)。
+   *  写入时机是"成功打开/物化一个真实会话"(renderer 的 openSession / sessionStart 水合),
+   *  不是"切走那一刻":这样才能保证冷启动恢复拿到的是退出时真正打开的会话。 */
+  lastSessionByCwd: Record<string, string>;
   currentLocale: string;
   bundledSkillsEnabled: boolean;
   /** 自定义 pi 内核目录(docs/design/custom-cli-path.md):"" = 未设置,走数据根 > PATH 原链。 */
@@ -62,6 +67,7 @@ export const DEFAULT_PREFS: Prefs = {
   activeSidePanelTabs: [],
   sidePanelOrder: [],
   lastCwd: "",
+  lastSessionByCwd: {},
   currentLocale: "zh-CN",
   bundledSkillsEnabled: true,
   customCliDir: "",

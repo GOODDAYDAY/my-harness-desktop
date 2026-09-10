@@ -205,7 +205,8 @@ sub-agent 编排器在派生子 Agent 时，往子会话的 custom 域**平铺�
 sidebar 和 timeline 是布局树里 `left` / `main` 两个并列 group，组件层面零直接引用。它们的协作靠共享 store 的"变更计数器 + 派生状态"：
 
 - **点会话**：sessions-list 的 `select()`（`renderer/index.tsx` 261–290 行）乐观写 `setCurrentSessionPath` / `setCurrentNeutralSessionId` / `setSessionTitle`，再 `openSession(...)`。权威层在 main 侧 `SessionStore.setContext` dispatch 一个 synthetic sessionStart 事件，水合同一字段。timeline 订阅 `useUiStore` 的 `sessionNonce`（`bumpSession`），收到自增后重 resync 会话流。乐观层管点击瞬间高亮，权威层管最终一致性。
-- **切目录 / 新会话**：projects 的 `switchCwd`（`projects/renderer/index.tsx` 41–52 行）写 `setCurrentCwd` + 清会话上下文 + `startNewChat` + `bumpSession()`。sessions-list 的 `newSession`（`sessions-list/renderer/index.tsx` 227–232 行）同理。`⌘N`（`app-main.tsx` 145–151 行）也走 `startNewChat`。timeline 是这些变更的最终受益方，但它不 import 任何 sidebar 居民。
+- **切目录**：projects 的 `switchCwd` 只调壳动作 `useSessionStore.switchCwd(dir)`——它落 `currentCwd`，再**恢复该项目上次看的会话**（壳侧记忆 `prefs.lastSessionByCwd`；无记录或会话已不可读才退新会话壳），最后 `bumpSession()`。语义与"清会话上下文 + 起新会话"的旧实现不同：切项目不再无条件丢掉浏览上下文（设计见 `docs/design/cwd-session-memory.md`）。
+- **新会话**：sessions-list 的 `newSession` 与 `⌘N` 都只调 `startNewChat(cwd)`——"清会话上下文三连（path/ns/title）"已收进 `startNewChat` 自身，三个入口不再各抄一遍（§3.3）。timeline 是这些变更的最终受益方，但它不 import 任何 sidebar 居民。
 - **折叠**：`⌘B`（`app-main.tsx` 119–131 行）切 `left` 组的 `hidden` 标志，`LayoutEngine` 把左组 Panel 缩为 0 宽。折叠时子树不卸载（react-resizable-panels 的 `collapsible` 模式），Sidebar 组件保持挂载、内部状态（如搜索框内容、折叠态）不丢。这是左栏独有的、与 timeline 无涉的 chrome 行为。
 
 ### 7.2 与右侧栏（sidePanel）
@@ -247,9 +248,9 @@ sessions-list 独占 `main` 组、sub-agent 独占自己的新组，中间再多
 
 因为"子 Agent"是会变的内容，sessions-list 是会长期稳定的列表机制。把"哪类会话该嵌套到父会话下"的**映射知识**推给贡献方（sub-agent 声明 `parentPathKey`），sessions-list 只认"custom 域里有没有这个 key"这个数据驱动的通用规则。将来有第二个需要嵌套的会话类型（比如 goal 的子任务），它贡献一条自己的 sessionGroupings，sessions-list 一行不改。这是"内容外挂、机制留在壳"纪律在插件间协作上的复现。
 
-**Q：projects 和 sessions-list 在同一个 Panel 里，它们怎么协作（比如切目录后刷新会话列表）？**
+**Q：projects 和 sessions-list 分处两个 Panel，它们怎么协作（比如切目录后刷新会话列表）？**
 
-不直接通信。projects 切目录时写 `useUiStore.setCurrentCwd(dir)` + `startNewChat`，sessions-list 读同一个 `useUiStore` 的 `currentCwd` 和 `useSessionStore` 的 `sessionInfos`（框架统一拉取、事件增量维护）。两个居民各自订阅框架 store，不互读写对方的私有状态——插件间通信只走事件或共享 store 只读，这里走的是后者。同组共享 Panel 只是布局上的相邻，不是数据上的耦合。
+不直接通信。projects 切目录时调壳动作 `useSessionStore.switchCwd(dir)`（内部写 `useUiStore.setCurrentCwd(dir)` + 恢复该项目上次的会话或起新会话壳），sessions-list 读同一个 `useUiStore` 的 `currentCwd` 和 `useSessionStore` 的 `sessionInfos`（框架统一拉取、事件增量维护）。两个居民各自订阅框架 store，不互读写对方的私有状态——插件间通信只走事件或共享 store 只读，这里走的是后者。分处两个 Panel 只是布局上可独立调高度，不是数据上的解耦变化；反过来同处一个 Panel 也只是布局相邻，不是数据耦合。
 
 **Q：sidebar 的 `title` 为什么是写死的中文原文，而不是 i18n key？**
 

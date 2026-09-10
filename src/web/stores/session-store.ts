@@ -209,8 +209,16 @@ export interface SessionStoreState {
    *  返回 false = 文件缺失/不可读(静默放弃,不进空会话、不 setContext——
    *  cwd 落空的防护语义不变,只是不再以异常噪音上报,由调用方决定如何呈现)。 */
   openSession: (sessionPath: string) => Promise<boolean>;
-  /** 新会话:本地清空,零 RPC;进程在首次发送时按需起。 */
+  /** 新会话:本地清空,零 RPC;进程在首次发送时按需起。
+   *  会话上下文三连(path/ns/title)也在这里一并清——此前 projects.switchCwd / ⌘N /
+   *  sessions-list.newSession 各自抄一遍,漏一个就留残影(§3.3 框架管通用,调用方只传参数)。 */
   startNewChat: (cwd: string) => Promise<void>;
+  /** 恢复某项目上次看的会话:有记忆且打开成功 → 打开它;否则起新会话。
+   *  切项目(switchCwd)与冷启动(app-main)共用这一个入口,两边语义不会漂。 */
+  restoreForCwd: (cwd: string) => Promise<void>;
+  /** 切项目(左栏项目行的唯一入口):落 cwd → 恢复该项目上次的会话 → 驱 UI 重 resync。
+   *  幂等:点当前已激活的项目直接返回,不重载、不重开新会话。 */
+  switchCwd: (cwd: string) => Promise<void>;
   /** 用户发消息后乐观回显(等 messageEnd(user) 到了去重) */
   appendOptimisticUser: (text: string, sendText: string) => void;
   /** 发送同时创建 assistant 占位(pending:true,content:'')消除空窗。
@@ -473,6 +481,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       if (ui.currentSessionPath !== detail.info.path) ui.setCurrentSessionPath(detail.info.path);
       if (ui.currentNeutralSessionId !== (detail.info.neutralSessionId ?? null)) ui.setCurrentNeutralSessionId(detail.info.neutralSessionId ?? null);
       ui.setSessionTitle(deriveSessionTitle(detail.info));
+      // 写穿"每个项目上次看的会话"(ns 主键优先、投影路径兜底)——切项目/冷启动恢复用的记忆。
+      // 写在"成功打开"这一刻而不是"切走那一刻":否则冷启动恢复拿到的是上次切出的会话,
+      // 而不是退出时真正打开的那一个(用户实际看到的是后者)。
+      ui.rememberSessionForCwd(detail.info.cwd, detail.info.neutralSessionId ?? detail.info.path);
       // 打开即拉一次活会话真值:新客户端(尤其浏览器)打开空闲会话时没有轮次事件可等,
       // 不拉则 stats 永停「—」占位;后端已被别的客户端/轮次起活时,这里立即补齐真值(多端一致)。
       // 后端未起(按需起,§1.5)→ getStats 拒绝,refreshStats 的 catch 兜底保持诚实态。
@@ -487,10 +499,37 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     sessionGen++;
     await window.kernel.sessions.setContext(cwd, null);
     // 能力面经 capabilitiesChanged 事件推送,此处不散拉。
-    // 中立主键随会话上下文一并清(根因修复):不清则新会话残留上一会话的 ns,
-    // 收藏/分叉会把新会话的消息锚到旧会话树上(静默错会话,比按钮不亮更糟)。
-    useUiStore.getState().setCurrentNeutralSessionId(null);
+    // 会话上下文三连随新会话一并清:ns 不清则新会话残留上一会话的主键(收藏/分叉会把
+    // 新会话的消息锚到旧会话树上——静默错会话,比按钮不亮更糟);path/title 不清则高亮
+    // 与面包屑停在已离开的会话上。
+    useUiStore.getState().clearSessionContext();
     set({ messages: [], overlay: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
+  },
+  restoreForCwd: async (cwd) => {
+    if (!cwd) return;
+    const remembered = useUiStore.getState().lastSessionByCwd[cwd];
+    // 记忆里没有(首次访问该项目)或文件已被删/不可读(openSession 返回 false)→ 起新会话。
+    // 两条路都走"新会话壳"(零 RPC,进程在首次发送时按需起),与切项目前的默认行为一致。
+    if (remembered) {
+      try {
+        if (await get().openSession(remembered)) return;
+      } catch (err) {
+        // 恢复是"锦上添花",不是启动的必经步骤:一句坏记忆(会话被删/内容损坏/读盘报错)
+        // 不许把切项目或冷启动打断——退到基线行为(新会话壳)并诚实留一条日志。
+        console.warn("[session-store] 恢复上次会话失败,退新会话:", err);
+      }
+    }
+    await get().startNewChat(cwd);
+  },
+  switchCwd: async (cwd) => {
+    // 幂等:点当前已激活的项目 = 无操作(旧行为是"重开一个新会话",在新语义下等于
+    // 无意义地丢掉当前会话——改掉)
+    if (!cwd || cwd === useUiStore.getState().currentCwd) return;
+    // 顺序:先落 cwd(落 prefs.lastCwd + 重读项目级 general.json,并触发框架拉新目录的
+    // 会话清单),再恢复该项目上次的会话——openSession 会按会话头把 main 侧上下文对齐。
+    useUiStore.getState().setCurrentCwd(cwd);
+    await get().restoreForCwd(cwd);
+    useUiStore.getState().bumpSession();
   },
   appendOptimisticUser: (text, sendText) => {
     set((s) => ({ overlay: [...s.overlay, {
@@ -630,13 +669,18 @@ export function hydrateSessionStart(event: SessionEvent): void {
   if (event.type !== "sessionStart") return;
   const sf = event.sessionFile;
   if (typeof sf !== "string" || !sf) return;
-  useUiStore.getState().setCurrentSessionPath(sf);
+  const ui = useUiStore.getState();
+  ui.setCurrentSessionPath(sf);
   const fromEvent = (event as { neutralSessionId?: unknown }).neutralSessionId;
-  useUiStore.getState().setCurrentNeutralSessionId(
+  const ns =
     typeof fromEvent === "string" && fromEvent
       ? fromEvent
-      : (useSessionStore.getState().sessionInfos?.[sf]?.neutralSessionId ?? null),
-  );
+      : (useSessionStore.getState().sessionInfos?.[sf]?.neutralSessionId ?? null);
+  ui.setCurrentNeutralSessionId(ns);
+  // 新会话物化(首条消息落盘)在此刻才有 id:补记"该项目上次看的会话"。
+  // 不写这一步,新会话壳期间的切换就没人记——下次切回该项目会回到更早那个会话。
+  const cwd = ui.currentCwd;
+  if (cwd) ui.rememberSessionForCwd(cwd, ns ?? sf);
 }
 
 /** 初始化 main→renderer 通道(幂等;应用启动时调一次)。 */

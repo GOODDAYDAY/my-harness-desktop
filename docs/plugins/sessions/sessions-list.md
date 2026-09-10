@@ -253,9 +253,9 @@
   - 写：`useSessionStore.getState().openSession(...)` / `.startNewChat(...)` / `.loadSessionInfos(...)` / `.applyHeaderPatch(...)` / `.removeSessionRows(...)`（框架动作，不是裸 set）；`useUiStore.getState().setCurrentSessionPath(...)` / `.setCurrentNeutralSessionId(...)` / `.setSessionTitle(...)`（框架 setter）。
   - 本插件不碰 `useSessionStore.setState`，不碰 `useUiStore.setState`——状态变更意图全部经框架动作表达，符合"插件不直改 store（§8.2 只读纪律）"。
 
-- `newSession`（第 227-232 行）与 `startNewChat` 的分工是"清 UI 态 + 起空会话壳"。
-  - 先清 `currentSessionPath` / `currentNeutralSessionId` / `sessionTitle`（三个 null），再 `useSessionStore.getState().startNewChat(currentCwd)`。
-  - `startNewChat`（session-store.ts 第 459-463 行）只做 `setContext(cwd, null)` + 清 messages/snapshot/stats/thinkingLevels，**零 RPC**——进程在首次发送时按需起（`ensureForSend`）。
+- `newSession`（第 228-233 行）现在只有一行：`useSessionStore.getState().startNewChat(currentCwd)`。
+  - "清会话上下文三连"（`currentSessionPath` / `currentNeutralSessionId` / `sessionTitle`）已收进 `startNewChat` 自身——同一序列此前在本插件、projects 的 `switchCwd`、`⌘N` 三处各抄一遍，漏一个就留残影（§3.3 框架管通用，调用方只传参数）。
+  - `startNewChat` 只做 `setContext(cwd, null)` + 清会话上下文三连 + 清 messages/snapshot/stats/thinkingLevels，**零 RPC**——进程在首次发送时按需起（`ensureForSend`）。它**不**写"每个项目上次看的会话"记忆（`lastSessionByCwd`）：null 不许覆盖记忆，否则冷启动那一次 `startNewChat` 就把记忆清空了。
 
 - 标题同步（`syncTitleFromList`，第 157-167 行）处理"活跃会话标题水合"的第二来源。
   - 权威层在 `openSession` 用 detail 设标题；但列表事件更新（后台改名）时标题要跟得上列表最新值，故在 `sessionInfos` 变化时从 `sessions` 里找到活跃会话、`deriveSessionTitle` 重设标题。

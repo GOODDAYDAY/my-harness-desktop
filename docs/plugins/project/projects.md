@@ -100,7 +100,7 @@ projects 填了六个字段全量：`id="projects"`、`title="项目"`、`compon
 
 - `const ctx = usePluginContext()`：拿 pluginId 绑定的 config + dialog。
 - `const { t } = useTranslation()`：查 `projects.*` 文案。
-- `const { currentCwd, setCurrentCwd, setCurrentSessionPath, setCurrentNeutralSessionId, setSessionTitle, bumpSession } = useUiStore()`：从 ui-store 拿 6 个动作/字段。注意这里**没有订阅 `currentCwd` 之外的任何东西重渲染**——它用整 store 解构（非 selector），所以 ui-store 任何字段变化都会让它重渲染，代价可接受（左栏分组本来就要响应高亮变化）。
+- `const { currentCwd, setCurrentCwd, clearSessionContext } = useUiStore()`：从 ui-store 拿 1 个字段（`currentCwd`）+ 2 个动作（`setCurrentCwd` / `clearSessionContext`）。注意这里**没有订阅 `currentCwd` 之外的任何东西重渲染**——它用整 store 解构（非 selector），所以 ui-store 任何字段变化都会让它重渲染，代价可接受（左栏分组本来就要响应高亮变化）。
 
 两个本地 state：`cwds: string[]`（最近目录清单）、`collapsed: boolean`（分组折叠态）。
 
@@ -122,27 +122,26 @@ const persist = (next: string[]): void => {
 ```ts
 const switchCwd = async (dir: string): Promise<void> => {
   try {
-    setCurrentCwd(dir);
-    setCurrentSessionPath(null);
-    setCurrentNeutralSessionId(null);
-    setSessionTitle(null);
-    await useSessionStore.getState().startNewChat(dir);
-    bumpSession();
+    // 切项目 = 落 cwd + 恢复该项目上次看的会话(无记录/文件已删 → 新会话壳)
+    await useSessionStore.getState().switchCwd(dir);
   } catch (err) {
     console.error("[projects] 切换目录失败:", err);
   }
 };
 ```
 
-五步顺序语义（§6 逐层下钻）：
+**语义全部收在壳动作里**（`src/web/stores/session-store.ts` 的 `switchCwd`），插件只传一个目录。这样收口有一个直接根因：旧实现把"清会话上下文 + startNewChat"序列写在插件里，是"切项目永远给新会话、浏览上下文全丢"的来源——而同一序列在 ⌘N、sessions-list 的 `newSession` 里还各抄了一份。壳动作的内容：
 
-- `setCurrentCwd(dir)`：写 ui-store 的 `currentCwd`，并触发 `lastCwd` 持久化 + general.json 分层重读（ui-store.ts:379-385）。
-- `setCurrentSessionPath(null)` + `setCurrentNeutralSessionId(null)`：清空「当前会话」的投影地址与中立主键——切项目意味着脱离旧项目里的会话。
-- `setSessionTitle(null)`：清面包屑标题（回到「新对话」）。
-- `await startNewChat(dir)`：走 `useSessionStore` 的 `startNewChat`，把壳后端上下文切到新目录、清空会话投影。
+- `if (cwd === currentCwd) return`：点当前已激活的项目 = 幂等 no-op（旧行为是重开一个新会话，在新语义下等于无意义地丢掉当前会话）。
+- `setCurrentCwd(cwd)`：写 ui-store 的 `currentCwd`，并触发 `lastCwd` 持久化 + general.json 分层重读（`ui-store.ts`），同时驱动框架拉新目录的会话清单（`initSessionStore` 的 cwd 订阅）。
+- `restoreForCwd(cwd)`：查 `prefs.lastSessionByCwd[cwd]`——有记忆且 `openSession` 成功就恢复它，否则 `startNewChat(cwd)`（新会话壳，零 RPC，进程在首次发送时按需起）。记忆写入点在"成功打开/物化真实会话"那两处（`openSession` 成功 / `sessionStart` 水合），不写在"切走那一刻"——否则冷启动恢复拿到的会是上次切出的会话，而不是退出时真正打开的那个。
 - `bumpSession()`：`sessionNonce + 1`——注意这个世代号当前**没有任何订阅者**（§8.4 专门交代这个「残留信号」）。
 
-try/catch 只 `console.error`：切换失败不弹 UI，静默保留旧态（`setCurrentCwd` 是同步的，失败点只可能在 `startNewChat` 的 `setContext` IPC 上；失败时 `currentCwd` 已改但会话投影没切，属半切换态，靠 catch 兜底不崩）。
+try/catch 只 `console.error`：切换失败不弹 UI。失败面已收窄到"读会话文件失败"一处——`restoreForCwd` 内部对 `openSession` 的返回 false / 抛错都做了兜底（退新会话壳），所以"半切换态"（cwd 改了、会话投影没切）在正常路径上不会出现。
+
+一个已知边界（接受，不设守卫）：记忆是按 cwd 键存的自洽值（记录时就在那个 cwd 里打开），所以只在"项目目录被移动/改名"这种路径本身已失效的场景下可能对不上——那时 `openSession` 的失败兜底同样会把它退成新会话。
+
+设计背景见 `docs/design/cwd-session-memory.md`。
 
 ### 5.4 `openDirectory`（第 54-59 行）：新增目录
 
@@ -168,14 +167,13 @@ setCwds((prev) => {
 });
 if (dir === currentCwd) {
   setCurrentCwd("");
-  setCurrentSessionPath(null);
-  setCurrentNeutralSessionId(null);
-  setSessionTitle(null);
+  clearSessionContext();
 }
 ```
 
 - 函数式 `setCwds`：注释明确「快速连删不读渲染闭包的旧 cwds」——连删两个条目时，第二个删除若读的是渲染闭包里的旧 `cwds` 会漏删。
 - 摘掉当前挂接分支：`dir === currentCwd` 时把 `currentCwd` 清空为 `""`。注释给出了这条分支的根因——`lastCwd` 随 prefs 持久化（`setCurrentCwd` 里 `window.kernel.prefs.set("lastCwd", cwd)`），若只从列表删、不清 `currentCwd`，重启后 `hydrateFromPrefs` 又会从 `lastCwd` 拉回这个目录，「删不干净」。所以清空 `currentCwd` 同时把 `lastCwd` 写成 `""`，回「无项目」空态。注意：这个分支**不调** `startNewChat`，所以壳后端 `activeCwd` 不会被清——它只清 renderer 侧状态，这是「删条目」与「切项目」的语义差异（删条目不清后端，切项目才清）。
+- `clearSessionContext()` 是壳提供的"会话上下文三连"（path/ns/title）——同一组清理此前在本文件、⌘N、sessions-list 各抄一遍，现在只有 ui-store 一处定义（`startNewChat` 内部也调它）。`lastSessionByCwd` 里的记忆**不删**：同路径再加回项目时能直接恢复到上次那个会话。
 
 ### 5.6 `onDragEnd`（第 78-89 行）：拖拽排序
 
@@ -218,23 +216,39 @@ setCurrentCwd: (cwd) => {
 - `prefs.set("lastCwd", cwd)`：把「最后工作目录」落桌面偏好（electron-store），跨重启恢复（`hydrateFromPrefs` 第 440 行读 `lastCwd`，第 476 行写入 `currentCwd`）。
 - `setGeneralConfigCwd(cwd)` + `reloadGeneralConfig()`：`general-config.ts` 维护一个模块级 `currentCwdMirror`，`setCurrentCwd` 时同步；随后重读 `general.json` 的分层合并视图（项目级覆盖全局），把结果写进 `generalConfig` 字段。这个字段被 timeline（输入框策略、发送逻辑）、settings-page（`readLayered(file, currentCwd)`）等消费——所以切项目会**连带刷新框架级偏好**（如 defaultThinkingLevel 的项目级覆盖）。
 
-### 6.2 壳后端线：`startNewChat` → `setContext`
+### 6.2 壳后端线：`restoreForCwd` → `openSession` / `startNewChat` → `setContext`
 
-`startNewChat`（`src/web/stores/session-store.ts:459-463`）：
+切项目不再无条件起新会话，壳后端线因此有**两条**，由 `restoreForCwd` 按记忆选择：
+
+```ts
+restoreForCwd: async (cwd) => {
+  const remembered = useUiStore.getState().lastSessionByCwd[cwd];
+  if (remembered) {
+    try { if (await get().openSession(remembered)) return; }
+    catch (err) { console.warn("[session-store] 恢复上次会话失败,退新会话:", err); }
+  }
+  await get().startNewChat(cwd);
+},
+```
+
+`startNewChat`（`src/web/stores/session-store.ts`）：
 
 ```ts
 startNewChat: async (cwd) => {
   sessionGen++;
   await window.kernel.sessions.setContext(cwd, null);
-  set({ messages: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
+  useUiStore.getState().clearSessionContext();
+  set({ messages: [], overlay: [], snapshot: null, stats: null, thinkingLevels: [], streaming: false, switching: false, ready: true });
 },
 ```
 
-- `sessionGen++`：递增「投影拉取防竞态代际」。这是 renderer 侧 session-store 的模块级变量（第 349 行），`refreshStats`/`refreshThinkingLevels` 等异步 RPC 回来后先比对 `gen === sessionGen`，不一致就丢弃——防「切了项目后旧项目的 stats 写回新视图」。
-- `window.kernel.sessions.setContext(cwd, null)`：跨进程调用壳后端。`plugin-context.ts:71` 的 `SessionsApi.setContext` 就是包它。第二个参数 `null` 是「新会话」的显式表达（不是「保留会话」）。
+- `sessionGen++`：递增「投影拉取防竞态代际」。这是 renderer 侧 session-store 的模块级变量，`refreshStats`/`refreshThinkingLevels` 等异步 RPC 回来后先比对 `gen === sessionGen`，不一致就丢弃——防「切了项目后旧项目的 stats 写回新视图」。
+- `window.kernel.sessions.setContext(cwd, null)`：跨进程调用壳后端。`plugin-context.ts` 的 `SessionsApi.setContext` 就是包它。第二个参数 `null` 是「新会话」的显式表达（不是「保留会话」）。
+- `clearSessionContext()`：清 `currentSessionPath`/`currentNeutralSessionId`/`sessionTitle` 三连（壳动作，唯一实现）。ns 不清则新会话残留上一会话的主键，收藏/分叉会把新会话的消息锚到旧会话树上（静默错会话）；path/title 不清则高亮与面包屑停在已离开的会话上。
 - 本地 `set({ messages: [], ... })`：清空会话投影——消息、快照、统计、思考档位、流式标记全清，`ready: true` 表示「有可展示的（空）基线」。注意这里**不递增 `syncNonce`/`openNonce`**，所以 timeline 的 Virtuoso 不会重挂，只是 messages 变空、`currentCwd` 变了导致 timeline 渲染空态（§8.2）。
+- 恢复分支走的是 `openSession`：读会话文件即基线（`openNonce++` → timeline 重挂并按 `initialTopMostItemIndex` 置底）、`setContext(会话头里的 cwd, sessionPath)`、水合 path/ns/title，并顺手写穿 `lastSessionByCwd`。
 
-`setContext` 在壳后端落到 `SessionStore.setContext`（`src/server/application/sessions/session-store.ts:296-336`）：
+`setContext` 在壳后端落到 `SessionStore.setContext`（`src/server/application/sessions/session-store.ts`）：
 
 - `this.activeCwd = cwd`、`this.activeSessionPath = null`、`this.activeProcKey = \`new:${cwd}\``：记录发送路径上下文。`activeProcKey` 用 `new:` 前缀的壳 key 表示「未落会话文件的新会话」。
 - 回收旧壳进程：若 `prevKey` 存在且不同，查旧进程「未发送过消息（`!p.touched`）且活着」→ `stop()` + delete。这是「未发送消息的新会话壳不泄漏孤儿进程」的根因修复——`pref flush`（setModel/setThinkingLevel 的 `ensureForSend`）会为本 cwd 起一个空壳进程，切目录时要收掉它。
@@ -243,10 +257,11 @@ startNewChat: async (cwd) => {
 
 ### 6.3 两条线的时序关系
 
-`switchCwd` 里 `setCurrentCwd` 是同步的（第 43 行先于 await），所以 `currentCwd` 先变、随后 `await startNewChat` 的 `setContext` IPC 才落地、最后 `bumpSession`。这意味着：
+`switchCwd` 里 `setCurrentCwd` 是同步的（先于 await），所以 `currentCwd` 先变、随后 `await restoreForCwd` 的会话读/`setContext` IPC 才落地、最后 `bumpSession`。这意味着：
 
-- 所有只订阅 `currentCwd` 的插件（file-tree、git-review、settings-page）在 `setContext` 完成前就已经开始对新目录重渲染。
+- 所有只订阅 `currentCwd` 的插件（file-tree、git-review、settings-page）在会话上下文切完前就已经开始对新目录重渲染。
 - 依赖 `sessionInfos` 的插件（sessions-list、session-colors、timeline 的自定义字段）要等 `initSessionStore` 的 `unsubCwd` 订阅器捕获到 `currentCwd` 变化、异步 `loadSessionInfos` 拉完新目录的会话列表后才更新（§8.1）。
+- 恢复分支（有记忆）比新会话分支多一次文件读往返，期间中区显示"切换中"骨架（`switching: true`，由 `openSession` 置位）——与直接点会话行的观感一致。
 
 ---
 
@@ -278,9 +293,9 @@ sessions-list 是 projects 在左栏里的「上/下邻居」（前者在 `group
 
 timeline 消费 `currentCwd` 的方式比 sessions-list 更细，分三层：
 
-- **投影清空（直接来自 `startNewChat`）**：projects 调 `startNewChat(dir)` 把 `messages` 清空（`session-store.ts:462`）。timeline 订阅 `messages`/`switching`（`timeline/renderer/index.tsx:110`），第 1095 行 `if (!currentCwd || (!switching && !messages.some((m) => m.role === "user")))` 命中 → 渲染「新对话」空态。也就是说，切项目后中区从旧会话流瞬时变空态，这个效果来自 `startNewChat` 的同步 `set({ messages: [] })`，**不是**来自 `syncNonce`/`openNonce` 递增。
-- **键派生（来自 `currentCwd`）**：timeline 用 `currentCwd` 拼 `draftKey`/`pendingKey`/`curKey`（第 113、447、703 行）——活会话用 `currentNeutralSessionId`，新会话壳用 `new:${currentCwd}`。切项目后 `currentCwd` 变了，输入框草稿、模型 pending 意图、排队消息这些「按会话 key 隔离」的内存态全部换到新 key，旧项目的草稿/排队消息不会串到新项目。
-- **会话切换重挂（不发生在切项目时）**：timeline 的 Virtuoso `key={\`${openNonce}:${syncNonce}\`}`（第 1153 行）和滚动重置 `useEffect(..., [switching, syncNonce])`（第 163 行）只在「打开历史会话」或「快照全量替换」时触发。切项目走的是 `startNewChat`，不递增这两个 nonce，所以没有重挂——只有 messages 清空 + 键派生。这是「切项目」与「切会话」在 timeline 侧的行为差异，根因在 `startNewChat` 与 `openSession` 的字段更新不同（`openSession` 递增 `openNonce`，`startNewChat` 不递增）。
+- **投影清空（直接来自壳动作）**：切到"无记忆/记忆失效"的项目时，`switchCwd` → `restoreForCwd` → `startNewChat(dir)` 把 `messages` 清空。timeline 订阅 `messages`/`switching`，命中空态分支 → 渲染「新对话」空态。也就是说，"切到没看过的项目"后中区从旧会话流瞬时变空态，这个效果来自 `startNewChat` 的同步 `set({ messages: [] })`，**不是**来自 `syncNonce`/`openNonce` 递增。
+- **键派生（来自 `currentCwd`）**：timeline 用 `currentCwd` 拼 `draftKey`/`pendingKey`/`curKey`——活会话用 `currentNeutralSessionId`，新会话壳用 `new:${currentCwd}`。切项目后 `currentCwd` 变了，输入框草稿、模型 pending 意图、排队消息这些「按会话 key 隔离」的内存态全部换到新 key，旧项目的草稿/排队消息不会串到新项目。
+- **会话切换重挂（恢复分支会发生）**：timeline 的 Virtuoso `key={\`${openNonce}:${syncNonce}\`}` 和滚动重置 `useEffect(..., [switching, syncNonce])` 在 `openSession` 时触发。所以切到"有记忆"的项目 = 等于打开那个历史会话：整表重挂、按 `initialTopMostItemIndex` 置底；而切到"无记忆"的项目走 `startNewChat`，不递增这两个 nonce，只有 messages 清空 + 键派生——这正是 `openSession` 与 `startNewChat` 的字段更新差异在 timeline 侧的表现。
 
 ### 8.3 git-review（右面板 Review Tab）：`useWorkspace` 依赖 `currentCwd` 重刷
 

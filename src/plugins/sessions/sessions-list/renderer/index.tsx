@@ -226,9 +226,8 @@ export function SessionsSection(): React.ReactNode {
   }, [currentCwd]);
 
   const newSession = async (): Promise<void> => {
-    setCurrentSessionPath(null);
-    setCurrentNeutralSessionId(null);
-    setSessionTitle(null);
+    // 会话上下文三连(path/ns/title)已收进 startNewChat 自身——同一序列此前在本插件与
+    // projects/⌘N 各写一遍,漏一个就留残影(§3.3 框架管通用,调用方只传参数)。
     await useSessionStore.getState().startNewChat(currentCwd);
   };
 

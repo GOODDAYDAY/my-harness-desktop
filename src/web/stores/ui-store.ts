@@ -37,6 +37,7 @@ const PREF_KEYS = {
   activeSidePanelTabs: "activeSidePanelTabs",
   sidePanelOrder: "sidePanelOrder",
   lastCwd: "lastCwd",
+  lastSessionByCwd: "lastSessionByCwd",
   currentLocale: "currentLocale",
 } as const;
 
@@ -111,6 +112,9 @@ export interface UiState {
   activeView: AppView;
   /** 当前工作目录(pi 子进程的 cwd,决定会话在哪个桶) */
   currentCwd: string;
+  /** 每个项目上次打开的会话(键=cwd,值=ns 优先/投影路径兜底)——切项目与冷启动恢复用。
+   *  与 lastCwd 同域:导航状态,各端独立,不进多端同步白名单。 */
+  lastSessionByCwd: Record<string, string>;
   /** 当前会话文件路径(投影地址,switch_session 后更新;pi 文件路径的派生形态) */
   currentSessionPath: string | null;
   /** 当前会话中立主键(§kernel-forkless §32):跨内核稳定,身份/高亮/未读/customOrder 以它为准 */
@@ -184,6 +188,13 @@ export interface UiState {
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
   setCurrentNeutralSessionId: (ns: string | null) => void;
+  /** 记下"这个项目上次看的会话"(ns 优先/路径兜底),内存 + prefs 同写。
+   *  只由"成功打开/物化真实会话"的路径调用(openSession / sessionStart 水合)——新会话
+   *  壳(null)不写,否则冷启动那次 startNewChat 会把记忆清成空。 */
+  rememberSessionForCwd: (cwd: string, sessionId: string) => void;
+  /** 清会话上下文三连(path/ns/title)。收敛:这三行曾在 projects/⌘N/sessions-list 各抄一遍,
+   *  漏一个就留残影(高亮指着已关的会话、标题停在旧会话名)。 */
+  clearSessionContext: () => void;
   toggleSidePanelTab: (id: string) => void;
   /** 揭示语义(幂等):tab 不在活跃集则补入,右面板组确保展开——
    *  与 toggle 的区别是不做反向关闭,供 revealOn 声明式揭示用。 */
@@ -222,6 +233,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   composerDrafts: {},
   activeView: "chat",
   currentCwd: "",
+  lastSessionByCwd: {},
   currentSessionPath: null,
   currentNeutralSessionId: null,
   activeSidePanelTabs: [],
@@ -385,6 +397,16 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
   setCurrentNeutralSessionId: (ns) => set({ currentNeutralSessionId: ns }),
+  rememberSessionForCwd: (cwd, sessionId) => {
+    if (!cwd || !sessionId) return;
+    const cur = get().lastSessionByCwd;
+    if (cur[cwd] === sessionId) return; // 幂等:同值不写盘(每次打开同一会话不产生 prefs 写)
+    const next = { ...cur, [cwd]: sessionId };
+    set({ lastSessionByCwd: next });
+    void window.kernel.prefs.set(PREF_KEYS.lastSessionByCwd, next);
+  },
+  clearSessionContext: () =>
+    set({ currentSessionPath: null, currentNeutralSessionId: null, sessionTitle: null }),
   // 右面板 tab 开关与 right 组显隐同生共死:tabs 清空即折叠,有 tab 即展开。
   // 显隐真相源在 layout store(树 right 组的 hidden),这里只维护 tab 列表与 prefs。
   toggleSidePanelTab: (id) => set((s) => {
@@ -423,7 +445,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     // 不会是 undefined;故不需 ?? 兜底(盲审 F4:删死代码,承认 electron-store defaults 兜底)。
     // rightPanelOpen 已迁到 layout store(layout-store hydrate 自行从 prefs 读),ui-store 不再管。
     // leftPanelOpen/sidebarDefaultOpen: layout-store hydrate 从 general-config 读,ui-store 不再管。
-    const [currentThemeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, sidebarStyle, sidebarWidth, sidebarFontScale, sidepanelFontScale, timelineFontScale, sidepanelStyle, activeSidePanelTabs, sidePanelOrder, lastCwd, currentLocale, timelineThemeId] = await Promise.all([
+    const [currentThemeId, fontScale, fontMonoChoice, fontEnglishChoice, fontChineseChoice, sidebarStyle, sidebarWidth, sidebarFontScale, sidepanelFontScale, timelineFontScale, sidepanelStyle, activeSidePanelTabs, sidePanelOrder, lastCwd, lastSessionByCwd, currentLocale, timelineThemeId] = await Promise.all([
       window.kernel.prefs.get<string>(PREF_KEYS.currentThemeId),
       window.kernel.prefs.get<number>(PREF_KEYS.fontScale),
       window.kernel.prefs.get<string>(PREF_KEYS.fontMonoChoice),
@@ -438,6 +460,7 @@ export const useUiStore = create<UiState>((set, get) => ({
       window.kernel.prefs.get<string[]>(PREF_KEYS.activeSidePanelTabs),
       window.kernel.prefs.get<string[]>(PREF_KEYS.sidePanelOrder),
       window.kernel.prefs.get<string>(PREF_KEYS.lastCwd),
+      window.kernel.prefs.get<Record<string, string>>(PREF_KEYS.lastSessionByCwd),
       window.kernel.prefs.get<string>(PREF_KEYS.currentLocale),
       window.kernel.prefs.get<string>(PREF_KEYS.timelineThemeId),
     ]);
@@ -474,6 +497,9 @@ export const useUiStore = create<UiState>((set, get) => ({
       activeSidePanelTabs: Array.isArray(activeSidePanelTabs) ? activeSidePanelTabs : [],
       sidePanelOrder: effectiveSidePanelOrder,
       currentCwd: cwd,
+      // 老库/首启无此键:prefs 的 defaults 会兜空对象,这里再防一手非对象形状
+      lastSessionByCwd:
+        lastSessionByCwd && typeof lastSessionByCwd === "object" ? lastSessionByCwd : {},
       currentLocale: currentLocale || "zh-CN",
       generalConfig,
       timelineThemeId: timelineThemeId || "__inherit__",

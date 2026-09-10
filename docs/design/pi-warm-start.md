@@ -108,7 +108,7 @@ gantt
 
 `setContext` 在两个场景被调：
 
-- **选项目/新建对话**：`projects` 插件的 `switchCwd` 调 `useSessionStore.startNewChat(dir)`，后者调 `window.pi.sessions.setContext(cwd, null)`（`session-store.ts:241`）。用户点了项目，setContext 立刻被调。
+- **选项目（无记忆/记忆失效则新会话）**：`projects` 插件的 `switchCwd` 调壳动作 `useSessionStore.switchCwd(dir)`——有记忆就 `openSession` 恢复（走下面"打开历史会话"那条线），否则 `startNewChat(dir)` → `window.pi.sessions.setContext(cwd, null)`。用户点了项目，setContext 立刻被调。
 - **打开历史会话**：`sessions-list` 插件点会话项调 `useSessionStore.openSession(path)`，后者先 `openSession` 读文件，再调 `setContext(detail.info.cwd, sessionPath)`（`session-store.ts:223`）。
 
 两种场景里，从 `setContext` 被调到用户打完字按发送，中间至少有几秒——用户要读历史消息、要打字、要思考。这几秒足够跑完 spawn + waitReady + sync（实测 1-3 秒）。窗口就在那里，当前完全没被利用。
@@ -327,7 +327,7 @@ flowchart LR
 
 **图 6 — 预热触发边界：用户手势驱动预热，内部编排不预热**
 
-- **用户选项目/新建对话**：`projects` 插件的 `switchCwd` → `setContext(cwd, null)`。这是最典型的预热场景——用户选了项目就是要发消息，新会话预生成路径（`generateNewSessionPath`）+ 水合 renderer（dispatch synthetic `sessionStart`），然后 fire-and-remember 起 pi。
+- **用户选项目 / 新建对话**：`projects` 插件的 `switchCwd` → 壳动作 `switchCwd` → 无记忆时 `setContext(cwd, null)`（有记忆时走恢复分支，等价于"打开历史会话"）。新会话分支是最典型的预热场景——用户选了项目就是要发消息，新会话预生成路径（`generateNewSessionPath`）+ 水合 renderer（dispatch synthetic `sessionStart`），然后 fire-and-remember 起 pi。
 
 - **用户打开历史会话**：`sessions-list` 插件点会话 → `setContext(cwd, sessionPath)`。已有路径，直接预热续接。打开会话时文件已读（`openSession`），renderer 已有消息列表，预热让 pi 在后台就绪，用户看完历史消息按发送时 pi 已经活着。
 

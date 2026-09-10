@@ -43,9 +43,9 @@ const showOptimistic =
 
 `currentSessionPath === null` 精确表达「新对话壳、尚无会话文件绑定」，它出现在三处、也只该出现在这三处：
 
-- 点「+」→ `newSession()` → `setCurrentSessionPath(null)`。
-- 冷启动 → `startNewChat(lastCwd)`（`currentSessionPath` 初始即 null，且 `setContext(cwd, null)` 不 dispatch `sessionStart`）。
-- 切目录 → projects 插件 `setCurrentSessionPath(null)` + `startNewChat(dir)`。
+- 点「+」→ `newSession()` → `startNewChat(cwd)`（"清会话上下文三连"已收进它自身，见 `docs/design/cwd-session-memory.md`）。
+- 冷启动 → `restoreForCwd(lastCwd)`：有记忆且可读则**打开那个会话**（不是新对话壳）；无记忆/不可读才退 `startNewChat`（`setContext(cwd, null)` 不 dispatch `sessionStart`）。
+- 切目录 → 壳动作 `switchCwd(dir)`：与冷启动同一条"恢复或新会话"二选一（记忆 = `prefs.lastSessionByCwd`）。
 
 打开历史会话后 `currentSessionPath` 必为真实路径（`openSession` 显式写 + main 权威 `sessionStart` 水合），故占位不显示。
 

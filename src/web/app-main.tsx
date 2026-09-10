@@ -144,9 +144,8 @@ function App(): React.ReactNode {
         }
       } else if (e.key === "n" && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        uiStore.setCurrentSessionPath(null);
-        uiStore.setCurrentNeutralSessionId(null);
-        uiStore.setSessionTitle(null);
+        // 清会话上下文三连已收进 startNewChat(§3.3 收敛:此前这里与 projects、
+        // sessions-list 各抄一遍)
         void useSessionStore.getState().startNewChat(uiStore.currentCwd);
       } else if (e.key === ",") {
         e.preventDefault();
@@ -194,9 +193,14 @@ function App(): React.ReactNode {
 
 const rootEl = document.getElementById("root");
 if (rootEl) {
-  const hydrateP = useUiStore.getState().hydrateFromPrefs().then(() => {
+  const hydrateP = useUiStore.getState().hydrateFromPrefs().then(async () => {
     const { currentCwd } = useUiStore.getState();
-    if (currentCwd) void useSessionStore.getState().startNewChat(currentCwd);
+    // 冷启动 = 恢复上次退出的样子:该项目(即 lastCwd)上次看的那个会话,无记录则新会话壳。
+    // 与切项目共用 restoreForCwd——否则会出现"冷启动新会话、切走再切回才恢复"的不一致。
+    // 必须 await(不能用 void):恢复要读会话文件并把基线写进 store,而渲染闸门在
+    // hydrateP 之后才 initSessionStore(事件订阅 + 中立层镜像基线),抢跑会丢那一份基线
+    // ——时间线上表现为"冷启动进来是空的,切一下会话才出来"。5s race 仍是兜底上限。
+    if (currentCwd) await useSessionStore.getState().restoreForCwd(currentCwd);
   });
   // 布局 store hydrate:在 ui-store 之后——general.json 分层读(helper)要先恢复 cwd 镜像,
   // 否则冷启动读不到项目级覆盖(sidebarDefaultOpen 等)

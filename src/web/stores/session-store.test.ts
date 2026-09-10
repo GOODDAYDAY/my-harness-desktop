@@ -477,3 +477,143 @@ describe("sendMessage → 新会话草稿清账(「enter 后要清理」根因�
     expect(useUiStore.getState().composerDrafts["new:/tmp/proj"]).toBe("别丢");
   });
 });
+
+// ── 切项目:记忆 + 恢复(根因守卫) ─────────────────────────────────────────
+// 根因实弹:projects 的 switchCwd 无条件 startNewChat + 清空上下文 → "切走再切回,上次看的
+// 会话没了,永远是个新会话"。修法=壳侧记"每个项目上次看的会话(prefs.lastSessionByCwd)",
+// 切项目/冷启动经 restoreForCwd 恢复。这一组断言把四条语义钉住:
+//   ① 无记忆 → 新会话壳(与旧行为一致);② 有记忆且可打开 → 恢复;③ 记忆失效(文件删了)→ 退新会话;
+//   ④ 写入时机是"打开/物化真实会话",startNewChat 的 null 不许覆盖记忆(否则冷启动那一次就清空)。
+describe("切项目:记忆上次会话 + 恢复(不再无条件新会话)", () => {
+  let opened: string[] = [];
+  let prefsWrites: { key: string; value: unknown }[] = [];
+  let detailFor: (id: string) => unknown = () => null;
+
+  const detail = (cwd: string, ns: string, path: string): unknown => ({
+    info: { cwd, id: ns, neutralSessionId: ns, path, created: "2026-01-01T00:00:00.000Z" },
+    messages: [],
+    stats: null,
+  });
+
+  beforeEach(() => {
+    opened = [];
+    prefsWrites = [];
+    detailFor = () => null;
+    vi.stubGlobal("window", {
+      kernel: {
+        prefs: {
+          get: async () => undefined,
+          set: async (key: string, value: unknown) => { prefsWrites.push({ key, value }); },
+        },
+        configFile: { get: async () => ({}), getLayered: async () => null },
+        sessions: {
+          setContext: async () => {},
+          getStats: async () => null,
+          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+          openSession: async (id: string) => { opened.push(id); return detailFor(id); },
+        },
+      },
+    });
+    useUiStore.setState({
+      currentCwd: "/proj/a",
+      lastSessionByCwd: {},
+      currentSessionPath: null,
+      currentNeutralSessionId: null,
+      sessionTitle: null,
+    });
+    useSessionStore.setState({ messages: [], overlay: [], stats: null, snapshot: null, sessionInfos: null });
+  });
+
+  it("无记忆(首次访问该项目):切过去起新会话壳,与旧行为一致", async () => {
+    await useSessionStore.getState().switchCwd("/proj/b");
+    expect(opened).toEqual([]);
+    expect(useUiStore.getState().currentCwd).toBe("/proj/b");
+    expect(useUiStore.getState().currentSessionPath).toBeNull();
+  });
+
+  it("有记忆且可打开:切过去恢复该项目上次的会话(高亮/标题/路径一起回来)", async () => {
+    useUiStore.setState({ lastSessionByCwd: { "/proj/b": "ns-b1" } });
+    detailFor = () => detail("/proj/b", "ns-b1", "/proj/b/s/b1.jsonl");
+    await useSessionStore.getState().switchCwd("/proj/b");
+    expect(opened).toEqual(["ns-b1"]);
+    expect(useUiStore.getState().currentNeutralSessionId).toBe("ns-b1");
+    expect(useUiStore.getState().currentSessionPath).toBe("/proj/b/s/b1.jsonl");
+    expect(useUiStore.getState().sessionTitle).toBe("ns-b1");
+  });
+
+  it("记忆失效(文件已删,openSession 返回 null):退新会话,不抛错、不留半开上下文", async () => {
+    useUiStore.setState({ lastSessionByCwd: { "/proj/b": "ns-gone" } });
+    detailFor = () => null;
+    await useSessionStore.getState().switchCwd("/proj/b");
+    expect(opened).toEqual(["ns-gone"]);
+    expect(useUiStore.getState().currentSessionPath).toBeNull();
+    expect(useUiStore.getState().currentNeutralSessionId).toBeNull();
+  });
+
+  it("记忆读取抛错(会话损坏/读盘失败):退新会话,不把切项目打断", async () => {
+    useUiStore.setState({ lastSessionByCwd: { "/proj/b": "ns-broken" } });
+    detailFor = () => { throw new Error("会话内容损坏"); };
+    await useSessionStore.getState().switchCwd("/proj/b");
+    expect(opened).toEqual(["ns-broken"]);
+    expect(useUiStore.getState().currentCwd).toBe("/proj/b");
+    expect(useUiStore.getState().currentSessionPath).toBeNull();
+  });
+
+  it("点当前已激活的项目:幂等 no-op(不重载会话、不重开新会话)", async () => {
+    useUiStore.setState({
+      currentCwd: "/proj/a",
+      currentSessionPath: "/proj/a/s/a1.jsonl",
+      currentNeutralSessionId: "ns-a1",
+    });
+    await useSessionStore.getState().switchCwd("/proj/a");
+    expect(opened).toEqual([]);
+    expect(useUiStore.getState().currentSessionPath).toBe("/proj/a/s/a1.jsonl");
+    expect(useUiStore.getState().currentNeutralSessionId).toBe("ns-a1");
+  });
+
+  it("打开成功即写穿记忆(ns 主键优先,内存 + prefs 同写)", async () => {
+    detailFor = () => detail("/proj/a", "ns-a1", "/proj/a/s/a1.jsonl");
+    await useSessionStore.getState().openSession("ns-a1");
+    expect(useUiStore.getState().lastSessionByCwd["/proj/a"]).toBe("ns-a1");
+    expect(prefsWrites.find((w) => w.key === "lastSessionByCwd")?.value).toEqual({ "/proj/a": "ns-a1" });
+  });
+
+  it("无 ns 的老会话:记忆回落投影路径(与 openSession 双形态归一一致)", async () => {
+    detailFor = () => ({
+      info: { cwd: "/proj/a", id: "legacy", path: "/proj/a/s/legacy.jsonl", created: "2026-01-01T00:00:00.000Z" },
+      messages: [],
+      stats: null,
+    });
+    await useSessionStore.getState().openSession("/proj/a/s/legacy.jsonl");
+    expect(useUiStore.getState().lastSessionByCwd["/proj/a"]).toBe("/proj/a/s/legacy.jsonl");
+  });
+
+  it("startNewChat 不覆盖记忆(null 不写):冷启动那一次也不会把记忆清空", async () => {
+    useUiStore.setState({ lastSessionByCwd: { "/proj/a": "ns-a1" } });
+    await useSessionStore.getState().startNewChat("/proj/a");
+    expect(useUiStore.getState().lastSessionByCwd["/proj/a"]).toBe("ns-a1");
+    expect(prefsWrites.filter((w) => w.key === "lastSessionByCwd")).toEqual([]);
+  });
+
+  it("新会话物化(sessionStart 水合)补记记忆:在新会话壳里切走也有记录", async () => {
+    hydrateSessionStart({
+      type: "sessionStart",
+      sessionFile: "/proj/a/s/new.jsonl",
+      neutralSessionId: "ns-new",
+    } as unknown as SessionEvent);
+    expect(useUiStore.getState().lastSessionByCwd["/proj/a"]).toBe("ns-new");
+  });
+
+  it("startNewChat 清会话上下文三连(path/ns/title)——三处调用方不再各抄一遍", async () => {
+    useUiStore.setState({
+      currentSessionPath: "/proj/a/s/a1.jsonl",
+      currentNeutralSessionId: "ns-a1",
+      sessionTitle: "旧会话",
+    });
+    await useSessionStore.getState().startNewChat("/proj/a");
+    const ui = useUiStore.getState();
+    expect(ui.currentSessionPath).toBeNull();
+    expect(ui.currentNeutralSessionId).toBeNull();
+    expect(ui.sessionTitle).toBeNull();
+  });
+});
