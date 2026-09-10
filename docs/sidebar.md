@@ -148,6 +148,24 @@ window.kernel.slots.sidebar() ◄───── Sidebar 组件 ─────�
 - **热区与"线"的视觉解耦**（`--sidebar-divider-visual-display`）：手柄热区恒为 `display:flex` + `cursor:row-resize`（8px 透明条），只有内线的显隐随风格变。旧实现两者共用一个 token（`--sidebar-divider-display`），而 card/minimal/glass 三种风格把它设成 `none`——于是这三种风格里手柄连热区一起消失，"分组拆开了也依然拖不动"。另外拖拽中内线一律显形，保证"无分隔线"的风格拖起来也有反馈。
 - **组级初值 `defaultSize`**：首个声明者生效（`projects` 给 25），避免首次渲染（localStorage 还没有记录时）被均分成 50/50——项目区只有几行内容，吃一半高度就是一块空白。
 
+### 5.4 折叠联动：整组收起 → 该组面板塌缩、空间让给后面的组
+
+分组分家带来一个必须补的坑：**旧版三个居民同处一个 Panel，收起项目区时由 flex 自动把高度让给会话列表；分家成两个固定份额的 Panel 后，"收起"只塌了面板内部的内容，面板份额纹丝不动**——收起项目区，会话区不跟上来，原地留一块空白（实测：项目面板 187px 不变，其内容只剩 30px 的折叠头）。
+
+机制（壳侧，`sidebar.tsx`）：
+
+- **信号源是框架 `Section` 的两个声明式锚点**（`packages/react/src/widgets/section.tsx`）：
+  - `data-section-collapsed`（根部，收起时 `"true"`）——"这一组现在是收起的"；
+  - `data-section-header`（折叠头元素）——壳量它的高度作为塌缩目标。
+  **插件私有的折叠态不进壳**（projects 的 `sectionCollapsed` 仍在自己的 config 里），壳只认这两个事实。不用 Section 的自定义根组不做联动（`headerPx = 0` → 不加 `collapsible`），免得"拖到塌缩"把整组收成 1% 且没有可点的展开入口。
+- **探测**（`SidebarItemSlot`）：原有 `MutationObserver` 的观察面加上 `attributes` + `attributeFilter: ["data-section-collapsed"]`——收起/展开只改这一个属性、子节点不动，只观察 `childList` 会整条漏掉。高度用 `ResizeObserver` 跟，同类变化 <12px 不上报；折叠动画（`grid-template-rows 0fr↔1fr`）的落定值由 `transitionend` 精确补一枪。三次上报/折叠是上限，不会每帧重渲染整栏。
+- **塌缩目标高度**：`(折叠头 + 组内上下留白) / 容器高度`，夹在 `[1, minSize-1]`。留白必须算进去，否则折叠头会被组容器的 `padding` 切掉一截；必须**小于 `minSize`**，库才把"拖到低于中点"判成塌缩；不能为 0，否则展开入口（折叠头）一起被收掉、只剩邻居手柄能救。
+- **只在非末组生效**：末组后面没有组能接住腾出的空间，塌了只是把留白从这组挪到那组。
+- **只在变化边沿动作**：首帧按当前态对齐一次（插件 config 里存着"上次是收起的"，冷启动要跟着塌），此后只在 `true↔false` 翻转时调 `collapse()`/`expand()`——用户手拖过手柄之后，不会被一个仍处于收起态的 Section 反复拽回去。
+- **展开恢复折叠前尺寸**：库的 `expandToSizes` 语义（`collapse()` 时记下尺寸，`expand()` 复原），壳不需要自己记账。
+
+实测（`scripts/demo/sidebar-panel.e2e.mjs`）：收起项目分组 → 项目面板 187px → 48px（= 折叠头 30 + 留白 20），会话面板 560px → 699px（全额接住腾出的 139px，两面板总高不变），折叠头仍可见（30px）；再展开 → 回到 187px。收起态写进 `autoSaveId` 的布局记录，但下次展开/收起仍按边沿重算，不依赖记录。
+
 ## 6 sessionGroupings：会话分组策略
 
 `sessionGroupings` 是独立的槽，但它的**唯一消费方是 sidebar 的居民 sessions-list**，所以它和左栏强相关。它的职责是让"子会话"（典型是子 Agent 会话）在会话列表里**嵌套到父会话之下**，而不是平铺成一条独立行。

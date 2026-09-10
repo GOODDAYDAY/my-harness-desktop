@@ -25,7 +25,7 @@ vi.mock("@my-harness-desktop/react", () => ({
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
-import { Sidebar } from "./sidebar";
+import { Sidebar, collapsedSizePercent } from "./sidebar";
 
 const contribution = (over: Record<string, unknown>): Record<string, unknown> => ({
   id: "x",
@@ -111,4 +111,28 @@ describe("分隔线热区与视觉解耦(风格不许把热区一起干掉)", ()
       cleanup();
     });
   }
+});
+
+// 折叠联动:整组收起 → 该组 Panel 塌到"折叠头 + 组内留白",腾出的高度让给后面的组。
+// 像素行为(面板真的变小、会话区真的跟上来)由 e2e 覆盖(jsdom 无排版,壳在 boxPx<=0 时
+// 本就不动作);这里钉两件在 jsdom 里可判的事:① 百分比换算的纯函数;② 信号源——
+// 框架 Section 必须挂出壳消费的两个声明式锚点,锚点丢了折叠联动就是静默失效。
+describe("折叠联动:塌缩高度换算(纯函数)", () => {
+  it("塌缩目标 = (折叠头 + 组内留白) / 容器高度,取一位小数", () => {
+    // 30px 头 + 20px 留白 / 900px ≈ 5.6%
+    expect(collapsedSizePercent(30, 20, 900, 10)).toBe(5.6);
+  });
+
+  it("下限 1%:头很矮/容器很高也不许塌成 0(0 会把展开入口一起收掉)", () => {
+    expect(collapsedSizePercent(4, 0, 2000, 10)).toBe(1);
+  });
+
+  it("上限 minSize-1:头比 minSize 还高时也要小于 minSize,库才判得出'塌缩态'", () => {
+    expect(collapsedSizePercent(200, 20, 300, 10)).toBe(9);
+  });
+
+  it("容器未测量(0)或没有折叠头(非 Section 组)→ 0,调用方据此不动作", () => {
+    expect(collapsedSizePercent(30, 20, 0, 10)).toBe(0);
+    expect(collapsedSizePercent(0, 20, 900, 10)).toBe(0);
+  });
 });
