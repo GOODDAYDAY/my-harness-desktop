@@ -38,19 +38,25 @@
 
 **背景**：worktree 不是一次性容器——只要改动已经 commit，删掉 worktree 目录并不丢代码，commit、分支都还在仓库里。但 AI 常把 worktree 误当成"任务跑完就该销毁"的临时区，在 checkout / fetch / merge 等操作里顺手批量清理 worktree，可能毁掉别的分支上**还没 commit / 还没 merge 的工作**。
 
-**正向工作流（有修改任务时默认采用）**：优先在 worktree 中完成修改——优先复用当前任务已有的 worktree，而不是直接在主工作区改。修改验证通过后合并回目标分支，再删除该 worktree 和临时分支。末步删除仍受下方规则约束：需用户确认、删前检查未提交改动。
+**正向工作流（有修改任务时默认采用，必须执行）**：优先在 worktree 中完成修改——优先复用当前任务已有的 worktree，而不是直接在主工作区改。改完 + 验证通过后 commit，合并回目标分支，**然后直接删掉本任务自建的 worktree 和临时分支，不必回头问用户**。
 
-**核心策略**：区分"清残留记录"和"删工作目录"两类操作，前者安全可做，后者必须用户明确要求。
+**核心边界：区分「自建自清」与「别人的 worktree」**。本节禁令防的是后者——顺手清掉不属于本任务、可能还持有未提交工作的 worktree。前者（本任务自己创建的 worktree + 临时分支）是闭环的收尾步，**合并确认无误后直接删，不需要每次回头问用户**：代码已 commit，删目录不丢任何东西，反复确认只是仪式不是保护。
 
-1. **区分 prune 与 remove**：
-   - `git worktree prune` 仅清理"目录已不存在"的残留登记，不碰现存目录 → **安全，可做**。
-   - `git worktree remove <路径>` 会真实删除工作目录 → **危险，未提交改动会被毁**；有未提交改动时 git 默认拒绝，但加 `--force` 会强删。
-2. **未经用户明确要求，禁止 remove 任何 worktree**：尤其禁止遍历 `git worktree list` 后批量 `remove`。"顺手整理一下"不构成授权。
-3. **切换分支 / fetch / merge 等操作不得附带 worktree 清理副作用**：用户说"checkout 到远程最新 test"就是 checkout，不是"checkout + 清 worktree"。不得借题发挥、扩大操作范围（呼应"组装和调用应该分开"）。
-4. **确需删除 worktree 时必须先确认**：先 `git worktree list` 列出全部，逐个说明要删哪个、为什么，等用户确认后再 `git worktree remove <路径>`（不加 `--force`）。
-5. **删前检查未提交改动**：若目标 worktree 有 uncommitted 改动或未合并的 commit，必须明确告知用户，由用户决定是丢弃、提交还是保留。
+**A. 自建自清（默认直接做，不问）**
 
-**目的**：杜绝"切个分支结果别的 worktree 被清掉"这类越界破坏。worktree 的清理永远是一个需要用户点头的显式动作，而非默认收尾步骤。
+1. 范围严格限定于**本任务自己创建**的那一个 worktree + 它的临时分支，一次只删这一个。
+2. 前置条件（三条同时成立才自动删）：① 改动已全部 commit；② 临时分支已合进目标分支；③ 删的是自己建的那个路径。任何一条不成立 → 落到下面的例外。
+3. 命令：`git worktree remove <路径>`（**不加 `--force`**）+ `git branch -d <临时分支>`（用 `-d` 不用 `-D`——git 拒删本身就是"未合并"的信号，此时停下来看）。删完顺手 `git worktree prune`。
+4. **例外（必须停下来告知用户，不自作主张）**：目标 worktree 有 uncommitted 改动、或有未合并进目标分支的 commit、或 `remove` 因脏工作区被 git 拒绝。把情况说清楚，由用户决定丢弃 / 提交 / 保留；**绝不用 `--force` 绕过拒绝**。
+
+**B. 别人的 worktree（禁止自动碰）**
+
+1. **不属于本任务创建的 worktree，未经用户明确要求不得 remove**：尤其禁止遍历 `git worktree list` 后批量 `remove`。"顺手整理一下"不构成授权。
+2. **切换分支 / fetch / merge 等操作不得附带 worktree 清理副作用**：用户说"checkout 到远程最新 test"就是 checkout，不是"checkout + 清 worktree"。不得借题发挥、扩大操作范围（呼应"组装和调用应该分开"）。
+3. **确需清理遗留 worktree 时必须先确认**：先 `git worktree list` 列出全部，逐个说明要删哪个、为什么，等用户确认后再 `git worktree remove <路径>`（不加 `--force`）。
+4. **区分 prune 与 remove**：`git worktree prune` 仅清理"目录已不存在"的残留登记，不碰现存目录 → **安全，任何场景可做**；`git worktree remove <路径>` 会真实删除工作目录 → 只适用 A 类，或 B 类经用户点头。
+
+**目的**：一手杜绝"切个分支结果别的 worktree 被清掉"这类越界破坏，一手不把自建自清的正常收尾变成每次都要用户点头的仪式。判据一句话：**删自己刚建的 = 收尾，删别人建的 = 需要授权。**
 
 ## Claude Code 八荣八耻
 - 以瞎猜接口为耻，以认真查询为荣。
