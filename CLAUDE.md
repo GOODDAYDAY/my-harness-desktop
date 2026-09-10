@@ -90,6 +90,27 @@
 - **内核身份不进配置文件**：`ModelInfo.kernel` 由"从哪个内核的配置扫出来"赋值，不由 provider 名反推（`if (provider.includes("deepseek")) kernel = "dsh"` 是错的）。
 - **缺面/补面/降级**三分法是"多内核默认"的操作面。缺面 = 内核没有某能力；补面 = 给缺能力的内核补实现（适配器之外的内核侧补齐）；降级 = 壳收到"不支持"后隐藏入口。
 
+### 1.6 内核源码只读：一切内核侧需求走插件
+
+**pi / dsh（及后续任何内核）的源码，一行都不许改。** 这条不解释、不通融、没有例外——包括三个具体形态：
+
+1. **不许改外部内核仓库**（`@earendil-works/pi-coding-agent` 上游、`deepseek-harness` / dsh 仓库）。那是别人维护的项目，我们改不动也不该改。
+2. **不许改本地已装的内核包**（`node_modules/@earendil-works/pi-coding-agent/dist/…`、`~/.dsh` 下内核本体文件）。手改装好的产物看着"立刻生效"，但它不在版本控制里、不被任何人 review，下次 `npm install` / 内核升级 / 换机器就整体消失——功能静默回退，且没有任何报错告诉你为什么。
+3. **不许做装后补丁**（在 `postInstall` / installer 里往内核文件上打 patch、注入代码、改 `dist/cli.js`）。这是第 2 条的"自动化版"，比手改更危险：它把"改内核源码"包装成了看起来正规的一步。`KernelSpec.postInstall` 只允许做**非源码**的准备工作；历史上的 fork position / entry_appended 运行时补丁已因此退役（见 `src/server/kernel/pi/manager/pi-kernel.ts` 注释）。
+
+**内核侧缺能力，唯一合法通道是内核插件**——写扩展，不写对方核心：
+
+- **pi**：TypeScript 扩展，源码放 `packages/my-harness-fit-pi-extension/`（统一适配）或壳插件自己的 `pi-extension/`，由 installer 同步进 `~/.pi/agent/extensions/<id>/`。pi 的 loader 在 spawn 时扫这个目录，扩展装进进程即为内核补能力。
+- **dsh**：Cordis 插件，同步进 `~/.dsh/.my-harness-desktop-plugins/<id>/`，并在 `cordis.yml` 挂一个固定 id 的块（`DshConfigSource.addPlugin` / `syncFitDshExtension`）。
+- **marker 纪律**：我们只碰自己带 marker（`.my-harness-desktop-plugin`）的目录，摘除/对账不越界，不覆盖用户手装的同名目录。这是"只写扩展"在物理层面的落点——我们的写入范围被 marker 圈死在内核的插件目录里，碰不到内核本体。
+
+为什么这么绝对？内核是**被壳管理的外部资源**（§6.4），它的价值恰恰在于它是别人持续演进的东西：上游一升级，我们的补丁要么被覆盖、要么与新内核冲突，而冲突的排查成本远高于当初写一个插件。插件通道是内核作者提供的**稳定扩展点**——它随内核版本演进，改内核源码不会。这也是 §7.6 三分法里"补面"的实现形态：补面 = 写内核插件，不是 = 改内核。
+
+- **判别气味一：diff 落在内核包/内核仓库里**。`node_modules/@earendil-works/pi-coding-agent/**`、外部 harness 仓库、`~/.dsh` 本体文件出现改动 → 违规，回滚并改写成插件。
+- **判别气味二：installer 里有"读内核文件 → 字符串替换 → 写回"的逻辑**。这就是补丁，不管它注释里写得多"必要"。
+- **判别气味三：为了绕开内核的限制而在壳里造一套影子实现**（比如自己重写内核的会话文件格式）→ 违反 §3.1「消费而非翻译」，同样违规。
+- **正确做法**：能力缺失 → 先问内核有没有扩展点（pi extension API / dsh cordis plugin）；有 → 写插件（`src/plugins/{domain}/{feature}/pi-extension|dsh-extension`，§7.7 四件套）；确实没有扩展点 → **显式降级**（隐藏/置灰入口 + tooltip），或向上游提 issue/PR，而不是自己动手改。
+
 ## 2 什么可以放在壳里，什么不可以
 
 判断标准只有一条：**一年后这东西会不会换。会换就推出去，不会换才留在壳里。**
@@ -458,7 +479,7 @@ src/plugins/{domain}/{feature}/
 
 参考实现：`src/plugins/sessions/goal/`（`renderer/` + `pi-extension/` + `dsh-extension/`）、`src/plugins/insight/llm-recorder/`（`core/` + `renderer/` + `pi-extension/` + `locales/`）。
 
-**非必要不修改薄壳内核，也绝不修改外部内核仓库**。新写插件时去改 desktop 的内核（壳）来容纳这个插件——这是把会变的内容焊进壳，破坏薄壳。要改别人的功能，**首选改对方插件**：对方插件提供槽位，本插件去填槽（会话流 UI 由 timeline 插件提供槽位、文件列表由 file-tree 插件提供槽位、会话列表由 sessions-list 插件提供槽位），动的是对方插件和本插件，动不到壳的核心内核。给内核补能力只写内核插件（pi-extension / dsh-extension），**严禁改 deepseek-harness / dsh 等外部仓库的核心**——只写扩展，不写对方核心。
+**非必要不修改薄壳内核，也绝不修改外部内核仓库**（§1.6 内核源码只读：外部仓库、本地已装内核包、装后补丁三个形态一律禁止）。新写插件时去改 desktop 的内核（壳）来容纳这个插件——这是把会变的内容焊进壳，破坏薄壳。要改别人的功能，**首选改对方插件**：对方插件提供槽位，本插件去填槽（会话流 UI 由 timeline 插件提供槽位、文件列表由 file-tree 插件提供槽位、会话列表由 sessions-list 插件提供槽位），动的是对方插件和本插件，动不到壳的核心内核。给内核补能力只写内核插件（pi-extension / dsh-extension），**严禁改 deepseek-harness / dsh / pi 等内核的源码**——只写扩展，不写对方核心。
 
 - **判别气味**：改动一个功能时，diff 落在 `server/`（壳）而非 `plugins/` 或内核插件；或把功能做成「改内核」而非「写内核插件」。
 - **正确做法**：一个功能一个 plugin，四件套内聚（i18n/pi 内核插件/dsh 内核插件/desktop 插件收进同一个 plugin）；要扩展别人功能走槽位填槽；内核侧缺能力写内核插件。
