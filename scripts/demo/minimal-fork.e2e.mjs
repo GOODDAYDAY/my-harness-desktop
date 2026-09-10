@@ -49,7 +49,7 @@ writeFileSync(join(sessionsDir, `${NS}.entries.json`), JSON.stringify({
   ] }],
 }));
 
-const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18455" }, timeoutMs: 90000 });
+const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18455", MHD_ENABLE_KERNELS: "minimal" }, timeoutMs: 90000 });
 const page = app.page;
 const consoleTail = [];
 page.on("pageerror", (e) => consoleTail.push(e.message));

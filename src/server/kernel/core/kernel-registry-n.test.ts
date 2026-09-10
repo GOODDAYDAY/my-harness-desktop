@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { KernelRegistry, validateKernelPlugin } from "./kernel-registry";
 import { initKernelRuntime } from "./kernel-manager";
 import { createNpmKernelRuntime } from "../../client/npm/kernel-runtime";
-import { scanKernelPlugins, loadKernelPlugin } from "./kernel-plugin-loader";
+import { scanKernelPlugins, loadKernelPlugin, defaultEnabledEntries } from "./kernel-plugin-loader";
 import { minimalKernelPlugin } from "../minimal/plugin";
 import { piKernelPlugin } from "../pi/plugin";
 import { dshKernelPlugin } from "../dsh/plugin";
@@ -87,16 +87,29 @@ describe("N 内核注册验收(真实插件工厂 + 真实 ctx)", () => {
   });
 });
 
-describe("真实编译产物加载 + 真实卸载", () => {
-  it("从 out/main 扫描真实 plugin.js + 注册真实内核 + 删 manifest → 缺面 → 恢复", async () => {
+describe("真实编译产物加载 + 默认装载过滤 + 真实卸载", () => {
+  it("默认装载:minimal(enabled=false)默认不装载,MHD_ENABLE_KERNELS 强制启用", async () => {
     // 真实编译产物目录(out/main/server/kernel/*/plugin.js 由 rollup 独立打包 + plugin.json)。
     const pluginRoot = join(process.cwd(), "out", "main", "server", "kernel");
     const before = scanKernelPlugins(pluginRoot);
+    // 扫描 = 存在性:三个 manifest 都在(含 enabled=false 的 minimal)。
     expect(before.map((e) => e.manifest.id)).toEqual(["pi", "dsh", "minimal"]);
+
+    // 装载 = 默认开关(§目标 16):minimal 默认 off,清单 = [pi, dsh]。
+    const def = defaultEnabledEntries(before);
+    expect(def.map((e) => e.manifest.id)).toEqual(["pi", "dsh"]);
+    // 强制启用(等价 MHD_ENABLE_KERNELS=minimal):三内核全量。
+    const forced = defaultEnabledEntries(before, new Set(["minimal"]));
+    expect(forced.map((e) => e.manifest.id)).toEqual(["pi", "dsh", "minimal"]);
+  });
+
+  it("从 out/main 加载真实 plugin.js + 注册三内核(强制启用 minimal)+ 真实 spawn", async () => {
+    const pluginRoot = join(process.cwd(), "out", "main", "server", "kernel");
+    const entries = defaultEnabledEntries(scanKernelPlugins(pluginRoot), new Set(["minimal"]));
 
     // 真实 loadKernelPlugin(require 真实编译产物 plugin.js,含其 chunks 依赖)。
     const registry = new KernelRegistry();
-    for (const { dir, manifest } of before) {
+    for (const { dir, manifest } of entries) {
       loadKernelPlugin(registry, dir, manifest, makeRealCtx(homedir, cwd).ctx);
     }
     expect(registry.ids()).toEqual(["pi", "dsh", "minimal"]);
@@ -106,12 +119,16 @@ describe("真实编译产物加载 + 真实卸载", () => {
     await backend.start();
     expect(backend.alive).toBe(true);
     await backend.stop();
+  });
 
-    // 真实卸载:rename minimal 的 manifest(等价删),重新扫描缺面,壳照常。
+  it("真实卸载:删 minimal 的 manifest → 扫描不存在(即使强制启用也缺面)→ 恢复", async () => {
+    const pluginRoot = join(process.cwd(), "out", "main", "server", "kernel");
     const minimalManifest = join(pluginRoot, "minimal", "plugin.json");
     renameSync(minimalManifest, minimalManifest + ".bak");
     try {
+      // 卸载 = 删 manifest → 扫描不再返回它;强制启用也找不到(缺面,壳照常)。
       expect(scanKernelPlugins(pluginRoot).map((e) => e.manifest.id)).toEqual(["pi", "dsh"]);
+      expect(defaultEnabledEntries(scanKernelPlugins(pluginRoot), new Set(["minimal"])).map((e) => e.manifest.id)).toEqual(["pi", "dsh"]);
     } finally {
       renameSync(minimalManifest + ".bak", minimalManifest); // 恢复,不影响后续 build/e2e
     }

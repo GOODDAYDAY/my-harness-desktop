@@ -64,6 +64,21 @@ describe("ThinkingChainBlock 流式计时", () => {
     expect(screen.getByText(/shell\.thinkingDone/)).toBeInTheDocument();
   });
 
+  it("思考中(streaming)运行态图标明暗交替(animate-pulse,§目标 15)", () => {
+    const { container } = render(
+      <ThinkingChainBlock content={{ type: "thinking", thinking: "在想" }} streaming={true} />,
+    );
+    // 运行中态必须有「动的 icon/明暗交替」:至少一个 svg(Brain)挂 animate-pulse。
+    expect([...container.querySelectorAll("svg")].some((s) => s.classList.contains("animate-pulse"))).toBe(true);
+  });
+
+  it("非流式无运行态动画(静态 icon)", () => {
+    const { container } = render(
+      <ThinkingChainBlock content={{ type: "thinking", thinking: "在想" }} streaming={false} startedAt={1000} completedAt={4200} />,
+    );
+    expect([...container.querySelectorAll("svg")].some((s) => s.classList.contains("animate-pulse"))).toBe(false);
+  });
+
   it("完成态有正文:点击展开全文(多行不截断),再点收起", () => {
     vi.setSystemTime(1700000000000);
     const full = "第一段\n第二段\n第三段";

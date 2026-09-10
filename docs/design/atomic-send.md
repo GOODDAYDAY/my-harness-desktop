@@ -39,7 +39,7 @@ await window.pi.sessions.prompt(...);            // RPC 4(这才是真发送)
 `setThinkingLevel` 不在 `BaseBackend`，在 `PiCapabilities`（`core/domain/backend.ts`）。main 侧 `SessionStore.setThinkingLevel()` 对 dsh 的处理是：
 
 ```ts
-if (!proc.backend.capabilities.pi) return;   // dsh 静默吞掉
+if (!proc.backend.capabilities.extensions) return;   // dsh 静默吞掉
 ```
 
 这是 §1.5「多内核默认」明令禁止的**静默缺面**——dsh 下用户设置思考强度，既不翻译、不补面、不降级，而是静默吞掉。而 dsh 侧确有对应语义 `reasoningEffort`（`client/dsh/dsh-config-source.ts`，`agent-default-model` 命名空间），形状不同（配置而非运行时 RPC）。

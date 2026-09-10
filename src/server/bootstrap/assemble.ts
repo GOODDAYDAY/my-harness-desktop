@@ -27,7 +27,7 @@ import type { KernelId } from "@my-harness-desktop/shared";
 import type { PluginLifecycleDeps } from "../application/lifecycle";
 import { KERNEL_LOGOS } from "../kernel/factories/kernel-logos";
 import { KernelRegistry } from "../kernel/core/kernel-registry";
-import { loadKernelPlugin, scanKernelPlugins } from "../kernel/core/kernel-plugin-loader";
+import { loadKernelPlugin, scanKernelPlugins, defaultEnabledEntries } from "../kernel/core/kernel-plugin-loader";
 import { mirrorBundledSkills } from "../application/skills/bundled-skills";
 import { SkillAggregator } from "../application/skills/skill-aggregator";
 import { installFitPiExtension, fitPiExtensionAvailable } from "../kernel/pi/extension/my-harness-fit-pi-extension-installer";
@@ -165,7 +165,13 @@ const pluginCtx = {
 const KERNEL_PLUGINS_DIR = opts.isPackaged
   ? join(process.resourcesPath, "app.asar", "out", "main", "server", "kernel")
   : join(process.cwd(), "out", "main", "server", "kernel");
-for (const { dir, manifest } of scanKernelPlugins(KERNEL_PLUGINS_DIR)) {
+// 默认装载过滤(§目标 16):manifest.enabled===false 的内核默认不装载(如 minimal=验证用内核,生产无意义)。
+// MHD_ENABLE_KERNELS(逗号分隔内核 id)运行时强制启用被声明为 off 的内核(测试/演示);
+// 扫描 = 存在性(卸载 = 删 manifest → 扫描不存在),装载 = 默认开关(enabled),两轴正交。
+const forceEnableKernels = new Set(
+  (process.env["MHD_ENABLE_KERNELS"] ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+);
+for (const { dir, manifest } of defaultEnabledEntries(scanKernelPlugins(KERNEL_PLUGINS_DIR), forceEnableKernels)) {
   loadKernelPlugin(kernelRegistry, dir, manifest, {
     ...pluginCtx,
     testModel: (cwd, p, m) => sessionStore.test(cwd, p, m, manifest.id),
@@ -522,7 +528,9 @@ registerRemote(gateway, auth, {
       for (const [id, plugin] of registry.allPlugins()) {
         const rel = plugin.manifest.piExtension;
         if (!rel || disabled.includes(id)) continue;
-        for (const l of lifecycles) l.piExtensionEnsure?.onActivate(id, resolve(plugin.path, rel), rel);
+        // 传原始插件目录 + 相对扩展路径(插件侧 onActivate 自会 join)——此前误传 resolve(plugin.path, rel)
+        // 再在插件侧 join(rel) 导致路径双重拼接,扩展目录永远同步不上(§根因修复,勿回退)。
+        for (const l of lifecycles) l.piExtensionEnsure?.onActivate(id, plugin.path, rel);
         active.add(id);
       }
       for (const l of lifecycles) l.piExtensionEnsure?.reconcile?.(active);
@@ -543,7 +551,10 @@ registerRemote(gateway, auth, {
       for (const [id, plugin] of registry.allPlugins()) {
         const rel = plugin.manifest.dshExtension;
         if (!rel || disabled.includes(id)) continue;
-        for (const s of extensionSyncs) s.onActivate?.(id, resolve(plugin.path, rel), rel);
+        // 同 piExtension:传原始插件目录 + 相对扩展路径,插件侧 onActivate 自会 join。
+        // 此前误传 resolve(plugin.path, rel) 再 join(rel) → 路径双重拼接,dsh 扩展目录同步不上,
+        // cordis.yml 里的相对块指向不存在的目录 → dsh 内核启动即崩(§根因修复,勿回退)。
+        for (const s of extensionSyncs) s.onActivate?.(id, plugin.path, rel);
         active.add(id);
       }
       // 对账:PLUGINS_ROOT 下带 marker 但不在 active 的目录(含旧 ask/goal/read-claude-md/skill-manager)摘除。

@@ -10,7 +10,7 @@
 //
 // 能力门槛(docs/design/dsh-capability-gate.md):装上的 dsh 版本可能缺某些 session/*
 // 方法。本后端做懒探测——按需调用,捕获 "unknown method" 即记为缺面、转成清晰错误,
-// 经 capabilities.dsh.missing / onMissing 上报壳,壳据此显式降级,不裸炸、不静默吞。
+// 经 capabilities.thinking.missing / onMissing 上报壳,壳据此显式降级,不裸炸、不静默吞。
 
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "../protocol/json-rpc";

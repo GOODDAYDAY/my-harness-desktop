@@ -13,7 +13,7 @@
 //   PiExtensions(pi 内核专属扩展面 §7.6:steer/followUp/abortRetry/cycleModel/
 //     getThinkingLevels/cycleThinkingLevel/compact/setAutoCompaction/setAutoRetry/
 //     exportHtml/getLastAssistantText/setSteeringMode/setFollowUpMode
-//     —— 经 capabilities.extensionsExtension 探测,有则用无则降级)
+//     —— 经 capabilities.extensions 探测,有则用无则降级)
 //
 // SessionsApi(会话生命周期:start/stop/setContext/list/openSession/rename/updateHeader/onEvent/onSnapshot/getSnapshot/sync/getStats + pi 扩展面)
 //   不继承 RpcOps —— 它管的是进程和文件,不是"发命令到内核"。
@@ -303,7 +303,7 @@ export interface SessionTreeApi extends RpcOps {
   getForkMessages(entryId: string): Promise<NeutralMessage[]>;
 }
 
-/** pi 内核专属扩展面(§7.6 内核扩展面):dsh 无此面,壳插件经 capabilities.extensionsExtension
+/** pi 内核专属扩展面(§7.6 内核扩展面):dsh 无此面,壳插件经 capabilities.extensions
  *  探测「有则用、无则降级」。这些方法都是 pi 命令的投影,返回中性类型,pi 协议翻译
  *  收进 client/pi。终态随「会话身份中性化」进一步下沉,此处是插件可引用的 pi 扩展面契约。 */
 export interface PiExtensions {
@@ -413,7 +413,7 @@ export interface SessionsApi {
   deleteBookmark(snapshotId: string): Promise<void>;
   /** 跨内核切换(§3.6):把激活会话切到目标内核(五步编排)。dsh 侧 seed 未接线时降级报错。 */
   switchKernel(target: KernelId): Promise<void>;
-  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensionsExtension 探测「有则用、无则降级」。
+  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensions 探测「有则用、无则降级」。
    *  dsh 下这些入口隐藏/置灰,调用抛「当前内核不支持」。 */
   pi: PiExtensions;
 }

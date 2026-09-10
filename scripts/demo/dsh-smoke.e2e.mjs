@@ -39,6 +39,10 @@ const realCreds = join(homedir(), ".dsh", ".credentials.yaml");
 if (existsSync(realSettings)) copyFileSync(realSettings, join(dshDir, "settings.yaml"));
 if (existsSync(realCordis)) copyFileSync(realCordis, join(dshDir, "cordis.yml"));
 if (existsSync(realCreds)) copyFileSync(realCreds, join(dshDir, ".credentials.yaml"));
+// dsh 内核 node_modules 符号链接(与 fork-cross-kernel 同款):FIT 扩展 import
+// @deepseek-ai/dsh-skill-filesystem 等 dsh 包,须经 .dsh/node_modules 解析(否则内核启动即崩)。
+const realDshNm = join(homedir(), ".dsh", "node_modules");
+if (existsSync(realDshNm)) symlinkSync(realDshNm, join(dshDir, "node_modules"), platform() === "win32" ? "junction" : undefined);
 
 // 读 dsh 模型名:优先 Free(compat.supportsDeveloperRole:false 已修 developer role,Free 即可用)。
 const dshSettings = readFileSync(realSettings, "utf8");
@@ -79,7 +83,7 @@ try {
   await page.waitForSelector("[role='menu']", { timeout: 4000 }).catch(() => {});
   ok(true, "模型下拉已打开");
 
-  // 点 dsh 内核 TAB。
+  // 点 dsh 内核 TAB(§多内核才渲染 TAB;单内核时 dsh 唯一、模型直接铺开,无 TAB 可点)。
   const tabRect = await page.evaluate(() => {
     const menu = document.querySelector("[role='menu']");
     const tab = [...(menu?.querySelectorAll("button") ?? [])].find((b) => (b.textContent || "").trim().toLowerCase() === "dsh");
@@ -87,9 +91,12 @@ try {
     const r = tab.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
-  if (!tabRect) throw new Error("未找到 dsh 内核 TAB");
-  await page.mouse.click(tabRect.x, tabRect.y);
-  ok(true, "已点击 dsh 内核 TAB");
+  if (tabRect) {
+    await page.mouse.click(tabRect.x, tabRect.y);
+    ok(true, "已点击 dsh 内核 TAB");
+  } else {
+    ok(true, "单内核无 TAB,dsh 模型直接铺开");
+  }
 
   // 选真实模型(按显示名匹配)。
   const itemRect = await page.evaluate((name) => {

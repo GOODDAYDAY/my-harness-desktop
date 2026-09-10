@@ -21,7 +21,7 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 **壳机制**:设置双臂(r323/r324)工具限制(r328/r329)语言切换(r344/r345)快捷键(r356)titlebar(r357)右面板(r352/r353)斜杠命令(r365)数据 tab(r366)统计槽(r351)
 **韧性与损坏域**:损坏模型域(r367)文件损坏(r368)灾难隔离(r370/r371)姊妹口纪律(r371)
 **架构守卫**:依赖方向审计(r342,audit:deps)| 测试文件 tsc 债(r335)
-**套件稳定性**:ws-server 闪红根治(r355)瞬态重跑分类(r359/r372)
+**套件稳定性**:ws-server 闪红根治(r355)瞬态重跑分类(r359/r372)刷新/重开渲染竞态(两个根因已修:① syncNonce 初始基线 null→ns 误重挂 Virtuoso;② sessionStart 只带 sessionFile 缺 neutralSessionId→renderer 回落 sessionInfos 反查落空清镜像。回点行重开用可信点击,别 dispatchEvent)思考块渲染瞬态(r380:kernel-thinking-matrix 幕A / pi-openai-thinking 偶发「文件有思考块但 DOM 无按钮」,数据已落中立层,模型裁量/时序相关,重跑分类)
 **大回归节奏**:r332/r348/r359/r364/r372(每批修复后官方矩阵全跑)
 **能力面×思考域(2026-09-07 轮)**:思考矩阵四幕 e2e(kernel-thinking-matrix)|能力面推送流水插桩(__capsLog)|模型项双禁用态(menuitem aria-disabled/inert div)|空思考帧 wire 级实证|dsh 思考档位补面验证(幕D)|新会话跨内核解锁(幕C)
 **pi dsv4pro 无思考三层根因(r28-r33)**:网关 anthropic 错标 thinking_delta / 网关 openai 拒 developer 角色(桌面可修=supportsDeveloperRole 复选框 3aec332d)/ pi 配置只在 anthropic 协议(已配到 openai)——「同模型 pi 无思考 dsh 有」的逐协议打穿法
@@ -50,6 +50,10 @@ writeFileSync(prefsFile, JSON.stringify({ ...JSON.parse(readFileSync(prefsFile, 
 - `~/.my-harness-desktop-dev/dsh` → 符号链接真实(内核 + 会话根)
 - `~/.dsh/{cordis.yml,settings.yaml,.credentials.yaml}` → **拷贝**(不写回真实 profile)
 - `~/.dsh/node_modules` → 符号链接(桌面适配插件的依赖解析根)
+
+**内核扩展同步的路径契约(§目标 13,勿回退)**:bootstrap 启动同步把**原始插件目录 + 相对扩展路径**传给插件侧 `onActivate(pluginId, pluginPath, extension)`,插件侧自会 `join(pluginPath, extension)`。**曾误传 `resolve(plugin.path, rel)` 再在插件侧 join → 路径双重拼接**(`.../dsh-extension/dsh-extension`),扩展目录永远同步不上 → cordis.yml 相对块指向不存在目录 → dsh 内核启动即崩(pi 扩展同理)。守卫:`pi-smoke`/`dsh-smoke` e2e 的扩展同步 + 内核启动全链(若 pi/dsh 冒烟发送零消息,先查 stderr 是否 `ERR_MODULE_NOT_FOUND` 指向 `.my-harness-desktop-plugins/<id>`)。
+
+**模型下拉内核 TAB 只在多内核渲染**(`kernels.length > 1` 才画 TAB 条):单内核(如只配 pi 模型的隔离 HOME)直接铺清单、无 TAB 可点——`pi-smoke`/`dsh-smoke` 的「点内核 TAB」要写成**条件式**(有 TAB 才点,无 TAB 直接选模型),别硬断言 TAB 存在。
 
 ## 2 DOM 锚点清单(实测有效,按角色/数据属性查,不按 class 查)
 
@@ -129,7 +133,7 @@ DOM 只断「呈现对不对」(右对齐/徽标/按钮在不在),数据正确�
 
 **dsh**:先按 §1 备齐三件 → 模型下拉(`button[id^=radix]` 开 menu → 点 `DSH` 页签 → 选 `qwen3.8-max`)→ 发送。注意 dsh 无 thinking 档、事件形状不同(回合收敛 = turn/end 合成的 agentSettled)。
 
-**minimal(第三个同级内核,独立子进程 CLI,未配置真模型时 echo 兜底,零 token)**:选模型下拉「Minimal Echo」(开 menu → 点内核 TAB「minimal」→ 点模型项,触发定位见 `scripts/demo/minimal-smoke.e2e.mjs` 的 trusted-click 配方)→ 发送 → 两阶段收敛 → 时间线 `[minimal echo] <文本>`(未配真模型)或真模型流式(配了 `<HOME>/.minimal/agent/models.json` + `.credentials.json`)。内核本体 = `src/server/kernel/minimal/kernel/*.mjs`(minimal-cli 协议循环 + minimal-model SSE 客户端 + minimal-tools 工具注册表 + minimal-plugin 插件加载),spawn 走 `process.execPath`(别用字面 "node",tsx/vitest 环境 PATH 里没有)。文件对账守卫(§4 数据层,别只读 DOM):① 中立层 `header.kernel="minimal"` + `header.custom.model.kernel="minimal"`;② minimal 会话文件落 `<隔离HOME>/.minimal/agent/sessions/<桶>/<ns>.jsonl`——**不是 .pi/**(曾踩:壳把单一 `agentDir`(=PI_AGENT_DIR)传所有内核,minimal 文件误写 pi 根;修法:minimal 的 agentDir 由 assemble.ts 工厂闭包捕获,同 dsh cordisConfig 不入中性契约);③ 文件格式 = 头行 `{type:"session",id}` + 条目 `{type:"message",id,timestamp,message:{role,content}}`——write 与 read 曾不一致(appendEntry 裸写 `{role,content}` 缺 type 包装,getEntries 读不回;已统一为 appendMessage/appendDivider 规范格式),对账读文件逐行 JSON 断言 `type==="message"` 与 role 计数;④ 多轮 append 走 appendFileSync(首条走 header 写),第二轮也要发(验 append 非首写路径)。两处「写死→注册式」已修:plugin-icon 曾写死 `name==="pi"||"dsh"` 漏 minimal(改 isKernelId);默认内核回退 `?? "pi"`(timeline refreshKernelStatus / session-store projectHeaderToKernel)改 `KERNEL_IDS[0]`。
+**minimal(第三个同级内核,独立子进程 CLI,未配置真模型时 echo 兜底,零 token;默认不装载——manifest `enabled:false`,生产无意义,§目标 16)**:**e2e 必须先 `MHD_ENABLE_KERNELS=minimal`**(launchApp env)才进内核清单,否则模型下拉无 minimal TAB(默认清单=[pi,dsh];卸载=删 manifest 后即使覆盖也缺面,`minimal-uninstall.e2e.mjs` 三段式验:默认 off→覆盖 on→卸载缺面)。选模型下拉「Minimal Echo」(开 menu → 点内核 TAB「minimal」→ 点模型项,触发定位见 `scripts/demo/minimal-smoke.e2e.mjs` 的 trusted-click 配方)→ 发送 → 两阶段收敛 → 时间线 `[minimal echo] <文本>`(未配真模型)或真模型流式(配了 `<HOME>/.minimal/agent/models.json` + `.credentials.json`)。内核本体 = `src/server/kernel/minimal/kernel/*.mjs`(minimal-cli 协议循环 + minimal-model SSE 客户端 + minimal-tools 工具注册表 + minimal-plugin 插件加载),spawn 走 `process.execPath`(别用字面 "node",tsx/vitest 环境 PATH 里没有)。文件对账守卫(§4 数据层,别只读 DOM):① 中立层 `header.kernel="minimal"` + `header.custom.model.kernel="minimal"`;② minimal 会话文件落 `<隔离HOME>/.minimal/agent/sessions/<桶>/<ns>.jsonl`——**不是 .pi/**(曾踩:壳把单一 `agentDir`(=PI_AGENT_DIR)传所有内核,minimal 文件误写 pi 根;修法:minimal 的 agentDir 由 assemble.ts 工厂闭包捕获,同 dsh cordisConfig 不入中性契约);③ 文件格式 = 头行 `{type:"session",id}` + 条目 `{type:"message",id,timestamp,message:{role,content}}`——write 与 read 曾不一致(appendEntry 裸写 `{role,content}` 缺 type 包装,getEntries 读不回;已统一为 appendMessage/appendDivider 规范格式),对账读文件逐行 JSON 断言 `type==="message"` 与 role 计数;④ 多轮 append 走 appendFileSync(首条走 header 写),第二轮也要发(验 append 非首写路径)。两处「写死→注册式」已修:plugin-icon 曾写死 `name==="pi"||"dsh"` 漏 minimal(改 isKernelId);默认内核回退 `?? "pi"`(timeline refreshKernelStatus / session-store projectHeaderToKernel)改 `KERNEL_IDS[0]`。
 
 **minimal fork/重开/改名/删除(补面,均已验)**:fork 是**纯中立操作**(`deriveFromAnchor` 零内核交互、kernel 归属从源 header 透传),minimal 天然支持不需适配——`scripts/demo/minimal-fork.e2e.mjs` 验全链(派生 `derivedFrom.kind=fork` + `pendingSeed` + `kernel=minimal` 不漂 → 首发物化 echo + minimal 文件落 `.minimal/`)。重开续跑在 `minimal-smoke.e2e.mjs`(⌘N → 回点会话行 → 历史仍在 → 第三条续跑,同文件续写)。改名/删除投影:**活会话走 `backend.setSessionName`、非活会话走 `catalog.rename`(追加 session_info)与 `catalog.deleteSessions`(rm 文件)**——两处曾是 no-op(投影缺失 + 文件泄漏),已修,守卫见 `minimal-catalog.test.ts`。
 

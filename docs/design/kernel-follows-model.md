@@ -206,7 +206,7 @@ flowchart TD
 - 隐式点：把 `setModel` 里那行 `throw new Error("当前会话已固定内核，跨内核切换后续支持")` 换回 `await this.switchKernel(target.kernel)`。
 - 显式点：把 `switchKernel` 入口那行 `throw new Error("跨内核切换暂未启用")` 删掉。
 
-就这两行。`switchKernel` 的七步编排（abort → 落定 → 快照 → stop → 查绑定 → 分内核 seed/start → 重绑）、`piSeedSession` 的纯函数 seed 与 `DshBackend.seed` 的 RPC seed 这两个生命周期不对称、`SessionBindingStore` 的映射表回切、`isBindingValid` 的失效回退、`capabilities.pi/.dsh` 的能力探测降级——这些全部已经实现且有测试覆盖（`session-store.test.ts` 里的 `switchKernel 五步切换` 和 `switchKernel 失效回退 + 预 seed` 两个用例）。暂缓期间它们一行都不删，只是没入口。放开的那天，拨两个开关，测试照跑，行为回来。
+就这两行。`switchKernel` 的七步编排（abort → 落定 → 快照 → stop → 查绑定 → 分内核 seed/start → 重绑）、`piSeedSession` 的纯函数 seed 与 `DshBackend.seed` 的 RPC seed 这两个生命周期不对称、`SessionBindingStore` 的映射表回切、`isBindingValid` 的失效回退、`capabilities.extensions/.thinking` 的能力探测降级——这些全部已经实现且有测试覆盖（`session-store.test.ts` 里的 `switchKernel 五步切换` 和 `switchKernel 失效回退 + 预 seed` 两个用例）。暂缓期间它们一行都不删，只是没入口。放开的那天，拨两个开关，测试照跑，行为回来。
 
 这里要顺带澄清一个可能的误读：暂缓不等于"这套代码可以锈掉"。`switchKernel` 依赖的 `seed`、映射表、能力探测这些，在暂缓期间依然被别的路径使用——`createProc` 会写 bindingStore（打开历史会话时），`ensureForSend` 会走 `factory.create`（起后端时），`bindProcEvents` 会绑 `capabilities`（每个后端启动时）。所以这套机制不是被冻结在冰里，而是"入口关了、机制照转"，等放开时它和外围是同步演化过的，不会出现"放了半年、接口对不上"的烂摊子。
 
@@ -224,8 +224,8 @@ flowchart TD
 
 - `switchKernel` 的实现（`session-store.ts` 里七步编排）。这是未来放开要直接调用的完整逻辑，删掉等于未来重写一遍最难的部分——中止落定、拓扑快照、边界归一、分内核 seed、失效回退，任何一段重写都是新的 bug 温床。
 - `seed` 契约与两个实现（`BackendFactory.seed`、`piSeedSession`、`DshBackend.seed`）。seed 是"把中立会话树灌进另一个内核"的能力，是切换的硬依赖；同时它也是"空会话以目标内核起后端"这条选择路径在 dsh 侧的首切入口（dsh 首切要走 seed），不是切换专属。
-- `KernelId` 字面量联合与 `KERNEL_IDS`（`packages/shared/src/domain/kernel.ts`）。这是内核身份的单源，`"pi" | "dsh"` 的字面量联合让编译器在"加第三个内核"时逼补全所有 switch 分支。把它退化成 `string`，就丢掉了这道编译期防线，未来放开切换乃至加内核时，漏改会静默发生。
-- `capabilities.pi/.dsh` 能力探测面（`BaseBackend.capabilities`，`packages/shared/src/domain/backend.ts`）。它是"有则用、无则降级"的机制，切不切换都靠它区分 pi/dsh 的能力差异。删了它，代码就会退回到"按内核身份硬分支"的泄漏。
+- `KernelId` 与 `KernelRegistry`（`packages/shared/src/domain/kernel.ts` + `src/server/kernel/core/kernel-registry.ts`）。内核身份是不透明 string、由插件声明，内核清单由注册表运行时驱动（替代已删的 `KERNEL_IDS` 字面量数组，§kernel-plugin 阶段五）。编译期漏补报错换成了启动期完整性校验（`validateKernelPlugin`）+ 运行时查注册表 + 显式降级——这是插件化架构（VSCode 扩展同理）的固有代价，用「运行时注册换运行时校验」兜底。删了注册表，代码就退回"按内核身份硬分支"的泄漏。
+- `capabilities.extensions/.thinking` 能力探测面（`BaseBackend.capabilities`，`packages/shared/src/domain/backend.ts`）。它是"有则用、无则降级"的机制，切不切换都靠它区分 pi/dsh 的能力差异。删了它，代码就会退回到"按内核身份硬分支"的泄漏。
 
 这四样的共同点：它们都是"多内核架构"的骨架，不是"切换功能"的零件。暂缓切换只关骨架上的一个入口，不动骨架本身——这是"暂缓"和"拆除"的分界线。
 
@@ -296,7 +296,7 @@ UI 层这次可以不动，但有一个可选的改进值得记下来，留给�
 
 **Q：未来加第三个内核，这套方案要改什么？**
 
-改四处，且编译器会逼你补全：`KernelId` 字面量联合加一个字面量、`KERNEL_IDS` 加一项、`ModelCatalog` 注入一个新 `KernelModelSource`、`BackendFactory.create` 加一个内核分支。清理默认 pi 和暂缓切换的逻辑本身一行不动——它们不依赖内核个数，只依赖"内核 = 模型归属"这一条不变量。加第三个内核不会重新引入"默认 pi"，因为默认值已经删掉了。
+加内核 = 写一个内核插件目录（plugin.json + factory）+ 在装配点扫描注册（§kernel-plugin），核心零改动——`ModelCatalog` 从注册表遍历 `KernelModelSource`、`BackendFactory` 从注册表查插件。清理默认 pi 和暂缓切换的逻辑本身一行不动——它们不依赖内核个数，只依赖"内核 = 模型归属"这一条不变量。加内核不会重新引入"默认 pi"，因为默认值已经删掉了。
 
 **Q：pi 和 dsh 有同名的 provider + modelId，选它时算哪个内核？**
 

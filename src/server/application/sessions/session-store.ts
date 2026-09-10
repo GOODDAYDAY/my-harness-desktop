@@ -157,7 +157,7 @@ export class SessionStore implements
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi, SessionStoreForRestart
 {
   /** pi 内核专属扩展面(§7.6):SessionStore 聚合实现全部 pi 专属命令,经此面向插件暴露。
-   *  插件经 capabilities.extensionsExtension 探测「有则用、无则降级」。 */
+   *  插件经 capabilities.extensions 探测「有则用、无则降级」。 */
   get pi(): PiExtensions {
     return this;
   }
@@ -256,17 +256,24 @@ export class SessionStore implements
     }
     return c;
   }
-  private get catalog(): SessionCatalog {
-    return this.catalogFor("pi");
-  }
-  private get dshCatalog(): SessionCatalog {
-    return this.catalogFor("dsh");
+
+  /** 会话路径 → 内核目录(文件操作按会话归属路由,非写死 pi):读中立头 kernel,
+   *  无归属回落默认内核(§剩余演进:此前恒取 pi,minimal 会话的复制/删除/工具配置会错走 pi 目录)。 */
+  private catalogForPath(sessionPath: string): SessionCatalog {
+    const ns = this.neutralSessionIdFromPath(sessionPath);
+    const kernel = (ns ? this.neutralStore?.getHeader(ns)?.header.kernel : undefined) ?? this.defaultKernelId;
+    return this.catalogFor(kernel);
   }
 
-  /** pi 会话文件路径(this.catalog 恒为 pi 文件型目录,newSessionId 必返回路径;null 只在
-   *  惰性创建会话的内核出现,pi 文件操作不该碰到)。 */
+  /** 注意:不再有「恒为 pi」的 catalog 别名 getter——文件操作统一经 catalogForPath/
+   *  catalogFor(proc.kernel) 按会话归属路由。剩余 3 处显式 catalogFor("pi") 是 pi 专属面
+   *  (总线子代理 spawn / 旧会话内核回读兜底 / pi 文件态项目统计),属「pi 专属能力插件化」
+   *  的剩余演进(§目标 13),已逐点标注,不静默回落。 */
+
+  /** pi 会话文件路径(总线子代理恒 pi:spawnSession/reopenSession 显式以 pi 建,§目标 13
+   *  待迁 pi 插件)。newSessionId 必返回路径;null 只在惰性创建会话的内核出现,pi 文件操作不该碰到。 */
   private newPiSessionPath(cwd: string): string {
-    const path = this.catalog.newSessionId(cwd);
+    const path = this.catalogFor("pi").newSessionId(cwd);
     if (path == null) throw new Error("当前内核未预生成会话文件路径");
     return path;
   }
@@ -356,8 +363,11 @@ export class SessionStore implements
     // sessions-list 手动补写 currentSessionPath——隐式契约,第二个忘记补写的入口
     // 就会导致"视图里有会话内容、发送却走了新会话分支"。修复:main 激活会话时
     // 主动推 synthetic sessionStart,当前会话流的真相源单一在 main。
+    // 同时带 neutralSessionId:renderer 的 hydrateSessionStart 若只靠 sessionInfos 反查
+    // (列表尚未加载时反查落空 → currentNeutralSessionId 置 null → 中立层镜像清空 → 时间线
+    // 空白,重开偶发空渲染的根因之一),带主键后事件自足、不再依赖 sessionInfos 时序。
     if (sessionPath) {
-      this.dispatch(key, { type: "sessionStart", sessionFile: sessionPath });
+      this.dispatch(key, { type: "sessionStart", sessionFile: sessionPath, neutralSessionId: this.neutralSessionIdFromPath(sessionPath) });
     }
     // 提问水合(ask-design §8.1):重投 pending(卡片复活)+ 补投 answered 未 delivered(答案必达)。
     this.rehydrateQuestions();
@@ -434,7 +444,8 @@ export class SessionStore implements
       if (neutral?.header?.kernel) return neutral.header.kernel;
     }
     if (!sessionPath) throw new Error("无法确定会话内核：新会话需先选择模型");
-    const custom = await this.catalog.readCustom(sessionPath).catch(() => null);
+    // 旧会话(无中立头)的内核回读兜底:legacy 会话历史是 pi(§剩余演进,待 pi 插件化)。
+    const custom = await this.catalogFor("pi").readCustom(sessionPath).catch(() => null);
     const prefs = parseSessionModelPrefs(custom ?? undefined);
     if (prefs?.kernel) return prefs.kernel;
     // 旧头行 custom.kernel 兜底:经 isKernelId 单源谓词识别(minimal-kernel §7.8.2——
@@ -668,7 +679,7 @@ export class SessionStore implements
       // sendText 仍判 currentSessionPath=null → 二次 startNewChat → setContext(cwd,null)
       // 把 activeProcKey 重置走、prompt 的 ensureForSend 再 spawn 第二个进程(双 spawn,
       // pref flush 那个成孤儿)。水合前置后 sendText 跳过 startNewChat,prompt 复用同一进程。
-      this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sessionPath });
+      this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sessionPath, neutralSessionId: this.neutralSessionIdFromPath(sessionPath) });
     }
     await this.start(this.activeCwd, sessionPath, undefined, false, kernel, provider, model);
     // 并发收尾校验:start 的 await 窗口内若并发 setContext 把 activeSessionPath 换走,
@@ -898,7 +909,7 @@ export class SessionStore implements
     });
   }
   async copySession(srcPath: string, targetPath: string): Promise<void> {
-    this.catalog.copy(srcPath, targetPath);
+    this.catalogForPath(srcPath).copy(srcPath, targetPath);
   }
 
   /** 中立层会话注解(设计 docs/design/goal.md §8.3):只写中立层、不写内核会话文件——
@@ -939,7 +950,15 @@ export class SessionStore implements
   async deleteSessions(paths: string[]): Promise<void> {
     // 活跃会话禁止删除:进程 append 会让文件复活,删了也白删(机制兜底,UI 侧另有 deletable 过滤)
     const targets = paths.filter((p) => p !== this.activeSessionPath);
-    if (targets.length > 0) await this.catalog.deleteSessions(targets);
+    // 按会话内核归属分组删除(非写死 pi):minimal 会话走 minimal 目录的删除,pi/dsh 各走各的。
+    const byKernel = new Map<KernelId, string[]>();
+    for (const p of targets) {
+      const ns = this.neutralSessionIdFromPath(p);
+      const kernel = (ns ? this.neutralStore?.getHeader(ns)?.header.kernel : undefined) ?? this.defaultKernelId;
+      const list = byKernel.get(kernel);
+      if (list) list.push(p); else byKernel.set(kernel, [p]);
+    }
+    await Promise.all([...byKernel.entries()].map(([kernel, ids]) => this.catalogFor(kernel).deleteSessions(ids)));
     // 级联删中立层(§27 阶段 D):中立层是唯一真相源,删会话也删中立树。
     for (const p of targets) {
       const ns = this.neutralSessionIdFromPath(p);
@@ -949,10 +968,12 @@ export class SessionStore implements
     }
   }
   async readToolConfig(sessionPath: string): Promise<SessionToolConfig | null> {
-    return this.catalog.readToolConfig(sessionPath);
+    return this.catalogForPath(sessionPath).readToolConfig(sessionPath);
   }
   async projectStats(cwd: string): Promise<ProjectStats> {
-    return this.catalog.projectStats(cwd);
+    // pi 文件态项目统计(§剩余演进:应聚合所有文件态内核;minimal 当前返零、dsh 无文件态,
+    //  故 pi 单源暂等价,待「文件态聚合」收口后改遍历 fileBacked 内核)。
+    return this.catalogFor("pi").projectStats(cwd);
   }
 
   /** 会话 lineage 树(§kernel-forkless §22):中立层是唯一读源,内核目录降级为兜底。 */
@@ -968,7 +989,7 @@ export class SessionStore implements
         })),
       };
     }
-    return this.catalog.getTree(sessionId);
+    return this.catalogForPath(sessionId).getTree(sessionId);
   }
 
   /** 按 cwd 懒取收藏快照存储;未启用(bookmarkDir 未注入)返回 null。 */
@@ -1382,7 +1403,8 @@ export class SessionStore implements
    *  (pi)顺手把头行 custom.kernel 写回,无文件内核(dsh)boundSessionPath 为 null 自然跳过。 */
   private async writeKernelToHeader(proc: SessionProc): Promise<void> {
     if (proc.boundSessionPath) {
-      await this.catalog.updateHeader(proc.boundSessionPath, { custom: { kernel: proc.kernel } }).catch(() => {});
+      // 按 proc 内核归属取目录(非写死 pi):minimal 会话的头行写回走 minimal 目录。
+      await this.catalogFor(proc.kernel).updateHeader(proc.boundSessionPath, { custom: { kernel: proc.kernel } }).catch(() => {});
     }
   }
 
@@ -1454,7 +1476,7 @@ export class SessionStore implements
     if (this.activeSessionPath) {
       const fromState = this.modelPrefsFromState(snapshot.state);
       if (fromState) {
-        const fromHeader = parseSessionModelPrefs((await this.catalog.readCustom(this.activeSessionPath)) ?? undefined);
+        const fromHeader = parseSessionModelPrefs((await this.catalogForPath(this.activeSessionPath).readCustom(this.activeSessionPath)) ?? undefined);
         const same = fromHeader
           && fromHeader.provider === fromState.provider
           && fromHeader.modelId === fromState.modelId
@@ -1800,7 +1822,7 @@ export class SessionStore implements
     // 成功后 main 主动推 synthetic sessionStart,renderer 现有 onEvent 分支
     // 直接水合;已发出的发送目标就是当前会话流,再发一条基于当前会话续发。
     if (this.activeSessionPath) {
-      this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: this.activeSessionPath });
+      this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: this.activeSessionPath, neutralSessionId: this.neutralSessionIdFromPath(this.activeSessionPath) });
     }
     // 自动命名条件是"活跃会话还没有名字"而非"新会话":真实使用多为 CLI 建会话、
     // desktop 打开续聊,wasNewSession(activeSessionPath===null) 恒 false,autoName 永不触发。
@@ -1868,7 +1890,7 @@ export class SessionStore implements
     }
     try {
       // 写三字段 + kernel(kernel 是模型的派生量,与模型同域原子落盘——重开据此无歧义读回内核)。
-      await this.catalog.updateHeader(sessionPath, {
+      await this.catalogForPath(sessionPath).updateHeader(sessionPath, {
         custom: { [SESSION_MODEL_PREFS_KEY]: { provider: prefs.provider, modelId: prefs.modelId, thinkingLevel: prefs.thinkingLevel, ...(prefs.kernel ? { kernel: prefs.kernel } : {}) } },
       });
     } catch (e) {
@@ -2160,7 +2182,7 @@ export class SessionStore implements
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
     // 用 context-probe 的请求侧实测兜底,再无可信来源则诚实未知——不放行内核的假锚点。
     if (!proc.lastPromptAnchorReal) {
-      const measured = proc.boundSessionPath ? this.catalog.contextProbeTokens(proc.boundSessionPath) : null;
+      const measured = proc.boundSessionPath ? this.catalogFor(proc.kernel).contextProbeTokens(proc.boundSessionPath) : null;
       stats.contextUsage = resolveContextUsage(stats.contextUsage, false, measured);
     }
     return stats;
@@ -2471,7 +2493,7 @@ export class SessionStore implements
     this.activeSessionPath = sf;
     const proc = this.activeProc();
     if (proc) this.rekeyProc(proc, sf);
-    this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sf });
+    this.dispatch(this.activeProcKey, { type: "sessionStart", sessionFile: sf, neutralSessionId: this.neutralSessionIdFromPath(sf) });
   }
 
   /** 分叉点之前的消息序列(session-single-source §4.2):中立层前缀截取,不再走 pi RPC。

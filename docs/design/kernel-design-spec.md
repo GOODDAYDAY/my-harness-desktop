@@ -171,7 +171,7 @@ my-harness-desktop 有一条设计宣言：**底座不是插件，是被管理�
 │   commands.ts / event-translator.ts / context-binding.ts      │
 ├────────────────────────────────────────────────────────────┤
 │ core/domain/  (圆心 · 零依赖)                                 │
-│   kernel.ts    KernelId / KERNEL_IDS                          │
+│   kernel.ts    KernelId / kernel-plugin.ts（内核身份 + 插件契约）│
 │   backend.ts   BaseBackend / BackendFactory / KernelModelSource│
 │   events/      ModelInfo / SessionEvent / NeutralMessage       │
 └────────────────────────────────────────────────────────────┘
@@ -282,15 +282,14 @@ client/dsh/          dsh 传输实现（spawn / JSON-RPC 行）+ DshBackend 适�
 ### 8.1 定义
 
 ```ts
-// core/domain/kernel.ts
-export type KernelId = "pi" | "dsh";
-export const KERNEL_IDS = ["pi", "dsh"] as const;
+// core/domain/kernel.ts（§kernel-plugin 阶段五已去字面量化）
+export type KernelId = string;
 ```
 
 ### 8.2 语义
 
-- `KernelId` 是内核身份的字面量联合。全仓只有这一处出现 `"pi" | "dsh"` 字面量（契约单源纪律）。
-- 加第三个内核 = 联合加一个字面量 + `KERNEL_IDS` 加一项，编译器逼补全所有 `switch (kernel)` 分支——这是字面量联合而非 `string` 的直接红利。
+- `KernelId` 是内核身份的不透明字符串（§kernel-plugin 阶段五已去字面量化）。内核 id 由内核插件在 plugin.json/工厂里声明，核心不硬编码任何具体内核名。
+- 加内核 = 写一个插件目录 + 注册（`KernelRegistry` 运行时清单），核心零改动。编译期 `Record<KernelId>` 漏补报错没了，用启动期完整性校验（`validateKernelPlugin`）+ 运行时注册表查 + 显式降级兜底——**运行时注册换运行时校验**（插件化架构的固有代价，VSCode 扩展同理）。
 
 ### 8.3 归属
 
@@ -306,8 +305,8 @@ export interface BaseBackend {
   readonly alive: boolean;
   /** 当前内核侧会话标识（不透明；dsh 有桶名默认 + seed 重绑）。 */
   readonly sessionId: string | null;
-  /** 内核能力面（pi?/dsh?），壳经 backend.capabilities.pi/.dsh 探测「有则用、无则降级」。 */
-  readonly capabilities: { pi?: PiCapabilities; dsh?: DshCapabilities };
+  /** 内核能力面（extensions?/thinking?），壳经 backend.capabilities.extensions/.thinking 探测「有则用、无则降级」。 */
+  readonly capabilities: { extensions?: unknown; thinking?: ThinkingCapabilities; fileBacked?: boolean };
   /** 内核专属配置依赖路径，供框架 configFile 白名单/失效监听（可选）。 */
   readonly configDepPaths?: string[];
   start(): Promise<void>;
@@ -517,7 +516,7 @@ export interface KernelModelSource {
 
 | 类型 | 定义处 | 语义 |
 |---|---|---|
-| `KernelId` | `kernel.ts` | 内核身份字面量联合 |
+| `KernelId` | `kernel.ts` | 内核身份（不透明 string，插件声明） |
 | `Lineage` | `backend.ts` | 一条有序事件流 + 一个分叉点（`{id, fork}`） |
 | `LineageFork` | `backend.ts` | 分叉点（`{parentLineageId, boundary}`） |
 | `LineageTree` | `backend.ts` | 会话全部 lineage（`{rootId, lineages[]}`） |
@@ -1122,7 +1121,7 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
 「换内核 = 换适配器」的可检验形式是：**同一套壳插件测试，参数化地跑在 pi 和 dsh 两个后端上，全绿且壳插件代码零改动**。三层测试：
 
 **单测（纯函数，无 mock）**：
-- `KernelId` / `KERNEL_IDS`：字面量联合 + 枚举。
+- `KernelRegistry` / `validateKernelPlugin`：运行时清单 + 启动期完整性校验。
 - `projectLineageTree`：入口级树 → lineage 树的投影（首子主干、分叉点、森林多根）。
 - `model-catalog` 合流：`PiModelSource` + `DshConfigSource` 两路合成带 `kernel` 标的 `ModelInfo[]`，同名不跨内核去重。
 - 事件翻译：`translateDshEvent` 映射表逐条（turn/user-message/assistant-message/tool-call/tool-result/丢弃项）。
@@ -1320,7 +1319,7 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
 | # | 决策 | 理由 | 替代方案（被否） |
 |---|---|---|---|
 | D1 | 会话语义归一为 lineage 树（分叉点节点），不保留 pi 的条目树 | pi/dsh 两边都原生表达；session-tree 和 session-groupings 能合体 | 保留条目树（dsh 造不出，硬翻译） |
-| D2 | 内核身份用字面量联合 `"pi" \| "dsh"`，不用 `string` | 加内核编译器逼补全所有 `switch` | `string`（失去编译期检查） |
+| D2 | 内核身份用不透明 `string`（插件声明，§kernel-plugin） | 加内核 = 写插件 + 注册，核心零改动 | 字面量联合（核心硬编码内核名，加内核改核心） |
 | D3 | 工厂契约只收中性字段，专属参数闭包捕获 | 内核形状不进契约 | 专属参数进契约（泄漏） |
 | D4 | 补面下沉内核插件，适配器只翻译 | 不破坏内核自洽 | 适配器补面（壳替内核装能力） |
 | D5 | 缺面能力基类给默认「不支持」，子类 override | 缺面语义单源 | 每后端各写一份（重复） |
@@ -1363,7 +1362,7 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
 4. **事件翻译**：专属事件 → 中性 `SessionEvent`，无对应的丢弃或先在中性域加类型。
 5. **模型源**：`KernelModelSource` 实现（`listModels` 带 `kernel` 标）。
 6. **内核管理**：`KernelSpec`（pkg/pkgJsonPath/extraPackages）注册进 `kernel-manager`。
-7. **契约面**：`KernelId` 加一个字面量 + `KERNEL_IDS` 加一项（编译器逼补全 `switch`）。
+7. **契约面**：写一个内核插件目录（plugin.json + factory）+ 在装配点扫描注册（§kernel-plugin），核心零改动。
 8. **内核标**：`PluginIcon` 加一个分支（logo + `name === "<new>"`）。
 9. **管理 UI**：一个 `<new>-manager` 插件——三 TAB 走 §12.4/§12.5/§12.6 的共享 base：安装页 `KernelVersionPage`（api+i18nPrefix）、模型页 `ModelConfigPage`（api+i18nPrefix+capabilities）、拓展页 `KernelExtensionsPage`（kernel+title），各只填 spec，不重写任何骨架。
 10. **回归**：壳插件集成测试参数化跑第三个后端，全绿且壳插件零改动。

@@ -135,11 +135,11 @@ pi 的老文件用 parentId 连成树，dsh 用 session forest 一个分支一�
 
 #### 2.8.1 capabilities 与 factory.seed 两个探测点
 
-壳承接 minimal，靠的是两个能力探测点，不是 `kernel === "minimal"`：一是 `backend.capabilities`（pi 给 `{pi: ...}`，dsh 给 `{dsh: ...}`，minimal 给空对象），二是 `factory.seed`（有预 seed 面的内核返回会话 id，无预 seed 面的返回 null）。先厘清两个术语，否则这节读不懂："预 seed"指内核的 seed 是纯文件写、能在 spawn 之前先把会话灌好（pi、minimal 都如此），"后 seed"指 seed 依赖活进程、必须先 spawn 再灌（dsh 如此）。这两个探测点各自的判据不同：`capabilities` 判"有没有内核专属扩展面"，`factory.seed` 判"seed 要不要先于 spawn"。
+壳承接 minimal，靠的是两个能力探测点，不是 `kernel === "minimal"`：一是 `backend.capabilities`（能力按语义分桶、不带内核名，§kernel-plugin §6：pi 给 `{extensions: ..., fileBacked: true}`，dsh 给 `{thinking: ...}`，minimal 给 `{fileBacked: true}`——**曾漂移为** `{pi: ...}`/`{dsh: ...}` 按内核名分桶 + minimal 给空对象，已中性化），二是 `factory.seed`（有预 seed 面的内核返回会话 id，无预 seed 面的返回 null）。先厘清两个术语，否则这节读不懂："预 seed"指内核的 seed 是纯文件写、能在 spawn 之前先把会话灌好（pi、minimal 都如此），"后 seed"指 seed 依赖活进程、必须先 spawn 再灌（dsh 如此）。这两个探测点各自的判据不同：`capabilities` 判"有没有内核专属扩展面 / 是不是文件态"，`factory.seed` 判"seed 要不要先于 spawn"。
 
 #### 2.8.2 minimal 是文件态：预 seed，但无 pi 扩展面
 
-minimal 在这两个探测点上的落位要分清，否则会和 §7.4/§8.2 打架：minimal **有会话文件，是文件态内核**，它的 `factory.seed` 返回会话 id（seed 是纯文件写、先于 spawn），所以它和 pi 同侧走预 seed 路径——`materializedLineageId` 在 spawn 前就是该 lineage 的 id（文件里已经有内容）。但 minimal 的 `capabilities` 是**空的**（没有 pi 的 `steer`/`followUp`，也没有 dsh 的 `dsh` 能力面），所以壳对 minimal 不做 `capabilities.pi` 分支（`boundSessionPath` 为 null，不写 pi 的文件头）。一句话把三个维度分开说，别混成一个：minimal 在"文件态/预 seed"上**像 pi**（都有会话文件、都先 seed 后 spawn）；在"`capabilities.pi` 探测"上**像 dsh**（两者 `capabilities.pi` 都 undefined、`boundSessionPath` 都 null）；而在"有没有专属扩展面"上 minimal **最简**——它是三者里唯一 `capabilities` 完全为空的。壳据此承接 minimal，全程不写身份分支——这就是 §2.3 论断的机制来源。
+minimal 在这两个探测点上的落位要分清，否则会和 §7.4/§8.2 打架：minimal **有会话文件，是文件态内核**，它的 `factory.seed` 返回会话 id（seed 是纯文件写、先于 spawn），所以它和 pi 同侧走预 seed 路径——`materializedLineageId` 在 spawn 前就是该 lineage 的 id（文件里已经有内容）。minimal 的 `capabilities` 是 **`{fileBacked: true}`**（没有 pi 的 `extensions` 扩展面 `steer`/`followUp`，也没有 dsh 的 `thinking` 面；**文件态是独立轴，经 `fileBacked` 显式声明，不借 `extensions` 当文件态代理**——§minimal-kernel 的"文件态能力位纪律"），所以壳对 minimal 的 `boundSessionPath` 指向 minimal 会话文件（`capabilities.fileBacked ? newSessionId : null`），**不是 null**。一句话把三个维度分开说，别混成一个：minimal 在"文件态/预 seed"上**像 pi**（都有会话文件、都先 seed 后 spawn）；在"`capabilities.extensions` 扩展面"上**像 dsh**（两者都无 pi 扩展面、`extensions` 都 undefined）；而在"专属扩展面"上 minimal **最简**——三者里只有它既无 `extensions` 也无 `thinking`。壳据此承接 minimal，全程不写身份分支——这就是 §2.3 论断的机制来源。
 
 ### 2.9 minimal 的模型与配置是自己的
 
@@ -638,6 +638,8 @@ minimal 的协议事件是它自己的形状，中性事件是壳的形状，两
 反向投影是 seed：壳把活跃 lineage 的纯 AI 内容（`assembleSeedProjection` 组装，压缩截断 + role 白名单）交给 minimal 的 `seed`，minimal 适配器把这串 `NeutralEntry` 写成 minimal 的会话文件。和 pi 的 `piSeedSession` 同构——都是"把中立 lineage 落成内核自己的文件"。minimal 是文件态内核，所以它的 seed 是纯文件写，不依赖活进程（这点对 §8 的运行期切换很关键）。
 
 ### 7.5 KernelId 加字面量
+
+> ⚠️ **历史演进记录**：本节（7.5–7.8）描述的是**插件化之前**接入 minimal 的路径——通过 `KernelId` 字面量联合 + `KERNEL_IDS` 数组。插件化后（§kernel-plugin）`KernelId` 已去字面量化（`= string`）、`KERNEL_IDS` 已删（内核清单由 `KernelRegistry` 运行时驱动），接入内核 = **写一个插件目录（plugin.json + factory）+ 注册**，核心零改动。本节保留作历史，实际接入见 `src/server/kernel/minimal/plugin.json` + `plugin.ts`。
 
 #### 7.5.1 kernel.ts 的联合 + KERNEL_IDS
 

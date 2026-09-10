@@ -40,6 +40,19 @@ export function scanKernelPlugins(pluginRootDir: string): KernelPluginEntry[] {
   return entries;
 }
 
+/**
+ * 默认装载清单(§目标 16):过滤 manifest.enabled === false 的内核(默认不装载),除非其 id 在
+ * forceEnable 里(运行时环境变量 MHD_ENABLE_KERNELS 强制启用,测试/demo 用)。
+ * 纯函数,可单测——「扫描 = 存在性」与「装载 = 默认开关」是两个正交概念,别混进 scanKernelPlugins。
+ * 卸载语义仍是「删 manifest → 扫描不存在」,与 enabled 无关。
+ */
+export function defaultEnabledEntries(
+  entries: KernelPluginEntry[],
+  forceEnable: ReadonlySet<string> = new Set(),
+): KernelPluginEntry[] {
+  return entries.filter((e) => e.manifest.enabled !== false || forceEnable.has(e.manifest.id));
+}
+
 /** 同步加载单个内核插件:require 工厂模块,取工厂(default 优先,回落 `${id}KernelPlugin`),register。 */
 export function loadKernelPlugin(
   registry: KernelRegistry,

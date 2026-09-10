@@ -68,6 +68,10 @@ export interface ComposerProps
   currentKernel?: KernelId | null;
   /** 会话是否已锁定内核(锁定后不可跨内核切换,§7.6 显式降级)。 */
   kernelLocked?: boolean;
+  /** 已注册内核的注册表顺序(运行时注册表序;模型下拉顶部 TAB 条按此排序)。
+   *  由调用方(timeline)从 PluginContext.kernels 派生传入——composer 是纯 UI 叶子,
+   *  不读 window.kernel 全局,数据全经 props 注入。缺省回落模型首现序(§纯 UI)。 */
+  kernelOrder?: KernelId[];
   /** goal 生效标记:药丸换绿晕(表现机制;目标语义归 timeline 订阅 goal:state 判定)。 */
   goalActive?: boolean;
 }
@@ -144,6 +148,7 @@ export function Composer({
   commands,
   currentKernel,
   kernelLocked = false,
+  kernelOrder,
   goalActive = false,
   ...rest
 }: ComposerProps): React.ReactNode {
@@ -188,12 +193,15 @@ export function Composer({
   // 模型下拉的内核 TAB 状态:null = 跟随当前模型内核/首个内核(打开下拉时重置为 null)。
   const [modelKernel, setModelKernel] = useState<KernelId | null>(null);
 
-  // 有模型的内核列表(注册表序 window.kernel.kernelIds),用于模型下拉顶部的 TAB 条。
+  // 有模型的内核列表(注册表序由调用方 kernelOrder 传入),用于模型下拉顶部的 TAB 条。
+  // composer 是纯 UI 叶子,不读 window.kernel——注册表序经 props 注入(依赖倒置),
+  // 缺省回落模型首现序(与 groupByKernel 同源,保证无 kernelOrder 时 TAB 仍稳定有序)。
   const kernels = useMemo((): KernelId[] => {
     const present = new Set<KernelId>();
     for (const m of models ?? []) present.add(m.kernel);
-    return window.kernel.kernelIds.filter((k) => present.has(k));
-  }, [models]);
+    const order = kernelOrder ?? [...present];
+    return order.filter((k) => present.has(k));
+  }, [models, kernelOrder]);
   const byKernel = useMemo(() => groupByKernel(models ?? []), [models]);
   // 当前生效的内核 TAB:显式点选 → 当前模型内核 → 首个内核。
   const tabKernel: KernelId | undefined =

@@ -31,7 +31,7 @@ mkdirSync(projectDir, { recursive: true });
 const prefsFile = join(home, ".my-harness-desktop-dev", "config", "config.json");
 writeFileSync(prefsFile, JSON.stringify({ ...JSON.parse(readFileSync(prefsFile, "utf-8")), lastCwd: projectDir }, null, 2));
 
-const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18462" }, timeoutMs: 90000 });
+const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18462", MHD_ENABLE_KERNELS: "minimal" }, timeoutMs: 90000 });
 const page = app.page;
 const consoleTail = [];
 page.on("pageerror", (e) => consoleTail.push(e.message));

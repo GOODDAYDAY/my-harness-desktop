@@ -101,7 +101,9 @@ export function ThinkingChainBlock({
         className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0"
       >
         {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        <Brain className="size-3.5" />
+        {/* 思考中(streaming)的 Brain 图标明暗交替(§目标 15):运行中态要有「动的 icon/明暗交替」,
+         *  与侧栏 PhaseIcon、工具卡 running 的 pulse/shimmer 同语义;非流式保持静态。 */}
+        <Brain className={`size-3.5 ${streaming ? "animate-pulse" : ""}`} />
         {label}
       </button>
       {open && (

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// minimal 卸载 e2e —— 验证第 13 点「把插件卸载掉仍然没问题」的端到端。
-// 删掉 out/main/server/kernel/minimal/plugin.json(模拟卸载内核插件)→ 起 app →
-// 验证:① app 照常启动(不崩);② 内核清单不再含 minimal(模型下拉无 minimal TAB)。
+// minimal 默认不装载 + 卸载 e2e —— 验证第 13/16 点的端到端:
+// ① 默认(无 MHD_ENABLE_KERNELS):minimal 不在内核清单(enabled=false 默认不装载,§目标 16);
+// ② 强制启用(MHD_ENABLE_KERNELS=minimal):minimal 进入清单(运行时覆盖,测试/演示用);
+// ③ 卸载(删 manifest)后即使强制启用也缺面:app 照常启动、内核清单不含 minimal。
 // 之后恢复 manifest。零真实 LLM、零外网。
 // 用法: npm run build && node scripts/demo/minimal-uninstall.e2e.mjs [--port 9356] [--keep]
 import { parseArgs } from "node:util";
@@ -36,58 +37,53 @@ mkdirSync(projectDir, { recursive: true });
 const prefsFile = join(home, ".my-harness-desktop-dev", "config", "config.json");
 writeFileSync(prefsFile, JSON.stringify({ ...JSON.parse(readFileSync(prefsFile, "utf-8")), lastCwd: projectDir }, null, 2));
 
-let app;
-try {
-  // 卸载 minimal:备份 + 删 manifest。
-  if (!existsSync(MANIFEST)) throw new Error(`manifest 不存在(需先 build): ${MANIFEST}`);
-  renameSync(MANIFEST, MANIFEST_BAK);
-
-  app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18464" }, timeoutMs: 90000 });
+/** 起 app 并读内核清单,返回 { app, kernelIds }。 */
+async function launchAndReadKernelIds(extraEnv) {
+  const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18464", ...extraEnv }, timeoutMs: 90000 });
   const page = app.page;
   await page.waitForSelector("[data-timeline-composer]", { timeout: 30000 });
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 25000 });
-  ok(true, "卸载 minimal 后 app 照常启动(composer 就绪,不崩)");
-
-  // 内核清单:window.kernel.kernelIds 不再含 minimal(动态扫描读 manifest,缺面)。
   const kernelIds = await page.evaluate(() => window.kernel.kernelIds);
-  ok(!kernelIds.includes("minimal"), `内核清单不含 minimal(实际 ${JSON.stringify(kernelIds)})`);
-  ok(kernelIds.length >= 1, `其余内核仍在(实际 ${kernelIds.length} 个)`);
+  return { app, kernelIds };
+}
 
-  // 模型下拉 TAB 条不含 minimal(composer 从 kernelIds 遍历)。
-  const triggerRect = await page.evaluate(() => {
-    const ta = document.querySelector("[data-timeline-composer]");
-    const scope = ta?.closest("form") ?? document.body;
-    const btns = [...scope.querySelectorAll("button")].filter((b) => b.querySelector("svg"));
-    const trigger = btns.find((b) => {
-      const t = (b.textContent || "").trim();
-      return t.length > 2 && !/^(off|minimal|low|medium|high|xhigh)$/i.test(t);
-    });
-    if (!trigger) return null;
-    const r = trigger.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  });
-  if (triggerRect) {
-    await page.mouse.click(triggerRect.x, triggerRect.y);
-    await page.waitForSelector("[role='menu']", { timeout: 4000 }).catch(() => {});
-    const hasMinimalTab = await page.evaluate(() =>
-      [...document.querySelectorAll("[role='menu'] button")].some((b) => (b.textContent || "").trim().toLowerCase() === "minimal"),
-    );
-    ok(!hasMinimalTab, "模型下拉 TAB 条不含 minimal(缺面降级)");
-    await page.keyboard.press("Escape").catch(() => {});
-  } else {
-    ok(true, "无模型下拉触发器(无模型内核,符合缺面预期)");
+try {
+  // ① 默认不装载(§目标 16):无 MHD_ENABLE_KERNELS 时 minimal 不在清单。
+  {
+    const { app, kernelIds } = await launchAndReadKernelIds({});
+    ok(!kernelIds.includes("minimal"), `默认不装载:内核清单不含 minimal(实际 ${JSON.stringify(kernelIds)})`);
+    ok(kernelIds.includes("pi") && kernelIds.includes("dsh"), `pi/dsh 仍装载(实际 ${JSON.stringify(kernelIds)})`);
+    ok(true, "默认配置下 app 照常启动(composer 就绪,不崩)");
+    await killApp(app);
   }
 
-  await killApp(app);
-  console.log(`\n✅ PASS: ${passed} 项断言(minimal 卸载,零真实 LLM)`);
+  // ② 强制启用:MHD_ENABLE_KERNELS=minimal 时 minimal 进入清单(运行时覆盖)。
+  {
+    const { app, kernelIds } = await launchAndReadKernelIds({ MHD_ENABLE_KERNELS: "minimal" });
+    ok(kernelIds.includes("minimal"), `强制启用:内核清单含 minimal(实际 ${JSON.stringify(kernelIds)})`);
+    await killApp(app);
+  }
+
+  // ③ 卸载:删 manifest 后,即使强制启用也缺面,app 照常启动。
+  if (!existsSync(MANIFEST)) throw new Error(`manifest 不存在(需先 build): ${MANIFEST}`);
+  renameSync(MANIFEST, MANIFEST_BAK);
+  let restored = false;
+  try {
+    const { app: app3, kernelIds } = await launchAndReadKernelIds({ MHD_ENABLE_KERNELS: "minimal" });
+    ok(!kernelIds.includes("minimal"), `卸载后缺面:内核清单不含 minimal(实际 ${JSON.stringify(kernelIds)})`);
+    ok(kernelIds.includes("pi") && kernelIds.includes("dsh"), "卸载 minimal 后 pi/dsh 照常装载");
+    ok(true, "卸载 minimal 后 app 照常启动(composer 就绪,不崩)");
+    await killApp(app3);
+  } finally {
+    if (existsSync(MANIFEST_BAK)) { renameSync(MANIFEST_BAK, MANIFEST); restored = true; }
+  }
+  ok(restored, "manifest 已恢复(不影响后续 build/e2e)");
+
+  console.log(`\n✅ PASS: ${passed} 项断言(minimal 默认不装载 + 卸载,零真实 LLM)`);
   if (!args.keep) rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-  // 恢复 manifest(成功路径;process.exit 会跳过 finally,故在此显式恢复)。
-  if (existsSync(MANIFEST_BAK)) renameSync(MANIFEST_BAK, MANIFEST);
   process.exit(0);
 } catch (err) {
   console.error(`\n❌ FAIL: ${err.message}`);
-  if (app) await killApp(app).catch(() => {});
-  // 恢复 manifest(失败路径)。
   if (existsSync(MANIFEST_BAK)) renameSync(MANIFEST_BAK, MANIFEST);
   process.exit(1);
 }

@@ -23,7 +23,7 @@
 │   kernel/kernel-manager.ts    KernelSpec 已参数化              │
 ├────────────────────────────────────────────────────────────┤
 │ core/domain/  (圆心 · 零依赖)                                 │
-│   kernel.ts    KernelId / KERNEL_IDS（内核身份单源）            │
+│   kernel.ts    KernelId（内核身份单源，不透明 string）          │
 │   backend.ts   BaseBackend / BackendFactory /                  │
 │                BackendCreateOptions / LineageTree / Anchor      │
 │   events/session-state.ts  ModelInfo(kernel: KernelId)         │
@@ -37,9 +37,8 @@
 ### 2.1 内核身份单源 `core/domain/kernel.ts`
 
 ```ts
-/** 内核标识。加第三个内核 = 这里加一个字面量，编译器逼补全所有 switch(kernel)。 */
-export type KernelId = "pi" | "dsh";
-export const KERNEL_IDS = ["pi", "dsh"] as const;
+/** 内核标识。不透明 string——内核 id 由内核插件声明，核心不硬编码内核名（§kernel-plugin）。 */
+export type KernelId = string;
 ```
 
 `KernelId` 是圆心原子，零依赖。`ModelInfo.kernel`、`switchKernel(target)`、`BaseBackend.kernel` 全部引用它，不再各处写 `"pi" | "dsh"` 字面量。
@@ -108,7 +107,7 @@ export interface KernelModelSource {
 迁移顺序从内往外、每阶段编译 + 测试全绿，不出现「新契约 + 新分层一起炸」。
 
 ### 阶段 1：圆心契约（纯增量）
-- 新增 `core/domain/kernel.ts`（`KernelId` / `KERNEL_IDS`）。
+- 新增 `core/domain/kernel.ts`（`KernelId = string`）+ `kernel-plugin.ts`（`KernelPlugin` 契约）+ `core/kernel-registry.ts`（运行时清单）。
 - `BaseBackend` 加 `readonly kernel: KernelId`；新增 `BackendCreateOptions` / `BackendFactory`。
 - `ModelInfo.kernel`、`sessions.ts` 的 `switchKernel` 改用 `KernelId`。
 - `PiBackend` / `DshBackend` 实现 `kernel` 属性。
@@ -125,7 +124,7 @@ export interface KernelModelSource {
 - 依赖方向 grep：`core` 目录 `import .../client/` 归零（除 type-only 契约外，实际目标归零）。
 
 ### 阶段 4：内核身份收敛 + 能力接口替代 instanceof（渐进）
-- `asPi` / `getAdapter(): PiBackend` 换成可选能力接口（如 `backend.capabilities.pi`），「有则用、无则降级」，不再 instanceof 具体类。
+- `asPi` / `getAdapter(): PiBackend` 换成可选能力接口（如 `backend.capabilities.extensions`），「有则用、无则降级」，不再 instanceof 具体类。
 
 ## 5. 验收标准
 
@@ -137,7 +136,7 @@ export interface KernelModelSource {
 
 ## 6. 落地状态（已达成）
 
-- ✅ **圆心契约**：`core/domain/kernel.ts`（`KernelId`/`KERNEL_IDS`）、`core/domain/backend.ts`（`BaseBackend.kernel`、`BackendCreateOptions`、`BackendFactory`、`KernelModelSource`、`projectLineageTree`）。`ModelInfo.kernel`、`sessions.ts` 的 `switchKernel` 均引用 `KernelId`。
+- ✅ **圆心契约**：`core/domain/kernel.ts`（`KernelId = string`）、`kernel-plugin.ts`（`KernelPlugin`/`KernelRegistry` 契约）、`core/domain/backend.ts`（`BaseBackend.kernel`、`BackendCreateOptions`、`BackendFactory`、`KernelModelSource`、`projectLineageTree`）。`ModelInfo.kernel`、`sessions.ts` 的 `switchKernel` 均引用 `KernelId`。
 - ✅ **物理下沉**：`PiBackend`→`client/pi/pi-backend.ts`、`DshBackend`→`client/dsh/dsh-backend.ts`、`dsh-event-translator`→`client/dsh/`、工厂→`bootstrap/kernel/kernel-factories.ts`。
 - ✅ **依赖方向**：core 生产代码值 import client 归零；`core/domain` 零外部包 import。
 - ✅ **工厂契约中性化**：`session-store` 走圆心 `BackendFactory`（`BackendCreateOptions` 含 `sessionId`/`systemPromptPaths`/`systemPromptTexts`/`ephemeral`/`maxTokens`），不再拼 `--session`/`--append-system-prompt`/`--no-session`；cliPath/cordisConfig/apiKey 由 bootstrap 工厂闭包捕获。

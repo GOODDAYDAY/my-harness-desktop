@@ -46,7 +46,7 @@
 1. **只动 `src/server/kernel/dsh/dsh-extension/index.mjs`**（加工具/钩子/服务），`extension.json` 更新描述；同步/挂摘/对账全走现成 `syncFitDshExtension` + `reconcilePluginDshExtensions`（单块 id `my-harness-fit-dsh-extension`）。
 2. **零 import dsh 内核包**（skill 轴除外）：优先 node 内建模块 + 文件侧车，避免把桌面壳耦合进 dsh 的包图。
 3. **文件侧车落点**：`~/.pi/agent/.my-harness-desktop-*`（问句/目标）或 `~/.dsh/*`（技能播报/禁用名单），壳侧适配器（`dsh-question-bridge`/`dsh-skill-provider`）已按这些路径消费，不换路径。
-4. **能力探测对称**：新增能力若需壳侧感知「有/无」，走 `capabilities.dsh`（懒探测缺面）或能力位，不写 `kernel === "dsh"` 硬分支（§1.5）。
+4. **能力探测对称**：新增能力若需壳侧感知「有/无」，走 `capabilities.thinking`（懒探测缺面）或能力位，不写 `kernel === "dsh"` 硬分支（§1.5）。
 5. **补面失败不炸 dsh**：同步失败只记日志；插件内异常 try/catch 降级，不因一块能力拖垮整个插件树。
 
 ## 6. 对照：为什么「让 dsh 装 pi」是错的

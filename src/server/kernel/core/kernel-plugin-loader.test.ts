@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanKernelPlugins } from "./kernel-plugin-loader";
+import { scanKernelPlugins, defaultEnabledEntries } from "./kernel-plugin-loader";
 
 let root: string;
 
@@ -20,9 +20,12 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-function makeManifest(dir: string, id: string, order?: number): void {
+function makeManifest(dir: string, id: string, order?: number, enabled?: boolean): void {
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "plugin.json"), JSON.stringify(order === undefined ? { id, factory: "./plugin.js" } : { id, factory: "./plugin.js", order }));
+  const manifest: Record<string, unknown> = { id, factory: "./plugin.js" };
+  if (order !== undefined) manifest.order = order;
+  if (enabled !== undefined) manifest.enabled = enabled;
+  writeFileSync(join(dir, "plugin.json"), JSON.stringify(manifest));
 }
 
 describe("内核插件扫描 + 卸载鲁棒性", () => {
@@ -47,5 +50,33 @@ describe("内核插件扫描 + 卸载鲁棒性", () => {
 
   it("扫描根目录不存在 → 空清单(不抛,壳照常启动)", () => {
     expect(scanKernelPlugins(join(root, "missing"))).toEqual([]);
+  });
+});
+
+describe("默认装载过滤(§目标 16:enabled=false 默认不装载)", () => {
+  it("enabled=false 的内核默认被过滤,enabled 缺省视为 true", () => {
+    makeManifest(join(root, "pi"), "pi", 1);
+    makeManifest(join(root, "dsh"), "dsh", 2);
+    makeManifest(join(root, "minimal"), "minimal", 3, false); // minimal 默认 off
+    const entries = scanKernelPlugins(root);
+    // 扫描 = 存在性:三个都在。
+    expect(entries.map((e) => e.manifest.id)).toEqual(["pi", "dsh", "minimal"]);
+    // 装载 = 默认开关:minimal 被过滤。
+    expect(defaultEnabledEntries(entries).map((e) => e.manifest.id)).toEqual(["pi", "dsh"]);
+  });
+
+  it("forceEnable 强制启用被声明为 off 的内核(MHD_ENABLE_KERNELS 语义)", () => {
+    makeManifest(join(root, "pi"), "pi", 1);
+    makeManifest(join(root, "minimal"), "minimal", 3, false);
+    const entries = scanKernelPlugins(root);
+    expect(defaultEnabledEntries(entries, new Set(["minimal"])).map((e) => e.manifest.id)).toEqual(["pi", "minimal"]);
+  });
+
+  it("卸载与默认开关正交:删 manifest 后 forceEnable 也找不到(缺面)", () => {
+    makeManifest(join(root, "pi"), "pi", 1);
+    makeManifest(join(root, "minimal"), "minimal", 3, false);
+    rmSync(join(root, "minimal", "plugin.json"));
+    const entries = scanKernelPlugins(root);
+    expect(defaultEnabledEntries(entries, new Set(["minimal"])).map((e) => e.manifest.id)).toEqual(["pi"]);
   });
 });

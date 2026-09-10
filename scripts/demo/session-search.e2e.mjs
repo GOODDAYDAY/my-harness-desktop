@@ -69,16 +69,16 @@ try {
     b?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
   await page.waitForSelector("input[placeholder*='搜索会话']", { timeout: 8000 }).catch(() => {});
+  // 等展开动画落定(AnimatePresence height/opacity 0.18s):输入框仍处于 height:0/opacity:0
+  // 时 page.click 点不到、keyboard 敲不进(实测 inputValue 恒空)。
+  await waitForDomIdle(page, { quietMs: 300, timeoutMs: 5000 }).catch(() => {});
   const inputShown = await page.evaluate(() => !!document.querySelector("input[placeholder*='搜索会话']"));
   ok(inputShown, "点搜索图标后输入框出现(隐藏→toggle)");
 
-  // 输入 alpha → 过滤
-  await page.evaluate(() => {
-    const inp = document.querySelector("input[placeholder*='搜索会话']");
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-    setter.call(inp, "alpha");
-    inp.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  // 输入 alpha → 过滤(真实键盘键入:合成 setter+input 事件绕过 React 的 _valueTracker,
+  // 不触发受控 input 的 onChange → query 恒空 → 过滤不生效)
+  await page.click("input[placeholder*='搜索会话']");
+  await page.keyboard.type("alpha");
   await waitForDomIdle(page, { quietMs: 500, timeoutMs: 5000 }).catch(() => {});
   const filtered = await page.evaluate(() => {
     const rows = [...document.querySelectorAll("[data-session-path]")].map((r) => (r.textContent || "").trim());

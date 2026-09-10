@@ -157,12 +157,19 @@ try {
   const timelineHasPing = () => page.evaluate(() =>
     [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("ping")));
   if (!(await timelineHasPing())) {
-    await page.evaluate(() => {
+    // 回点会话行重开:用可信点击(拿坐标 page.mouse.click)——合成 dispatchEvent 对会话行
+    // 不保证触发 onClick(§交互测试 3.2 可信点击纪律),此前用 dispatchEvent 导致偶发「点行不开」假阴。
+    const rowRect = await page.evaluate(() => {
       const rows = [...document.querySelectorAll("[data-session-path]")];
       const row = rows.find((r) => (r.innerText || "").includes("ping"));
-      row?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      if (!row) return null;
+      const r = row.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
     });
-    await waitForDomIdle(page, { quietMs: 900, timeoutMs: 15000 }).catch(() => {});
+    if (rowRect) {
+      await page.mouse.click(rowRect.x, rowRect.y);
+      await waitForDomIdle(page, { quietMs: 900, timeoutMs: 15000 }).catch(() => {});
+    }
   }
   ok(await timelineHasPing(), "⑤ 刷新重开后时间线会话内容仍在(中立层单源)");
 

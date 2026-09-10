@@ -2,7 +2,7 @@
 
 > 状态：**已实施**（2026-09-08 `a79a3e76` 全量落地）。前置事实已全部实测（2026-09-07，kernel-thinking-matrix e2e + dsh 源码对读）。
 >
-> 落地与验证：① `src/server/kernel/dsh/extension/dsh-extension/index.mjs` 给 `handleRequest` 补丁拦截 `session/setThinkingLevel`（经 `ctx.get("llm").resolveCallConfig` 校验）+ `session/getThinkingLevels`（`resolveModelInfo(...).reasoning?.efforts`），并 `installModelSelection(agent.ctx, ref)` 原地热切 `{provider, model, reasoningEffort}`；② `DshBackend.setThinkingLevel` override（懒探测缺面 no-op + 未知会话 stash `pendingThinkingLevel`）+ `capabilities.dsh.getThinkingLevels`；③ 配套 §5：`dsh-config-source.ts` 的 `setProvider` 写 `reasoningEfforts`（`off:null/low:low/medium:medium/high:high`）+ `toModelSpec` 读回 `reasoning:true`；④ 呈现面：composer `levels = capabilities.dshExtension ? thinkingLevels : []`（dsh 档位清单来自 `getThinkingLevels`，非 pi 的 DEFAULT_LEVELS）。
+> 落地与验证：① `src/server/kernel/dsh/extension/dsh-extension/index.mjs` 给 `handleRequest` 补丁拦截 `session/setThinkingLevel`（经 `ctx.get("llm").resolveCallConfig` 校验）+ `session/getThinkingLevels`（`resolveModelInfo(...).reasoning?.efforts`），并 `installModelSelection(agent.ctx, ref)` 原地热切 `{provider, model, reasoningEffort}`；② `DshBackend.setThinkingLevel` override（懒探测缺面 no-op + 未知会话 stash `pendingThinkingLevel`）+ `capabilities.thinking.getThinkingLevels`；③ 配套 §5：`dsh-config-source.ts` 的 `setProvider` 写 `reasoningEfforts`（`off:null/low:low/medium:medium/high:high`）+ `toModelSpec` 读回 `reasoning:true`；④ 呈现面：composer `levels = capabilities.thinking ? thinkingLevels : []`（dsh 档位清单来自 `getThinkingLevels`，非 pi 的 DEFAULT_LEVELS）。
 >
 > 运行时证据：kernel-thinking-matrix 幕D（dsh 会话档位下拉存在 + 切档后「思考强度 → low」分隔线落会话流）、`scripts/demo/dsh-model-reasoning.e2e.mjs`（模型页 reasoning 复选框 → settings.yaml 落 reasoningEfforts，6 断言）、`dsh-config-source.test.ts`（写盘/读回双向守卫）。
 >
@@ -12,12 +12,12 @@
 
 用户报告：「DSH 好像无法触发思考深度的切换」。
 
-实测（幕D 证据）：dsh 会话下 composer 的思考档位下拉不渲染（`levels = capabilities.piExtension ? … : []`），思考开关置灰。用户无处切档。
+实测（幕D 证据）：dsh 会话下 composer 的思考档位下拉不渲染（`levels = capabilities.extension ? … : []`），思考开关置灰。用户无处切档。
 
 ## 2 根因链（实测钉死）
 
 1. dsh 内核**没有运行时切档 RPC**：`initialize` 只收 `{cwd, provider, model, maxTokens}`，`session/setModel` 只收 `{sessionId, provider, modelId}`（`packages/sdk/protocol/src/types.ts`）。`reasoningEffort` 是配置态（settings.yaml / initialize 时的 agentOptions）。
-2. 桌面 `DshBackend` 继承 `AbstractBackend.setThinkingLevel` 缺面默认（抛错），发送路径对无运行时切档面的内核跳过（`session-store.ts` 的 `capabilities.pi` 探测）。这是 `atomic-send.md` §1.3 定的显式降级，**语义正确，但呈现缺失**（控件整个消失，用户「无法触发」且不知道为什么）。
+2. 桌面 `DshBackend` 继承 `AbstractBackend.setThinkingLevel` 缺面默认（抛错），发送路径对无运行时切档面的内核跳过（`session-store.ts` 的 `capabilities.extensions` 探测）。这是 `atomic-send.md` §1.3 定的显式降级，**语义正确，但呈现缺失**（控件整个消失，用户「无法触发」且不知道为什么）。
 
 ## 3 已验证的补面通道（dsh 侧）
 
@@ -58,7 +58,7 @@ renderer composer 选档
 
 ## 6 呈现面（composer）
 
-- `levels` 的生产绑 `capabilities.piExtension`（pi 档位清单：`thinkingLevels.length>0 ? thinkingLevels : DEFAULT_LEVELS`）。补面后 dsh 分支改为能力探测：`capabilities.dshExtension`（=`backend.capabilities.dsh != null`）为真时用 `thinkingLevels`（该数组由 `capabilities.dsh.getThinkingLevels` 拉取——清单来自模型 `reasoningEfforts` 声明，非 pi 的 DEFAULT_LEVELS 硬编码；旧版适配插件无 `session/getThinkingLevels` → 懒探测记缺面 → `thinkingLevels` 空 → 档位控件不渲染 + 诚实提示）。落地实现见 `src/server/application/sessions/session-store.ts` 的 `getThinkingLevels()`。
+- `levels` 的生产绑 `capabilities.extension`（pi 档位清单：`thinkingLevels.length>0 ? thinkingLevels : DEFAULT_LEVELS`）。补面后 dsh 分支改为能力探测：`capabilities.thinking`（=`backend.capabilities.thinking != null`）为真时用 `thinkingLevels`（该数组由 `capabilities.thinking.getThinkingLevels` 拉取——清单来自模型 `reasoningEfforts` 声明，非 pi 的 DEFAULT_LEVELS 硬编码；旧版适配插件无 `session/getThinkingLevels` → 懒探测记缺面 → `thinkingLevels` 空 → 档位控件不渲染 + 诚实提示）。落地实现见 `src/server/application/sessions/session-store.ts` 的 `getThinkingLevels()`。
 - 模型不支持思考（无 reasoning 面）时切档会抛错——错误 toast 显形（既有 send 失败通道），不伪造成功。
 - pi 侧行为不变（回归位）。
 

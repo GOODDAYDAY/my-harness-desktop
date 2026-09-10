@@ -150,13 +150,15 @@ export interface BaseBackend {
    *  pi=extension_ui_response 帧翻译,dsh=文件侧车(阶段一)/session/answer(阶段二)。 */
   answerQuestion?(questionId: string, answers: QuestionAnswer[]): Promise<void>;
 
-  /** 内核专属能力探测面(§7.6):按内核分桶。pi 给 { pi: BackendExtensions }，dsh 给 { dsh: DshCapabilities }。
-   *  壳经 backend.capabilities.extensions / backend.capabilities.dsh 探测「有则用、无则降级」，
-   *  不按内核身份硬分支。pi 槽对圆心是 opaque(unknown)——pi 扩展面形状定义在 client/pi
-   *  (BackendExtensions)，core/application 经 type-only import 收窄(§28.6)。
-   *  fileBacked=会话是壳要跟踪的文件(boundSessionPath 指向会话文件):pi/minimal 声明 true,
-   *  dsh 无(会话是 RPC 服务端 forest,壳不持文件)。曾用 capabilities.extensions 当文件态代理,
-   *  minimal(文件态但无 pi 面)被误判——多内核下「文件态」是独立轴,须显式声明(§minimal-kernel)。 */
+  /** 内核专属能力探测面(§7.6):按语义分桶,能力名中性、不带内核名(§kernel-plugin §6)。
+   *  壳经 backend.capabilities.extensions / thinking / fileBacked 探测「有则用、无则降级」,
+   *  不按内核身份硬分支:
+   *  - extensions=运行时切档/多路并发等扩展面(pi 有,dsh/minimal 无);对圆心 opaque(unknown),
+   *    形状定义在 client/pi(BackendExtensions),core/application 经 type-only import 收窄。
+   *  - thinking=思考档位能力探测面(getThinkingLevels/onMissing;dsh 补面、pi 经 extensions)。
+   *  - fileBacked=会话是壳要跟踪的文件(boundSessionPath 指向会话文件):pi/minimal 声明 true,
+   *    dsh 无(会话是 RPC 服务端 forest,壳不持文件)。曾用 capabilities.extensions 当文件态代理,
+   *    minimal(文件态但无 pi 面)被误判——多内核下「文件态」是独立轴,须显式声明(§minimal-kernel)。 */
   readonly capabilities: { extensions?: unknown; thinking?: ThinkingCapabilities; fileBacked?: boolean };
 
   /** 内核 spawn 时读取的配置文件绝对路径清单——这些文件变了壳需重建进程

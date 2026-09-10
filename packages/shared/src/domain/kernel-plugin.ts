@@ -60,6 +60,10 @@ export interface KernelPluginManifest {
   factory: string;
   /** 注册顺序(越小越先注册;registry.ids()[0] 即默认内核)。缺省按字母序。 */
   order?: number;
+  /** 默认装载开关(§目标 16):false = 默认不装载(demo/验证用内核,如 minimal,生产无意义)。
+   *  缺省 true。运行时经 MHD_ENABLE_KERNELS 环境变量(逗号分隔内核 id)强制启用被声明为 off
+   *  的内核(测试/演示用);加载器经 defaultEnabledEntries 按此过滤,不硬编码任何内核名。 */
+  enabled?: boolean;
 }
 
 /**

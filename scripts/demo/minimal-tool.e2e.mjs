@@ -65,7 +65,7 @@ writeFileSync(join(minimalAgentDir, "models.json"), JSON.stringify({
   default: { provider: "mock", model: "mock-model" },
 }));
 
-const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18463" }, timeoutMs: 90000 });
+const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18463", MHD_ENABLE_KERNELS: "minimal" }, timeoutMs: 90000 });
 const page = app.page;
 const consoleTail = [];
 page.on("pageerror", (e) => consoleTail.push(e.message));

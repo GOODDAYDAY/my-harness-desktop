@@ -290,7 +290,7 @@ export interface PluginContext {
   messaging: MessagingApi;
   models: ModelApi;
   tree: SessionTreeApi;
-  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensionsExtension 探测「有则用、无则降级」。 */
+  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensions 探测「有则用、无则降级」。 */
   pi: PiExtensions;
   i18n: I18nApi;
   fs?: FsApi;

@@ -808,8 +808,16 @@ export function initSessionStore(): void {
   let lastLineage = useNeutralMirror.getState().activeLineageId;
   useNeutralMirror.subscribe((m) => {
     if (m.activeLineageId !== lastLineage) {
+      const wasNull = lastLineage === null;
       lastLineage = m.activeLineageId;
-      useSessionStore.setState((s) => ({ syncNonce: s.syncNonce + 1 }));
+      // 初始基线(null→ns)不重挂:那是 openSession 的 openNonce 职责。此前这里对
+      // 初始基线也递增 syncNonce,刷新/重开时 openNonce 与 syncNonce 双重重挂 Virtuoso,
+      // 与异步 data 的并发提交竞态 → 偶发空渲染(重开后 store 有消息但时间线空白,§根因)。
+      // 只在「从一条已物化 lineage 切到另一条」(wasNull=false)时递增,清空(ns→null)仍递增
+      // (新会话壳要重挂空列表)。
+      if (!wasNull) {
+        useSessionStore.setState((s) => ({ syncNonce: s.syncNonce + 1 }));
+      }
     }
     recomputeMessages();
   });

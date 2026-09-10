@@ -14,10 +14,11 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, LoaderCircle, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, Brain, Wrench } from "lucide-react";
+import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@my-harness-desktop/react";
 import { deriveSessionTitle, applyCustomOrder, advancePhase, type WorkingPhase, type SessionRawFilePaths } from "@my-harness-desktop/shared";
 import { filterSessions } from "../core/search";
+import { PhaseIcon } from "./phase-icon";
 
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */
@@ -1158,23 +1159,4 @@ const plusBtnStyle: React.CSSProperties = {
   background: "transparent", color: "var(--color-muted)", cursor: "pointer",
 };
 
-// 阶段图标的颜色映射(与 timeline 底部指示同语义:请求=灰/思考=蓝紫/工具=绿/输出=蓝;
-// 重试=红/压缩=灰归忙碌转圈)。渲染层内容,主题 token 是查询契约,不新增 token。
-const PHASE_COLOR: Record<string, string> = {
-  requesting: "var(--color-muted)",
-  thinking: "color-mix(in srgb, var(--color-primary) 65%, var(--color-muted) 35%)",
-  toolExecuting: "var(--color-accent-success)",
-  outputting: "var(--color-primary)",
-  retrying: "var(--color-accent-error)",
-  compacting: "var(--color-muted)",
-};
 
-/** 会话栏行图标:按 WorkingPhase 切换形态(设计文档 §2.3)。
- *  思考=脑形固定,工具执行=扳手固定,其余忙碌态(请求/输出/重试/压缩)=转圈。 */
-function PhaseIcon({ phase }: { phase: WorkingPhase }): React.ReactNode {
-  const color = PHASE_COLOR[phase] ?? "var(--color-primary)";
-  const common = { width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)", color } as const;
-  if (phase === "thinking") return <Brain style={common} />;
-  if (phase === "toolExecuting") return <Wrench style={common} />;
-  return <LoaderCircle className="animate-spin" style={common} />;
-}

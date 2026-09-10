@@ -102,6 +102,10 @@ const PHASE_META: Record<string, { key: string; color: string; pulse: boolean }>
 
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
+  // 已注册内核的注册表顺序(模型下拉 TAB 条排序用):从 PluginContext.kernels 的键序派生
+  // (kernels = Object.fromEntries(kernelIds.map(...)),键序 = 注册表序 = 默认内核在前)。
+  // 经 props 传给纯 UI 的 Composer,避免 Composer 叶子直接读 window.kernel 全局(依赖倒置)。
+  const kernelOrder = useMemo(() => Object.keys(ctx.kernels) as KernelId[], [ctx.kernels]);
   const { t } = useTranslation();
   const {
     currentCwd, currentNeutralSessionId, sessionModelPending, setSessionModelPending,
@@ -1073,6 +1077,7 @@ export function TimelineView(): React.ReactNode {
           }
         }}
         models={models}
+        kernelOrder={kernelOrder}
         levels={levels}
         currentModel={currentModel}
         currentLevel={currentLevel}
@@ -1192,6 +1197,7 @@ export function TimelineView(): React.ReactNode {
                     maxLines={composerMaxLines}
                     onStop={handleRewindStop}
                     models={models}
+                    kernelOrder={kernelOrder}
                     levels={levels}
                     currentModel={currentModel}
                     currentLevel={currentLevel}

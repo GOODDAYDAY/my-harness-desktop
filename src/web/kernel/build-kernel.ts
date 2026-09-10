@@ -335,7 +335,7 @@ const kernel = {
     runBash: (command: string, excludeFromContext?: boolean): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
       transport.invoke(IPC.session.runBash, command, excludeFromContext),
     abortBash: (): Promise<void> => transport.invoke(IPC.session.abortBash),
-    // pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensionsExtension 探测「有则用、无则降级」
+    // pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensions 探测「有则用、无则降级」
     pi: {
       steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
         transport.invoke(IPC.session.steer, text, images),

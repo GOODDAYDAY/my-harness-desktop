@@ -1,8 +1,9 @@
 // 圆心:内核身份单源 —— kernel.ts 只放「内核标识」这个零依赖原子。
 //
-// 依据 docs/design/kernel-layer.md §2.1。pi 和 dsh 是同级的两个内核(multi-kernel-shell.md),
-// 内核身份是全仓唯一一处能出现 "pi" | "dsh" 字面量的地方。加第三个内核 = 这里加一个字面量,
-// 编译器会逼着补全所有 switch(kernel) / KERNEL_IDS 消费处——这是字面量联合而非 string 的直接红利。
+// 依据 docs/design/kernel-plugin.md。内核身份已去字面量化(§kernel-plugin §1):KernelId 是
+// 不透明 string,内核 id 由各内核插件在 plugin.json/工厂里自行声明,核心不硬编码任何具体内核名。
+// 内核清单由 KernelRegistry 运行时驱动(替代已删除的 KERNEL_IDS 字面量数组)。加内核 = 写插件
+// + 注册,本文件零改动——「全仓唯一能出现 pi|dsh 字面量」的历史纪律已随插件化废止。
 //
 // 本文件零依赖:不 import 任何 domain 内外的类型,是圆心最内层的原子。
 
