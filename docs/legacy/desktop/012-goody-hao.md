@@ -50,7 +50,7 @@ description 里一句"卸载即停止注入"概括了这条纪律的根本含义
 
 - **GitHub Remote 安全禁令**：禁止向 `github.com` remote push（`git remote set-url --push <name> no-push`）。clone GitHub 仓库后必须立即锁 push。允许 pull/fetch。
 
-- **Worktree 操作禁令**：区分 `git worktree prune`（安全）和 `git worktree remove`（危险，需用户确认）。禁止在 checkout/fetch/merge 等操作中附带 worktree 清理。
+- **Worktree 操作禁令**：区分「自建自清」（本任务创建的 worktree，commit + 合并后直接删，不问用户）与「别人的 worktree」（禁止自动碰，需用户明确要求）。区分 `git worktree prune`（安全）和 `git worktree remove`（真删目录，不加 `--force`）。禁止在 checkout/fetch/merge 等操作中附带 worktree 清理。
 
 - **八荣八耻**：以瞎猜接口为耻、以模糊执行为耻、以臆想业务为耻、以创造接口为耻、以跳过验证为耻、以破坏架构为耻、以假装理解为耻、以盲目修改为耻。
 
