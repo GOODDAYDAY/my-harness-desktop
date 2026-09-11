@@ -324,7 +324,8 @@ src/
     routing/         #   gateway + broadcast
     bootstrap/       #   组装根：assemble.ts（共享组装）+ electron.ts / server.ts（双入口）
   web/               # 前端 renderer（原 api/renderer/）：app/、components/、kernel/、stores/、transport/、ui/
-  plugins/           # 内容层：50 个壳插件；按域分组（themes/sessions/project/insight/manager/system）
+  plugins/           # 内容层：内置壳插件；按域分组（themes/sessions/project/insight/manager/system/**kernels**）
+                     #   kernels/<id> = 内核插件（一个内核一个插件：kernel 块 + renderer/ + locales/）
 packages/
   shared/            # 圆心发布面（原 packages/contract/ + core/domain/ 合并）：src/domain/（纯类型+纯函数零依赖）+ channel/ + contract/ + wire/
   react/             # 发布面（有 package.json）：React 组件/hooks/事件总线 + PluginContext
@@ -356,7 +357,9 @@ scripts/           # 开发环境引导脚本
 
 **`src/server/bootstrap/` 组装根**——装：`assemble.ts`（共享组装）+ `electron.ts`/`server.ts`（双入口）、全部 store/registry/coordinator 的构造、MainContext 注入、**内核注册表**（`kernel/factories/kernel-factories.ts` 把 `BaseBackend` 接口和 `PiBackend`/`DshBackend` 实现绑起来；`kernel/factories/kernel-managers.ts` 把 `KernelManager` 基类和 `PiKernelManager`/`DshKernelManager` 绑起来）。不装：任何一个具体 handler 的实现、任何业务规则。目标极薄——组装代码是"怎么拼"，不是"怎么干"。
 
-**`src/plugins/` 内容层（壳插件）**——装：一切功能，按域分六组（themes/sessions/project/insight/manager/system）。不装：机制实现、跨层 import、任何内核的存储格式/事件形状/插件树。
+**`src/plugins/` 内容层（壳插件）**——装：一切功能，按域分组（themes/sessions/project/insight/manager/system/kernels）。不装：机制实现、跨层 import、任何内核的存储格式/事件形状/插件树。
+
+**`src/plugins/kernels/<id>/` 内核插件**——「一个内核 = 一个插件」（§kernel-plugin）：manifest 里的 `kernel` 块声明内核面（order/enabled），同目录的 `renderer/`+`locales/` 是它的 desktop 对接面，内核实现在 `src/server/kernel/<id>/`。卸载这一个目录 = 内核与它的设置页一起消失。
 
 ### 6.3 依赖方向检验
 

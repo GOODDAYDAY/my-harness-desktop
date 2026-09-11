@@ -551,10 +551,10 @@ src/plugins/{domain}/{feature}/
 
 ### 10.5 按域分组：目录名即语义
 
-**信号**：`src/plugins/` 顶层按六域分组（themes/sessions/project/insight/manager/system），`src/server/` 按能力域分文件（sessions/config/kernel/plugins/fs-git/remote…）。
+**信号**：`src/plugins/` 顶层按域分组（themes/sessions/project/insight/manager/system/kernels），`src/server/` 按能力域分文件（sessions/config/kernel/plugins/fs-git/remote…）。
 
 **证据**：
-- `src/plugins/sessions/` 装会话流的一切（timeline/message-blocks/markdown/mermaid/session-tree…），`src/plugins/manager/` 装管理页的一切（pi-manager/dsh-manager/plugin-manager/theme-manager…）。
+- `src/plugins/sessions/` 装会话流的一切（timeline/message-blocks/markdown/mermaid/session-tree…），`src/plugins/manager/` 装通用管理页（plugin-manager/theme-manager/skill-manager/tool-manager…），`src/plugins/kernels/` 装**内核插件**（一个内核一个目录：`kernel` 块 + `renderer/` + `locales/`，如 `kernels/pi`、`kernels/dsh`、`kernels/minimal`）。
 - `src/server/controllers/` 的每个文件对应一个能力域：`sessions.ts`、`config.ts`、`kernel.ts`、`plugins.ts`、`skills.ts`、`fs-git.ts`、`remote.ts`、`window.ts`。
 
 **风格意义**：目录名承担了「这层装什么」的解释责任。新人打开目录树就能看懂系统分了几块，不用先读代码。这是「骨架先行：先建空目录，让目录自己解释这层装什么」的落地。

@@ -191,7 +191,8 @@ src/
                 #   + renderer(React entry, slot shells, plugins-host, stores)
   client/       # outbound adapters: pi + dsh(kernel RPC adapters, subprocess lifecycle) + fs + git + npm
   bootstrap/    # assembly root: Electron main entry — reads env, builds deps, injects MainContext, manages the window
-  plugins/      # content layer: every feature, grouped into six domains(themes/sessions/project/insight/manager/system)
+  plugins/      # content layer: every feature, grouped by domain(themes/sessions/project/insight/manager/system/kernels)
+                #   kernels/<id> = one kernel plugin (kernel block + renderer/ + locales/)
 packages/
   contract/     # public surface: re-exports of domain + path/style preset contracts
   react/        # public surface: React components & hooks, the only API entry plugins are allowed
