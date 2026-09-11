@@ -61,6 +61,12 @@ export function setActiveToolSet(set) {
   activeSet = set;
 }
 
+/** 当前活跃工具集的 id（`read-only`/`write`/`full`）。头行 `tools` 快照与 sessionStart 事件
+ *  都报这个值——同一个量只有一处算（此前头行写的是"用户传进来的字符串"，没校验过是否存在）。 */
+export function activeToolSetId() {
+  return activeSet;
+}
+
 export function activeToolNames() {
   return TOOL_SETS[activeSet] ?? [];
 }

@@ -13,8 +13,9 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadModelConfig, streamModel } from "./minimal-model.mjs";
-import { activeToolSchemas, executeTool, listTools, setActiveToolSet } from "./minimal-tools.mjs";
+import { activeToolSchemas, activeToolSetId, executeTool, listTools, setActiveToolSet } from "./minimal-tools.mjs";
 import { loadPlugins, dispatchPluginEvent, dispatchCommand } from "./minimal-plugin.mjs";
+import { EVENTS } from "./minimal-events.mjs";
 
 // ---- 会话文件路径 + 读写(§3.2/§3.3) ----
 
@@ -81,11 +82,18 @@ function updateHeader(path, patch) {
 }
 
 function appendMessage(path, message) {
-  appendLine(path, JSON.stringify({ type: "message", id: message.id ?? randomUUID(), timestamp: new Date(typeof message.timestamp === "number" ? message.timestamp : Date.now()).toISOString(), message }));
+  const entry = { type: "message", id: message.id ?? randomUUID(), timestamp: new Date(typeof message.timestamp === "number" ? message.timestamp : Date.now()).toISOString(), message };
+  appendLine(path, JSON.stringify(entry));
+  // 条目落盘事件（§4.2.3）：**写穿之后**才发（§4.3.3 的顺序不变量）——先发后写会让壳侧
+  // 按事件回填中立层、回头读文件却缺条目，两边漂。此前这一种从没发过，而壳侧的上行同步
+  // 分支一直等着它（死路径）。
+  out({ type: EVENTS.entryAppended, entry });
 }
 
 function appendDivider(path, type, fields) {
-  appendLine(path, JSON.stringify({ type, id: randomUUID(), timestamp: new Date().toISOString(), ...fields }));
+  const entry = { type, id: randomUUID(), timestamp: new Date().toISOString(), ...fields };
+  appendLine(path, JSON.stringify(entry));
+  out({ type: EVENTS.entryAppended, entry });
 }
 
 // ---- 协议:stdin 命令 → stdout 事件 ----
@@ -242,16 +250,18 @@ async function handleSend(cmd) {
   currentAbort = controller;
   const now = Date.now();
   appendMessage(path(), { role: "user", content: cmd.text, timestamp: now });
-  out({ type: "agentStart" });
+  out({ type: EVENTS.agentStart });
   const id = randomUUID();
-  out({ type: "messageStart", message: { role: "assistant", id, pending: true, timestamp: now, model: { provider: model.provider, modelId: model.modelId, kernel: "minimal" } } });
+  out({ type: EVENTS.messageStart, message: { role: "assistant", id, pending: true, timestamp: now, model: { provider: model.provider, modelId: model.modelId, kernel: "minimal" } } });
   let full = "";
   let failed = false;
   let hitMaxRounds = false;
   const toolCallsAll = [];
+  /** 已经在分片阶段发过 toolCallStart 的 index（避免 Start 发两次：分片一次、执行前又一次）。 */
+  const seenToolCallStart = new Set();
   const onDelta = (d) => {
     full += d;
-    out({ type: "messageUpdate", message: { role: "assistant", id, content: [{ type: "text", text: d }], pending: true } });
+    out({ type: EVENTS.messageUpdate, message: { role: "assistant", id, content: [{ type: "text", text: d }], pending: true } });
   };
   try {
     const config = loadModelConfig(cfg.agentDir);
@@ -262,7 +272,21 @@ async function handleSend(cmd) {
       const messages = [{ role: "user", content: cmd.text }];
       const tools = activeToolSchemas();
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        const { toolCalls } = await streamModel(config, cfg.agentDir, providerId, modelId, messages, tools, onDelta, controller.signal);
+        const { toolCalls } = await streamModel(config, cfg.agentDir, providerId, modelId, messages, tools, {
+          onDelta,
+          // 工具参数分片 → toolCallUpdate（§4.2.3 三态里的中间那一态）。
+          // 此前这一种事件**从没发过**：模型客户端把分片攒到 [DONE] 才一次交出，
+          // CLI 只在执行时发 Start/End 一对，于是"参数怎么流式到达"这条能力整个不存在
+          // （时间线上工具卡的参数是"啪"地出现，不是滚出来的）。
+          onToolCallDelta: (frag) => {
+            if (!seenToolCallStart.has(frag.index)) {
+              seenToolCallStart.add(frag.index);
+              out({ type: EVENTS.toolCallStart, toolCallId: frag.id, toolName: frag.name, args: {} });
+            }
+            out({ type: EVENTS.toolCallUpdate, toolCallId: frag.id, toolName: frag.name, argsText: frag.arguments });
+          },
+          signal: controller.signal,
+        });
         if (toolCalls.length === 0) break; // 最终文本已流式发出
         // 达上限强制收尾(§5.10.1):最后一轮仍调工具 = 未收敛,标 maxToolRounds。
         if (round === MAX_TOOL_ROUNDS - 1) { hitMaxRounds = true; break; }
@@ -271,10 +295,11 @@ async function handleSend(cmd) {
         for (const tc of toolCalls) {
           let args = {};
           try { args = JSON.parse(tc.arguments || "{}"); } catch { /* 参数损坏按空对象 */ }
-          out({ type: "toolCallStart", toolCallId: tc.id, toolName: tc.name, args });
+          // 分片阶段没发过 Start（有些网关不 streams 参数）时补发一次：toolCallStart 必须每调用恰好一次。
+          if (!seenToolCallStart.has(tc.index ?? 0)) out({ type: EVENTS.toolCallStart, toolCallId: tc.id, toolName: tc.name, args });
           const result = executeTool(tc.name, args);
-          out({ type: "toolCallEnd", toolCallId: tc.id, toolName: tc.name, result, isError: result.isError === true });
-          dispatchPluginEvent("toolCallEnd", { toolCallId: tc.id, toolName: tc.name, result, isError: result.isError === true });
+          out({ type: EVENTS.toolCallEnd, toolCallId: tc.id, toolName: tc.name, result, isError: result.isError === true });
+          dispatchPluginEvent(EVENTS.toolCallEnd, { toolCallId: tc.id, toolName: tc.name, result, isError: result.isError === true });
           toolCallsAll.push({ id: tc.id, name: tc.name, args, result });
           messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result) });
         }
@@ -305,11 +330,11 @@ async function handleSend(cmd) {
   // §4.3.3 写穿先于发事件:先落 assistant 条目、再发 messageEnd——否则事件发出后崩溃,
   // 壳侧按事件 append 进中立层、minimal 文件却缺条目,两边漂(曾漂移:messageEnd 先发后写)。
   appendMessage(path(), final);
-  out({ type: "messageEnd", message: final });
-  dispatchPluginEvent("messageEnd", { message: final });
+  out({ type: EVENTS.messageEnd, message: final });
+  dispatchPluginEvent(EVENTS.messageEnd, { message: final });
   const reason = controller.signal.aborted ? "aborted" : failed ? "error" : hitMaxRounds ? "maxToolRounds" : "completed";
-  out({ type: "agentSettled", reason });
-  dispatchPluginEvent("agentSettled", { reason });
+  out({ type: EVENTS.agentSettled, reason });
+  dispatchPluginEvent(EVENTS.agentSettled, { reason });
 }
 
 // 启动:加载插件(§6.9 目录扫描),插件注册的工具进注册表;读头行 tools 快照(§5.6.1
@@ -318,6 +343,18 @@ await loadPlugins(cfg.agentDir);
 try {
   const header = readEntries(path())[0];
   if (typeof header?.tools === "string") setActiveToolSet(header.tools);
+  // **会话换绑/水合事件**（§4.2.3 的第一种）：这一刻"这个进程绑到了哪个会话、它现在的
+  // 模型与工具集是什么"已经确定（插件已加载、头行已读）。此前这一种从没发过 ——
+  // 壳侧的透传白名单里列着它，插件可订阅清单里也列着它，而它永远不触发：
+  // 「订阅了一个永不触发的事件」正是最难查的一类静默失效。
+  out({
+    type: EVENTS.sessionStart,
+    sessionId: sessionId(),
+    path: path(),
+    model: header?.model ?? model,
+    tools: header?.tools ?? activeToolSetId(),
+  });
+  dispatchPluginEvent(EVENTS.sessionStart, { sessionId: sessionId(), path: path() });
 } catch { /* 会话文件不存在(新会话)或 tools 非法:用默认 read-only */ }
 
 // 主循环:逐行读 stdin,每行一个完整 JSON 命令。

@@ -41,7 +41,12 @@ function loadApiKey(agentDir, providerId) {
  * 流式调 OpenAI 兼容端点(§4.7/§4.8):POST /chat/completions stream:true,逐 data 行解析
  * `choices[0].delta.content`,每次增量回调 onDelta。signal 供 abort 掐断(§4.6.2)。
  */
-export async function streamModel(config, agentDir, providerId, modelId, messages, tools, onDelta, signal) {
+export async function streamModel(config, agentDir, providerId, modelId, messages, tools, hooks) {
+  // 回调收成一个对象而不是继续加位置参数：这个函数已经 7 个位置参数了，
+  // 再加一个"只在有工具调用时才用得上"的回调，调用点会变成一串看不出语义的实参。
+  // hooks.onDelta(text) 增量文本；hooks.onToolCallDelta(tc, index) 工具参数分片（§4.8.2）；
+  // hooks.signal AbortSignal（掐流）。
+  const { onDelta, onToolCallDelta, signal } = hooks ?? {};
   const provider = config.providers.find((p) => p.id === providerId);
   if (!provider) throw new Error(`provider 不存在: ${providerId}`);
   const apiKey = loadApiKey(agentDir, providerId) ?? provider.apiKey;
@@ -86,10 +91,16 @@ export async function streamModel(config, agentDir, providerId, modelId, message
           for (const tc of delta.tool_calls) {
             const i = tc.index ?? 0;
             let buf = toolBufs.get(i);
-            if (!buf) { buf = { id: "", name: "", arguments: "" }; toolBufs.set(i, buf); }
+            if (!buf) { buf = { id: "", name: "", arguments: "", index: i }; toolBufs.set(i, buf); }
             if (tc.id) buf.id = tc.id;
             if (tc.function?.name) buf.name = tc.function.name;
-            if (tc.function?.arguments) buf.arguments += tc.function.arguments;
+            if (tc.function?.arguments) {
+              buf.arguments += tc.function.arguments;
+              // 参数分片流式上报（§4.8.2：id 首次到位发 toolCallStart、之后 arguments 继续到达发
+              // toolCallUpdate）。内核只上报**已知的部分**（buf 的当前快照），不替调用方攒批——
+              // 攒批是消费方的事（壳按 toolCallId 覆盖式渲染）。
+              onToolCallDelta?.({ id: buf.id, name: buf.name, arguments: buf.arguments, index: i });
+            }
           }
         }
       } catch {

@@ -252,7 +252,10 @@ minimal 的协议是 JSONL 行协议：stdin 一行一个命令对象，stdout �
 
 #### 4.2.3 事件清单：十种事件，一份常量，无省略号
 
-minimal 的事件就是下面这份完整清单，一行一个，一共十种，没有省略号：`sessionStart`（会话换绑/水合）、`agentStart`/`agentSettled`（回合边界）、`messageStart`/`messageUpdate`/`messageEnd`（消息流式三态）、`toolCallStart`/`toolCallUpdate`/`toolCallEnd`（工具调用三态）、`entryAppended`（条目落盘）。这十种是 minimal 的事件常量，单一来源，§6.2.3 的插件可订阅清单就从这里取。它们是适配器翻译成中性 `SessionEvent` 的原料。minimal 的事件名可以和中性事件同名，也可以不同名——适配器负责对齐；同名只是省翻译，不是必须。
+minimal 的事件就是下面这份完整清单，一行一个，一共十种，没有省略号：`sessionStart`（会话换绑/水合）、`agentStart`/`agentSettled`（回合边界）、`messageStart`/`messageUpdate`/`messageEnd`（消息流式三态）、`toolCallStart`/`toolCallUpdate`/`toolCallEnd`（工具调用三态）、`entryAppended`（条目落盘）。这十种是 minimal 的事件常量，单一来源（**已落地**：`kernel/minimal-events.mjs` 的 `EVENTS`/`EVENT_NAMES`/`SUBSCRIBABLE_EVENTS`，CLI 与插件系统都从它取，谁都不手拼字符串），§6.2.3 的插件可订阅清单就从这里取。
+
+> **漂移记录（勿重蹈）**：这份清单曾有三种事件**从没被发出过**（`sessionStart` / `toolCallUpdate` / `entryAppended`）——壳侧的透传白名单、插件可订阅清单、上行同步分支全都列着它们，却永远不触发：「订阅了一个永不触发的事件」是最难查的一类静默失效（没有任何报错）。现在三种都真的发：`sessionStart` 在插件加载 + 头行读完之后发一次；`entryAppended` 在**每条条目写穿之后**发（§4.3.3 顺序不变量）；`toolCallUpdate` 由模型客户端的参数分片回调驱动（`streamModel` 的 `hooks.onToolCallDelta`，累积快照）。
+> **守卫**：`minimal-events.test.ts` 断言①常量清单恰好是文档那十种、②一次带工具调用的真实回合里十种**全部实际发出**（多一种少一种都红）、③`toolCallUpdate` 真的带分片（不是把 Start 复制一遍）、④订阅边界（未知事件名、过程事件均显式拒绝）。它们是适配器翻译成中性 `SessionEvent` 的原料。minimal 的事件名可以和中性事件同名，也可以不同名——适配器负责对齐；同名只是省翻译，不是必须。
 
 ### 4.3 agent loop：一条回合从收到落定
 
