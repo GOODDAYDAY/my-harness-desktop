@@ -139,6 +139,22 @@ try {
   const modelAfter = await page.evaluate(() => document.querySelector("[data-composer-model]")?.textContent ?? "");
   ok(modelAfter.length > 0, `发送后 composer 仍渲染模型(${modelAfter})`);
 
+  // ── #19「新建的会话没有在左侧展示」的真判据 ──
+  // 此前只有 orphan-kernel 那条 e2e 验"点了 + 之后**原会话**还在"——那不是用户报的事。
+  // 用户报的是：**新建一个会话、发了消息，左栏里没有它**。
+  // 判据必须落在"这个新会话本身出现了"，而不是"列表没崩"。
+  const sidebar = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll("[data-session-path]")];
+    return {
+      count: rows.length,
+      texts: rows.map((r) => (r.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40)),
+    };
+  });
+  ok(
+    sidebar.count >= 1 && sidebar.texts.some((t) => t.includes("你好 minimal")),
+    `新建的会话出现在左栏（${sidebar.count} 行：${JSON.stringify(sidebar.texts)}）`,
+  );
+
   // 文件对应守卫:中立层 header.kernel=minimal,且 minimal 会话文件落 .minimal/(非 .pi/)。
   const neutralDir = join(home, ".my-harness-desktop-dev", "sessions");
   const headers = readdirSync(neutralDir).filter((f) => f.endsWith(".header.json"));
