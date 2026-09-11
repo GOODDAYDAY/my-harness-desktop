@@ -38,8 +38,32 @@ function loadApiKey(agentDir, providerId) {
 }
 
 /**
+ * 模型调用的**空闲超时**默认值（§4.7.1/§4.6.1：客户端必须处理"超时、重连、中断"三件事，
+ * 其中"重连"第一版可显式降级，但**超时和中断是必须的**）。
+ *
+ * 为什么它是必须的（文档原话）："没有它们，一个卡住的模型调用会永远占住 minimal 的进程"。
+ * 此前只做了中断（signal）没做超时：服务端接了连接却不发数据、或流发到一半不再动，
+ * `reader.read()` 就永远挂着 → 这一回合永不收敛（`agentSettled` 永不发）→
+ * 壳侧"运行中"永远转。用户只能手动 abort 才解得开。
+ *
+ * 取 120 秒：这是**空闲**超时（两次数据之间），不是总时长——推理模型的首 token 可能很慢，
+ * 但只要还在吐数据就不该掐。真正要防的是"彻底不动了"。
+ */
+export const MODEL_IDLE_TIMEOUT_MS = (() => {
+  // 可用环境变量覆盖（`MHD_MINIMAL_MODEL_IDLE_MS`）：给测试一个**不打生产折扣**的接缝
+  // （测试里不必真的等 120 秒），也让运维能在不改代码的前提下调它。
+  const raw = Number(process.env.MHD_MINIMAL_MODEL_IDLE_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 120_000;
+})();
+
+/**
  * 流式调 OpenAI 兼容端点(§4.7/§4.8):POST /chat/completions stream:true,逐 data 行解析
  * `choices[0].delta.content`,每次增量回调 onDelta。signal 供 abort 掐断(§4.6.2)。
+ *
+ * `hooks.idleTimeoutMs`：空闲超时（缺省 MODEL_IDLE_TIMEOUT_MS）。到点**自己** abort，
+ * 抛一个说得清的错（"模型调用超时(空闲 Ns)"）——注意**不能**去 abort 调用方的 controller：
+ * 那会让 CLI 把它当成"用户主动停止（stopped）"，而它其实是失败（error）。两者语义不同
+ * （§4.6.2 把这条钉死过），所以这里用**自己的** AbortController，只挂在调用方 signal 上做联动。
  */
 export async function streamModel(config, agentDir, providerId, modelId, messages, tools, hooks) {
   // 回调收成一个对象而不是继续加位置参数：这个函数已经 7 个位置参数了，
@@ -47,10 +71,26 @@ export async function streamModel(config, agentDir, providerId, modelId, message
   // hooks.onDelta(text) 增量文本；hooks.onToolCallDelta(tc, index) 工具参数分片（§4.8.2）；
   // hooks.signal AbortSignal（掐流）。
   const { onDelta, onToolCallDelta, signal } = hooks ?? {};
+  const idleTimeoutMs = hooks?.idleTimeoutMs > 0 ? hooks.idleTimeoutMs : MODEL_IDLE_TIMEOUT_MS;
   const provider = config.providers.find((p) => p.id === providerId);
   if (!provider) throw new Error(`provider 不存在: ${providerId}`);
   const apiKey = loadApiKey(agentDir, providerId) ?? provider.apiKey;
   const url = `${String(provider.baseURL).replace(/\/$/, "")}/chat/completions`;
+  // 自己的 AbortController：空闲超时只掐本次请求，不污染调用方的 abort 语义（见函数头注释）。
+  const local = new AbortController();
+  const onCallerAbort = () => local.abort();
+  signal?.addEventListener("abort", onCallerAbort, { once: true });
+  let idleTimer = null;
+  let idleTimedOut = false;
+  /** 每收到一段数据就重置空闲计时；到点即掐。 */
+  const bumpIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      idleTimedOut = true;
+      local.abort();
+    }, idleTimeoutMs);
+  };
+  bumpIdle();
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -65,12 +105,16 @@ export async function streamModel(config, agentDir, providerId, modelId, message
       stream: true,
       stream_options: { include_usage: true },
     }),
-    signal,
+    signal: local.signal,
+  }).catch((e) => {
+    if (idleTimedOut) throw new Error(`模型调用超时(空闲 ${Math.round(idleTimeoutMs / 1000)}s): 连接后没有任何数据`);
+    throw e;
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`模型请求失败 ${res.status}: ${body.slice(0, 200)}`);
   }
+  bumpIdle(); // 响应头已到，开始按"两次数据之间"计空闲
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -83,7 +127,18 @@ export async function streamModel(config, agentDir, providerId, modelId, message
   // tool_call 分片聚合(§4.8.2):按 index 缓冲,arguments 追加拼接(非覆盖)。
   const toolBufs = new Map();
   for (;;) {
-    const { done, value } = await reader.read();
+    let chunk;
+    try {
+      chunk = await reader.read();
+    } catch (e) {
+      // 空闲超时掐断：给一个**说得清**的错（不是裸 AbortError）——它会被 CLI 记成
+      // 失败（messageEnd.error + agentSettled.reason=error），不是 stopped。
+      if (idleTimedOut) throw new Error(`模型调用超时(空闲 ${Math.round(idleTimeoutMs / 1000)}s): 流中途停止`);
+      throw e;
+    } finally {
+      bumpIdle();
+    }
+    const { done, value } = chunk;
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     let idx;
@@ -138,5 +193,7 @@ export async function streamModel(config, agentDir, providerId, modelId, message
   }
   // 流没给 [DONE] 就断了（网关提前关流）：已有内容照常返回，usage/stopReason 可能缺——
   // 缺就是缺，不编造（口径：拿不到的东西不写假值）。
+  clearTimeout(idleTimer);
+  signal?.removeEventListener("abort", onCallerAbort);
   return { text: acc, toolCalls: [...toolBufs.values()].filter((t) => t.name), usage, stopReason };
 }

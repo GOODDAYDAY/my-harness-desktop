@@ -329,6 +329,21 @@ minimal 进程 crash（OOM、未捕获异常），壳经进程退出事件收尾
 
 模型客户端要处理三件事：超时（多久没数据就算卡死）、重连（流中途断了怎么办）、中断（`abort` 命令 → AbortController 掐断）。重连是第一版可以显式降级的能力（断了就按失败收尾，不静默伪造"重连成功"），但超时和中断是必须的——没有它们，一个卡住的模型调用会永远占住 minimal 的进程。
 
+> **已落地（本轮补上"超时"这一件，勿回退）**：此前只做了**中断**（`signal`），**没有超时**——
+> 服务端接了连接却不发数据、或流发到一半不再动，`reader.read()` 就永远挂着 → 这一回合永不收敛
+> （`agentSettled` 永不发）→ 壳侧"运行中"永远转，用户只能手动 abort 才解得开。
+> 这正是上面那句"永远占住 minimal 的进程"的字面成立。
+> 现在：`streamModel` 有**空闲超时**（两次数据之间，默认 120 秒 —— 不是总时长，
+> 推理模型首 token 慢不该被掐；可用 `MHD_MINIMAL_MODEL_IDLE_MS` 覆盖），到点自己 abort 并抛
+> 「模型调用超时(空闲 Ns)」。**它用自己私有的 AbortController**，只挂在调用方 signal 上做联动：
+> 若图省事去 abort 调用方的 controller，CLI 会按 §4.6.2 的判据把它记成 **stopped（用户停止）**，
+> 而它其实是失败（error）—— 这两条语义文档专门钉过，别混。
+> 重连仍是显式降级（断了按失败收尾，不伪造"重连成功"）。
+> 守卫：`minimal-model-timeout.test.ts`（连上不说话 / 流到一半不动 / 不污染调用方 signal /
+> 多帧不被误掐 / 用户 abort 仍即时 / 默认 120s）与 `minimal-model-failure.test.ts`
+> 的 CLI 级那条（卡住 → `messageEnd.error` + `agentSettled.reason=error`）。
+> 红绿证明：把空闲计时去掉，前三条守卫**直接挂住 15 秒**（正是"永远卡住"的现场）。
+
 ### 4.8 流式 SSE：delta 怎么转成事件
 
 #### 4.8.1 文本 delta → messageUpdate

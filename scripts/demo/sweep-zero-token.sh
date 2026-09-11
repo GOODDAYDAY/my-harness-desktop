@@ -12,6 +12,10 @@
 #     FAIL(2x)  = 复跑也失败 → 可信失败
 #   单次结果不足以判定；这样广扫的结论才可信，也不会把抖动误报成回归。
 #
+# ⚠ 机器负载高时的失败签名：`Runtime.callFunctionOn timed out`（CDP 协议级超时）。
+#   它**不是**产品失败——实测 load average 20 时连 build 都要 47s（平时 8s），
+#   renderer 忙不过来 → CDP 调用超时。看到这个签名先看 `uptime`，别急着查代码。
+#
 # 用法: npm run build && bash scripts/demo/sweep-zero-token.sh
 # 排除在外的（**别往里加**，加了就是花真 token）：
 #   · attach 型：dsh-credentials / dsh-multiturn（连接运行中的 app，默认 CDP 9222）；
