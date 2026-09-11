@@ -1839,3 +1839,52 @@ describe("交叠态:锚点不在中立层时(fork/bookmark)必须显式拒绝,�
     await expect(s.fork(ns, `${ns}:999`, "at")).rejects.toThrow(/分叉锚点不在会话内容里/);
   });
 });
+
+describe("列表行的内核投影必须逐行隔离(一行坏数据不许拖垮整份列表)", () => {
+  // 实弹根因(用户报「新建的会话没有在左侧展示」):中立层里只要有一行 header.kernel 指向
+  // **当前没装载的内核**——minimal 默认 enabled:false,而用户曾用 MHD_ENABLE_KERNELS=minimal
+  // 跑过 e2e、留下一行归档会话——list() 的 map 回调里 catalogFor 抛「未注册的内核」,
+  // **整个 list() reject**。renderer 的 loadSessionInfos 又把异常吞进空 catch,
+  // 于是症状是「该项目整个会话列表永久为空、刷新也无效」,而不是「少了一行」。
+  //
+  // 同族第一次复发(commit a9c7997b/bb0810b6 修的是 listByCwd 的形状守卫),
+  // 所以这条守卫钉的是**不变式本身**:列表行解析逐行隔离,新加的 catalog 调用也只能经
+  // projectionPathForRow 走,不许再写回 map 回调里。
+  /** 工厂:未注册的内核显式抛错(与 bootstrap/assemble 的 sessionCatalogFactory 同语义)。 */
+  const strictFactory: SessionCatalogFactory = {
+    create: (kernel) => {
+      if (kernel !== "pi") throw new Error(`未注册的内核: ${kernel}`);
+      return new PiSessionCatalog(dir);
+    },
+  };
+
+  function storeWithRows(): { s: SessionStore; neutralStore: NeutralSessionStore } {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "session-store-listrow-")));
+    neutralStore.put(emptyNeutralSession("ns-pi", { kernel: "pi", cwd: CWD, createdAt: "2026-09-10T00:00:00.000Z", name: "正常会话" }));
+    // 指向一个**没装载**的内核(实弹就是 minimal 被 enabled:false 跳过后的历史行)
+    neutralStore.put(emptyNeutralSession("ns-ghost", { kernel: "minimal", cwd: CWD, createdAt: "2026-09-09T00:00:00.000Z", name: "孤儿内核会话" }));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
+    const s = new SessionStore(factory, strictFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    return { s, neutralStore };
+  }
+
+  it("一行内核未装载:其余行照常返回(此前整个 list() reject,列表永久为空)", async () => {
+    const { s } = storeWithRows();
+    const rows = await s.list(CWD);
+    expect(rows.map((r) => r.neutralSessionId).sort()).toEqual(["ns-ghost", "ns-pi"]);
+  });
+
+  it("未装载内核的那一行不丢:退回中立 id 作为投影地址(中立层是真相源,不因内核缺失蒸发)", async () => {
+    const { s } = storeWithRows();
+    const rows = await s.list(CWD);
+    expect(rows.find((r) => r.neutralSessionId === "ns-ghost")?.path).toBe("ns-ghost");
+    // 正常行的投影地址仍来自内核(不被兜底污染)
+    expect(rows.find((r) => r.neutralSessionId === "ns-pi")?.path).not.toBe("ns-pi");
+  });
+
+  it("行字段完整:兜底行仍带 name/created/cwd(不是只留一个 id)", async () => {
+    const { s } = storeWithRows();
+    const ghost = (await s.list(CWD)).find((r) => r.neutralSessionId === "ns-ghost");
+    expect(ghost).toMatchObject({ name: "孤儿内核会话", cwd: CWD, created: "2026-09-09T00:00:00.000Z" });
+  });
+});

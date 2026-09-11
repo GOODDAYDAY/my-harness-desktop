@@ -44,11 +44,6 @@ vi.mock("@my-harness-desktop/react", () => ({
 import { ProjectsSection } from "./index";
 
 const row = (dir: string): HTMLElement => document.querySelector(`[title="${dir}"]`) as HTMLElement;
-// 行内唯一的 button 就是"移除"钮(新增钮在 Section 的 actions 里,不在行内)——
-// 不按 title 文案查:mock 的 t 返回 key,按中文/英文文案查都会落空(实测红过一轮)。
-const removeBtn = (dir: string): HTMLElement =>
-  row(dir).querySelector("button") as HTMLElement;
-
 beforeEach(() => {
   h.cwds = ["/w/alpha", "/w/beta"]; h.currentCwd = "/w/alpha";
   h.switchCalls = []; h.setCwdCalls = []; h.clearCalls = 0; h.configSets = [];

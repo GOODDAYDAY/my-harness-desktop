@@ -1,0 +1,29 @@
+/* 流式文本「打印中」的动效 —— 共享流式件自带样式。
+ *
+ * 诉求 15：会话流里凡是「运行中」的态（思考中 / 执行工具 / **打印中**）都要看得出在执行。
+ * 思考块（Brain）与工具卡（toolIcon）此前各补了 `animate-pulse`，但打印中这一态没有动效：
+ * 只有一根 1.5px 静态竖线（当时的规格明写「不闪烁」）。三种运行态里少了最常出现的一种。
+ *
+ * 现在改为明暗交替（opacity 呼吸 1.1s）——不是 steps 硬闪（刺眼），而是平滑的亮度往复：
+ * 既明确「在执行」，长回复里也不晃眼。停顿超阈值的 shimmer 提示保持不变，
+ * 两条信号互补：光标在呼吸 = 在动，微光文字 = 卡住了。
+ *
+ * 关键帧与组件同处一份文件，所以「引用了不存在的 @keyframes」这类静默失效
+ * 不可能在这里发生；全仓范围的同类守卫见 src/animation-keyframes.test.ts。 */
+
+.stream-caret {
+  animation: stream-caret-breathe 1.1s ease-in-out infinite;
+}
+
+@keyframes stream-caret-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+/* 无障碍：系统开了「减少动态效果」就停掉呼吸，退回常亮竖线。
+   运行态信息仍由 stalled-hint 与侧栏 PhaseIcon 承担，不靠动画唯一承载。 */
+@media (prefers-reduced-motion: reduce) {
+  .stream-caret {
+    animation: none;
+  }
+}

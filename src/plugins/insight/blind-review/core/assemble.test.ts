@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { truncateContent, serializeTree, assembleTeamPrompt, assembleReports, assembleJudgePrompt, TREE_MAX_LINES, CONTENT_MAX_CHARS, type AssembleLabels } from "./assemble";
 import { initRunState, markTeam, markJudge, markPhase } from "./run-state";
+import type { FileTreeNode } from "@my-harness-desktop/shared";
 import { resolveConfig, squadTeams } from "./config";
 import type { TeamConfig } from "./config";
 
@@ -147,8 +148,10 @@ describe("resolveConfig / squadTeams(配置解析与兜底)", () => {
 // 此前用 `lines.length >= TREE_MAX_LINES` 反推,导致**恰好** 200 个节点的**完整**树也被标"已截断"。
 describe("serializeTree(树序列化与截断标注)", () => {
   const labels2: AssembleLabels = { reportHeading: "r", failedHeading: "f", contentTruncated: "CUT", treeTruncated: "TREECUT" };
-  const chain = (n: number) => {
-    let node: any = { name: `n${n - 1}`, isDir: false };
+  const chain = (n: number): FileTreeNode => {
+    // 显式类型而不是 any:这条守卫断言的是"恰好 TREE_MAX_LINES 个节点"的**边界**，
+    // 一旦形状写错(children 挂错层)节点数就不是 n，而 any 会让这种错误静默通过(§10.3 弱断言)。
+    let node: FileTreeNode = { name: `n${n - 1}`, isDir: false };
     for (let i = n - 2; i >= 0; i--) node = { name: `n${i}`, isDir: true, children: [node] };
     return node;
   };

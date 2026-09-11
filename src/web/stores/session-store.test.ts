@@ -332,6 +332,67 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
   });
 });
 
+// 会话键漂移回归(用户症状:「发送之后输入框的模型没固定」)。
+//
+// 链路:新会话壳期间用户点选的模型挂在 `new:${cwd}` 下;首条消息让 ensureForSend **先**
+// 派发合成 sessionStart、**后** spawn(application/sessions/session-store.ts 的 dispatch 早于
+// start),renderer 的 hydrateSessionStart 随即把 currentNeutralSessionId 从 null 翻成真实 ns。
+// 而所有读取侧一律用「currentNeutralSessionId ?? `new:${cwd}`」—— 翻键瞬间旧键再没人读,
+// 刚点选的那份 pending 变成孤儿,输入框在整个 spawn+首轮窗口里回落到应用默认模型。
+// 修法:翻键那一刻把旧键上的按会话暂存态整体搬到新键(ui-store.carrySessionKey)。
+describe("sessionStart 翻键时按会话暂存的框架态必须跟着走", () => {
+  beforeEach(() => {
+    // hydrateSessionStart 会连带写"该项目上次看的会话"(rememberSessionForCwd → prefs.set),
+    // 需要最小 kernel 桥;只补这条路径用到的方法,不造整套 mock。
+    // 走 globalThis 显式建命名空间,不假设 window 已存在——本文件跑在 node 环境
+    // (无 jsdom docblock),`-t` 过滤运行时与整文件运行时对 window 的存在性并不一致。
+    const g = globalThis as unknown as { window?: { kernel?: unknown } };
+    g.window = g.window ?? {};
+    g.window.kernel = { prefs: { set: () => Promise.resolve(), get: () => Promise.resolve(undefined) } };
+    useUiStore.setState({
+      currentCwd: "/tmp/proj",
+      currentNeutralSessionId: null,
+      currentSessionPath: null,
+      sessionModelPending: {},
+      pendingQueue: {},
+      composerDrafts: {},
+      lastSessionByCwd: {},
+    });
+  });
+
+  const startEvent = (ns: string) => ({ type: "sessionStart", sessionFile: `/tmp/proj/sessions/${ns}.jsonl`, neutralSessionId: ns }) as never;
+
+  it("模型点选从 new:${cwd} 改挂到真实 ns(否则输入框回落默认模型)", () => {
+    useUiStore.getState().setSessionModelPending("new:/tmp/proj", { provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" });
+    hydrateSessionStart(startEvent("ns-real"));
+    const ui = useUiStore.getState();
+    expect(ui.sessionModelPending["ns-real"]).toEqual({ provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" });
+    expect(ui.sessionModelPending["new:/tmp/proj"]).toBeUndefined(); // 旧键不残留(残留会在下次新建时串味)
+  });
+
+  it("草稿与排队消息同步跟着走(三张按会话暂存的 map 一起搬,不是只搬模型那张)", () => {
+    useUiStore.getState().setComposerDraft("new:/tmp/proj", "写了一半");
+    useUiStore.getState().enqueueMessage("new:/tmp/proj", "排队的一条");
+    hydrateSessionStart(startEvent("ns-real"));
+    const ui = useUiStore.getState();
+    expect(ui.composerDrafts["ns-real"]).toBe("写了一半");
+    expect(ui.pendingQueue["ns-real"]?.map((q) => q.text)).toEqual(["排队的一条"]);
+    expect(ui.composerDrafts["new:/tmp/proj"]).toBeUndefined();
+    expect(ui.pendingQueue["new:/tmp/proj"]).toBeUndefined();
+  });
+
+  it("已有 ns 的会话再来 sessionStart(同键/回退)不搬、不覆盖目标键已有值", () => {
+    useUiStore.setState({
+      currentNeutralSessionId: "ns-real",
+      sessionModelPending: { "ns-real": { provider: "a", modelId: "a", thinkingLevel: "", kernel: "pi" }, "new:/tmp/proj": { provider: "b", modelId: "b", thinkingLevel: "", kernel: "dsh" } },
+    });
+    hydrateSessionStart(startEvent("ns-real"));
+    const p = useUiStore.getState().sessionModelPending;
+    expect(p["ns-real"]).toEqual({ provider: "a", modelId: "a", thinkingLevel: "", kernel: "pi" }); // 目标键已有值 → 不被覆盖
+    expect(p["new:/tmp/proj"]).toEqual({ provider: "b", modelId: "b", thinkingLevel: "", kernel: "dsh" }); // 非 null→ns 翻键,不触发搬迁
+  });
+});
+
 // 评论真相源回归(设计 docs/design/aux-block-mechanism.md §5)——乐观 content 直接放全文:
 // 发送当轮渲染层即能解析出引用条,不依赖落盘回放;镜像覆盖后 content 仍是全文(不丢块)。
 describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {

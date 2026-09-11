@@ -17,6 +17,14 @@ export default tseslint.config(
       // 注册了规则,插件里 eslint-disable-next-line react-hooks/* 才生效(此前报 rule-not-found)
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
+      // 下划线前缀 = 有意不用。默认配置不认这个约定,于是测试里的占位形参
+      // (`useDebouncedValue: (_v, _ms) => ...` 这类 mock 签名对齐) 会判成 unused-vars —— 
+      // 实测 `npm run lint` 因此长期 10 error 全红,红着的门等于没有门。
+      // 按社区标准约定显式放行下划线前缀(只放行前缀,不是整体关掉规则)。
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
       "no-restricted-syntax": [
         "error",
         {

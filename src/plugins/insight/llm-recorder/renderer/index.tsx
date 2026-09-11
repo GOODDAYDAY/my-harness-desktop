@@ -255,12 +255,24 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
     void fullLoad();
   }, [fullLoad]);
 
-  // 增量触发(设计 §6.2):messageEnd = LLM 调用完成 = 扩展写完该 seq 配对——
-  // 数据粒度与触发粒度对齐,替代 messages 流式防抖(删掉 400ms 赌时序)。
+  // 增量触发(设计 §6.2):两个时机都要订阅,缺一个就有内核的记录永远停在「未返回」。
+  //
+  //   · messageEnd  —— 一次 LLM 调用完成。pi 侧扩展就在这一刻写完该 seq 的配对行
+  //                    (`after_provider_response` + `message_end` 同刻),所以它曾是唯一触发点。
+  //   · agentSettled —— **回合边界**。dsh 侧的 response 行不写在 messageEnd 那一刻:
+  //                    它等 `agent/turn-stopping`(回合关闭 ⇒ 这次调用没失败)才 settleSuccess,
+  //                    而回合边界在 shell 的 messageEnd **之后**。只订阅 messageEnd 的话,
+  //                    面板读到的永远是「请求已发、响应未回」,而结算行落盘后再无事件触发重读
+  //                    ——除非用户切会话/重挂面板(那才走 fullLoad),否则那条记录的状态
+  //                    永不流转(用户症状:「dsh 内核执行的时候右侧的请求记录就没有记录了」)。
+  //
+  // 为什么不改成只订阅 agentSettled:pi 的 messageEnd 早于回合边界,一轮多步工具调用里
+  // 每一步的配对是即时可见的,砍掉它会让面板整轮不动。两个都订阅 = 数据粒度与触发粒度
+  // 在每个内核上都对齐。agentSettled 是中性事件,不引入任何内核身份分支。
   // 面板不活跃时不读(订阅保留,事件到了跳过)。
   useEffect(() => {
     return ctx.sessions.onEvent((event) => {
-      if (event.type !== "messageEnd") return;
+      if (event.type !== "messageEnd" && event.type !== "agentSettled") return;
       if (!isActiveRef.current) return;
       void incrementalLoad();
     });

@@ -3,8 +3,8 @@
 //   `const content = streaming ? debouncedText : text;`
 //   ① **非流式直接用原文**(不经过防抖)——历史消息不该被延迟
 //   ② **流式用防抖后的值**——50ms 攒批,避免每个 token 都整块重渲
-//   ③ 光标**只在流式时**渲染(StreamingCaret 是有意静态的,由它自己的设计文档决定;
-//      这里守的是"该不该出现",不是"它动没动")
+//   ③ 光标**只在流式时**渲染(光标自身的呼吸动画由共享件 packages/react/src/stream-caret.css
+//      与 src/animation-keyframes.test.ts 守;这里守的是「该不该出现」)
 //
 // 做法说明:用**哨兵值**代替真防抖——`useDebouncedValue` mock 成固定返回 "[debounced]",
 // 于是"body 收到的是原文还是防抖值"一眼可断言,且不必和定时器打交道
@@ -13,7 +13,8 @@ import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-vi.mock("./stream-utils", () => ({
+// 流式件已收归发布面共享件（原 ./stream-utils 是 message-blocks 那份的逐字节拷贝，已删）。
+vi.mock("@my-harness-desktop/react", () => ({
   useDebouncedValue: (_v: string, _ms: number) => "[debounced]",
   StreamingCaret: () => <span data-testid="caret" />,
 }));

@@ -5,7 +5,7 @@
 // 而是独立可执行文件 `dsh-jsonrpc-agent`(@deepseek-ai/dsh-sdk-jsonrpc-demo 的 bin),
 // 经 DSH_CORDIS_CONFIG(或 argv[2])指定 cordis.yml 插件组合,读 stdin JSON-RPC 常驻。
 import { spawn, type ChildProcess } from "node:child_process";
-import type { SubprocessHandle, ProcessExit } from "../../pi/backend/subprocess-handle";
+import type { SubprocessHandle, ProcessExit } from "../../core/subprocess-handle";
 
 /** dsh spawn 选项。 */
 export interface DshSubprocessSpawnOptions {

@@ -5,7 +5,7 @@
 // 子进程句柄契约,minimal 与 dsh 同源复用——接口是机制、非 pi 专属)。
 
 import { spawn, type ChildProcess } from "node:child_process";
-import type { SubprocessHandle, ProcessExit } from "../../pi/backend/subprocess-handle";
+import type { SubprocessHandle, ProcessExit } from "../../core/subprocess-handle";
 
 /** minimal spawn 选项(内核专属参数,由工厂闭包拼装,不进中性契约)。 */
 export interface MinimalSubprocessSpawnOptions {

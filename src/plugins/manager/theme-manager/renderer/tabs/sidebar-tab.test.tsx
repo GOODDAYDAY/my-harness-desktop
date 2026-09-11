@@ -19,11 +19,6 @@ const h = vi.hoisted(() => ({
   styleCalls: [] as string[],
   dragCalls: [] as boolean[],
 }));
-// 稳定 store(对象级稳定,避免任何 effect 依赖问题)
-const ui = vi.hoisted(() => ({
-  store: {} as Record<string, unknown>,
-}));
-
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 vi.mock("@my-harness-desktop/react", () => ({
   useUiStore: () => ({

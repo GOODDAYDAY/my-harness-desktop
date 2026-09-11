@@ -378,6 +378,9 @@ export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLo
 export { useCodeBlockRenderers, resolveCodeBlockRenderer, resolveCodeBlockRendererByExtension, resolveCodeBlockRendererComponent, type CodeBlockRendererItem } from "./code-block-renderers";
 export { PluginOverlays } from "./plugin-overlays";
 export { ErrorBoundary } from "./error-boundary";
+// 流式件（诉求 15）：message-blocks 与 markdown 两条渲染路径共用一份实现，
+// 避免「改一份、另一份不动」——详由见 ./stream-caret.tsx 头注释。
+export { StreamingCaret, useDebouncedValue } from "./stream-caret";
 
 // 内核管理共享 base（kernel-design-spec.md §12.4/§12.5/§12.6）：设置页三 TAB 的统一功能面骨架。
 // value 与 type 分开 export：rollup 对「inline type modifier 混合 value」的 re-export 偶发丢 value，

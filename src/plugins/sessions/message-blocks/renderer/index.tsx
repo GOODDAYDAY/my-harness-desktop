@@ -2,6 +2,10 @@
 // 框架按 manifest contributes.blockRenderers[].component 名在本 module exports 自动匹配(§7.4),
 // 只 export 组件,零注册调用、零字符串字面量(零硬编码纪律)。
 // 文本块渲染(MarkdownText)已迁出为独立 markdown 插件——本插件只管工具卡/思考链/气泡/分隔线。
+// 工具卡运行态动效(@keyframes tool-live-pulse)随本插件携带,不塞壳样式表——见该文件头注释。
+import "./tool-cards.css";
+
+
 export { BashCard, EditCard, ReadCard, DefaultCard } from "./tool-cards";
 export { ThinkingChainBlock } from "./thinking-chain-block";
 export { UserBubble } from "./user-bubble";

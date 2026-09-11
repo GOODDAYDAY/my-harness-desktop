@@ -5,7 +5,7 @@
 // 行读(不用 readline,防拆 U+2028/U+2029)。
 
 import { StringDecoder } from "node:string_decoder";
-import type { SubprocessHandle } from "../../pi/backend/subprocess-handle";
+import type { SubprocessHandle } from "../../core/subprocess-handle";
 import type { ProcessExitInfo } from "@my-harness-desktop/shared";
 
 /** minimal 协议事件(命令进、事件出的「出」侧)。 */

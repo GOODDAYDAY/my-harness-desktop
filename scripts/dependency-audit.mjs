@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 依赖方向审计(CLAUDE.md §6.3 四检验的自动化 + KernelId 单源 + 内核身份分支)——CI-able 守卫。
 // 用法:node scripts/dependency-audit.mjs(违规 exit 1,全绿 exit 0)。
-// 七检验:
+// 八检验:
 //   ① 圆心零外部 import(packages/shared/src/domain 不碰任何外部包/壳内部)
 //   ② application 不 import 内核实现(非 type-only)·不 import electron/react
 //      ——neutral-migration.ts 是 session-single-source.md §4.3 明文例外(离线迁移工具)
@@ -11,7 +11,7 @@
 //   ⑥ 会话意图链路(application)零 kernel === "pi"/"dsh" 身份硬分支
 //   (能力接口探测替代身份分支——§1.5 判别气味;测试文件豁免,注释行豁免)
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 
@@ -128,6 +128,41 @@ for (const f of walk(join(ROOT, "src/server/application"))) {
   }
 }
 
+// ⑧ 内核之间零 import(§目标 13 可卸载性的物理前提)。
+//    为什么必须是一条**结构**检验而不是"注意一下":内核插件是可以被整体删掉的(卸载验收),
+//    只要 A 内核 import 了 B 内核的一个文件,删掉 B 就让 A 编译不过——"能卸载"当场变成假的。
+//    实测就发生过:SubprocessHandle(三个内核共用的子进程句柄契约)曾放在 pi/backend/ 下,
+//    dsh/minimal 都写 `../../pi/backend/subprocess-handle` —— 删 pi 即 dsh/minimal 崩。
+//    现已收进 kernel/core/(机制层),本检验守住不让它复发:任一内核的依赖只许指向
+//    `kernel/core/`(机制)或自己的目录,不许指向另一个内核。
+{
+  const KERNEL_DIRS = ["pi", "dsh", "minimal"];
+  for (const k of KERNEL_DIRS) {
+    const base = join(ROOT, "src/server/kernel", k);
+    let files = [];
+    try { files = walk(base); } catch { continue; } // 内核被卸载(目录已删)→ 无事可查
+    for (const f of files) {
+      for (const spec of importsOf(f).matchAll(/from\s+["']([^"']+)["']/g)) {
+        const s = spec[1];
+        if (!s.startsWith(".")) {
+          // 非相对:任何 `kernel/<other>/` 或 `@/server/kernel/<other>/` 都是跨内核
+          const m = s.match(/kernel\/([^/]+)\//);
+          if (m && KERNEL_DIRS.includes(m[1]) && m[1] !== k) {
+            violations.push(`⑧ 内核互引 ${f.replace(ROOT, "")}: ${s}(内核 ${k} → 内核 ${m[1]})`);
+          }
+          continue;
+        }
+        const abs = resolve(dirname(f), s);
+        const m = abs.match(/src\/server\/kernel\/([^/]+)\//);
+        // 相对路径也必须落在自己目录或 core 里;落进另一个内核目录即违规。
+        if (m && KERNEL_DIRS.includes(m[1]) && m[1] !== k) {
+          violations.push(`⑧ 内核互引 ${f.replace(ROOT, "")}: ${s} → kernel/${m[1]}/`);
+        }
+      }
+    }
+  }
+}
+
 // 这个数是**四个被 walk 的骨架目录的文件数之和**(含 plugin.json/locales 等非 ts 文件),
 // **不是整条审计的覆盖面**——⑤⑥⑦ 三条是 grep,另外覆盖 `src/web` / `packages/react/src`。
 // 原来只写"七检验,N 文件"会被读成"整条审计只看了 N 个文件",是**标签误导**(实测 289 里
@@ -139,7 +174,7 @@ const walked = [
   "src/plugins",
 ];
 const scope = walked.reduce((n, d) => n + walk(join(ROOT, d)).length, 0);
-console.log(`依赖方向审计(七检验): ${violations.length} 处违规`);
+console.log(`依赖方向审计(八检验): ${violations.length} 处违规`);
 console.log(`  覆盖:walk ${walked.length} 个骨架目录共 ${scope} 文件(${walked.join(" · ")});` +
   `另有 ⑤⑥⑦ 三条 grep 覆盖 src/web、packages/react/src 等(核 KernelId 字面量/内核身份分支/能力名中性化)`);
 for (const v of violations) console.log("  " + v);

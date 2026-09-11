@@ -351,6 +351,28 @@ SSE 里的 `tool_calls` 是分片到达的：同一个 tool_call 的 `id`、`fun
 
 minimal 的模型配置是它自己的 JSON：providers 列表（id、baseURL、models）+ default（provider + model）。注意这份文件里**没有 apiKey**——apiKey 落在另一份独立的凭证文件里（minimal 自己的凭证库，形如 `~/.minimal/.credentials`），配置里只留 provider/baseURL/models，不留明文密钥。这个拆分不是 minimal 的发明，是学 dsh 已经落地的做法：dsh 的密钥持续写入者是适配器 `DshConfigSource` 的 `setProvider`/`renameProvider`/`removeProvider` 三处，凭证路径由注入的 `settingsPath` **派生**（`dirname + ".credentials.yaml"`），spawn 不注入任何进程 env。minimal 照搬这条"凭证与配置分离"的路，理由和 dsh 完全一样——密钥不该以明文躺在会进列表、会进日志的配置里。
 
+#### 4.9.1b 内置 offline provider：`echo`（**这一条是补的裁决，此前文档没写、代码有**）
+
+代码里一直存在一个"没配置任何 provider 时也能发消息"的回显回落（`minimal-cli.mjs` 的 `[minimal echo] ${text}`），
+且 `MinimalModelSource` 在无配置时会交出 `{ provider: "minimal", id: "echo" }` 这个模型。文档此前对**它到底算不算模型**没有表态，
+于是形成一个说不清的中间态：它既不是"空清单"（下拉里看得见、选得中），也不是"真清单"（它不来自任何配置文件）。
+
+这里给出裁决，二选一而不是含糊：**算模型，写进文档，并说明它是什么。**
+
+- **它是什么**：minimal 的**内置 offline provider**，id `minimal`、模型 id `echo`。语义是"这个内核在没有配置任何外部模型时的确定性回显能力"——
+  不是某个大模型的替身，是内核自己实现的一等行为（真进程、真 JSONL 事件流、真落盘、逐字流式）。
+- **为什么保留**：§2.10.1「脱离 desktop 也能用」要求 minimal 在**零配置**的干净机器上就能完整跑通一轮（起进程 → 收消息 → 出事件 → 写会话文件）。
+  若没有它，一个刚装好的 minimal 连一条消息都发不出去，"独立内核"的最低验收线就没有可执行形态。
+  它同时是 desktop 侧**零 token** 端到端测试的唯一通路（`minimal-smoke.e2e.mjs` 真 app 真发送，不花任何模型费用）。
+- **为什么必须写进文档**：编程纪律里"桩不许伪造成功"（§7.9.3）针对的是**声称做了而没做**。
+  echo 没有声称自己是别的模型：模型 id 就叫 `echo`、回复正文自带 `[minimal echo]` 前缀、消息的 `model` 域写着 `minimal/echo`。
+  它的问题从来不是"假"，而是"**文档没说它存在**"——那条灰色地带才是隐患（下一个人会以为它是 bug 而删掉，删掉即打断零配置可用性）。
+- **边界**：一旦配置了任何 provider，`echo` 就不该再作为可选项干扰选择——回落只在"没有任何 provider"时生效；
+  有配置但 provider 名写错时**不回落**（那是配置错误，必须显式报错，见 §4.6.1 的失败不静默）。
+
+> 裁决的落点：`src/server/kernel/minimal/manager/minimal-models.ts`（`MinimalModelSource` 的无配置分支）
+> 与 `src/server/kernel/minimal/kernel/minimal-cli.mjs`（回落分支）。守卫：`minimal-models.test.ts`。
+
 #### 4.9.2 apiKey 的完整生命周期：子进程自读，永不进 spawn / 事件 / 文件
 
 这条单独成条，因为它在前几稿里整段缺失，是盲审确认的真实缺口。apiKey 的四段生命周期钉死如下：

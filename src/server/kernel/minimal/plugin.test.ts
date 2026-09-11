@@ -44,7 +44,7 @@ describe("minimalKernelPlugin 工厂", () => {
     await backend.stop();
     expect(backend.alive).toBe(false);
 
-    // createModelSource:无配置回落 echo 占位模型。
+    // createModelSource:零配置 = 内置 offline provider（§4.9.1b 裁决）。
     const modelSource = plugin.createModelSource();
     expect(modelSource.listModels()).toEqual([{ kernel: "minimal", provider: "minimal", id: "echo", name: "Minimal Echo" }]);
 

@@ -16,7 +16,7 @@
 // ⚠ 不用假定时器(skills §10.5 第 11 条:动态 import 的时序不在 vi 的时钟上),用真实 await。
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 
 const h = vi.hoisted(() => ({ renderThrows: false, renderCalls: 0, instanceCalls: 0 }));
 vi.mock("@viz-js/viz", () => ({

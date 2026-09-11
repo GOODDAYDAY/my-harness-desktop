@@ -116,7 +116,7 @@
 ## 5 公共流式渲染件：`stream-text-reveal.tsx`
 
 - 这个文件是 message-blocks 内部的内容件内聚依赖，四个导出件被思考链和工具卡共用，不是机制。
-- `StreamingCaret`（第 19–36 行）：1.5px 静态竖线，颜色 `color-mix(in srgb, var(--color-fg) 50%, transparent)`，**不闪烁**（设计 §4.5.1 明确「静态竖线，不闪烁」），`aria-hidden` 藏起。
+- `StreamingCaret`：**已上提到共享发布面 `packages/react/src/stream-caret.tsx`**（诉求 15 的收敛，见该文 §3.2 的更新说明）。1.5px 竖线，颜色 `color-mix(in srgb, var(--color-fg) 50%, transparent)`，**明暗交替**（`@keyframes stream-caret-breathe` 落在同目录 `stream-caret.css`，1.1s opacity 呼吸；`prefers-reduced-motion` 下退回常亮），`aria-hidden` 藏起。此前是「静态不闪烁」，三种运行态里独缺「打印中」这一态。
 - `useStalledHint(streaming, deltaKey, stallMs = 800)`（第 46–79 行）：停顿提示 hook。流式中 `setInterval(stallMs / 2)` 轮询，`Date.now() - lastChangeRef.current > stallMs` 时置 `stalled = true`；`deltaKey`（通常是文本长度）变化时刷新 `lastChangeRef` 并清 stalled。非流式清 stalled 并提前 return。
 - `useDebouncedValue(value, delayMs = 50)`（第 87–96 行）：50ms 防抖值。注释解释根因——高频 `message_update` 每 token 触发一次，防抖到 50ms 攒批后重渲染，避免每个 token 都跑一次 markdown 解析 + highlight。
 - `StreamTextReveal({ text, streaming, children })`（第 106–147 行）：流式期间用 `debouncedText` + `StreamingCaret` 渲染，`stalled` 时追加 shimmer 渐变的 `...` 提示（`backgroundSize: "200% 100%"` + `animation: shimmer 2s linear infinite`）；非流式直接渲染 `children(text)` 或原文，不防抖、不加光标。
@@ -220,7 +220,7 @@
 
 **Q：思考链的「思考时间较长…」提示和流式光标是从哪来的？为什么思考块和工具卡共享它们？**
 
-都来自 `renderer/stream-text-reveal.tsx` 的四个公共件：`StreamingCaret`（1.5px 静态竖线，不闪烁）、`useStalledHint`（800ms 停顿判定）、`useDebouncedValue`（50ms 防抖）、`StreamTextReveal`（流式文本组件）。它们是内容件的内聚依赖——思考链用 `StreamTextReveal` 渲染思考正文、用 `useStalledHint` 判停顿，工具卡用 `StreamingCaret` 挂流式光标。设计文档 §4.1 把它们列为「共享渲染件随行」，只被这些卡消费，是内容不是机制，所以跟着搬进 message-blocks 而不是留在 timeline。
+来自 `renderer/stream-text-reveal.tsx` 的公共件（其中前两个已上提 `packages/react`，见 §3.2）：`StreamingCaret`（1.5px 明暗交替竖线，`packages/react/src/stream-caret.tsx`）、`useStalledHint`（800ms 停顿判定，仍在本地）、`useDebouncedValue`（50ms 防抖，`packages/react`）、`StreamTextReveal`（流式文本组件，仍在本地）。它们是内容件的内聚依赖——思考链用 `StreamTextReveal` 渲染思考正文、用 `useStalledHint` 判停顿，工具卡用 `StreamingCaret` 挂流式光标。设计文档 §4.1 把它们列为「共享渲染件随行」，只被这些卡消费，是内容不是机制，所以跟着搬进 message-blocks 而不是留在 timeline。
 
 **Q：覆盖内置卡时，同 id 替换和新 id 覆盖怎么选？**
 

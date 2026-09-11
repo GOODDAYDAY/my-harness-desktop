@@ -5,14 +5,14 @@
 //
 // 关键纪律(依赖倒置):
 // - rpc-adapter 不负责 spawn/kill 子进程——那是 shell/subprocess-lifecycle 的职责。
-//   本层构造时收一个 SubprocessHandle(接口归 gateway 自有,见 subprocess-handle.ts),
+//   本层构造时收一个 SubprocessHandle(接口归内核机制层,见 kernel/core/subprocess-handle.ts),
 //   只消费其 stdin/stdout 做 JSONL 读写 + id 配对 + event 分发。
-// - gateway 只 import domain + 自身 protocol + 自身 subprocess-handle,不 import application/shell。
+// - gateway 只 import domain + 自身 protocol + 内核机制层,不 import 其它内核 / application / shell。
 // - 用 Node 内置 string_decoder(标准库)。
 // - JSONL reader 自写 LF-only 分帧(不用 readline,参考 pi SDK jsonl.js)。
 import { StringDecoder } from "node:string_decoder";
 import { RequestCorrelator } from "./correlator";
-import type { SubprocessHandle, ProcessExit } from "./subprocess-handle";
+import type { SubprocessHandle, ProcessExit } from "../../core/subprocess-handle";
 import type { RpcCommand, RpcResponse, AgentSessionEvent, RpcExtensionUIRequest, RpcExtensionUIResponse } from "../protocol/rpc-types";
 
 /** stdout 上一行 JSON 解析后的消息。 */

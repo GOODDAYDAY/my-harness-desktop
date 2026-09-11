@@ -13,7 +13,7 @@ import { mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
-import type { ProcessExit } from "./subprocess-handle";
+import type { ProcessExit } from "../../core/subprocess-handle";
 import type { Anchor, BoundaryRef, LineageTree, SeedOptions } from "@my-harness-desktop/shared";
 import type { BackendExtensions } from "./pi-backend-extensions";
 import { AbstractBackend, type BackendContext } from "../../core/abstract-backend";

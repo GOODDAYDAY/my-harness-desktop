@@ -44,18 +44,18 @@
 
 ## 3 renderer 源码逐文件拆解
 
-### 3.1 `markdown.tsx`：流式特化壳（50ms 防抖 + 静态光标）
+### 3.1 `markdown.tsx`：流式特化壳（50ms 防抖 + 呼吸光标）
 
 - `renderer/markdown.tsx` 只有 18 行，导出 `Markdown = memo(function Markdown({ text, streaming = false }) {...})`。
 - `memo` 包裹的根因（对照 `packages/react/src/plugin-modules.ts` 第 12–16 行 `asReactComponent` 的注释）：`memo()` 返回的是带 `$$typeof` 的 exotic 对象，不是普通函数——旧码只认 `typeof function`，`memo` 包装的导出会被静默丢弃、消费方落兜底，这曾是「会话流 markdown 长期退化为纯文本的根因」。`asReactComponent` 现已同时认 `function` 和 `$$typeof`，`Markdown` 的 `memo` 包装才不再被吞。
 - 流式特化的核心是 `useDebouncedValue(text, 50)`（§3.2）：`streaming === true` 时渲染防抖后的 `debouncedText`，`false` 时直接渲染原始 `text`——非流式不防抖（防抖会延迟最终快照的落地）。
 - 组件把 `text`（防抖后的 content）和 `streaming` 原样透传给 `<MarkdownBody text={content} streaming={streaming} />`，并在 `streaming` 时末尾追加 `<StreamingCaret />`。
-- 头注一句话交代职责边界：「渲染配置在 markdown-body(槽分发)，本壳只做流式特化——50ms 防抖攒批 + 末尾静态光标」——把「画什么」全部下沉到 markdown-body，「流式怎么稳」留在本壳。
+- 头注一句话交代职责边界：「渲染配置在 markdown-body(槽分发)，本壳只做流式特化——50ms 防抖攒批 + 末尾呼吸光标」——把「画什么」全部下沉到 markdown-body，「流式怎么稳」留在本壳。
 
-### 3.2 `stream-utils.tsx`：`StreamingCaret` + `useDebouncedValue`
+### 3.2 `StreamingCaret` + `useDebouncedValue`：**已上提到 `packages/react`**（原 `stream-utils.tsx` 已删）
 
-- `renderer/stream-utils.tsx` 只有 31 行，两个导出件：
-  - `StreamingCaret()`（第 4–21 行）：`<span class="stream-caret" aria-hidden>`，内联样式写死 `width: 1.5px`、`height: 1.05em`、`background: color-mix(in srgb, var(--color-fg) 50%, transparent)`、`borderRadius: 1px`、`transform: translateY(2px)`——**静态竖线，不闪烁**（头注「与 message-blocks 同规格」）。
+- 两个导出件现住在 `packages/react/src/stream-caret.tsx`，`markdown.tsx` 与 message-blocks 都从 `@my-harness-desktop/react` import（**单一实现**）：
+  - `StreamingCaret()`：`<span class="stream-caret" aria-hidden>`，内联样式写死 `width: 1.5px`、`height: 1.05em`、`background: color-mix(in srgb, var(--color-fg) 50%, transparent)`、`borderRadius: 1px`、`transform: translateY(2px)`；**明暗交替**（`stream-caret.css` 的 `@keyframes stream-caret-breathe`，`prefers-reduced-motion` 下退回常亮）。
   - `useDebouncedValue<T>(value, delayMs = 50)`（第 24–31 行）：`useState` 存 debounced 值 + `useEffect` 里 `setTimeout(setDebounced, delayMs)`，清理函数 `clearTimeout` 防泄漏，依赖 `[value, delayMs]`。
 - **已知重复**：这两个件是 `src/plugins/sessions/message-blocks/renderer/stream-text-reveal.tsx` 里 `StreamingCaret`（第 19–36 行）和 `useDebouncedValue`（第 87–96 行）的**逐字节拷贝**——`stream-text-reveal.tsx` 的头注第 14 行还写着「markdown 富文本由 markdown.tsx 处理」，但 markdown 迁出时把流式件自持了一份，没有从 message-blocks import。这是「同一逻辑多处各写」的既有重复，写新代码时不应再复制第三份；严格看应把这两个流式件上提到 `packages/react` 让两边共用，但当前仓库里它们是两份平行实现。
 - 防抖根因（抄自 stream-text-reveal.tsx 第 83–85 行注释）：高频 `message_update` 每 token 触发一次，防抖到 50ms 攒批后重渲染，避免每个 token 都跑一次 markdown 解析 + highlight。50ms 是设计锚定值（`docs/design/timeline-block-renderers.md`；原指向的 `docs/design-style-guide.md` 已不存在，该内容现落在本文档）。
@@ -207,9 +207,11 @@
 
 因为 `markdown-body.tsx` 第 7 行 `import "highlight.js/styles/github-dark.css"` 是静态 CSS 引入，highlight.js 的主题是编译期打包的全局样式，不是运行时 token。这是插件内部的内容选择（合法内容，对照 timeline-block-renderers.md §4.1「写死一张表在内容插件里是合法内容」），代价是恒 github-dark、不随 app 明暗切换。对比 mermaid 的 `isDarkMode()`（读 `document.body` 背景亮度判明暗）是运行时跟随主题的。若要让高亮跟主题走，需要把 highlight.js 主题换成 CSS 变量驱动，这是演进项不是 bug。
 
-**Q：`stream-utils.tsx` 里的 `StreamingCaret` 和 `useDebouncedValue` 为什么和 message-blocks 的 `stream-text-reveal.tsx` 一模一样？**
+**Q：`StreamingCaret` 和 `useDebouncedValue` 以前和 message-blocks 的 `stream-text-reveal.tsx` 一模一样，现在呢？**
 
-这是 markdown 从 message-blocks 迁出时的**已知重复**：`stream-text-reveal.tsx` 第 19–36、87–96 行的两个件被逐字节拷到 markdown 的 `stream-utils.tsx`，两处是平行实现、互不 import。根因是迁出时为了「markdown 插件自持内聚」没有把这两个流式件上提到共享层（`packages/react`）。严格看这违反「同一逻辑多处各写」的反模式，正确的收敛方向是把 `StreamingCaret`/`useDebouncedValue` 上提到 `packages/react`，message-blocks 和 markdown 各自 import——但当前仓库里它们是两份拷贝，写新代码不要再复制第三份。
+**重复已收敛（诉求 15 那一轮做的）。** 这曾经是 markdown 从 message-blocks 迁出时留下的**已知重复**：`stream-text-reveal.tsx` 的两个件被逐字节拷到 markdown 的 `stream-utils.tsx`，两处平行实现、互不 import，违反「同一逻辑多处各写」的反模式。
+
+收敛的触发不是洁癖，是一次真实缺陷：诉求 15 要求「打印中」看得出在执行，而光标是关键信号——两份拷贝意味着**只改一份，另一条路径继续不动**，而 markdown 恰恰是助手正文最常见的渲染路径。现在两个件住在 `packages/react/src/stream-caret.tsx`（+ 同目录 `stream-caret.css`），message-blocks 与 markdown 都从 `@my-harness-desktop/react` import，`stream-utils.tsx` 已删。**写新代码不要再复制第二份。**
 
 **Q：file-preview 和 markdown 都在用 markdown 的 `MarkdownText`，它们有什么区别？**
 

@@ -700,10 +700,18 @@ export class SessionStore implements
     // 列表行字段全在 header(遗留文件迁移时已 heal),不再需要整树。
     const summaries = this.neutralStore?.listByCwd(cwd) ?? [];
     return summaries.map((s) => {
-      const catalog = this.catalogFor(s.header.kernel);
       return {
         neutralSessionId: s.neutralSessionId,
-        path: catalog.projectionPath(cwd, s.rootLineageId),
+        // 投影地址逐行解析,**失败不许拖垮整份列表**(根因,勿回退成整段 map 内直调):
+        // catalogFor 对「未注册的内核」是 fail-fast 抛错(装配点语义,不变),但它此前被
+        // 直接放在 map 回调里 —— 中立层只要有一行 header.kernel 指向一个**当前没装载的内核**
+        // (例如 minimal 默认 enabled:false,而用户曾用 MHD_ENABLE_KERNELS=minimal 跑过、
+        // 留下一行归档会话),这个异常就会让 **整个 list() reject**。后果不是"少一行",
+        // 而是该项目**整个会话列表永久为空**且刷新同样必挂——renderer 的 loadSessionInfos
+        // 又把异常吞进空 catch,于是症状表现为"新建的会话没在左侧展示"。
+        // 兜底取中立 id:中立层是会话的真相源(§neutral-session-first),它不依赖任何内核装载;
+        // 内核不可用时**不丢这一行**,只是没有内核侧投影地址(投影本来就可重建)。
+        path: this.projectionPathForRow(cwd, s.header.kernel, s.rootLineageId, s.neutralSessionId),
         id: s.rootLineageId,
         cwd: s.header.cwd,
         name: s.header.name,
@@ -716,6 +724,32 @@ export class SessionStore implements
         custom: s.header.custom,
       };
     });
+  }
+
+  /**
+   * 一行的投影地址 —— 内核可用时取内核投影,内核**未装载**时退回中立 id,绝不抛。
+   *
+   * 为什么单独成方法而不是在 list() 里内联 try/catch:这是「一行坏数据 ⇒ 整份列表挂掉」
+   * 的第二个实例(`listByCwd` 的形状守卫是第一处,commit a9c7997b/bb0810b6 修的)。
+   * 同一根因在同一文件复发过,说明缺的不是某一个 catch,而是**"列表行的解析必须逐行隔离"**
+   * 这条不变式——独立成方法后,守卫测试可以直接打这个入口,后续新加的列表行字段
+   * (catalog 还有十几个方法)也只能经这里取,不会再有人把 catalog 调用写回 map 回调里。
+   *
+   * 退回中立 id 而不是跳过该行:中立层是会话的真相源,一行真实存在的会话不该因为
+   * 「当前没装载它所属的内核」而从列表里蒸发——那正是用户看到的「会话不见了」。
+   * 内核投影是可重建的(seed 就是重建动作),中立坐标不会。
+   */
+  private projectionPathForRow(cwd: string, kernel: KernelId, rootLineageId: string, neutralSessionId: string): string {
+    try {
+      return this.catalogFor(kernel).projectionPath(cwd, rootLineageId);
+    } catch (e) {
+      // 不静默:日志留痕,排障时能一眼看出「这一行的内核没装载」而不是「会话丢了」。
+      console.error(
+        `[session-store] 会话 ${neutralSessionId} 的内核 "${kernel}" 未装载,列表行退回中立 id 作为投影地址:`,
+        e instanceof Error ? e.message : e,
+      );
+      return neutralSessionId;
+    }
   }
 
   /** 解析会话可打开的原始文件地址(§7.6:原始文件位置是内核专属知识,经各内核

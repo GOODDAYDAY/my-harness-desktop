@@ -9,32 +9,22 @@
 //   - `message_update` 推的是完整快照而非 delta——本组件直接消费快照文本，
 //     不自己累积 delta，每次用最新快照重渲染。
 //   - 高频 update 防抖到 rAF（§8.4 批处理 + §2.3.4 50ms 攒批），避免每个 token 触发一次重渲染。
-//   - 流式期间（streaming=true）末尾挂 StreamingCaret（竖线规格见 `docs/plugins/sessions/message-blocks.md`：1.5px 静态、不闪烁）。
-//   - 停顿超 800ms 触发 useStalledHint，shimmer 落在提示文字上、光标仍静态（同上 + 同文档的停顿提示小节）。
+//   - 流式期间（streaming=true）末尾挂 StreamingCaret（竖线规格见 `docs/plugins/sessions/message-blocks.md`：
+//     1.5px、**明暗交替**——诉求 15 要求「打印中」也看得出在执行，故由「静态不闪烁」改为
+//     opacity 呼吸，关键帧在 ./stream-text-reveal.css）。
+//   - 停顿超 800ms 触发 useStalledHint，shimmer 落在提示文字上（与光标呼吸互补：
+//     光标=在动，微光文字=卡住了）。
 //
 // 本组件只负责"流式文本"这一种内容块——markdown 富文本由 markdown.tsx 处理，
 // 工具卡片由 tool-cards.tsx 处理，thinking 块由 thinking-chain-block.tsx 处理。
 import { useState, useEffect, useRef, type ReactNode } from "react";
-
-/** StreamingCaret：1.5px 静态竖线，颜色 foreground/50，不闪烁（规格见 docs/plugins/sessions/message-blocks.md）。 */
-export function StreamingCaret(): ReactNode {
-  return (
-    <span
-      className="stream-caret"
-      aria-hidden
-      style={{
-        display: "inline-block",
-        width: "1.5px",
-        height: "1.05em",
-        marginLeft: "2px",
-        transform: "translateY(2px)",
-        borderRadius: "1px",
-        background: "color-mix(in srgb, var(--color-fg) 50%, transparent)",
-        verticalAlign: "baseline",
-      }}
-    />
-  );
-}
+// StreamingCaret / useDebouncedValue 收归发布面共享件（packages/react/src/stream-caret.tsx）。
+// 此前本文件与 markdown/renderer/stream-utils.tsx 各持一份**逐字节拷贝**——
+// 两份平行实现意味着改一份另一条路径不动（markdown 恰是助手正文最常见的渲染路径）。
+// 现在单一实现：改一次，两条路径同时变。此处 re-export 只为兼容既有 import 点，
+// 新代码请直接从 @my-harness-desktop/react 引。
+export { StreamingCaret, useDebouncedValue } from "@my-harness-desktop/react";
+import { StreamingCaret, useDebouncedValue } from "@my-harness-desktop/react";
 
 /**
  * useStalledHint —— 停顿提示 hook（规格见 docs/plugins/sessions/message-blocks.md 的停顿提示小节）
@@ -80,27 +70,10 @@ export function useStalledHint(
 }
 
 /**
- * useDebouncedValue —— 50ms 防抖值（§2.3.4 50ms 攒批）
- *
- * 高频 message_update 每 token 触发一次，防抖到 50ms 攒批后重渲染，
- * 避免每个 token 都跑一次 markdown 解析 + highlight。
- */
-export function useDebouncedValue<T>(value: T, delayMs = 50): T {
-  const [debounced, setDebounced] = useState(value);
-
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(id);
-  }, [value, delayMs]);
-
-  return debounced;
-}
-
-/**
  * StreamTextReveal —— 流式文本组件
  *
  * 在流式期间用防抖文本 + StreamingCaret 渲染；
- * 停顿超过 800ms 显示 "正在思考..." shimmer 提示（光标仍静态）。
+ * 停顿超过 800ms 显示 "正在思考..." shimmer 提示（与光标呼吸互补：光标=在动，微光=卡住）。
  *
  * 非流式时直接渲染 children（不防抖、不加光标）。
  */

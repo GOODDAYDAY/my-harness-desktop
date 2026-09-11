@@ -110,7 +110,15 @@ function syncFromDisk(sid, st) {
         } catch { /* 坏行跳过 */ }
       }
     }
-    st.seq = maxSeq;
+    // **seq 单调:只许抬高,不许压低**（根因修复，勿改回 `st.seq = maxSeq`）。
+    // syncFromDisk 由 appendLine 调用，而 appendLine 的调用点**在 seq 已经分配之后**：
+    // 首次写入时文件还不存在 ⇒ maxSeq = 0 ⇒ `st.seq = 0` 把刚分配的 1 抹掉，
+    // 于是下一次请求又从 1 开始 —— **同一会话的第二次请求与第一次撞 seq**。
+    // 后果不是"序号难看"：读侧 pairRecords 按 seq 配对/去重，撞号会让记录互相覆盖，
+    // 面板上表现为"只看到最后一条 / 记录没了"（用户症状「dsh 内核执行时右侧请求记录没有记录」）。
+    // pi 侧同名逻辑一直是对的（pi-extension/index.ts 的 `if (state.maxSeq > seq) seq = state.maxSeq`），
+    // 这一条是两份实现之间的漂移 —— 本文件的 dsh-extension-flow.test.ts 是两侧共同的不变式守卫。
+    if (maxSeq > st.seq) st.seq = maxSeq;
     // 当前分片的已写字节 = 该分片文件大小
     try { st.size = fs.statSync(shardPath(dir, fileName, st.shard)).size; } catch { st.size = 0; }
   } catch { /* 目录还没建 */ }

@@ -9,7 +9,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { resolveMyHarnessDesktopDir } from "../../../application/config/paths";
-import type { SubprocessHandle, ProcessExit } from "./subprocess-handle";
+import type { SubprocessHandle, ProcessExit } from "../../core/subprocess-handle";
 
 /** spawn 选项(对应原 RpcAdapterOptions 的 spawn 部分,shell 侧用)。 */
 export interface PiSubprocessSpawnOptions {

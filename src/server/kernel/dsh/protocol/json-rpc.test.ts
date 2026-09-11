@@ -1,7 +1,7 @@
 // JsonRpcTransport 单测:request 带 id 配对、notification 分发、error 响应 reject。
 import { describe, it, expect } from "vitest";
 import { PassThrough } from "node:stream";
-import type { SubprocessHandle } from "../../pi/backend/subprocess-handle";
+import type { SubprocessHandle } from "../../core/subprocess-handle";
 import { JsonRpcTransport, DshRpcError } from "./json-rpc";
 
 /** 记录写入的假 stdin。 */

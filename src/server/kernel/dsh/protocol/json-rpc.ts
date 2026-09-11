@@ -7,7 +7,7 @@
 // 依赖倒置:本层只消费 SubprocessHandle(stdin/stdout),不负责 spawn/kill——那是
 // shell 的职责(同 pi 的 createPiSubprocess 纪律)。换运行时只写新 spawn 实现,本层一行不改。
 import { StringDecoder } from "node:string_decoder";
-import type { SubprocessHandle, ProcessExit } from "../../pi/backend/subprocess-handle";
+import type { SubprocessHandle, ProcessExit } from "../../core/subprocess-handle";
 
 /** JSON-RPC 请求帧。 */
 interface JsonRpcRequest {

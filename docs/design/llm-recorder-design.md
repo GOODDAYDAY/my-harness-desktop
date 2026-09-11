@@ -62,9 +62,28 @@ llm-recorder 是一个桌面插件：把每次 LLM 调用的完整请求体和�
 
 `before_provider_headers` 能拿到完整请求头——**含 Authorization，即 API Key 明文**。这条 hook 整个不碰：request 行只存 `before_provider_request` 的 payload（payload 里不含凭证，凭证在传输层 header），response 行只存 status 和组装消息，`after_provider_response` 的 headers 丢弃。日志文件落盘在项目目录下，记了 Key 就是事故，这个口子从设计上焊死，不留「可选开启」。
 
-### 2.5 dsh 侧数据面：hook 不同名，行契约相同（待实现）
+### 2.5 dsh 侧数据面：hook 不同名，行契约相同（**已落地**）
 
-**现状缺口**：`plugin.json` 只有 `piExtension`、**没有 `dshExtension`**，而记录能力整条实现落在 pi 扩展里。所以 **dsh 内核执行时右侧「请求记录」恒空**（不是坏了，是从没接过）。补法按 §7.6 三分法走「内核插件补面」：给同一个插件目录加 `dsh-extension/`（Cordis 插件）+ 在 manifest 里装 `dshExtension` 键，与 `goal` 插件的双内核形态同构。
+> **实现现状**：本节正文仍是有效设计，标题不再是"待实现"——`plugin.json` 已装 `dshExtension` 键，
+> `dsh-extension/index.mjs` 已实现三 hook + `(turn, step)` 配对，由 `dshExtensionEnsure` 随插件启停
+> 同步到 `~/.dsh/.my-harness-desktop-plugins/llm-recorder/`。守卫：`dsh-extension-flow.test.ts`
+> （与 pi 侧 `extension-flow.test.ts` 对称）。
+
+**曾经的缺口（记录在案，勿重蹈）**：`plugin.json` 起初只有 `piExtension`、**没有 `dshExtension`**，而记录能力整条实现落在 pi 扩展里。所以 **dsh 内核执行时右侧「请求记录」恒空**（不是坏了，是从没接过）。补法按 §7.6 三分法走「内核插件补面」：给同一个插件目录加 `dsh-extension/`（Cordis 插件）+ 在 manifest 里装 `dshExtension` 键，与 `goal` 插件的双内核形态同构。
+
+**落地时暴露的两条不变量（都不在原设计里，是实测修出来的，必须一起守）**：
+
+1. **`seq` 单调：只许抬高、不许压低。** `syncFromDisk`（接手已有分片、续号的入口）由 `appendLine`
+   调用，而 `appendLine` 的调用点在 **seq 已分配之后**；首次写入时文件还不存在 ⇒ 磁盘 maxSeq = 0
+   ⇒ 写成 `st.seq = maxSeq` 就把刚分配的 1 抹掉，**同一会话的第二次请求与第一次撞 seq**。
+   后果不是"序号难看"：读侧 `pairRecords` 按 seq 配对，撞号即互相覆盖，面板上就是
+   「只看到最后一条 / 记录没了」。正确写法与 pi 侧一致：`if (maxSeq > st.seq) st.seq = maxSeq`。
+   这是**两份平行实现之间的漂移**（两侧运行时不同、不共用代码），所以两侧各有一条流程守卫钉同一不变式。
+2. **读侧增量刷新必须订阅回合边界（`agentSettled`），不能只订阅 `messageEnd`。** dsh 的 response 行不在
+   一次调用结束的瞬间写，而是等 `agent/turn-stopping`（回合关闭 ⇒ 这次调用没失败）才结算，而回合边界
+   在 shell 的 `messageEnd` **之后**：只订阅 `messageEnd` 会让面板读到"请求已发、响应未回"，结算行落盘后
+   再无事件触发重读，那条记录的状态**永不流转**（除非切会话/重挂面板走 fullLoad）。pi 侧同刻落盘，
+   所以这个洞只在 dsh 上显形——**触发粒度要按"最晚写盘的那个内核"对齐，而不是按最常见的那一个**。
 
 **dsh 能给的 hook（实测 `@deepseek-ai/dsh-agent` 的 runtime-types）**：
 

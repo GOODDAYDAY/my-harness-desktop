@@ -1,9 +1,9 @@
 import { memo, type ReactNode } from "react";
 import { MarkdownBody } from "./markdown-body";
-import { StreamingCaret, useDebouncedValue } from "./stream-utils";
+import { StreamingCaret, useDebouncedValue } from "@my-harness-desktop/react";
 
 /** 会话流 Markdown 文本块:渲染配置在 markdown-body(槽分发),
- *  本壳只做流式特化——50ms 防抖攒批 + 末尾静态光标。 */
+ *  本壳只做流式特化——50ms 防抖攒批 + 末尾呼吸光标（共享件见 packages/react/src/stream-caret.tsx）。 */
 export const Markdown = memo(function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }): ReactNode {
   const debouncedText = useDebouncedValue(text, 50);
 

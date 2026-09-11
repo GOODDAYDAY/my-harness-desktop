@@ -1,0 +1,18 @@
+/* 工具卡运行态动效 —— 归 message-blocks 插件自己所有（与 im-graph.css 同款）。
+ *
+ * 为什么不塞进壳的 src/web/index.css：动效是内容，不是壳机制（CLAUDE.md §1.2 机制与内容分离）。
+ * 插件自己带样式表，卸载插件即带走它的动画。
+ *
+ * 这个文件存在的直接原因（根因，勿删）：
+ * tool-cards.tsx 的「运行中」左侧呼吸条写了 `animation: "tool-live-pulse 2.4s …"`，
+ * 但全仓**没有任何地方定义过 @keyframes tool-live-pulse** —— 没有关键帧的 animation 声明
+ * 是**静默 no-op**：不报错、不警告、什么也不动。于是「工具执行中」最显眼的那条呼吸条
+ * 从来没有动过，而所有既有守卫（查 animate-pulse class）都从旁边溜了过去。
+ * 同批修的是图标（animate-pulse），漏的是这条内联动画 —— 守卫盲区在此。
+ * 现在的守卫：src/animation-keyframes.test.ts 扫「用到的动画名 ⊄ 已定义关键帧」的差集。 */
+
+/* 明暗交替：0/100% 全亮、50% 压到 0.2 —— 一眼看出「在执行」，停下来就恢复常亮。 */
+@keyframes tool-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}

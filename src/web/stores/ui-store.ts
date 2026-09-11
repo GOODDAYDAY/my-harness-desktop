@@ -188,6 +188,21 @@ export interface UiState {
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
   setCurrentNeutralSessionId: (ns: string | null) => void;
+  /**
+   * 会话键迁移:把 `from` 键上的**所有按会话暂存的框架态**搬到 `to` 键。
+   *
+   * 存在理由(根因,勿删):会话键在**物化那一刻**发生身份切换 —— 新会话壳期间键是
+   * `new:${cwd}`,首条消息让内核起进程、壳合成 sessionStart 之后键变成真实 ns。
+   * 读取侧一律用「currentNeutralSessionId ?? `new:${cwd}`」,所以切换瞬间旧键就再也没人读了:
+   * 用户刚点选的模型、刚打的草稿、刚排的队列全部变成孤儿,表现就是
+   * 「发送之后输入框的模型没固定」(回落到应用默认模型)与草稿/队列凭空消失。
+   *
+   * 为什么收成一个方法而不是各调用点各修:这是**框架机制**(会话键是框架的东西),
+   * 按会话键暂存的 map 目前有三张(sessionModelPending / pendingQueue / composerDrafts),
+   * 将来还会加第四张。逐张在切换点补一行 = 加一张忘一次(同一症状第二次修复)。
+   * 收在这里后,新加的按会话态只需进本方法的搬迁清单,切换点永远只有一处。
+   */
+  carrySessionKey: (from: string, to: string) => void;
   /** 记下"这个项目上次看的会话"(ns 优先/路径兜底),内存 + prefs 同写。
    *  只由"成功打开/物化真实会话"的路径调用(openSession / sessionStart 水合)——新会话
    *  壳(null)不写,否则冷启动那次 startNewChat 会把记忆清成空。 */
@@ -397,6 +412,28 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
   setCurrentNeutralSessionId: (ns) => set({ currentNeutralSessionId: ns }),
+  carrySessionKey: (from, to) =>
+    set((s) => {
+      if (!from || !to || from === to) return s;
+      // 三张按会话暂存的 map 一起搬。目标键已有值时以**已存在的目标值**为准(不覆盖):
+      // 正常情况下目标键是全新的,但防御「物化后又回退到壳」这种交叠态。
+      const nextPending = { ...s.sessionModelPending };
+      const carriedPending = nextPending[from];
+      delete nextPending[from];
+      if (carriedPending && !nextPending[to]) nextPending[to] = carriedPending;
+
+      const nextQueue = { ...s.pendingQueue };
+      const carriedQueue = nextQueue[from];
+      delete nextQueue[from];
+      if (carriedQueue?.length) nextQueue[to] = [...(nextQueue[to] ?? []), ...carriedQueue];
+
+      const nextDrafts = { ...s.composerDrafts };
+      const carriedDraft = nextDrafts[from];
+      delete nextDrafts[from];
+      if (carriedDraft && !nextDrafts[to]) nextDrafts[to] = carriedDraft;
+
+      return { sessionModelPending: nextPending, pendingQueue: nextQueue, composerDrafts: nextDrafts };
+    }),
   rememberSessionForCwd: (cwd, sessionId) => {
     if (!cwd || !sessionId) return;
     const cur = get().lastSessionByCwd;

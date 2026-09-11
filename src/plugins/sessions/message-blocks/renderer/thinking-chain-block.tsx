@@ -24,6 +24,34 @@ function formatDuration(ms: number): string {
   return `${m}m${rest}s`;
 }
 
+/**
+ * 用户对「思考块展开/收起」的显式选择 —— 粘性覆盖（null = 未表态，用设置默认）。
+ *
+ * 为什么必须是模块级而不是组件 useState（根因，勿回退成局部 state）：
+ * 组件 state 在**重挂（remount）**时被重置回 `!collapseDefault`，而这一行**每轮都会重挂**——
+ * timeline 的 Virtuoso `computeItemKey` 用消息 id 作 key，而消息 id 在定稿瞬间**必然改变**：
+ * 流式期是内核的流 id / `stream-N`，定稿后叠加层占位被摘除、改由中立层镜像供行，
+ * id 变成 `neutralEntryId`（形如 `{lineageId}:{seq}`），两者永不相等。
+ * 于是「用户手动展开 → 定稿重挂 → state 重置 → 又合上了」，用户看到的就是
+ * 「跑完又自己收起来了」——同一条诉求在 #15 那批修复里被判为已解决，其实只删掉了
+ * 流式强制翻转的 effect，没处理重挂这条真正路径。
+ *
+ * 用粘性覆盖而不是「按消息 id 记忆」：id 恰恰是这里不可靠的东西（见上），
+ * 按它记忆等于把守卫架在会变的值上。粘性覆盖在语义上也更贴用户诉求——
+ * 「打开就一直打开」说的是**态度**（我想看思考过程），不是一个具体块的坐标，
+ * 与全局设置项 `timelineCollapseDefault` 同一层级，作用域一致。
+ *
+ * 生命周期：renderer 窗口内存态，刷新即回到设置默认；不做持久化——
+ * 想长期展开的用户应该去改 `timelineCollapseDefault`（那是它的正式入口），
+ * 本覆盖只负责「这一会儿别自己动」。
+ */
+let thinkingOpenOverride: boolean | null = null;
+
+/** 测试专用：清空粘性覆盖（模块级状态跨用例泄漏会让守卫互相污染）。 */
+export function resetThinkingOpenOverride(): void {
+  thinkingOpenOverride = null;
+}
+
 export function ThinkingChainBlock({
   content,
   streaming,
@@ -32,12 +60,21 @@ export function ThinkingChainBlock({
   collapseDefault = true,
 }: ThinkingChainBlockProps): ReactNode {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(!collapseDefault);
+  const [open, setOpen] = useState(thinkingOpenOverride ?? !collapseDefault);
   // 默认折叠(设置项 collapseDefault 驱动),**不随流式自动翻转**——用户诉求「默认收起来,
   // 打开就保持打开,别我看着看着又自动收起来」。此前流式中强制展开、流式结束回落折叠默认,
-  // 造成「思考中自动展开 → 跑完又自动收起」的跳变;现在只在设置项变化时重置默认,
-  // 用户手动展开/收起后状态保持不变(不再有自动操作)。
-  useEffect(() => { setOpen(!collapseDefault); }, [collapseDefault]);
+  // 造成「思考中自动展开 → 跑完又自动收起」的跳变。
+  // 用户已显式表态过(overriding)则设置项变化不再动它——否则改设置会把用户当前的选择顶掉。
+  useEffect(() => {
+    if (thinkingOpenOverride === null) setOpen(!collapseDefault);
+  }, [collapseDefault]);
+
+  /** 用户手动开合：既改本次渲染，也记成粘性覆盖（重挂后按它恢复）。 */
+  const toggleOpen = (): void => {
+    const next = !open;
+    thinkingOpenOverride = next;
+    setOpen(next);
+  };
   const stalled = useStalledHint(streaming, content.thinking.length);
   const [elapsed, setElapsed] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -99,7 +136,7 @@ export function ThinkingChainBlock({
   return (
     <div className="mb-1">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={toggleOpen}
         className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0"
       >
         {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}

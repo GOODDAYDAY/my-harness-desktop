@@ -79,13 +79,34 @@ function parseArgv(argv) {
 
 const cfg = parseArgv(process.argv);
 let alive = true;
-let aborted = false;
 let model = { provider: "minimal", modelId: "echo" };
 
-const path = () => {
-  if (!cfg.sessionId) throw new Error("minimal 未绑定会话(--session 缺省)");
-  return sessionPath(cfg.agentDir, cfg.cwd, cfg.sessionId);
-};
+/**
+ * 裸跑时的默认会话 id（§2.10.1「`echo '{"type":"send","text":"你好"}' | minimal` 就能喂一条」）。
+ *
+ * 此前 `--session` 是**必填**：不给就在第一次用到 path() 时抛「minimal 未绑定会话」，
+ * 于是文档承诺的裸跑形态根本跑不起来 —— 而那正是 §2.1.2「干净的机器上只装 minimal，
+ * 从命令行完整地聊完一轮、关掉、再打开续聊」的验收线。
+ *
+ * 默认 id **由 cwd 确定性派生**，不是 randomUUID：随机 id 会让每次裸跑都开一个新会话，
+ * 「关掉再打开续聊」就永远做不到（同一个项目应当落回同一个文件）。取 cwd 的稳定短哈希，
+ * 与 desktop 托管时的行为不冲突——托管态恒显式传 `--session`（= neutralSessionId）。
+ */
+function defaultSessionId(cwd) {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < cwd.length; i++) {
+    const c = cwd.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+  }
+  return `local-${h1.toString(16).padStart(8, "0")}${h2.toString(16).padStart(8, "0")}`;
+}
+
+/** 本次运行的会话 id：显式 `--session` 优先，裸跑时用 cwd 派生的默认 id（见上）。 */
+const sessionId = () => cfg.sessionId ?? defaultSessionId(cfg.cwd);
+
+const path = () => sessionPath(cfg.agentDir, cfg.cwd, sessionId());
 
 /** 处理一条命令,产出一串事件。 */
 function handle(cmd) {
@@ -131,14 +152,14 @@ function handle(cmd) {
       // seed 投影:把活跃 lineage 的线性内容写进会话文件(覆盖写,幂等)。
       const p = path();
       mkdirSync(dirname(p), { recursive: true });
-      const header = { type: "session", id: cfg.sessionId, createdAt: cmd.header?.createdAt ?? new Date().toISOString(), name: cmd.header?.name };
+      const header = { type: "session", id: sessionId(), createdAt: cmd.header?.createdAt ?? new Date().toISOString(), name: cmd.header?.name };
       const lines = [JSON.stringify(header)];
       for (const entry of cmd.lineage ?? []) {
         const msg = entry.message ?? { role: "user", content: "" };
         lines.push(JSON.stringify({ type: "message", id: entry.kernelEntryId ?? randomUUID(), timestamp: new Date(typeof msg.timestamp === "number" ? msg.timestamp : Date.now()).toISOString(), message: { role: msg.role, content: msg.content ?? "" } }));
       }
       writeFileSync(p, lines.join("\n") + "\n", "utf-8");
-      out({ type: "seeded", sessionId: cfg.sessionId, path: p });
+      out({ type: "seeded", sessionId: sessionId(), path: p });
       return;
     }
     case "stop":

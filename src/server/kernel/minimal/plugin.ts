@@ -6,6 +6,7 @@
 
 import { join, resolve } from "node:path";
 import { createMinimalBackend, createMinimalCatalog, minimalSeedSession } from "../factories/kernel-factories";
+import { MinimalConfigSource } from "./manager/minimal-config-source";
 import { MinimalModelSource, MinimalModelsApi } from "./manager/minimal-models";
 import { MinimalConfigApi } from "./manager/minimal-config";
 import { MinimalExtensionSource } from "./manager/minimal-extension";
@@ -32,6 +33,13 @@ export const minimalKernelPlugin: KernelPluginFactory = (ctx) => {
   const cliPath = ctx.isPackaged
     ? join(process.resourcesPath, "minimal-kernel", "minimal-cli.mjs")
     : resolve(process.cwd(), "src/server/kernel/minimal/kernel/minimal-cli.mjs");
+  // 私有存储读写面(模型配置 + 凭证 + 原生配置)。路径是 minimal 的私有知识,经本闭包捕获,
+  // 壳的 application 层不知道也不碰(§4.9.2)。**同一份 source 同时交给读取面与写入面**——
+  // 「设置页写进去的」与「模型下拉读出来的」与「子进程读的」是同一份文件。
+  const configSource = new MinimalConfigSource(agentDir);
+  // 一次性迁移 legacy 明文 apiKey → 凭证文件(§4.9.1「配置里不留明文」)。幂等:
+  // 写入面此前是空实现,用户只能手改 models.json 写明文,这批数据不迁走,分离规矩只对以后成立。
+  configSource.migratePlaintextApiKeys();
   return {
     id: "minimal",
     logo: MINIMAL_LOGO,
@@ -39,9 +47,9 @@ export const minimalKernelPlugin: KernelPluginFactory = (ctx) => {
     seed: (lineage, opts) =>
       Promise.resolve(minimalSeedSession(agentDir, opts.cwd, lineage, { lineageId: opts.lineageId, header: opts.header })),
     createCatalog: () => createMinimalCatalog(agentDir),
-    createModelSource: () => new MinimalModelSource(agentDir),
-    createModelsApi: () => new MinimalModelsApi(agentDir),
-    createConfigApi: () => new MinimalConfigApi(),
+    createModelSource: () => new MinimalModelSource(configSource),
+    createModelsApi: () => new MinimalModelsApi(configSource, (cwd, p, m) => ctx.testModel(cwd, p, m)),
+    createConfigApi: () => new MinimalConfigApi(configSource),
     createExtensionSource: () => new MinimalExtensionSource(),
     createVersionApi: minimalVersionApi,
   };

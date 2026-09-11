@@ -11,7 +11,7 @@
 //   (第 164 轮在 i18n 插件上真踩过,整轮 60s 超时)。所以 ctx 必须是**模块级稳定引用**。
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, fireEvent, waitFor } from "@testing-library/react";
 
 const h = vi.hoisted(() => ({
   listCalls: 0,

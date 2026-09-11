@@ -415,8 +415,13 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         if (s.neutralSessionId) map[s.neutralSessionId] = s;
       }
       useSessionStore.setState({ sessionInfos: map, sessionInfosCwd: cwd });
-    } catch {
-      // 拉取失败保持旧值(切 cwd 瞬间 main 未就绪等);下次触发重试
+    } catch (e) {
+      // 拉取失败保持旧值(切 cwd 瞬间 main 未就绪等);下次触发重试。
+      // **但失败必须留痕**:此前是空 catch —— 后端一旦整份 list 抛错(曾因某行 header 指向
+      // 未装载的内核而整条 RPC 失败),这里把它吞成静默,症状就变成「侧栏一直空着/一直显示
+      // 上一个项目的行」,而控制台一片干净,根因在几层之外。静默吞异常会把一个明确的
+      // 后端错误放大成「UI 莫名其妙不更新」。
+      console.error(`[session-store] 会话列表拉取失败(cwd=${cwd}),保留旧值:`, e);
     }
   },
   applyHeaderPatch: (sessionPaths, patch) => {
@@ -683,10 +688,20 @@ export function hydrateSessionStart(event: SessionEvent): void {
     typeof fromEvent === "string" && fromEvent
       ? fromEvent
       : (useSessionStore.getState().sessionInfos?.[sf]?.neutralSessionId ?? null);
+  const prevNs = ui.currentNeutralSessionId;
+  const cwd = ui.currentCwd;
   ui.setCurrentNeutralSessionId(ns);
+  // 会话键迁移(根因修复,勿删):这一刻会话键从「新会话壳」`new:${cwd}` 翻成真实 ns。
+  // 读取侧一律用 currentNeutralSessionId ?? `new:${cwd}`,所以翻键瞬间旧键再没人读 ——
+  // 用户刚点选的模型就此变成孤儿,输入框回落应用默认模型(用户症状:「发送之后输入框的
+  // 模型没固定」),草稿/排队消息同理。搬一次键,三张按会话暂存的 map 一起跟着走。
+  // 之前那版把"已修"寄托在头域镜像 → applyHeaderPatch 上,但新会话那一刻 sessionInfos
+  // 里还没有这一行,补丁被早退丢弃且不重试 —— 修的是"陈旧",没修"键漂移"。
+  if (cwd && prevNs === null && ns) {
+    useUiStore.getState().carrySessionKey(`new:${cwd}`, ns);
+  }
   // 新会话物化(首条消息落盘)在此刻才有 id:补记"该项目上次看的会话"。
   // 不写这一步,新会话壳期间的切换就没人记——下次切回该项目会回到更早那个会话。
-  const cwd = ui.currentCwd;
   if (cwd) ui.rememberSessionForCwd(cwd, ns ?? sf);
 }
 

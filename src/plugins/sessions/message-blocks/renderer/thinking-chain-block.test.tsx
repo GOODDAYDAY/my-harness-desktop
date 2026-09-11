@@ -8,15 +8,16 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import { ThinkingChainBlock } from "./thinking-chain-block";
+import { ThinkingChainBlock, resetThinkingOpenOverride } from "./thinking-chain-block";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (k: string, args?: Record<string, unknown>) => (args ? `${k}(${JSON.stringify(args)})` : k), i18n: { language: "zh-CN" } }),
 }));
 
 describe("ThinkingChainBlock 流式计时", () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  // 粘性覆盖是模块级状态：不逐例复位会让「谁先跑」决定结果（守卫互相污染）。
+  beforeEach(() => { vi.useFakeTimers(); resetThinkingOpenOverride(); });
+  afterEach(() => { vi.useRealTimers(); resetThinkingOpenOverride(); });
 
   it("流式期 label 露出实时计时(思考中… + 时长),不是只显示静态标签", () => {
     const now = 1700000000000;
@@ -118,5 +119,35 @@ describe("ThinkingChainBlock 流式计时", () => {
       <ThinkingChainBlock content={{ type: "thinking", thinking: full }} streaming={false} startedAt={1000} completedAt={4200} collapseDefault={true} />,
     );
     expect(screen.getByText(new RegExp(full))).toBeInTheDocument();
+  });
+
+  // 上面那条用的是 rerender()——**同一个组件实例**，state 天然保留，所以它今天绿、
+  // 却抓不到真实缺陷：真实路径上这行会在定稿瞬间被 Virtuoso **重挂**（computeItemKey 用
+  // 消息 id，而 id 从流 id/stream-N 变成 neutralEntryId，必然不相等）→ 局部 state 归零 →
+  // 用户手动展开的那块「跑完又自己合上了」。
+  // 下面这条用 unmount + 全新 render 复现重挂（等价于换了 key 的新实例）。
+  it("定稿重挂后仍保持展开（真实缺陷形态：Virtuoso key 变化 = 换实例，局部 state 会归零）", () => {
+    vi.setSystemTime(1700000000000);
+    const full = "重挂也不能合上";
+    const view = (): React.ReactElement => (
+      <ThinkingChainBlock content={{ type: "thinking", thinking: full }} streaming={false} startedAt={1000} completedAt={4200} collapseDefault={true} />
+    );
+    const first = render(view());
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText(new RegExp(full))).toBeInTheDocument();
+    // 重挂（= 定稿换 key）：卸载再挂一个全新实例，局部 state 从零开始
+    first.unmount();
+    render(view());
+    expect(
+      screen.getByText(new RegExp(full)),
+      "重挂后回到折叠默认——这正是「跑完又自己收起来」的根因；用户的开合意图必须粘住",
+    ).toBeInTheDocument();
+  });
+
+  it("默认仍然是折叠的（重挂不改变「默认收起来」）", () => {
+    resetThinkingOpenOverride();
+    const full = "默认收起来";
+    render(<ThinkingChainBlock content={{ type: "thinking", thinking: full }} streaming={false} startedAt={1000} completedAt={4200} collapseDefault={true} />);
+    expect(screen.queryByText(new RegExp(full))).not.toBeInTheDocument();
   });
 });

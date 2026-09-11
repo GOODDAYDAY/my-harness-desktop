@@ -211,3 +211,21 @@ src/server/kernel/{pi,dsh,minimal}/
 
 `minimal-uninstall.e2e.mjs`：删 minimal 的 manifest → 起 app → 内核清单不含 minimal + 模型下拉无 minimal TAB + 其余内核照常 + app 不崩。加载器单测（`kernel-plugin-loader.test.ts`）覆盖扫描/卸载/空目录/动态 require。
 
+### 内核之间零 import（可卸载性的物理前提）
+
+「删掉某内核的 manifest，壳照常启动」这句要真的成立，光靠加载器不抛异常是不够的——
+**只要 A 内核 import 了 B 内核的任何一个文件，删掉 B 就让 A 编译不过**，"能卸载"当场变成假的。
+
+实测踩过：`SubprocessHandle`（三个内核的 transport / rpc-adapter 共用的子进程句柄契约，
+文档里写明是"依赖倒置接口"）当时放在 `src/server/kernel/pi/backend/subprocess-handle.ts`，
+于是 dsh 与 minimal 都写 `import type { SubprocessHandle } from "../../pi/backend/subprocess-handle"`——
+**pi 从"三个内核之一"变成了"另外两个的编译期依赖"**，删 pi 即 dsh/minimal 崩。
+这同时违反「内核无特权差异」：共享机制寄生在其中一个内核的目录里，就是那一个内核的特权。
+
+修法：共享机制归机制层。`SubprocessHandle`/`ProcessExit` 已移到 `src/server/kernel/core/subprocess-handle.ts`，
+三个内核各自的 `subprocess-lifecycle` 只实现它、消费方只依赖它，内核之间零 import。
+
+**守卫**：`scripts/dependency-audit.mjs` 检验 ⑧（内核互引审计）——扫描 `src/server/kernel/<k>/` 下每个文件的
+import，解析相对路径到绝对路径后判定落点，凡落在**另一个内核目录**即报错。目录被整个删掉时该内核无文件可扫，
+自然跳过（卸载态不误报）。这条是"结构"检验而非"注意一下"：谁再把共享类型塞进某个内核目录并让别处引用，当场红。
+
