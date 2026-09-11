@@ -4,7 +4,6 @@
 // 九检验:
 //   ① 圆心零外部 import(packages/shared/src/domain 不碰任何外部包/壳内部)
 //   ② application 不 import 内核实现(非 type-only)·不 import electron/react
-//      ——neutral-migration.ts 是 session-single-source.md §4.3 明文例外(离线迁移工具)
 //   ③ kernel/core 骨架不 import 具体内核(pi/dsh)·不 import react
 //   ④ plugins 只 import @my-harness-desktop/shared + @my-harness-desktop/react
 //   ⑤ "pi" | "dsh" 字面量联合收敛到 domain/kernel.ts 单源
@@ -55,7 +54,11 @@ for (const f of walk(join(ROOT, "packages/shared/src/domain"))) {
 }
 
 // ② application 红线(§4.3 明文例外豁免)
-const DOCUMENTED_EXCEPTIONS = ["neutral-migration.ts"]; // session-single-source.md §4.3:离线迁移工具,非会话流
+// **例外清单已清空**（勿再往里加东西）：此前唯一一条是 neutral-migration.ts（pi 旧会话导入，
+// 它 import 了 pi-catalog）。那条依赖已经归位——读 pi 老格式是 pi 的私有知识，搬进 pi 插件
+// （kernel/pi/backend/pi-legacy-sessions.ts），壳侧只剩"把中立会话写进中立层"的机制
+// （application/sessions/legacy-import.ts，零内核依赖）。红线回归无条件。
+const DOCUMENTED_EXCEPTIONS = [];
 for (const f of walk(join(ROOT, "src/server/application"))) {
   if (/\.test\./.test(f)) continue;
   if (DOCUMENTED_EXCEPTIONS.some((x) => f.endsWith(x))) continue;

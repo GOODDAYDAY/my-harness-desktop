@@ -1,9 +1,9 @@
 // registerSessions 的「会话文件路径圈禁」守卫 —— 对应源码里的一处根因:
 //
 //   // …声明能力的圈禁被**核心默认能力绕过**(根因:**该通道无门控**)
-//   function assertSessionPathAllowed(p: string, paths: MainPaths): void {
+//   function assertSessionPathAllowed(p: string, paths: MainPaths, kernelConfigRoots: readonly string[]): void {
 //     const allowed =
-//       p.startsWith(paths.piAgentDir + sep) ||
+//       kernelConfigRoots.some((root) => p.startsWith(root + sep)) ||
 //       p.startsWith(paths.myHarnessDesktopDir + sep) ||
 //       p.includes(`${sep}.my-harness-desktop${sep}`);
 //     if (!allowed) throw new Error(`session 文件路径越界: ${p}`);
@@ -14,6 +14,9 @@
 //   ① **门本身**:三条允许分支放行、其余抛;**且 `+ sep` 的边界不能少**(否则
 //      `~/.pi/agent-evil/…` 会被 `startsWith("~/.pi/agent")` 放行 ✗ —— 这是最容易漏的一处)
 //   ② **门被装上**:经 `copySession` 通道走一遍 —— 该通道此前无门控,现在 src/target 都要过 ✓
+//
+// 注:内核配置根从 `paths.piAgentDir`（写死 pi）改成了 `ctx.kernelConfigRoots`（注册表收集）。
+// 断言里的 PI_DIR 仍是那个具体目录 —— 它现在是"某个已注册内核报上来的配置根"的一个实例。
 import { describe, it, expect, beforeEach } from "vitest";
 
 import { registerSessions } from "./sessions";
@@ -33,7 +36,7 @@ function ctxWith(): Record<string, unknown> {
       },
       apply: () => rec(p),                                    // await 后仍可读属性
     });
-  return { paths: { piAgentDir: PI_DIR, myHarnessDesktopDir: MHD_DIR }, sessionStore: rec("store") };
+  return { kernelConfigRoots: [PI_DIR], paths: { myHarnessDesktopDir: MHD_DIR }, sessionStore: rec("store") };
 }
 
 const gateway = { register: (ch: string, h: (...a: unknown[]) => unknown) => { handlers.set(ch, h); }, broadcast: () => {} };

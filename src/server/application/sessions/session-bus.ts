@@ -347,8 +347,12 @@ export class SessionBus {
    *  assertSessionPathAllowed 同纪律——reopen 会把文件内容读入会话上下文,越界是信息泄露)。 */
   async opSessionReopen(origin: string, p: { cwd?: string; sessionPath?: string }): Promise<unknown> {
     if (!p.cwd || !p.sessionPath) throw new Error("session_reopen 缺 cwd/sessionPath");
-    const sessionsRoot = `${this.store.agentDirPath}/sessions`;
-    if (!p.sessionPath.startsWith(sessionsRoot)) throw new Error(`session_reopen 路径越界: ${p.sessionPath}`);
+    // 圈禁：只允许**任一已注册内核**的会话根下的文件（越界会把任意文件读进会话上下文）。
+    // 逐内核收根而不是写死某一个内核的路径——写死时这道门只对一个内核成立。
+    const roots = this.store.sessionRoots;
+    if (!roots.some((root) => p.sessionPath!.startsWith(root))) {
+      throw new Error(`session_reopen 路径越界: ${p.sessionPath}`);
+    }
     const { key, sessionPath } = await this.store.reopenSession(p.cwd, p.sessionPath);
     this.spawnedBy.set(key, origin);
     return { session: sessionAddress(key), key, sessionPath };

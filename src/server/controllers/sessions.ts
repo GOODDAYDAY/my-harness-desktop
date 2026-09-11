@@ -15,9 +15,11 @@ import type { MainContext, MainPaths } from "../application/context/main-context
  *  不设防时 copySession 是裸文件复制原语:任意插件可把 ~/.ssh/id_rsa 复制进项目目录
  *  再经 fs:project 读回——声明能力的圈禁被核心默认能力绕过(根因:该通道无门控)。
  *  (forkFromSession 已收编为纯中立派生(unify §7.1),不碰文件,不在此圈禁。) */
-function assertSessionPathAllowed(p: string, paths: MainPaths): void {
+function assertSessionPathAllowed(p: string, paths: MainPaths, kernelConfigRoots: readonly string[]): void {
+  // 允许的前缀 = 桌面数据根 + **各已注册内核的配置根**（注册表收集，不再是只有 pi 的那一个）。
+  // 写死 `paths.piAgentDir` 时，这句话读起来是"通用门控"，实际只对 pi 的目录成立。
   const allowed =
-    p.startsWith(paths.piAgentDir + sep) ||
+    kernelConfigRoots.some((root) => p.startsWith(root + sep)) ||
     p.startsWith(paths.myHarnessDesktopDir + sep) ||
     p.includes(`${sep}.my-harness-desktop${sep}`);
   if (!allowed) throw new Error(`session 文件路径越界: ${p}`);
@@ -60,8 +62,8 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.session.copySession, async (_e, srcPath: string, targetPath: string) => {
     const src = expandDesktopPath(srcPath, ctx.paths.homeDir, ctx.paths.myHarnessDesktopDir);
     const target = expandDesktopPath(targetPath, ctx.paths.homeDir, ctx.paths.myHarnessDesktopDir);
-    assertSessionPathAllowed(src, ctx.paths);
-    assertSessionPathAllowed(target, ctx.paths);
+    assertSessionPathAllowed(src, ctx.paths, ctx.kernelConfigRoots);
+    assertSessionPathAllowed(target, ctx.paths, ctx.kernelConfigRoots);
     // 必须 await:此前 void 派发,复制失败(源缺失等)变 main 未捕获拒绝,
     // renderer 永远 resolve——调用方照写元数据,产出指向不存在副本的幽灵记录。
     await sessionStore.copySession(src, target);

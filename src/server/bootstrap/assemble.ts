@@ -8,7 +8,6 @@ import { randomUUID } from "node:crypto";
 import { JsonPrefsStore } from "../application/config/json-prefs";
 import { ConfigStore } from "../application/config/config-store";
 import { ModelCatalog } from "../application/models/model-catalog";
-import { writeApiKey } from "../kernel/dsh/backend/dsh-credentials-store";
 import { discoverPlugins } from "../application/loader/discover";
 import { PluginRegistry } from "../application/loader/registry";
 import {
@@ -33,7 +32,7 @@ import { SkillAggregator } from "../application/skills/skill-aggregator";
 import { mirrorManagedDir } from "../application/bundled/mirror";
 import { initKernelRuntime } from "../kernel/core/kernel-manager";
 import { reconcileMissingKernels } from "../kernel/core/kernel-reconcile";
-import { importLegacyPiSessions } from "../application/sessions/neutral-migration";
+import { importLegacySessions } from "../application/sessions/legacy-import";
 import { RestartCoordinatorImpl } from "../application/restart/restart-coordinator";
 import { createNpmKernelRuntime } from "../client/npm/kernel-runtime";
 import { DEFAULT_PREFS, type MainContext, type Prefs } from "../application/context/main-context";
@@ -93,35 +92,16 @@ const PORT = Number(process.env["MHD_PORT"]) > 0 ? Number(process.env["MHD_PORT"
 const remoteConfig = new RemoteConfigStore(join(CONFIG_DIR, "remote.json"));
 const auth = new RemoteAuth(remoteConfig);
 const gateway = createGateway(auth.createTokenVerifier());
-const PI_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "pi");
-// dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh);dsh 原生配置(cordis.yml/settings.yaml)在 ~/.dsh。
-const DSH_INSTALL_DIR = join(MY_HARNESS_DESKTOP_DIR, "dsh");
 const GENERAL_CONFIG_PATH = join(CONFIG_DIR, "general.json");
 // pi 内核配置目录(~/.pi/agent,内核标准,非 ~/.my-harness-desktop)。pi-settings 插件读写它。
-const PI_AGENT_DIR = join(HOME_DIR, ".pi", "agent");
 // 内置 skills:仓库顶级 .claude/skills/ 随壳分发(pkg 拷贝到 resources/my-harness-desktop-skills,
 // 与 my-harness-desktop-builtin 同批),启动时镜像到 ~/.my-harness-desktop/skills(强制覆盖,受管目录)
 const BUNDLED_SKILLS_DIR = join(MY_HARNESS_DESKTOP_DIR, "skills");
 // 桌面偏好走 electron-store,显式 cwd 纳入数据根 config 树(跨重启持久,与插件配置同根)
 const prefsStore = new JsonPrefsStore<Prefs>(join(CONFIG_DIR, "config.json"), DEFAULT_PREFS);
 
-// 迁移旧 prefs.dshApiKeys(provider → 密钥字面值;旧机制 spawn 时注入进程 env)
-// → dsh 凭证库(~/.dsh/.credentials.yaml refs;新机制 dsh 运行时直接读凭证库,不注入 env)。
-// 一次幂等:迁移后清空旧 map,避免「凭证库 + prefs」双份真相。deepseek-official 官方路由已废弃,
-// 旧单值 dshApiKey(指向它)随迁移一并清除,不再落凭证库。读 raw store:字段已从 Prefs 类型删除。
-{
-  const raw = prefsStore.store as unknown as Record<string, unknown>;
-  const legacyKeys = (raw.dshApiKeys ?? {}) as Record<string, unknown>;
-  for (const [provider, key] of Object.entries(legacyKeys)) {
-    if (typeof key === "string" && key) {
-      writeApiKey(join(HOME_DIR, ".dsh", ".credentials.yaml"), provider, key);
-    }
-  }
-  if (Object.keys(legacyKeys).length > 0) delete raw.dshApiKeys;
-  if (typeof raw.dshApiKey === "string") delete raw.dshApiKey;
-}
-
 initKernelRuntime(createNpmKernelRuntime());
+
 
 // dsh 首次运行准备(ensure* 写 cordis.yml/凭证插件/明文会话日志 + zstd 迁移 + 悬空默认清理 +
 //  tool-skill 启用)已收进 dshKernelPlugin 工厂(§kernel-plugin),此处不再重复构造——加第四个内核零改动。
@@ -138,6 +118,8 @@ const pluginCtx = {
   prefs: {
     get: <T>(key: string): T | undefined => prefsStore.get(key as keyof Prefs) as T | undefined,
     set: <T>(key: string, value: T): void => { prefsStore.set(key as keyof Prefs, value as Prefs[keyof Prefs]); },
+    // 一次性迁移要能"摘掉"旧键（不是留个空壳在盘上），所以 prefs 面除 get/set 还有 remove。
+    remove: (key: string): void => { prefsStore.remove(key as keyof Prefs); },
   },
   markSessionsPendingRestart: (reason: string) => {
     const keys = sessionStore.getRunningSessionKeys();
@@ -199,6 +181,16 @@ const unloadedKernelPluginIds = new Set(
     .filter((e) => !kernelEntries.some((k) => k.manifest.id === e.manifest.id))
     .map((e) => e.manifest.id),
 );
+// 内核**自己的历史遗留状态**一次性迁移（如 dsh 的 prefs 明文 apiKey → 凭证库）：
+// 注册表驱动，逐个问内核插件要不要迁移。壳不认内核名、不知道迁移内容——那些都是内核私有知识。
+// 放在任何内核 spawn 之前；实现方必须幂等（每次启动都会调）。
+for (const p of kernelRegistry.all()) {
+  try {
+    p.migrateLegacyState?.();
+  } catch (e) {
+    console.warn(`[kernel-migration] 内核 ${p.id} 的历史状态迁移失败(不阻断启动):`, e instanceof Error ? e.message : e);
+  }
+}
 const modelCatalog = new ModelCatalog(kernelRegistry.all().map((p) => p.createModelSource()));
 const bundledSkillsSource = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-skills")
@@ -257,7 +249,12 @@ const sessionCatalogFactory: SessionCatalogFactory = {
 sessionStore = new SessionStore(
   baseBackendFactory,
   sessionCatalogFactory,
-  PI_AGENT_DIR,
+  {
+    // 注册表派生的内核事实（会话根 / 已注册清单 / 默认内核）——三面同源，打成一包。
+    sessionRoots: kernelRegistry.all().map((p) => p.sessionRoot?.()).filter((r): r is string => !!r),
+    ids: kernelRegistry.ids(),
+    defaultId: kernelRegistry.ids()[0],
+  },
   () => registry.systemPromptPaths(),
   new NeutralSessionStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
   modelCatalog,
@@ -265,8 +262,6 @@ sessionStore = new SessionStore(
   (cwd) => join(cwd, ".my-harness-desktop", "bookmarks"),
   // 挂起提问请求单(ask-design §4.3):壳持有的持久存储,进程生死不影响其存续。
   new PendingQuestionStore(join(MY_HARNESS_DESKTOP_DIR, "pending-questions")),
-  // 默认内核 id:注册表首个内核(无模型/无会话头时兜底)。
-  kernelRegistry.ids()[0] ?? "",
 );
 sessionStore.onEvent((event) => {
   gateway.broadcast("session:event", event);
@@ -421,13 +416,13 @@ const skillAggregator = new SkillAggregator(
 );
 
 const ctx: MainContext = {
+  // 注册表派生的两条路径面（configFile 白名单前缀 / 技能清单监视文件）。
+  kernelConfigRoots: kernelRegistry.all().map((p) => p.configRoot?.()).filter((r): r is string => !!r),
+  kernelSkillWatchPaths: (cwd: string) => kernelRegistry.all().flatMap((p) => p.skillWatchPaths?.(cwd) ?? []),
   paths: {
     homeDir: HOME_DIR,
     myHarnessDesktopDir: MY_HARNESS_DESKTOP_DIR,
     configDir: CONFIG_DIR,
-    piInstallDir: PI_INSTALL_DIR,
-    dshInstallDir: DSH_INSTALL_DIR,
-    piAgentDir: PI_AGENT_DIR,
     generalConfigPath: GENERAL_CONFIG_PATH,
     bundledSkillsDir: BUNDLED_SKILLS_DIR,
     bundledSkillsSource,
@@ -629,14 +624,14 @@ registerRemote(gateway, auth, {
   try {
     const store = sessionStore.neutralStoreRef;
     if (store) {
-      const r = importLegacyPiSessions(PI_AGENT_DIR, store);
+      const r = importLegacySessions(kernelRegistry.all(), store);
       if (r.imported > 0) {
-        console.log(`[neutral-migration] 旧 pi 会话文件导入中立层: ${r.imported} 个(跳过 ${r.skipped},失败 ${r.failed})`);
+        console.log(`[legacy-import] 内核旧会话导入中立层: ${r.imported} 个(跳过 ${r.skipped},失败 ${r.failed}${r.failedKernels.length ? `,内核读取失败 ${r.failedKernels.join(",")}` : ""})`);
         broadcastRefreshRequested(gateway);
       }
     }
   } catch (e) {
-    console.warn("[neutral-migration] 启动导入失败(不阻断启动):", e);
+    console.warn("[legacy-import] 启动导入失败(不阻断启动):", e);
   }
 
   return { ctx, sessionStore, gateway, localToken: auth.localToken, port: PORT };

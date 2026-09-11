@@ -87,14 +87,14 @@ beforeEach(async () => {
   neutralStore = new NeutralSessionStore(join(dir, "neutral"));
   questionStore = new PendingQuestionStore(join(dir, "pending-questions"));
   const factory: BackendFactory = {
-    create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir, sessionId: sessionPath }),
+    create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir, sessionId: sessionPath }),
     // 忠实 pi 形态(session-single-source §4.4):factory 有 seed 面 → createProc 的
     // materializedLineageId 初始化为 ns(文件已含内容,不重投);无 seed 面会被当成
     // dsh 类内核,首发经 materializeActiveLineage 从中立层重写会话文件。
     seed: (lineage, opts) => piSeedSession(dir, opts.cwd, lineage, opts),
   };
   const catalogFactory: SessionCatalogFactory = { create: () => new PiSessionCatalog(dir) };
-  store = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore,
+  store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore,
     new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]), undefined, questionStore);
   store.setContext(CWD, sessionPath);
   await store.start(CWD, sessionPath);

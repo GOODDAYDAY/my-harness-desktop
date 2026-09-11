@@ -11,7 +11,7 @@ import { broadcastSettingsChanged } from "../routing/broadcast";
 import type { MainContext } from "../application/context/main-context";
 
 export function registerSkills(gateway: Gateway, ctx: MainContext): void {
-  const { prefsStore, paths, skillAggregator, ensureBundledSkills } = ctx;
+  const { prefsStore, paths, skillAggregator, ensureBundledSkills, kernelSkillWatchPaths } = ctx;
   const skillWatchers = new Map<string, { close: () => void }>();
 
   gateway.register(IPC.skills.list, async (_e, cwd: string) => {
@@ -50,11 +50,9 @@ export function registerSkills(gateway: Gateway, ctx: MainContext): void {
     skillWatchers.delete(key);
 
     const { watch } = await import("chokidar");
-    const watchPaths = [
-      join(paths.piAgentDir, "settings.json"),
-      join(key, ".pi", "settings.json"),
-      join(paths.piAgentDir, "desktop-skills.json"),
-    ].filter((p) => existsSync(p) || p.endsWith(".pi" + join("", "settings.json")));
+    // 监视哪些文件由各内核自报（技能清单存在哪是内核的私有知识）：此前这里写死了 pi 的三个路径，
+    // 等于壳知道 pi 的配置格式与文件名。现在从注册表收集，加内核自动纳入；没有该面的内核不挂监视器。
+    const watchPaths = kernelSkillWatchPaths(key).filter((p) => existsSync(p) || p.endsWith(".pi" + join("", "settings.json")));
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const watcher = watch(watchPaths, {
       ignored: /(^|[/\\])\./,

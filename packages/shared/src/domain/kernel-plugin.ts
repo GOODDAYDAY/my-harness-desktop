@@ -7,7 +7,7 @@
 // 零依赖:本文件只 import 圆心内的类型,不 import 任何内核实现。
 
 import type { BackendCreateOptions, BaseBackend, SeedOptions, SessionCatalog, KernelModelSource } from "./backend";
-import type { NeutralEntry } from "./session-neutral";
+import type { NeutralEntry, NeutralSession } from "./session-neutral";
 import type { KernelModelsApi, KernelConfigApi, KernelVersionApi } from "./context";
 import type { KernelExtensionSource } from "./extensions";
 import type { KernelId, KernelLogo } from "./kernel";
@@ -28,7 +28,7 @@ export interface KernelPluginContext {
   /** 壳数据根(~/.my-harness-desktop 或 -dev);内核安装目录/版本管理从这推导。 */
   dataRoot: string;
   /** 偏好读写;内核插件读写自己的 customCliDir 等 key(核心不硬编码 key 名,key 由插件自定)。 */
-  prefs: { get<T>(key: string): T | undefined; set<T>(key: string, value: T): void };
+  prefs: { get<T>(key: string): T | undefined; set<T>(key: string, value: T): void; remove(key: string): void };
   /** 模型连通性测试(内核 modelsApi 的 test 用);壳在装配点注入「绑定内核名」的 sessionStore.test 包装。
    *  中性回调,不暴露壳的 SessionStore 类型——依赖倒置:内核插件依赖「测模型」这个能力,壳提供实现。 */
   testModel: (cwd: string, provider: string, modelId: string) => Promise<{ ok: boolean; error?: string }>;
@@ -108,7 +108,7 @@ export interface KernelPlugin {
    * - 文件态内核(pi/minimal)= 纯文件写,先 seed 得路径再以该路径 spawn;
    * - RPC 内核(dsh)= 依赖进程,返回 null,走 create → start → backend.seed。
    */
-  seed?(lineage: NeutralEntry[], opts: SeedOptions & { kernel: KernelId; cwd: string; agentDir: string }): Promise<string | null>;
+  seed?(lineage: NeutralEntry[], opts: SeedOptions & { kernel: KernelId; cwd: string }): Promise<string | null>;
 
   /** 建会话目录/CRUD 面(per-kernel 跨会话存储)。agentDir 是插件自己的数据根,工厂闭包捕获。 */
   createCatalog(): SessionCatalog;
@@ -171,6 +171,51 @@ export interface KernelPlugin {
     start(): void;
     onQuestion(cb: (req: { requestId: string; sessionId: string; questions: Question[] }) => void): () => void;
   };
+
+  /**
+   * 该内核**会话文件所在的根目录**（pi: `<agentDir>/sessions`；dsh: 数据根下的 dsh/sessions；
+   * minimal: `<agentDir>/sessions`）。壳用它做两件事：① 判断一个路径"是不是内核会话文件"
+   * （总线 `session_reopen` 的路径圈禁，越界会把任意文件读进会话上下文）；
+   * ② 排除工作区扫描。缺省 undefined = 该内核不落文件（无路径可圈）。
+   *
+   * 为什么由内核交而不是壳算：会话根是**内核的存储私有知识**（dsh 的根还带 cwd 分桶与 lineage
+   * 子目录），壳只需要"某个前缀是不是内核会话区"这个判断所需的最小事实。
+   * 历史上壳里硬编码过 `~/.pi/agent`（PI_AGENT_DIR），于是「哪些路径算内核会话区」
+   * 只在 pi 上成立，别的内核的会话文件不受同一道门保护。
+   */
+  sessionRoot?(): string;
+
+  /**
+   * 该内核的**配置根目录**（pi: `~/.pi/agent`；dsh: `~/.dsh`；minimal: `~/.minimal/agent`）。
+   * 壳用它做 `configFile` 框架通道的**白名单前缀**（防止任意路径读写）。
+   * 此前壳里写死 `~/.pi/agent`，于是"能被框架通道读写的只有 pi 的配置区"——
+   * 别的内核的配置文件反而打不开、而这份白名单看起来又像"通用安全策略"。
+   */
+  configRoot?(): string;
+
+  /**
+   * 该内核**技能清单所在文件**（改这些文件 = 技能清单变了，壳据此重扫）。
+   * 技能清单存在哪是内核的私有知识（pi 在 `settings.json` 的 `skills[]` 里；
+   * 别的内核可能没有这个面 → 返回空数组，壳就不挂监视器）。
+   * 此前壳里写死了 pi 的三个路径，等于壳知道 pi 的配置格式。
+   */
+  skillWatchPaths?(cwd: string): string[];
+
+  /**
+   * **旧会话的历史迁移面**：返回该内核自己存储里"还没进中立层"的旧会话（已是中立形状）。
+   *
+   * 为什么由内核交、而不是壳去读内核的文件：把旧格式读成中立会话是**内核专属知识**
+   * （pi 的老 JSONL 命名、dsh 的 zstd 归档各不相同），而"写进中立层、幂等跳过已存在的"
+   * 是**壳的机制**（中立层是壳的 canonical 真相源，内核不感知它）。
+   * 这样切分之后，壳侧再没有"为了迁移而 import 某个内核实现"的例外——
+   * 历史上这条通道是 application→kernel 依赖的**明文豁免**（session-single-source §4.3），
+   * 现在豁免本身可以取消了。缺省 undefined = 该内核无历史迁移需求。
+   */
+  readLegacySessions?(): NeutralSession[];
+
+  /** **旧状态的一次性迁移面**（内核自己的历史遗留：如 dsh 的 prefs 明文 apiKey → 凭证库）。
+   *  只在启动时调一次，必须幂等。缺省 undefined = 无此面。 */
+  migrateLegacyState?(): void;
 
   /** 内置 skills 挂/摘(pi 专属:settings.json skills[];enabled = 挂/摘)。缺省 undefined = 无此面。 */
   ensureSkills?(enabled: boolean): Promise<boolean>;

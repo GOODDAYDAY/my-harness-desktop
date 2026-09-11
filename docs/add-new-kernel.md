@@ -109,7 +109,7 @@
 - **六条核心意图 + 两条会话意图 + seed + 探测**全部在 `backend.ts:70-151` 落成字段：`sendMessage`（消息）、`abort`（中断）、`setModel`（模型）、`getTree`/`getEntries`/`bookmark`/`resume?`（分支/会话标识）、`onEvent`（流式事件）、`setSessionName`（命名）、`continue?`（续跑）、`seed`（投影）、`listTools?`/`answerQuestion?`/`capabilities`（工具/提问/能力探测）、`setThinkingLevel`（思考强度）。
 - **一个内核要"可托管"，交的就是这 14 条 abstract + 若干可缺面。** 14 条必实现里没有一条是 pi/dsh 专属形状——`seed` 入参是 `NeutralEntry[]`（中性），`bookmark` 入参是 `lineageId + BoundaryRef`（不透明引用），`getTree` 返回 `LineageTree`（中性树）。新内核只需把它自己的会话/事件/fork 语义翻译成这些中性类型，不需要知道壳怎么渲染。
 - **缺面默认在 `AbstractBackend` 里免费拿到**：`listTools` 返回 null、`answerQuestion`/`continue`/`setThinkingLevel` 抛错（`abstract-backend.ts:107-125`）。新内核若不支持工具发现/提问/续跑/思考切换，**什么都不写就自动得到"显式降级"**，不会静默吞、不会伪造成功。这是三分法（§7.6）在实现层的免费落地——pi 用 override 填了 `setThinkingLevel`/`continue`/`listTools`/`answerQuestion`，dsh 填了 `continue`/`answerQuestion`/`setSessionName`/`setModel`/`resume`，第三个内核按需填。
-- **`BackendCreateOptions` 把内核专属 spawn 参数挡在了契约外**：`cwd`/`agentDir`/`kernel`/`neutralSessionId`/`systemPromptPaths`/`systemPromptTexts`/`ephemeral`/`provider`/`model`/`maxTokens`（`backend.ts:222-240`），不含 `cliPath`/`cordisConfig`/`apiKey`——那些由工厂闭包捕获。这条边界是"换内核只换适配器"成立的前提，也是 §1.2"spawn 命令"能独立成文件的原因。
+- **`BackendCreateOptions` 把内核专属 spawn 参数挡在了契约外**：`cwd`/`kernel`/`neutralSessionId`/`systemPromptPaths`/`systemPromptTexts`/`ephemeral`/`provider`/`model`/`maxTokens`（`agentDir` 已删除，见 §4.2 的落地说明），不含 `cliPath`/`cordisConfig`/`apiKey`——那些由工厂闭包捕获。这条边界是"换内核只换适配器"成立的前提，也是 §1.2"spawn 命令"能独立成文件的原因。
 
 判定：**BaseBackend 的意图覆盖度是本文四个抽象里最成熟的**。但成熟里藏了两个裂缝，放 §4 展开：一是 `capabilities` 的形状（两个硬桶），二是 `provider`/`model`/`maxTokens` 三个字段其实各自只服务一个内核（§4.1）。
 
@@ -154,6 +154,8 @@
 裁定：**不合理，需补。** 优先级最高——它是"内核无特权差异"（§1.4）在能力面这条线被悄悄违反的地方：pi 用 opaque 逃过了圆心污染，dsh 没逃过。补法：把 `ThinkingCapabilities` 挪进 `src/server/kernel/dsh/`（它本就在那定义更合适，圆心只留 `unknown` 或一个通用 `Capabilities` 字典），或把整个 `capabilities` 改成 `ReadonlyMap<string, unknown>` + 每个内核声明自己的 capability id 常量。
 
 ### 4.2 `BackendCreateOptions` 里有三个字段各自只服务一个内核
+
+> **已落地（本轮收口）**：`agentDir` 已从 `BackendCreateOptions` **删除**——实测三个内核**全都忽略**壳传进来的那个值，各自在插件工厂里从 `KernelPluginContext`（`homedir`/`dataRoot`）解析自己的数据根；它现在只是各内核工厂入参里的专属字段（`PiFactoryOptions.agentDir` 等）。一个"每个实现都忽略"的字段留在中立契约里的害处是**误导**：读者会以为壳管内核的数据根，而真相是内核自己管（§1.6 内核是被壳管理的外部资源）。下面这段分析记录的就是当初为什么要盯这类字段。
 
 - **证据**：`backend.ts:222-240` 的 `BackendCreateOptions`：
   - `provider`/`model`：dsh 在 initialize 握手即用，pi 在 spawn 后经 `setModel` 命令（注释 line 226 自己承认了时机不对称）。

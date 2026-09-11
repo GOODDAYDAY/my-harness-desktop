@@ -37,7 +37,7 @@ describe("minimalKernelPlugin 工厂", () => {
     expect(catalog.kernel).toBe("minimal");
 
     // createBackend:真实 spawn minimal CLI,backend.kernel = minimal。
-    const backend = plugin.createBackend({ cwd, agentDir: "ignored", kernel: "minimal", neutralSessionId: "ns-plug", lineageId: "ns-plug" });
+    const backend = plugin.createBackend({ cwd, kernel: "minimal", neutralSessionId: "ns-plug", lineageId: "ns-plug" });
     expect(backend.kernel).toBe("minimal");
     await backend.start();
     expect(backend.alive).toBe(true);

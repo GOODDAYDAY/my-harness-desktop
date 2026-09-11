@@ -36,8 +36,15 @@ export { piSeedSession };
 /** minimal 的 seed 投影纯函数 re-export:bootstrap 的 BackendFactory.seed 用(§8.2.2 预 seed)。 */
 export { minimalSeedSession };
 
-/** pi 工厂入参:中性 BackendCreateOptions + pi 专属 spawn 注入(cliPath 由 bootstrap 闭包捕获)。 */
+/**
+ * pi 工厂入参:中性 BackendCreateOptions + pi **专属**注入。
+ *
+ * agentDir（pi 的会话根 ~/.pi/agent）在这里、不在中性契约里：它是 pi 的私有知识，
+ * 由 pi 的插件工厂从 KernelPluginContext 解析后经闭包捕获传进来（§1.3 契约只收真中性字段；
+ * 实测"每个内核都忽略壳传的 agentDir、一律用自己的"——那种字段留在契约里会误导新内核）。
+ */
 export interface PiFactoryOptions extends BackendCreateOptions {
+  agentDir: string;
   cliPath?: string;
 }
 
@@ -133,6 +140,8 @@ export function createDshCatalog(opts: DshCatalogFactoryOptions): SessionCatalog
 
 /** minimal 工厂入参:中性 BackendCreateOptions + minimal 专属 spawn 注入(cliPath 由 bootstrap 闭包捕获)。 */
 export interface MinimalFactoryOptions extends BackendCreateOptions {
+  /** minimal 的数据根（~/.minimal/agent）——同上，内核私有知识不进中性契约。 */
+  agentDir: string;
   /** minimal-cli.mjs 绝对路径。 */
   cliPath: string;
 }

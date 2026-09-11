@@ -200,8 +200,16 @@ export class SessionStore implements
   private activeKernel: KernelId | null = null;
 
   /** factory 由 shell 在启动期注入(依赖倒置);不在此 new gateway 具体类。 */
-  /** agentDir 由 shell 注入(pi 内核会话根目录);application 不直读 process.env.HOME(依赖倒置)。 */
-  private agentDir: string;
+  /**
+   * 已注册内核各自的**会话文件根**（bootstrap 从注册表收集后注入）。
+   *
+   * 用途只有一处：判断某个路径"是不是内核会话文件"（总线 session_reopen 的路径圈禁——
+   * 越界会把任意文件读进会话上下文）。**不是**"把内核数据根告诉内核"：
+   * 每个内核的数据根由它自己的插件从 KernelPluginContext 解析（见 BackendCreateOptions 注释）。
+   * 此前这里是单个 `agentDir`（= `~/.pi/agent`），于是那道圈禁门只在 pi 上成立，
+   * 别的内核的会话文件不在同一道门里保护；现在按注册表逐内核收，加第四个内核自动纳入。
+   */
+  private kernelSessionRoots: readonly string[];
   /** 系统 prompt 文件路径列表,spawn 时拉取(由 registry.systemPromptPaths() 注入,
    *  插件贡献的 systemPrompts 槽项;插件卸载 → 贡献移除 → 不注入);空数组不拼 argv。 */
   private getSystemPromptPaths: () => string[];
@@ -223,31 +231,47 @@ export class SessionStore implements
   constructor(
     factory: BackendFactory,
     catalogFactory: SessionCatalogFactory,
-    agentDir: string,
+    /**
+     * 注册表派生的**内核事实**（壳的机制面，来自 KernelRegistry，不是中性契约）：
+     *   · `sessionRoots`：各内核会话文件根（总线路径圈禁用）；
+     *   · `ids`：已注册内核清单（旧会话内核回读兜底 + 跨内核项目统计遍历它）；
+     *   · `defaultId`：默认内核（无模型/无会话头时兜底）；缺省 = `ids[0]`。
+     * 打成一个包而不是散成三个位置参数：它们是**同一个来源**（注册表快照）的三面，
+     * 拆开后每加一个用法就要再往后塞一个参数，调用点全是被 `undefined` 填出来的空洞。
+     */
+    kernelFacts: { sessionRoots: string[]; ids: KernelId[]; defaultId?: KernelId },
     getSystemPromptPaths?: () => string[],
     neutralStore?: NeutralSessionStore,
     modelCatalog?: ModelCatalog,
     bookmarkDir?: (cwd: string) => string,
     questionStore?: PendingQuestionStore,
-    /** 默认内核 id(无模型/无会话头时兜底;bootstrap 传注册表首个内核,替代 this.defaultKernelId)。
-     *  迁移期默认 "pi" 保持向后兼容(测试/未迁移调用方),bootstrap 显式传 registry.ids()[0] 覆盖。 */
-    defaultKernelId: KernelId = "pi",
+    /**
+     * 已注册内核清单（bootstrap 从注册表注入）。用于"这个会话属于哪个内核"的回读兜底
+     *  与跨内核聚合（项目统计）——**遍历注册表**，不写死某个内核名。
+     */
+
   ) {
     this.factory = factory;
     this.catalogFactory = catalogFactory;
-    this.agentDir = agentDir;
+    this.kernelSessionRoots = kernelFacts.sessionRoots;
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
     this.neutralStore = neutralStore ?? null;
     this.modelCatalog = modelCatalog ?? null;
     this.bookmarkDir = bookmarkDir ?? null;
     this.questionStore = questionStore ?? null;
-    this.defaultKernelId = defaultKernelId;
+    this.knownKernelIds = kernelFacts.ids;
+    // 默认内核：显式传入者优先，否则注册表第一个。**这里没有字面量内核名**（勿加回 `?? "pi"`）：
+    // "谁先注册谁当默认"该由插件的 order 决定（§1.4 内核无特权差异）。
+    this.defaultKernelId = kernelFacts.defaultId ?? kernelFacts.ids[0] ?? "";
   }
 
   /** 目录/CRUD 按内核懒缓存(§1.5 多内核默认):统一经 Map<KernelId, SessionCatalog> 查,
    *  不在调用方写 kernel === "pi" 二选一。pi/dsh 别名保留给已有文件类方法。 */
   private catalogCache = new Map<KernelId, SessionCatalog>();
+  /** 默认内核：显式传入者优先，否则注册表第一个（空注册表 = 空串，调用方会显式报错）。 */
   private readonly defaultKernelId: KernelId;
+  /** 已注册内核清单（注册表快照；bootstrap 注入）。 */
+  private readonly knownKernelIds: readonly KernelId[];
   private catalogFor(kernel: KernelId): SessionCatalog {
     let c = this.catalogCache.get(kernel);
     if (!c) {
@@ -265,13 +289,20 @@ export class SessionStore implements
     return this.catalogFor(kernel);
   }
 
-  /** 注意:不再有「恒为 pi」的 catalog 别名 getter——文件操作统一经 catalogForPath/
-   *  catalogFor(proc.kernel) 按会话归属路由。剩余 3 处显式 catalogFor("pi") 是 pi 专属面
-   *  (总线子代理 spawn / 旧会话内核回读兜底 / pi 文件态项目统计),属「pi 专属能力插件化」
-   *  的剩余演进(§目标 13),已逐点标注,不静默回落。 */
+  /** 文件操作统一经 catalogForPath / catalogFor(proc.kernel) 按会话归属路由，没有"恒为某内核"的别名。
+   *
+   *  **本文件里只剩下面这两处内核字面量，原因已收敛到一条**：会话总线的子代理会话**恒由 pi 建**
+   *  （子代理机制是 pi 的内核扩展，见 `src/plugins/sessions/sub-agent/pi-extension/`），
+   *  所以它 spawn 时显式指定 pi。这不是"忘了插件化"，而是"这个能力只有 pi 有"——
+   *  把它做成中性需要一个新的能力面（"谁托管总线会话"），而当前只有 pi 一个实现，
+   *  预支一个抽象不如先记清楚（§9.4 不预支）。其余两处曾经的 pi 字面量已收口：
+   *  旧会话内核回读 → 遍历 `knownKernelIds`；项目统计 → 跨全部已注册内核聚合。
+   *
+   *  另：`spawnSession`/`reopenSession` 也是总线的入口 —— 若将来第二个内核提供子代理面，
+   *  这里的改动点就是"改成问那个能力面"，而不是再加一个 if。 */
 
-  /** pi 会话文件路径(总线子代理恒 pi:spawnSession/reopenSession 显式以 pi 建,§目标 13
-   *  待迁 pi 插件)。newSessionId 必返回路径;null 只在惰性创建会话的内核出现,pi 文件操作不该碰到。 */
+  /** 总线子代理的会话文件路径（恒 pi，理由见上）。newSessionId 必返回路径；
+   *  null 只在惰性创建会话的内核出现，pi 是文件态内核，不该碰到。 */
   private newPiSessionPath(cwd: string): string {
     const path = this.catalogFor("pi").newSessionId(cwd);
     if (path == null) throw new Error("当前内核未预生成会话文件路径");
@@ -444,8 +475,14 @@ export class SessionStore implements
       if (neutral?.header?.kernel) return neutral.header.kernel;
     }
     if (!sessionPath) throw new Error("无法确定会话内核：新会话需先选择模型");
-    // 旧会话(无中立头)的内核回读兜底:legacy 会话历史是 pi(§剩余演进,待 pi 插件化)。
-    const custom = await this.catalogFor("pi").readCustom(sessionPath).catch(() => null);
+    // 旧会话(无中立头)的内核回读兜底：**遍历已注册内核**各问一次（谁认得这个会话就是谁的），
+    // 而不是写死 pi。写死时读回一个非 pi 的历史会话会被误判成"未记录内核归属"而拒绝打开；
+    // 逐内核问之后，加第四个内核自动纳入这条兜底。
+    let custom: Awaited<ReturnType<ReturnType<SessionCatalogFactory["create"]>["readCustom"]>> = null;
+    for (const kernel of this.knownKernelIds) {
+      custom = await this.catalogFor(kernel).readCustom(sessionPath).catch(() => null);
+      if (custom) break;
+    }
     const prefs = parseSessionModelPrefs(custom ?? undefined);
     if (prefs?.kernel) return prefs.kernel;
     // 旧头行 custom.kernel 兜底:经 isKernelId 单源谓词识别(minimal-kernel §7.8.2——
@@ -472,7 +509,6 @@ export class SessionStore implements
     }
     const backend = this.factory.create({
       cwd,
-      agentDir: this.agentDir,
       kernel,
       // 内核私有会话 id 派生见 kernelSessionId(会话标识中性化收口点 §session-neutral-layer §5.3)。
       neutralSessionId: ns,
@@ -1005,9 +1041,26 @@ export class SessionStore implements
     return this.catalogForPath(sessionPath).readToolConfig(sessionPath);
   }
   async projectStats(cwd: string): Promise<ProjectStats> {
-    // pi 文件态项目统计(§剩余演进:应聚合所有文件态内核;minimal 当前返零、dsh 无文件态,
-    //  故 pi 单源暂等价,待「文件态聚合」收口后改遍历 fileBacked 内核)。
-    return this.catalogFor("pi").projectStats(cwd);
+    // 跨**所有已注册内核**聚合项目统计（此前只问 pi：别的内核的会话完全不计入，
+    // 而读起来像是"这个项目的统计"）。各内核各报自己那份（dsh 无文件态 → 恒零），
+    // 这里做加法；加第四个内核自动纳入，无需改这一行。
+    const parts = await Promise.all(this.knownKernelIds.map((k) => this.catalogFor(k).projectStats(cwd).catch(() => null)));
+    const zero: ProjectStats = { tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 };
+    return parts.reduce<ProjectStats>((acc, p) => {
+      if (!p) return acc;
+      return {
+        tokens: {
+          input: acc.tokens.input + p.tokens.input,
+          output: acc.tokens.output + p.tokens.output,
+          cacheRead: acc.tokens.cacheRead + p.tokens.cacheRead,
+          cacheWrite: acc.tokens.cacheWrite + p.tokens.cacheWrite,
+          total: acc.tokens.total + p.tokens.total,
+        },
+        cost: acc.cost + p.cost,
+        sessionCount: acc.sessionCount + p.sessionCount,
+        turns: acc.turns + p.turns,
+      };
+    }, zero);
   }
 
   /** 会话 lineage 树(§kernel-forkless §22):中立层是唯一读源,内核目录降级为兜底。 */
@@ -1337,7 +1390,7 @@ export class SessionStore implements
       // 4. seed 活跃 lineage(幂等,id 派生自 lineageId §12.2;生命周期不对称 §4.5)
       //    去映射表:内核侧 id 由 lineageId 确定,回切重算同 id,不查表不存表(§12.3)。
       const seedOpts = {
-        kernel: target, cwd: proc.cwd, agentDir: this.agentDir,
+        kernel: target, cwd: proc.cwd,
         neutralSessionId: proc.neutralSessionId, lineageId: activeLineageId,
         header: { ...session.header, kernel: target },
       };
@@ -1349,7 +1402,7 @@ export class SessionStore implements
         // pi:纯文件写,先 seed 得派生路径、再以该路径 spawn
         newSessionId = seeded;
         newBackend = this.factory.create({
-          cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
+          cwd: proc.cwd, kernel: target,
           systemPromptPaths: this.getSystemPromptPaths(),
           systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
           neutralSessionId: proc.neutralSessionId,
@@ -1359,7 +1412,7 @@ export class SessionStore implements
       } else {
         // dsh:RPC 依赖进程,先 start 后 seed
         newBackend = this.factory.create({
-          cwd: proc.cwd, agentDir: this.agentDir, kernel: target,
+          cwd: proc.cwd, kernel: target,
           neutralSessionId: proc.neutralSessionId,
           lineageId: activeLineageId,
           systemPromptPaths: this.getSystemPromptPaths(),
@@ -2118,7 +2171,7 @@ export class SessionStore implements
     kernel: KernelId,
   ): { proc: SessionProc } {
     const backend = this.factory.create({
-      cwd, agentDir: this.agentDir, kernel, neutralSessionId: key, provider, model: modelId, ephemeral: true,
+      cwd, kernel, neutralSessionId: key, provider, model: modelId, ephemeral: true,
     });
     const proc: SessionProc = {
       backend, kernel, neutralSessionId: key, nonce: randomUUID(), cwd, key, boundSessionPath: null,
@@ -2368,7 +2421,7 @@ export class SessionStore implements
       return;
     }
     const seedOpts = {
-      kernel: proc.kernel, cwd: proc.cwd, agentDir: this.agentDir,
+      kernel: proc.kernel, cwd: proc.cwd,
       neutralSessionId: proc.neutralSessionId, lineageId: proc.activeLineageId,
       header: session?.header ?? { kernel: proc.kernel, cwd: proc.cwd, createdAt: new Date().toISOString() },
     };
@@ -2391,7 +2444,7 @@ export class SessionStore implements
       if (seeded != null) {
         newSessionId = seeded;
         newBackend = this.factory.create({
-          cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
+          cwd: proc.cwd, kernel: proc.kernel,
           systemPromptPaths: this.getSystemPromptPaths(),
           systemPromptTexts: proc.role ? [roleToPrompt(proc.role)] : undefined,
           neutralSessionId: proc.neutralSessionId,
@@ -2402,7 +2455,7 @@ export class SessionStore implements
         await newBackend.start();
       } else {
         newBackend = this.factory.create({
-          cwd: proc.cwd, agentDir: this.agentDir, kernel: proc.kernel,
+          cwd: proc.cwd, kernel: proc.kernel,
           neutralSessionId: proc.neutralSessionId,
           lineageId: proc.activeLineageId,
           systemPromptPaths: this.getSystemPromptPaths(),
@@ -2989,9 +3042,9 @@ export class SessionStore implements
     return { key, sessionPath };
   }
 
-  /** agentDir 只读暴露:总线会话文件路径圈禁用(agentDir 由 shell 注入,本层不直读环境)。 */
-  get agentDirPath(): string {
-    return this.agentDir;
+  /** 各内核会话根只读暴露：总线会话文件路径圈禁用（由 shell 从注册表收集注入，本层不直读环境）。 */
+  get sessionRoots(): readonly string[] {
+    return this.kernelSessionRoots;
   }
 
   /** 总线续聊:以已有会话文件起进程续上下文(不抢激活语义,key=bus:<uuid8>)。

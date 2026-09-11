@@ -87,8 +87,8 @@ beforeEach(async () => {
   // models.json 让 ModelCatalog 有 p/a、p/b 模型(setModel 反查依赖;见 kernel-follows-model.md §2.3)
   writeFileSync(join(dir, "models.json"), JSON.stringify({ providers: { p: { models: [{ id: "a" }, { id: "b" }] } } }));
   adapter = new FakeAdapter();
-  const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-  store = new SessionStore(factory, catalogFactory, dir, undefined, undefined, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+  const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+  store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
   // 激活并起进程:start → waitReady → sync,latestSnapshot 落定 {p/a @ high}
   store.setContext(CWD, sessionPath);
   await store.start(CWD, sessionPath);
@@ -134,9 +134,9 @@ describe("配置依赖失效重建(docs/design/models-config-reload.md)", () => 
   /** 自建 store:factory 计数 spawn 次数(models.json/settings.json 变更 → 复用前校验过期 → 重建)。 */
   function newStore(): { s: SessionStore; spawnCount: () => number } {
     let created = 0;
-    const factory: BackendFactory = { create: (opts) => { created++; return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); } };
+    const factory: BackendFactory = { create: (opts) => { created++; return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }); } };
     const modelCatalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]);
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, modelCatalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, modelCatalog);
     s.setContext(CWD, sessionPath);
     return { s, spawnCount: () => created };
   }
@@ -198,9 +198,9 @@ describe("abort 双保险与强杀兜底", () => {
     const dshFactory: BackendFactory = {
       create: (opts) => opts.kernel === "dsh"
         ? dshMock as unknown as BaseBackend
-        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }),
     };
-    const dshStore = new SessionStore(dshFactory, catalogFactory, dir, undefined, undefined, catalog);
+    const dshStore = new SessionStore(dshFactory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, catalog);
     dshStore.setContext(CWD, null); // 空会话
     await dshStore.setModel("us-new", "dsh-model", "dsh"); // 选 dsh 模型 → 起 dsh 后端
     await expect(dshStore.abort()).resolves.toBeUndefined();
@@ -219,10 +219,10 @@ describe("abort 双保险与强杀兜底", () => {
     const dshFactory: BackendFactory = {
       create: (opts) => opts.kernel === "dsh"
         ? dshMock as unknown as BaseBackend
-        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }),
     };
     const neutralStore = new NeutralSessionStore(join(dir, "neutral"));
-    const dshStore = new SessionStore(dshFactory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const dshStore = new SessionStore(dshFactory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     dshStore.setContext(CWD, null);
     await dshStore.setModel("us-new", "dsh-model", "dsh");
     await dshStore.prompt("ping base"); // 建中立层会话 + 一条 user
@@ -317,9 +317,9 @@ describe("switchKernel 五步切换(测试内翻 gate,验证 pi→dsh「文件�
     const factory: BackendFactory = {
       create: (opts) => opts.kernel === "dsh"
         ? mock as unknown as BaseBackend
-        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }),
     };
-    const s = new SessionStore(factory, catalogFactory, dir);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] });
     (s as unknown as { switchKernelEnabled: boolean }).switchKernelEnabled = true;
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
@@ -344,10 +344,10 @@ describe("switchKernel 七步(测试内翻 gate,验证 minimal 侧就绪,生产 
     const factory: BackendFactory = {
       create: (opts) => opts.kernel === "minimal"
         ? minimalMock as unknown as BaseBackend
-        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }),
       seed: async (_lineage, opts) => { seededKernels.push(opts.kernel); return (opts.kernel === "minimal" ? "minimal-derived-s1" : null); },
     };
-    const s = new SessionStore(factory, catalogFactory, dir);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] });
     (s as unknown as { switchKernelEnabled: boolean }).switchKernelEnabled = true;
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
@@ -373,10 +373,10 @@ describe("switchKernel 七步(测试内翻 gate,验证 minimal 侧就绪,生产 
         ? minimalMock as unknown as BaseBackend
         : opts.kernel === "dsh"
           ? dshMock as unknown as BaseBackend
-          : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+          : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }),
       seed: async (_lineage, opts) => { seededKernels.push(opts.kernel); return (opts.kernel === "minimal" ? "minimal-derived-s1" : null); },
     };
-    const s = new SessionStore(factory, catalogFactory, dir);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] });
     (s as unknown as { switchKernelEnabled: boolean }).switchKernelEnabled = true;
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath, undefined, false, "dsh", "us-new", "dsh-model"); // 起 dsh(RPC)
@@ -402,9 +402,9 @@ describe("setModel 跨内核路由(中间转换层)", () => {
     const factory: BackendFactory = {
       create: (opts) => opts.kernel === "dsh"
         ? mock as unknown as BaseBackend
-        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }),
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, catalog);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
     await s.prompt("hi"); // 发一条消息 → touched=true,有历史
@@ -443,9 +443,9 @@ describe("setModel 跨内核路由(中间转换层)", () => {
     const factory: BackendFactory = {
       create: (opts) => opts.kernel === "dsh"
         ? mock as unknown as BaseBackend
-        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }),
+        : new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }),
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     const piPath = join(dir, "sessions", cwdToBucketName(CWD), `${piNs}.jsonl`);
     const dshPath = dshNs; // dsh 投影路径 = 根 lineageId(= ns)
 
@@ -477,9 +477,9 @@ describe("内核跟随模型(清理默认 pi + 跨内核切换,kernel-follows-mo
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
     const createdKernels: string[] = [];
     const factory: BackendFactory = {
-      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
+      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }); },
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, catalog);
     s.setContext(CWD, null); // 空会话,无活跃进程
     await s.setModel("us-new", "dsh-model", "dsh");
     // 空会话选 dsh 模型 = 「选择」,以目标内核直接起,不是 switchKernel 七步
@@ -493,9 +493,9 @@ describe("内核跟随模型(清理默认 pi + 跨内核切换,kernel-follows-mo
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
     const createdKernels: string[] = [];
     const factory: BackendFactory = {
-      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
+      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }); },
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, catalog);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath); // 预热 pi(warmup 语义),touched=false
     await s.setModel("us-new", "dsh-model", "dsh");
@@ -507,13 +507,13 @@ describe("内核跟随模型(清理默认 pi + 跨内核切换,kernel-follows-mo
   it("没有预热也发起:选模型按需起进程 + 发消息(进程只在选模型后起)", async () => {
     const createdKernels: string[] = [];
     const factory: BackendFactory = {
-      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
+      create: (opts) => { createdKernels.push(opts.kernel); return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }); },
     };
     const dshSource: KernelModelSource = {
       listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
     };
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, catalog);
     s.setContext(CWD, null);
     // setContext 后不起任何进程(内核=模型派生量,选模前无内核)——抢跑预热已移除
     expect(createdKernels).toEqual([]);
@@ -566,7 +566,7 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     const created: string[] = [];
     const backends: { sessionId?: string }[] = [];
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
-    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     s.setContext(CWD, null);
     await s.prompt("你好", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     // 只创建过一个进程,且是 dsh(pi 从未被抢跑起)
@@ -585,7 +585,7 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     const created: string[] = [];
     const backends: { sessionId?: string }[] = [];
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
-    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     s.setContext(CWD, null);
     await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     // 第二发不带偏好(重开历史会话的形态):服务端兜底读中立头,仍走 dsh,不新起进程
@@ -599,7 +599,7 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     const created: string[] = [];
     const backends: { sessionId?: string }[] = [];
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
-    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     s.setContext(CWD, null);
     await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     const backend = backends[0] as unknown as { calls: string[] };
@@ -615,7 +615,7 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     const created: string[] = [];
     const backends: { sessionId?: string }[] = [];
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
-    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     s.setContext(CWD, null);
     // 第一发:新会话(中立层空)→ 不 seed 不 continue。
     await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
@@ -633,7 +633,7 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     const ns = neutralStore.listByCwd(CWD)[0].neutralSessionId;
     const created2: string[] = [];
     const backends2: { sessionId?: string }[] = [];
-    const s2 = new SessionStore(makeDshFactory(created2, backends2), catalogFactory, dir, undefined, neutralStore, catalog);
+    const s2 = new SessionStore(makeDshFactory(created2, backends2), catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     s2.setContext(CWD, ns); // dsh 投影地址 = 裸 ns(中立主键反查会话归属)
     await s2.prompt("重开后续聊", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     const reopened = backends2[0] as unknown as { calls: string[]; seedLineageLength: number | null };
@@ -668,7 +668,7 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
         return b as unknown as BaseBackend;
       },
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     s.setContext(CWD, ns);
     await s.prompt("重开后续聊", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     const b = backends[0];
@@ -681,7 +681,7 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     const created: string[] = [];
     const backends: { sessionId?: string }[] = [];
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
-    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     s.setContext(CWD, null);
     await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     const calls = (backends[0] as unknown as { calls: string[] }).calls;
@@ -707,7 +707,7 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
         return b as unknown as BaseBackend;
       },
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     s.setContext(CWD, null);
     await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     // 旧实现:第二发的 prompt 编排先走 setModel → 坏面抛错 → 整条发送失败。
@@ -726,7 +726,7 @@ describe("内核路由回归(选 dsh 不得调度到 pi;会话归属持久)", ()
     const created: string[] = [];
     const backends: { sessionId?: string }[] = [];
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir })), dshSource]);
-    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(makeDshFactory(created, backends), catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     s.setContext(CWD, null);
     await s.prompt("旧会话消息", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     // ⌘N:renderer 清上下文 = setContext(cwd, null)
@@ -783,7 +783,7 @@ describe("prompt 强度对齐只对支持运行时切档的内核生效(§atomic
     const dshSource: KernelModelSource = {
       listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }],
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, new ModelCatalog([dshSource]));
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, new ModelCatalog([dshSource]));
     s.setContext(CWD, null); // 新会话
     // 根因回归:composer 会给 pending 盖默认档位("high"),dsh 发送必须不被它打断。
     await s.prompt("hi", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "high", kernel: "dsh" });
@@ -817,8 +817,8 @@ describe("归档/置顶:中立层真相源不被内核投影失败阻断", () =>
     }));
     // 派生路径 = <bucket>/<ns>.jsonl,不写盘 → 内核投影 existsSync 失败必抛。
     const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
-    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     s.setContext(CWD, sessionPath);
     return { s, neutralStore, ns, sessionPath };
   }
@@ -981,8 +981,8 @@ describe("内核投影取舍(neutral-storage-split §2.5):{pinned,archived} 纯�
       rename: async (id, name) => { calls.rename++; return real.rename(id, name); },
       updateHeader: async (id, patch) => { calls.updateHeader++; return real.updateHeader(id, patch); },
     } as SessionCatalog;
-    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-    const s = new SessionStore(factory, { create: () => spying }, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, { create: () => spying }, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     s.setContext(CWD, sessionPath);
     return { s, neutralStore, ns, sessionPath, calls };
   }
@@ -1032,8 +1032,8 @@ describe("内核投影取舍(neutral-storage-split §2.5):{pinned,archived} 纯�
 describe("rawFilePaths(打开原始文件:不拿投影地址硬猜)", () => {
   function newStore(): { s: SessionStore; neutralStore: NeutralSessionStore } {
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "rawpaths-neutral-")));
-    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     return { s, neutralStore };
   }
 
@@ -1085,8 +1085,8 @@ describe("fork:父 lineage 尊重调用方指定 + 派生新会话(根因修复�
         { lineageId: "branch-B", fork: { parentLineageId: ns, boundaryEntryId: `${ns}:0` }, entries: [{ neutralEntryId: "branch-B:0", message: { role: "user", content: "on-B" } }] },
       ],
     });
-    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     return { s, neutralStore, ns };
   }
 
@@ -1209,7 +1209,7 @@ describe("dsh 热切与缺面回落(docs/model-switching.md §11,断言落在机
         return b as unknown as BaseBackend;
       },
     };
-    const s = new SessionStore(factory, dualCatalogFactory, dir, undefined, undefined, new ModelCatalog([dshTwoModels]));
+    const s = new SessionStore(factory, dualCatalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, new ModelCatalog([dshTwoModels]));
     s.setContext(CWD, null);
     return { s, created, backends };
   }
@@ -1262,7 +1262,7 @@ describe("dsh 热切与缺面回落(docs/model-switching.md §11,断言落在机
         return b as unknown as BaseBackend;
       },
     };
-    const s = new SessionStore(factory, dualCatalogFactory, dir, undefined, undefined, new ModelCatalog([dshTwoModels]));
+    const s = new SessionStore(factory, dualCatalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, new ModelCatalog([dshTwoModels]));
     s.setContext(CWD, null);
     await s.prompt("第一发", undefined, undefined, { provider: "us-new", modelId: "dsh-model-a", thinkingLevel: "", kernel: "dsh" });
     const b1 = backends[0];
@@ -1295,9 +1295,9 @@ describe("dsh 热切与缺面回落(docs/model-switching.md §11,断言落在机
   it("pi 回归:未物化会话换模型不重启,set_model 热切照发(文件型内核不落入惰性重建)", async () => {
     let created = 0;
     const factory: BackendFactory = {
-      create: (opts) => { created++; return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }); },
+      create: (opts) => { created++; return new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }); },
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, undefined, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, undefined, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath); // 起进程,touched=false
     adapter.sent = [];
@@ -1322,8 +1322,8 @@ describe("sessionStart 携带 neutralSessionId(fork/bookmark 入口水合的命�
 describe("合成分隔线双落点:视图流 + 中立层持久化(刷新/冷开不丢,pi/dsh 一致)", () => {
   it("setModel 换模型:中立层追加 model_change divider(刷新后可读回)", async () => {
     const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "divider-neutral-")));
-    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
     // 换一个模型(快照现值 p/a → p/b):触发 set_model + 合成分隔线
@@ -1341,7 +1341,8 @@ describe("提问投递/作答(ask)的诚实性", () => {
     // 全新 store(不起进程):activeProc 不存在
     const s = new SessionStore(
       { create: () => { throw new Error("不应起进程"); } },
-      catalogFactory, dir,
+      catalogFactory,
+      { sessionRoots: [join(dir, "sessions")], ids: ["pi"] },
     );
     const got: unknown[] = [];
     s.onQuestion((q) => got.push(q));
@@ -1355,7 +1356,8 @@ describe("提问投递/作答(ask)的诚实性", () => {
   it("answerQuestion 无进程:诚实文案(提问已失效),不再是误导性的「内核未启动」", async () => {
     const s = new SessionStore(
       { create: () => { throw new Error("不应起进程"); } },
-      catalogFactory, dir,
+      catalogFactory,
+      { sessionRoots: [join(dir, "sessions")], ids: ["pi"] },
     );
     await expect(s.answerQuestion("r1", [])).rejects.toThrow("提问已失效");
   });
@@ -1402,7 +1404,7 @@ describe("resume 根 lineage 不变量(root lineageId ≡ neutralSessionId,unify
       lineage: { lineageId: "src", entries: [{ neutralEntryId: "src:0", message: { role: "user", content: "hi" } }] },
     }));
     const factory: BackendFactory = { create: () => new ResumeBackend() as unknown as BaseBackend };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, undefined, () => bookmarkDir);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, undefined, () => bookmarkDir);
     s.setContext(CWD, null);
     const anchorId = await s.resume(snapId);
     // 新会话:根 lineage 必须 == neutralSessionId(不变量)
@@ -1454,7 +1456,7 @@ describe("三会话跨内核切换(pi/dsh/pi,会话对应进程不串)", () => {
       seed: async () => null,
       create: (opts) => { created.push(opts.kernel); return new TriBackend(opts.kernel as "pi" | "dsh") as unknown as BaseBackend; },
     };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     // 逐个会话发一轮,再回来切换重发
     const send = async (ns: string, kernel: "pi" | "dsh", text: string) => {
       s.setContext(CWD, ns);
@@ -1515,7 +1517,7 @@ describe("fork/clone 派生会话首发物化(内核私有 id 派生自新会话
       create: (opts) => { createdLineageIds.push(opts.lineageId); return new LineageBackend() as unknown as BaseBackend; },
     };
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]);
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
     return { s, neutralStore, ns, sessionPath, createdLineageIds };
   }
@@ -1578,7 +1580,7 @@ describe("fork/clone 派生会话首发物化(内核私有 id 派生自新会话
       create: (opts) => { createdLineageIds.push(opts.lineageId); return new LineageBackend() as unknown as BaseBackend; },
     };
     const catalog = new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]);
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath, undefined, false, "pi", "p", "a");
@@ -1657,7 +1659,7 @@ describe("SessionStore.getTree 中立层投影(逐条明细树换中立层投影
     });
     // getTree 中立层命中时不走 backend(catalog.getTree 兜底只在中立层缺失时),dummy 工厂即可
     const dummyFactory: BackendFactory = { create: () => ({} as unknown as BaseBackend) };
-    const s = new SessionStore(dummyFactory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const s = new SessionStore(dummyFactory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     const tree: LineageTree = await s.getTree(ns);
     expect(tree.rootId).toBe(ns);
     expect(tree.lineages).toHaveLength(2);
@@ -1680,7 +1682,7 @@ describe("activeSessionHasHistory 的 pendingSeed 豁免(fork→跨内核切 dsh
       lineages: [{ lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "prefix" } }] }],
     });
     const dummyFactory: BackendFactory = { create: () => ({} as unknown as BaseBackend) };
-    const s = new SessionStore(dummyFactory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const s = new SessionStore(dummyFactory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     s.setContext(CWD, ns);
     // pendingSeed=true → 不算历史 → 不锁(可自由选内核)
     expect(s.getCapabilities().locked).toBe(false);
@@ -1700,8 +1702,8 @@ describe("fork dsh → 切 pi 的 header.kernel 更新(reverse 方向,r24 待查
       header: { kernel: "dsh", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z", pendingSeed: true, derivedFrom: { kind: "fork", sourceNeutralSessionId: "src", boundaryEntryId: "src:1" } },
       lineages: [{ lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "prefix" } }] }],
     });
-    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     s.setContext(CWD, ns); // dsh 投影路径 = ns
     // setModel(pi) 应触发 writeNeutralModelPrefs(kernel=pi)
     await s.setModel("p", "a", "pi");
@@ -1741,7 +1743,7 @@ describe("思考档位校验(1a:不在内核声明的清单里就不进内核,ds
     };
     const dshSource: KernelModelSource = { listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }] };
     const catalog = new ModelCatalog([dshSource]);
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, gateNeutral, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, gateNeutral, catalog);
     s.setContext(CWD, null);
     await s.prompt("首发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
     const b = backends[backends.length - 1];
@@ -1788,7 +1790,7 @@ describe("交叠态:内核切换进行中的互斥(§15.1)", () => {
       { listModels: () => [{ kernel: "pi", provider: "p", id: "a", name: "a" }] },
       { listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }] },
     ]);
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, catalog);
     (s as unknown as { switchKernelEnabled: boolean }).switchKernelEnabled = true;
     s.setContext(CWD, null);
     await s.prompt("起一个 pi 会话", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "", kernel: "pi" });
@@ -1821,8 +1823,8 @@ describe("交叠态:锚点不在中立层时(fork/bookmark)必须显式拒绝,�
         { neutralEntryId: `${ns}:0`, message: { role: "user", content: "唯一一条" } },
       ] }],
     });
-    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     s.setContext(CWD, ns);
     return { s, ns };
   }
@@ -1863,8 +1865,8 @@ describe("列表行的内核投影必须逐行隔离(一行坏数据不许拖垮
     neutralStore.put(emptyNeutralSession("ns-pi", { kernel: "pi", cwd: CWD, createdAt: "2026-09-10T00:00:00.000Z", name: "正常会话" }));
     // 指向一个**没装载**的内核(实弹就是 minimal 被 enabled:false 跳过后的历史行)
     neutralStore.put(emptyNeutralSession("ns-ghost", { kernel: "minimal", cwd: CWD, createdAt: "2026-09-09T00:00:00.000Z", name: "孤儿内核会话" }));
-    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-    const s = new SessionStore(factory, strictFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, strictFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
     return { s, neutralStore };
   }
 

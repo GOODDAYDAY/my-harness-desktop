@@ -47,6 +47,8 @@ export const minimalKernelPlugin: KernelPluginFactory = (ctx) => {
     seed: (lineage, opts) =>
       Promise.resolve(minimalSeedSession(agentDir, opts.cwd, lineage, { lineageId: opts.lineageId, header: opts.header })),
     createCatalog: () => createMinimalCatalog(agentDir),
+    sessionRoot: () => join(agentDir, "sessions"),
+    configRoot: () => agentDir,
     createModelSource: () => new MinimalModelSource(configSource),
     createModelsApi: () => new MinimalModelsApi(configSource, (cwd, p, m) => ctx.testModel(cwd, p, m)),
     createConfigApi: () => new MinimalConfigApi(configSource),

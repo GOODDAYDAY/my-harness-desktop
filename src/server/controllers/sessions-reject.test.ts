@@ -35,7 +35,8 @@ const gateway = { register: (ch: string, h: (...a: unknown[]) => unknown) => { h
 beforeEach(() => {
   handlers.clear();
   registerSessions(gateway as never, {
-    paths: { piAgentDir: PI_DIR, myHarnessDesktopDir: MHD_DIR },
+    kernelConfigRoots: [PI_DIR],
+    paths: { myHarnessDesktopDir: MHD_DIR },
     sessionStore: failing("store"),
   } as never);
 });

@@ -139,15 +139,15 @@ beforeEach(() => {
       const a = new FakeAdapter();
       // 模拟 createPiBackend 的中性字段 → spawn argv 翻译(生产逻辑在 bootstrap/kernel)。
       const args: string[] = [];
-      if (opts.neutralSessionId) args.push("--session", piDerivedSessionPath(opts.agentDir, opts.cwd, opts.neutralSessionId));
+      if (opts.neutralSessionId) args.push("--session", piDerivedSessionPath(dir, opts.cwd, opts.neutralSessionId));
       for (const p of opts.systemPromptPaths ?? []) args.push("--append-system-prompt", p);
       for (const t of opts.systemPromptTexts ?? []) args.push("--append-system-prompt", t);
       a.args = args;
       adapters.push(a);
-      return new PiBackend(a as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir });
+      return new PiBackend(a as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir });
     },
   };
-  store = new SessionStore(factory, catalogFactory, dir, () => [globalPrompt]);
+  store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, () => [globalPrompt]);
 });
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));

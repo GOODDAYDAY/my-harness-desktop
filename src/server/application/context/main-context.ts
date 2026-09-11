@@ -79,10 +79,6 @@ export interface MainPaths {
   homeDir: string;
   myHarnessDesktopDir: string;
   configDir: string;
-  piInstallDir: string;
-  /** dsh 内核 npm 安装目录(~/.my-harness-desktop/dsh;dsh 配置另在 ~/.dsh 原生)。 */
-  dshInstallDir: string;
-  piAgentDir: string;
   generalConfigPath: string;
   bundledSkillsDir: string;
   bundledSkillsSource: string;
@@ -93,6 +89,12 @@ export interface MainPaths {
 }
 
 export interface MainContext {
+  /** 各已注册内核的**配置根**（configFile 框架通道的白名单前缀）。
+   *  从注册表收集而不是环境路径——加第四个内核自动纳入白名单，壳零改动。 */
+  kernelConfigRoots: string[];
+  /** 各已注册内核的**技能清单文件**（改它们 = 技能清单变了，壳据此重挂监视器）。
+   *  技能清单存在哪是内核的私有知识（pi 在 settings.json，别的内核可能没有这个面）。 */
+  kernelSkillWatchPaths: (cwd: string) => string[];
   paths: MainPaths;
   prefsStore: JsonPrefsStore<Prefs>;
   configStore: ConfigStore;

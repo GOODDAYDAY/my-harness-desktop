@@ -22,6 +22,13 @@ export class JsonPrefsStore<T extends object> {
     void writeJsonFile(this.path, this.data as unknown as Record<string, unknown>).catch((e) => console.error("[json-prefs] 写盘失败:", e));
   }
 
+  /** 删一个键并立即写盘（一次性迁移用：迁完要把旧键**摘掉**，不是留一个空壳在盘上）。 */
+  remove<K extends keyof T>(key: K): void {
+    if (!(key in this.data)) return;
+    delete this.data[key];
+    void writeJsonFile(this.path, this.data as unknown as Record<string, unknown>).catch((e) => console.error("[json-prefs] 写盘失败:", e));
+  }
+
   /** 原始对象快照(对齐 electron-store 的 store;注意不是 live proxy,改它需经 set)。 */
   get store(): T {
     return this.data;

@@ -21,6 +21,7 @@ import { PI_LOGO } from "./manager/pi-logo";
 import { wrapVersionApi } from "../core/kernel-version";
 import { fitPiExtensionAvailable, installFitPiExtension, FIT_PI_EXTENSION_ID } from "./extension/my-harness-fit-pi-extension-installer";
 import { runPiOneshot } from "./extension/pi-oneshot";
+import { readLegacyPiSessions } from "./backend/pi-legacy-sessions";
 import { PiSkillProvider } from "./extension/pi-skill-provider";
 import { ensureBundledSkillsEntry, ensurePluginSkillsEntry, migrateLegacySkillPatterns } from "./extension/pi-bundled-skills";
 import { syncPluginPiExtension, removePluginPiExtension, reconcilePluginPiExtensions } from "./extension/pi-extension-installer";
@@ -107,6 +108,19 @@ export const piKernelPlugin: KernelPluginFactory = (ctx) => {
     }),
     // 壳插件携带的 pi 扩展：写 ~/.pi/agent/extensions/<pluginId>/（内核侧扩展位）。
     // 中立面叫 createPluginExtensionSync —— 壳遍历注册表按内核 id 派发，不认内核名。
+    // 旧会话历史迁移：读 pi 自己的老 JSONL（私有知识），交中立会话；**落库与去重是壳的事**
+    // （中立层是壳的 canonical，内核不感知）。此前这段代码在 application 层、import 了 pi-catalog，
+    // 是"application 不许 import 内核实现"红线上唯一一条明文豁免——现在豁免取消。
+    readLegacySessions: () => readLegacyPiSessions(agentDir).sessions,
+    sessionRoot: () => join(agentDir, "sessions"),
+    configRoot: () => agentDir,
+    // pi 的技能清单住在 settings.json 的 skills[] 里：全局 + 项目级 + 桌面的 desktop-skills.json。
+    // 这是 pi 的私有布局，由 pi 自己报——壳不再硬编码这三个路径。
+    skillWatchPaths: (cwd) => [
+      join(agentDir, "settings.json"),
+      join(cwd, ".pi", "settings.json"),
+      join(agentDir, "desktop-skills.json"),
+    ],
     createPluginExtensionSync: () => ({
       // 随壳分发的适配扩展（packages/my-harness-fit-pi-extension → ~/.pi/agent/extensions/…）。
       // 资产路径由 pi 自己解析（installFitPiExtension 内部按 isPackaged 分流），壳不传参、不认路径。

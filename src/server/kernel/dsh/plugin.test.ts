@@ -53,6 +53,6 @@ describe("dshKernelPlugin 工厂", () => {
     const { ctx } = makeRealCtx(homedir, cwd);
     const plugin = dshKernelPlugin(ctx);
     expect(plugin.seed).toBeDefined();
-    expect(await plugin.seed!([], { neutralSessionId: "ns", lineageId: "ns", header: { kernel: "dsh", cwd: "/p", createdAt: "now" }, kernel: "dsh", cwd: "/p", agentDir: "/a" })).toBeNull();
+    expect(await plugin.seed!([], { neutralSessionId: "ns", lineageId: "ns", header: { kernel: "dsh", cwd: "/p", createdAt: "now" }, kernel: "dsh", cwd: "/p" })).toBeNull();
   });
 });

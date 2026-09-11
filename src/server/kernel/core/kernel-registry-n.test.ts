@@ -39,7 +39,7 @@ describe("N 内核注册验收(真实插件工厂 + 真实 ctx)", () => {
     expect(() => validateKernelPlugin(r.get("minimal")!)).not.toThrow();
     expect(r.ids()).toEqual(["minimal"]);
     // 真实 spawn minimal CLI(非 mock)。
-    const backend = r.get("minimal")!.createBackend({ cwd, agentDir: join(homedir, ".minimal"), kernel: "minimal", neutralSessionId: "ns" });
+    const backend = r.get("minimal")!.createBackend({ cwd, kernel: "minimal", neutralSessionId: "ns" });
     expect(backend.kernel).toBe("minimal");
     await backend.start();
     expect(backend.alive).toBe(true);
@@ -184,7 +184,7 @@ describe("真实插件目录加载 + 默认装载过滤 + 真实卸载", () => {
     expect(registry.ids()).toEqual(["pi", "dsh", "minimal"]);
 
     // 真实 minimal 内核:真实 spawn CLI(非 mock)。
-    const backend = registry.get("minimal")!.createBackend({ cwd, agentDir: join(homedir, ".minimal"), kernel: "minimal", neutralSessionId: "ns" });
+    const backend = registry.get("minimal")!.createBackend({ cwd, kernel: "minimal", neutralSessionId: "ns" });
     await backend.start();
     expect(backend.alive).toBe(true);
     await backend.stop();

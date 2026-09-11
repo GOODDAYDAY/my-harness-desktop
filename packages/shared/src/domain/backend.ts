@@ -236,13 +236,19 @@ export function projectLineageTree(roots: TreeNode[]): LineageTree {
  *
  * 不含任何内核专属 spawn 参数(args/env/cliPath/cordisConfig 等)——那些由各内核的工厂
  * 实现闭包捕获(bootstrap 组装时绑定)。契约只收「壳必须向每一个内核索要」的中性字段:
- * cwd(项目根)、agentDir(会话根)、kernel(路由依据)、provider/model(六条意图 setModel
- * 的中性输入;pi 走 setModel 命令、dsh 走 initialize 握手)、sessionId(打开/续接哪个会话)、
+ * cwd(项目根)、kernel(路由依据)、provider/model(六条意图 setModel 的中性输入;
+ * pi 走 setModel 命令、dsh 走 initialize 握手)、sessionId(打开/续接哪个会话)、
  * systemPromptPaths/Texts(注入什么提示)、ephemeral(临时会话)、maxTokens(输出上限)。
+ *
+ * **`agentDir` 已从契约删除**（勿加回）：它是"壳把内核的会话根告诉内核"这个假设的产物，
+ * 而实情是**没有内核需要它**——三个内核都在自己的插件工厂里从 `KernelPluginContext`
+ * （`homedir`/`dataRoot`）解析自己的数据根，spawn 时传进来的那个值一律被覆盖。
+ * 一个"每个实现都忽略"的字段留在中立契约里有两个害处：① 读者以为壳管内核的数据根，
+ * 而真相是内核自己管（§1.6 内核是被壳管理的外部资源，不是壳的子系统）；
+ * ② 它会诱导新内核也去"接收"一个本该公司自己决定的东西。函数的实参是承诺，不兑现的承诺要删。
  */
 export interface BackendCreateOptions {
   cwd: string;
-  agentDir: string;
   kernel: KernelId;
   /** 模型偏好(可选)。dsh 侧在 initialize 握手即用;pi 侧 spawn 后经 setModel 命令。 */
   provider?: string;
@@ -278,7 +284,7 @@ export interface BackendFactory {
    *   `create` 后的 `backend.seed` 在 `start` 之后处理。
    * 返回 null = 本内核不支持预 seed,调用方走"create → start → backend.seed"。
    */
-  seed?(lineage: NeutralEntry[], opts: SeedOptions & { kernel: KernelId; cwd: string; agentDir: string }): Promise<string | null>;
+  seed?(lineage: NeutralEntry[], opts: SeedOptions & { kernel: KernelId; cwd: string }): Promise<string | null>;
 }
 
 /**

@@ -47,7 +47,7 @@ describe.skipIf(skippable)("SessionStore → dsh 全链路(真机)", () => {
     const catalogFactory: SessionCatalogFactory = {
       create: () => ({ kernel: "dsh", newSessionId: () => null }) as unknown as ReturnType<SessionCatalogFactory["create"]>,
     };
-    const store = new SessionStore(factory, catalogFactory, join(homedir(), ".pi"));
+    const store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(homedir(), ".pi", "agent", "sessions")], ids: ["pi"] });
 
     const gotReply = new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => resolve(false), 60_000);

@@ -91,8 +91,8 @@ beforeEach(async () => {
   writeFileSync(join(dir, "models.json"), JSON.stringify({ providers: { p: { models: [{ id: "a" }] } } }));
   neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "wt-neutral-")));
   adapter = new FakeAdapter();
-  const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
-  store = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+  const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+  store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
   store.setContext(CWD, join(bucket, "s1.jsonl"));
   await store.start(CWD, join(bucket, "s1.jsonl"));
   adapter.sent = [];
@@ -216,7 +216,7 @@ describe("sync 对无快照面内核(dsh 形态)也产基线:内容中立层 + �
     const dsh = new FakeDsh("ns-dsh");
     const factory: BackendFactory = { create: () => dsh as unknown as BaseBackend };
     const dshSource = { listModels: () => [{ kernel: "dsh" as const, provider: "p", id: "a", name: "a" }] };
-    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([dshSource]));
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([dshSource]));
     s.setContext(CWD, null);
     await s.prompt("问", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "", kernel: "dsh" });
     dsh.emit({ type: "messageEnd", message: { role: "assistant", content: [{ type: "text", text: "答" }] } });

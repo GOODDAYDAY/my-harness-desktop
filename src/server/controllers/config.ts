@@ -10,7 +10,7 @@ import { broadcastSettingsChanged } from "../routing/broadcast";
 import type { MainContext, Prefs } from "../application/context/main-context";
 
 export function registerConfig(gateway: Gateway, ctx: MainContext): void {
-  const { configStore, prefsStore, paths } = ctx;
+  const { configStore, prefsStore, paths, kernelConfigRoots } = ctx;
 
   // ---- IPC:插件配置(统一项目级配置通道;scope/getScope 见 unified-project-config.md)----
   gateway.register(IPC.config.get, (_e, pluginId: string, key: string) =>
@@ -40,15 +40,15 @@ export function registerConfig(gateway: Gateway, ctx: MainContext): void {
 
   // ---- IPC:通用 JSON 配置文件读写(框架级配置管理,路径白名单 + 逻辑前缀展开)----
   // 安全门控(§4.6/§8.1):configFile 是框架级通道,限定在 ~/.my-harness-desktop/(桌面配置区)
-  // 和 ~/.pi/agent/(内核配置区)前缀内,杜绝任意路径读写(评估 P1-D1:此前无门控,
+  // 和各内核配置根(经注册表收集)前缀内,杜绝任意路径读写(评估 P1-D1:此前无门控,
   // 被 session-bookmarks 用来读写项目内 <cwd>/.my-harness-desktop/bookmarks/,绕过 fs:project 只读沙箱)。
   // 插件的私有数据应走 ctx.config(数据根 plugins-data/<id>/),项目级数据走声明能力。
   // ~/.my-harness-desktop 是逻辑前缀(expandDesktopPath 映射到当前数据根,dev 态 -dev 目录)。
   function resolveConfigFilePath(path: string): string {
     const abs = expandDesktopPath(path, paths.homeDir, paths.myHarnessDesktopDir);
-    const allowed = [paths.myHarnessDesktopDir, paths.piAgentDir];
+    const allowed = [paths.myHarnessDesktopDir, ...kernelConfigRoots];
     const ok = allowed.some((root) => abs === root || abs.startsWith(root + sep));
-    if (!ok) throw new Error(`configFile 路径越界:仅允许 ~/.my-harness-desktop/ 或 ~/.pi/agent/ 前缀,收到 ${path}`);
+    if (!ok) throw new Error(`configFile 路径越界:仅允许 ~/.my-harness-desktop/ 或任一内核配置根前缀,收到 ${path}`);
     return abs;
   }
   gateway.register(IPC.configFile.get, (_e, path: string) => {

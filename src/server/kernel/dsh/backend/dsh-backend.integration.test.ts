@@ -40,7 +40,6 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
   it("模型连通性测试:setModel 在会话创建前 no-op + ping 收到 assistant 回复", async () => {
     const backend = createDshBackend({
       cwd: process.cwd(),
-      agentDir: join(homedir(), ".pi"),
       kernel: "dsh",
       neutralSessionId: "test-session",
       provider: "us-new",
@@ -91,7 +90,6 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
   it("seed 转录:线性 NeutralEntry[] 经 session/seed 灌进真实 dsh,getEntries 回放同角色序列", async () => {
     const backend = createDshBackend({
       cwd: process.cwd(),
-      agentDir: join(homedir(), ".pi"),
       kernel: "dsh",
       neutralSessionId: "seed-integration",
       provider: "us-new",
@@ -135,7 +133,6 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
   it("原地热切:已物化会话 setModel 换模型,进程不死、缺面不记、下条消息走新模型(docs/model-switching.md §11)", async () => {
     const backend = createDshBackend({
       cwd: process.cwd(),
-      agentDir: join(homedir(), ".pi"),
       kernel: "dsh",
       neutralSessionId: "hot-switch-integration",
       provider: "us-new",

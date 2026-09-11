@@ -29,6 +29,7 @@ export function makeRealCtx(homedir: string, cwd: string): RealCtx {
     prefs: {
       get: <T>(key: string): T | undefined => prefsStore.get(key as keyof Prefs) as T | undefined,
       set: <T>(key: string, value: T): void => { prefsStore.set(key as keyof Prefs, value as Prefs[keyof Prefs]); },
+      remove: (key: string): void => { prefsStore.remove(key as keyof Prefs); },
     },
     testModel: (p, m) => Promise.resolve({ ok: false, error: `no real backend for ${p}/${m}` }),
     markSessionsPendingRestart: (reason) => { restarts.push(reason); },
