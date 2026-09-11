@@ -101,14 +101,16 @@ export async function clickBySelector(page, selector, { timeoutMs = 6000, settle
  *  做法：算点 → 点 → 每次都重新算（动画结束后位置才稳定）→ 直到 predicate 成立或次数用尽。
  *  最后一次仍不成立时返回 false，让调用方给出**说人话**的失败信息（不吞、不伪造通过）。
  */
-export async function clickPointUntil(page, locate, predicate, { tries = 6, settleMs = 300 } = {}) {
+export async function clickPointUntil(page, locate, predicate, { tries = 6, settleMs = 300, arg } = {}) {
+  // `arg` 会原样传给两个函数：page.evaluate 是**跨进程序列化**的，闭包变量不会带过去
+  // （把内核名/模型名这类参数写进闭包，在页面里就是 undefined —— 实测踩过）。
   for (let i = 0; i < tries; i++) {
-    const pt = await page.evaluate(locate).catch(() => null);
+    const pt = await page.evaluate(locate, arg).catch(() => null);
     if (pt) {
       await page.mouse.click(pt.x, pt.y);
       await sleep(settleMs);
     }
-    if (await page.evaluate(predicate).catch(() => false)) return true;
+    if (await page.evaluate(predicate, arg).catch(() => false)) return true;
   }
   return false;
 }
