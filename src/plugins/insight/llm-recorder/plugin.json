@@ -3,13 +3,15 @@
   "version": "0.9.0",
   "tier": "official",
   "displayName": "LLM 请求记录",
+  "extensions": {
+    "pi": "./pi-extension",
+    "dsh": "./dsh-extension"
+  },
   "description": "记录每次 LLM 请求的完整请求体与响应消息，右侧面板按会话查看，设置页统计与清理",
   "tags": [
     "insight"
   ],
   "renderer": "./renderer/index.tsx",
-  "piExtension": "./pi-extension",
-  "dshExtension": "./dsh-extension",
   "permissions": [
     "fs:project"
   ],

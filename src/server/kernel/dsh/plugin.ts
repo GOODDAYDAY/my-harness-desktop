@@ -5,7 +5,7 @@
 // 聚合成一份插件。dsh 的「首次运行准备」(ensure* 写 cordis.yml/凭证插件/明文会话日志 + zstd 工件迁移)
 // 有副作用,放在工厂内部(工厂 = 装配 + 初始化入口,bootstrap 装配点调用工厂即完成准备)。
 
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { DshConfigSource } from "./backend/dsh-config-source";
 import { migrateZstdSessionArtifacts } from "./backend/dsh-artifact-migration";
 import { createDshBackend, createDshCatalog } from "../factories/kernel-factories";
@@ -16,7 +16,7 @@ import { createDshConfigApi } from "./manager/dsh-kernel-config";
 import { DSH_LOGO } from "./manager/dsh-logo";
 import { wrapVersionApi } from "../core/kernel-version";
 import { DshSkillProvider } from "./extension/dsh-skill-provider";
-import { syncPluginDshExtension, removePluginDshExtension, syncFitDshExtension, reconcilePluginDshExtensions } from "./extension/dsh-extension-installer";
+import { FIT_DSEXTENSION_ID, syncPluginDshExtension, removePluginDshExtension, syncFitDshExtension, reconcilePluginDshExtensions } from "./extension/dsh-extension-installer";
 import { DshQuestionBridge } from "./manager/dsh-question-bridge";
 import type { KernelPluginFactory } from "@my-harness-desktop/shared";
 
@@ -118,15 +118,21 @@ export const dshKernelPlugin: KernelPluginFactory = (ctx) => {
     // 技能能力面(读 dsh fork 插件播报 + 写 disabled 名单)。
     createSkillProvider: () => new DshSkillProvider({ dshHome: join(ctx.homedir, ".dsh") }),
     // 扩展同步能力(壳插件携带 dsh-extension → cordis;用插件自己的 configSource)。
-    createExtensionSync: () => ({
+    createPluginExtensionSync: () => ({
       onActivate: (pluginId, pluginPath, extension) => {
         syncPluginDshExtension(pluginId, join(pluginPath, extension), configSource);
       },
       onDeactivate: (pluginId) => {
         removePluginDshExtension(pluginId, configSource);
       },
-      syncFit: (sourceDir) => {
+      // 资产路径是 dsh 自己的私有知识（dev = 仓库里那块合并扩展；pkg = extraResources 随壳分发），
+      // 由插件解析——壳不再持有 DSH_FIT_EXTENSION_SOURCE / FIT_DSEXTENSION_ID 这类内核专属常量。
+      syncFit: () => {
+        const sourceDir = ctx.isPackaged
+          ? join(process.resourcesPath, "my-harness-desktop-dsh-extension")
+          : resolve(process.cwd(), "src/server/kernel/dsh/extension/dsh-extension");
         syncFitDshExtension(sourceDir, configSource);
+        return FIT_DSEXTENSION_ID;
       },
       reconcile: (activeIds) => {
         reconcilePluginDshExtensions(activeIds, configSource);

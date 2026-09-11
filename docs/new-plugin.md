@@ -46,8 +46,7 @@ import { ... } from "@my-harness-desktop/react";    // 发布面（hooks + 组�
   "description": "...",         // 一句话描述。
   "tags": ["session"],          // 分类 tag。最终 tags = 框架推导 ∪ 声明（resolvePluginTags）。
   "renderer": "./renderer/index.tsx",  // 壳插件入口，相对插件目录。框架按它加载 React 模块。
-  "piExtension": "./pi-extension",     // 可选。pi 内核扩展目录（相对路径）。
-  "dshExtension": "./dsh-extension",   // 可选。dsh 内核扩展目录（相对路径）。
+  "extensions": { "pi": "./pi-extension", "dsh": "./dsh-extension" },  // 可选。内核 id → 扩展目录（相对路径）。
   "permissions": ["fs:project"],       // 可选。声明式能力清单（见 §9）。
   "dependsOn": ["timeline"],           // 可选。生命周期护栏：消费别的插件 channel 时声明。
   "protected": false,                  // 可选。true = 不可卸载（可禁用不可移除）。
@@ -69,9 +68,9 @@ import { ... } from "@my-harness-desktop/react";    // 发布面（hooks + 组�
 
 **`renderer`**。壳插件入口路径，相对插件目录。内置插件的 renderer 由 `src/web/app/plugins-host.ts:4` 的 `import.meta.glob("../../plugins/*/*/renderer/index.{ts,tsx}")` 在构建期静态打包；第三方插件的 renderer 由 `loadThirdParty`（`plugins-host.ts:56`）动态 `import("file://...")`。`renderer` 字段的值必须指向那个导出组件/channels 的模块（见 §4）。
 
-**`piExtension`**。声明了它，`lifecycle/index.ts:102` 的 `activate` 才会调 `piExtensionEnsure.onActivate`，把 `<pluginPath>/<piExtension>/` 同步进 `~/.pi/agent/extensions/<id>/`。值是相对插件目录的路径（如 `"./pi-extension"`），不带尾斜杠。不声明就不触发，目录存不存在都不影响插件本体加载。
+**`extensions`**。可选，类型是 `{ [内核 id]: 相对路径 }`，如 `{ "pi": "./pi-extension", "dsh": "./dsh-extension" }`。声明后，框架在 activate 时**按内核 id 派发**给那个内核自己的同步实现（`lifecycle/index.ts` 遍历 `manifest.extensions` → `deps.pluginExtensionEnsure.onActivate(kernel, …)`）：pi 把 `<pluginPath>/<路径>/` 同步进 `~/.pi/agent/extensions/<id>/`；dsh 同步进 `~/.dsh/.my-harness-desktop-plugins/<id>/` 并挂 cordis.yml 块；第四个内核由它自己的插件实现。不声明就不触发，目录存不存在都不影响插件本体加载。
 
-**`dshExtension`**。与 piExtension 对称，`lifecycle/index.ts:105` 的 `activate` 调 `dshExtensionEnsure.onActivate`，同步到 `~/.dsh/.my-harness-desktop-plugins/<id>/` 并挂 cordis.yml 块。
+> **为什么是按内核 id 的映射，不是一个内核一个字段**（勿改回）：`piExtension`/`dshExtension` 这种命名意味着每接一个内核就要在**圆心**加一个字段、在生命周期/装配/能力广播各加一处对称分支。圆心是"拿掉所有会变的东西之后剩下的"，内核清单恰恰最会变。守卫：`npm run audit:deps` 检验 ⑨（壳机制层与圆心不许出现 `<内核名>Extension` 形态的标识符）。
 
 **`permissions`**。字符串数组。声明式能力清单，壳后端网关（`src/server/controllers/`）在每个受控 IPC 入口调 `registry.assertPermission(pluginId, permission)` 校验。已实现的权限字符串只有六个：`fs:project`、`git:read`、`git:write`、`llm:oneshot`、`sessions:bus`、`rpc:bash`（见 §9 详述）。核心能力（config/prefs/sessions/i18n 等）不需要声明。
 
@@ -97,7 +96,7 @@ import { ... } from "@my-harness-desktop/react";    // 发布面（hooks + 组�
 
 ```
 goal/
-  plugin.json            # 声明 renderer + piExtension + dshExtension + blockRenderers/composerTop
+  plugin.json            # 声明 renderer + extensions{pi,dsh} + blockRenderers/composerTop
   core/                  # 纯函数状态机（goal-state / goal-command / goal-reduce），renderer 内部 import
   renderer/
     index.tsx            # export GoalCard / GoalBar + channels + composerCommands
@@ -116,7 +115,7 @@ goal/
 
 ```
 llm-recorder/
-  plugin.json            # 声明 renderer + piExtension + permissions:["fs:project"] + sidePanel/settings/languages
+  plugin.json            # 声明 renderer + extensions{pi} + permissions:["fs:project"] + sidePanel/settings/languages
   core/                  # 纯函数（log-model / payload-model）
   renderer/
     index.tsx            # export RecordsTab / RecorderSettings
@@ -310,7 +309,7 @@ locales/
 ### 6.1 注册工具：goal 的 pi-extension/index.ts
 
 ```ts
-// 本目录由 piExtensionEnsure 随插件启停同步到 ~/.pi/agent/extensions/goal/。
+// 本目录由 createPluginExtensionSync（pi 的那一份）随插件启停同步到 ~/.pi/agent/extensions/goal/。
 // 不 import 官方 pi 包——手写窄结构。
 
 interface GoalToolResult {
@@ -396,9 +395,9 @@ export default function llmRecorder(pi: RecorderApi): void {
 
 `ctx` 是 pi 注入的上下文（`RecorderContext { sessionManager: { getSessionFile() } }`），扩展用它拿会话级信息。llm-recorder 在 `before_provider_request` 记 request 行、`after_provider_response` 挂 status、`message_end` 出栈写 response 行，配对落 JSONL 到 `<cwd>/.my-harness-desktop/llm-logs/`——这是「壳插件需要的能力，pi 内核没有，就写 pi 扩展补」的典型。
 
-### 6.3 同步机制（piExtension 怎么进内核）
+### 6.3 同步机制（extensions["pi"] 怎么进内核）
 
-声明了 `piExtension` 后，`lifecycle/index.ts:102` 的 `activate` 调 `piExtensionEnsure.onActivate`，最终落到 `src/server/kernel/pi/extension/pi-extension-installer.ts` 的 `syncPluginPiExtension`（第 64 行）：
+声明了 `extensions["pi"]` 后，`lifecycle/index.ts` 的 `activate` 遍历 `manifest.extensions` 并调 `pluginExtensionEnsure.onActivate("pi", …)`，最终落到 `src/server/kernel/pi/extension/pi-extension-installer.ts` 的 `syncPluginPiExtension`（第 64 行）：
 
 1. `findExtensionEntry(sourceDir, [".ts", ".js"])` 找入口文件（`.ts`/`.js`，没有则跳过同步告警）。
 2. 目标 `~/.pi/agent/extensions/<pluginId>/` 若已存在但无 `.my-harness-desktop-plugin` 标记文件 → 是用户手装的同名扩展，跳过不覆盖。
@@ -416,7 +415,7 @@ deactivate 时 `removePluginPiExtension`（第 102 行）只删带标记的目�
 ### 7.1 index.mjs：Cordis 插件
 
 ```js
-// 本目录由 dshExtensionEnsure 随插件启停同步到 ~/.dsh/.my-harness-desktop-plugins/goal/。
+// 本目录由 createPluginExtensionSync（dsh 的那一份）随插件启停同步到 ~/.dsh/.my-harness-desktop-plugins/goal/。
 // 零 import dsh 内核包（与 pi 扩展同纪律）：只依赖 cordis 的 ctx.tools 注入面。
 export const name = "desktop-goal";
 
@@ -472,9 +471,9 @@ export function apply(ctx) {
 
 类型 `DshExtensionManifest`（`src/server/kernel/dsh/extension/dsh-extension-manifest.ts:10`）：`{ displayName: string; description?: string }`。缺 manifest 时拓展管理页回落 cordis id（剥 `my-harness-desktop-` 前缀），同步期 `warnMissingManifest`（`dsh-extension-installer.ts:76`）打告警提醒补齐。
 
-### 7.3 同步机制（dshExtension 怎么进内核）
+### 7.3 同步机制（extensions["dsh"] 怎么进内核）
 
-声明了 `dshExtension` 后，`lifecycle/index.ts:105` 调 `dshExtensionEnsure.onActivate`，落到 `src/server/kernel/dsh/extension/dsh-extension-installer.ts` 的 `syncPluginDshExtension`（第 134 行）：
+声明了 `extensions["dsh"]` 后，`lifecycle/index.ts` 遍历派发到对应内核的 `onActivate`，落到 `src/server/kernel/dsh/extension/dsh-extension-installer.ts` 的 `syncPluginDshExtension`（第 134 行）：
 
 1. `findExtensionEntry(sourceDir, [".mjs"])` 找 `.mjs` 入口。
 2. 目标 `~/.dsh/.my-harness-desktop-plugins/<id>/` 带标记检查（同 pi）。
@@ -604,10 +603,9 @@ llm-recorder 是范本：它需要读自己 pi-extension 落盘的 JSONL（`<cwd
 deps.registry.registerOne({ manifest, path, source });   // 1. 注册槽位贡献到注册表
 await deps.loader.load(manifest, pluginPath);             // 2. 加载 renderer 模块（前端 plugins-host）
 if (deps.skillsEnsure) await deps.skillsEnsure.onActivate(...);       // 3. 技能挂载（若有）
-if (deps.piExtensionEnsure && manifest.piExtension)                 // 4. pi 扩展同步
-  deps.piExtensionEnsure.onActivate(manifest.id, pluginPath, manifest.piExtension);
-if (deps.dshExtensionEnsure && manifest.dshExtension)               // 5. dsh 扩展同步
-  deps.dshExtensionEnsure.onActivate(manifest.id, pluginPath, manifest.dshExtension);
+for (const [kernel, rel] of Object.entries(manifest.extensions ?? {})) {   // 4. 内核扩展同步（按内核 id 派发）
+  deps.pluginExtensionEnsure?.onActivate(kernel, manifest.id, pluginPath, rel);
+}
 clearPluginState(manifest.id);                            // 6. 清 error 态
 deps.notifyPluginsChanged();                               // 7. 广播（前端据 nonce 重拉槽清单）
 ```
@@ -621,8 +619,8 @@ deps.notifyPluginsChanged();                               // 7. 广播（前端
 ```ts
 deps.registry.unregister(pluginId);                        // 1. 从注册表移除全部贡献
 await deps.skillsEnsure.onDeactivate(...);                 // 2. 技能摘除
-deps.piExtensionEnsure.onDeactivate(pluginId);             // 3. pi 扩展摘除（删带标记目录）
-deps.dshExtensionEnsure.onDeactivate(pluginId);            // 4. dsh 扩展摘除（摘 cordis 块 + 删目录）
+for (const kernel of Object.keys(manifest.extensions ?? {}))              // 3. 内核扩展摘除（与挂对称）
+  deps.pluginExtensionEnsure?.onDeactivate(kernel, pluginId);
 const components = collectComponentNames(manifest);        // 5. 收集组件名
 deps.notifyPluginUnloaded(pluginId, components);           // 6. 通知前端卸载模块
 deps.notifyPluginsChanged();
@@ -691,8 +689,7 @@ src/plugins/sessions/todo/
   "description": "内核无关的同会话待办：add_todo 工具 + 时间线卡片 + 右侧面板",
   "tags": ["session"],
   "renderer": "./renderer/index.tsx",
-  "piExtension": "./pi-extension",
-  "dshExtension": "./dsh-extension",
+  "extensions": { "pi": "./pi-extension", "dsh": "./dsh-extension" },
   "contributes": {
     "blockRenderers": [
       { "id": "todo", "block": "toolCall", "names": ["add_todo"], "component": "TodoCard" }

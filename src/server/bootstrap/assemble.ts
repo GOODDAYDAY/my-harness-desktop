@@ -23,14 +23,13 @@ import { NeutralSessionStore } from "../application/sessions/neutral-session-sto
 import { PendingQuestionStore } from "../application/sessions/pending-question-store";
 import type { BackendFactory, SessionCatalogFactory } from "@my-harness-desktop/shared";
 import type { KernelModelsRegistry, KernelConfigApi, KernelExtensionSource, KernelVersionApi, SkillProvider } from "@my-harness-desktop/shared";
-import type { KernelId } from "@my-harness-desktop/shared";
+import type { KernelId, KernelPlugin } from "@my-harness-desktop/shared";
 import type { PluginLifecycleDeps } from "../application/lifecycle";
 import { KERNEL_LOGOS } from "../kernel/factories/kernel-logos";
 import { KernelRegistry } from "../kernel/core/kernel-registry";
 import { loadKernelPlugin, scanKernelPlugins, defaultEnabledEntries } from "../kernel/core/kernel-plugin-loader";
 import { mirrorBundledSkills } from "../application/skills/bundled-skills";
 import { SkillAggregator } from "../application/skills/skill-aggregator";
-import { installFitPiExtension, fitPiExtensionAvailable } from "../kernel/pi/extension/my-harness-fit-pi-extension-installer";
 import { mirrorManagedDir } from "../application/bundled/mirror";
 import { initKernelRuntime } from "../kernel/core/kernel-manager";
 import { reconcileMissingKernels } from "../kernel/core/kernel-reconcile";
@@ -53,7 +52,6 @@ import { registerWindow } from "../controllers/window";
 import { registerAppInfo } from "../controllers/app-info";
 import { registerNotification } from "../controllers/notification";
 import { registerRemote } from "../controllers/remote";
-import { FIT_DSEXTENSION_ID } from "../kernel/dsh/extension/dsh-extension-installer";
 import { SessionBus } from "../application/sessions/session-bus";
 import { resolveMyHarnessDesktopDir } from "../application/config/paths";
 import { createGateway } from "../routing/gateway";
@@ -127,12 +125,6 @@ initKernelRuntime(createNpmKernelRuntime());
 
 // dsh 首次运行准备(ensure* 写 cordis.yml/凭证插件/明文会话日志 + zstd 迁移 + 悬空默认清理 +
 //  tool-skill 启用)已收进 dshKernelPlugin 工厂(§kernel-plugin),此处不再重复构造——加第四个内核零改动。
-// 统一 dsh 适配插件源目录(合并 ask/goal/read-claude-md/skill-manager 四个随插件携带的
-// dsh cordis 插件为一块 my-harness-fit-dsh-extension)。dev: __dirname=out/main →
-// ../../src/server/kernel/dsh/extension/dsh-extension;pkg: resources/my-harness-desktop-dsh-extension(extraResources 随壳分发)。
-const DSH_FIT_EXTENSION_SOURCE = opts.isPackaged
-  ? join(process.resourcesPath, "my-harness-desktop-dsh-extension")
-  : resolve(process.cwd(), "src/server/kernel/dsh/extension/dsh-extension");
 // 内核插件注册(§kernel-plugin):唯一 import 具体内核插件并注册的地方。加第四个内核 = 在此加一行。
 // 提前到 modelCatalog 之前(modelSource 从 registry 遍历),testModel/markSessionsPendingRestart 用延迟
 // 闭包引用后赋值的 sessionStore/restartCoordinator(运行时才求值,那时已赋值)。
@@ -337,24 +329,27 @@ const pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]> = {
     }
   },
 };
-// 插件携带 pi 内核扩展的挂/摘 hooks(写 ~/.pi/agent/extensions 是流出适配)。
-const pluginPiExtensionEnsure: NonNullable<PluginLifecycleDeps["piExtensionEnsure"]> = {
-  onActivate(pluginId, pluginPath, piExtension) {
-    for (const l of lifecycles) l.piExtensionEnsure?.onActivate(pluginId, pluginPath, piExtension);
+// 插件携带**内核扩展**的挂/摘（一个内核一份实现，壳按 manifest.extensions 的内核 id 派发）。
+// 这里没有 `piExtensionEnsure` / `dshExtensionEnsure` 这种按内核命名的分支：加第四个内核 =
+// 它自己的插件交一份 createPluginExtensionSync，本文件零改动（§1.3 契约单源 / §1.4 无特权差异）。
+const kernelExtensionSyncs: { kernel: KernelId; sync: NonNullable<ReturnType<NonNullable<KernelPlugin["createPluginExtensionSync"]>>> }[] =
+  kernelRegistry.all()
+    .map((p) => ({ kernel: p.id, sync: p.createPluginExtensionSync?.() }))
+    .filter((e): e is typeof e & { sync: NonNullable<typeof e.sync> } => !!e.sync);
+
+const pluginExtensionEnsure: NonNullable<PluginLifecycleDeps["pluginExtensionEnsure"]> = {
+  onActivate(kernel, pluginId, pluginPath, extensionDir) {
+    const target = kernelExtensionSyncs.find((e) => e.kernel === kernel);
+    if (!target) {
+      // 显式降级 + 留痕：插件声明了内核 X 的扩展，但 X 没装载（或它没交同步面）。
+      // 不能静默——否则表现为"扩展装了、内核就是看不见"，是最难查的一类。
+      console.warn(`[plugin-extension] 插件 ${pluginId} 声明了内核 "${kernel}" 的扩展，但该内核没有扩展同步面（未装载？），已跳过`);
+      return;
+    }
+    target.sync.onActivate(pluginId, pluginPath, extensionDir);
   },
-  onDeactivate(pluginId) {
-    for (const l of lifecycles) l.piExtensionEnsure?.onDeactivate(pluginId);
-  },
-};
-// 插件携带 dsh cordis 扩展的挂/摘 hooks(同步目录 + 挂 cordis.yml 块)。
-// 从 registry 遍历 createExtensionSync(dsh 有、pi/minimal 无此面)。
-const extensionSyncs = kernelRegistry.all().map((p) => p.createExtensionSync?.()).filter((s) => !!s);
-const pluginDshExtensionEnsure: NonNullable<PluginLifecycleDeps["dshExtensionEnsure"]> = {
-  onActivate(pluginId, pluginPath, dshExtension) {
-    for (const s of extensionSyncs) s.onActivate?.(pluginId, pluginPath, dshExtension);
-  },
-  onDeactivate(pluginId) {
-    for (const s of extensionSyncs) s.onDeactivate?.(pluginId);
+  onDeactivate(kernel, pluginId) {
+    kernelExtensionSyncs.find((e) => e.kernel === kernel)?.sync.onDeactivate(pluginId);
   },
 };
 
@@ -456,11 +451,9 @@ const ctx: MainContext = {
   kernelVersionApis,
   kernelIds,
   kernelOneshots,
-  fitPiExtensionAvailable,
   ensureBundledSkills,
   pluginSkillsEnsure,
-  pluginPiExtensionEnsure,
-  pluginDshExtensionEnsure,
+  pluginExtensionEnsure,
   i18n: {
     resources: i18nResources,
     namespaces: collectNamespaces(i18nResources),
@@ -541,55 +534,38 @@ registerRemote(gateway, auth, {
     if (anyChanged) broadcastSettingsChanged(gateway);
   })().catch((e) => console.error("[plugin-skills] 启动同步失败:", e));
 
-  // 插件携带内核扩展(piExtension)的启动同步:同步非禁用插件的声明 + 摘除孤儿目录。
-  // 放在任何 pi spawn 之前(toolgate 同约束:内核 loader 只在 spawn 时扫一次扩展目录)。
-  // 设计 docs/design/llm-recorder-design.md §5。
+  // 插件携带**内核扩展**的启动同步：内核各自的适配扩展 + 非禁用壳插件的声明 + 摘除孤儿目录。
+  // 放在任何内核 spawn 之前（内核的 loader 只在 spawn 时扫一次扩展目录；dsh 启动时读 cordis.yml 组合）。
+  // 设计 docs/design/llm-recorder-design.md §5。**内核无关**：循环的是注册表，不是写死的 pi/dsh 两段。
   void (async () => {
     try {
       const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
       const active = new Set<string>();
+      // ① 随壳分发的适配扩展：各内核自报（syncFit 自己解析资产路径，并回报它注册的 id）。
+      for (const e of kernelExtensionSyncs) {
+        const fitId = e.sync.syncFit?.();
+        if (fitId) active.add(fitId);
+      }
+      // ② 壳插件携带的扩展：读 manifest.extensions 的 {内核 id: 相对路径}，按 id 派发。
+      //    传**原始插件目录 + 相对路径**（插件侧 onActivate 自会 join）——历史上误传
+      //    resolve(plugin.path, rel) 再 join(rel) 造成路径双重拼接，扩展永远同步不上（勿回退）。
       for (const [id, plugin] of registry.allPlugins()) {
-        const rel = plugin.manifest.piExtension;
-        if (!rel || disabled.includes(id)) continue;
-        // 传原始插件目录 + 相对扩展路径(插件侧 onActivate 自会 join)——此前误传 resolve(plugin.path, rel)
-        // 再在插件侧 join(rel) 导致路径双重拼接,扩展目录永远同步不上(§根因修复,勿回退)。
-        for (const l of lifecycles) l.piExtensionEnsure?.onActivate(id, plugin.path, rel);
+        const ext = plugin.manifest.extensions ?? {};
+        if (disabled.includes(id) || Object.keys(ext).length === 0) continue;
+        for (const [kernel, rel] of Object.entries(ext)) {
+          pluginExtensionEnsure.onActivate(kernel, id, plugin.path, rel);
+        }
         active.add(id);
       }
-      for (const l of lifecycles) l.piExtensionEnsure?.reconcile?.(active);
+      // ③ 对账：各内核摘除自己目录下带 marker 但不在 active 的扩展（含历史遗留的几个）。
+      for (const e of kernelExtensionSyncs) e.sync.reconcile?.(active);
     } catch (e) {
-      console.error("[pi-extension] 启动同步失败:", e);
-    }
-  })().catch((e) => console.error("[pi-extension] 启动同步失败:", e));
-
-  // 插件携带 dsh cordis 插件的启动同步:同步非禁用插件的声明 + 摘除孤儿。与 piExtension 对账对称;
-  // 放在任何 dsh spawn 之前(dsh 内核启动时读 cordis.yml 组合,须先挂好块)。
-  void (async () => {
-    try {
-      const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
-      // 统一适配插件:bootstrap 常驻,先于任何 dsh spawn(合并后的单一块)。
-      for (const s of extensionSyncs) s.syncFit?.(DSH_FIT_EXTENSION_SOURCE);
-      const active = new Set<string>([FIT_DSEXTENSION_ID]);
-      // 第三方插件仍可经 manifest.dshExtension 携带 dsh cordis 插件(通用通道,随插件启停)。
-      for (const [id, plugin] of registry.allPlugins()) {
-        const rel = plugin.manifest.dshExtension;
-        if (!rel || disabled.includes(id)) continue;
-        // 同 piExtension:传原始插件目录 + 相对扩展路径,插件侧 onActivate 自会 join。
-        // 此前误传 resolve(plugin.path, rel) 再 join(rel) → 路径双重拼接,dsh 扩展目录同步不上,
-        // cordis.yml 里的相对块指向不存在的目录 → dsh 内核启动即崩(§根因修复,勿回退)。
-        for (const s of extensionSyncs) s.onActivate?.(id, plugin.path, rel);
-        active.add(id);
-      }
-      // 对账:PLUGINS_ROOT 下带 marker 但不在 active 的目录(含旧 ask/goal/read-claude-md/skill-manager)摘除。
-      for (const s of extensionSyncs) s.reconcile?.(active);
-    } catch (e) {
-      console.error("[dsh-extension] 启动同步失败:", e);
+      console.error("[plugin-extension] 启动同步失败:", e);
     }
   })().catch((e) => console.error("[dsh-extension] 启动同步失败:", e));
 
-  // my-harness-fit-pi-extension 内核扩展同步:统一了原 tool-gate/context-probe/bus/subagent/skills
-  // 五个扩展,任何 pi 会话进程 spawn 之前装好,renderer 经 kernel.fitPiExtensionAvailable IPC 探测可用性。
-  installFitPiExtension(opts.isPackaged);
+  // （随壳分发的适配扩展已由上面的「插件携带内核扩展的启动同步」统一装好：各内核自报 syncFit，
+  //   壳不认内核名、不持内核专属资产路径。renderer 经 kernel.fitPiExtensionAvailable IPC 探测可用性。）
   // 起 HTTP+WS 服务器(§6/§7.3):静态 + /rpc。
   const httpServer = createHttpServer({ staticDir: opts.rendererDir, gateway, auth });
   const wsHandle = attachWsServer(httpServer, gateway, host, auth.createTokenVerifier());

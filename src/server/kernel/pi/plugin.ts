@@ -19,7 +19,7 @@ import { PiExtensionManager } from "./extension/pi-extension-manager";
 import { PiKernelManager, PI_SPEC } from "./manager/pi-kernel";
 import { PI_LOGO } from "./manager/pi-logo";
 import { wrapVersionApi } from "../core/kernel-version";
-import { fitPiExtensionAvailable } from "./extension/my-harness-fit-pi-extension-installer";
+import { fitPiExtensionAvailable, installFitPiExtension, FIT_PI_EXTENSION_ID } from "./extension/my-harness-fit-pi-extension-installer";
 import { runPiOneshot } from "./extension/pi-oneshot";
 import { PiSkillProvider } from "./extension/pi-skill-provider";
 import { ensureBundledSkillsEntry, ensurePluginSkillsEntry, migrateLegacySkillPatterns } from "./extension/pi-bundled-skills";
@@ -104,16 +104,24 @@ export const piKernelPlugin: KernelPluginFactory = (ctx) => {
           return ensurePluginSkillsEntry({ settingsPath, skillsDir, active: false, homeDir: ctx.homedir });
         },
       },
-      piExtensionEnsure: {
-        onActivate: (pluginId, pluginPath, extension) => {
-          syncPluginPiExtension(pluginId, join(pluginPath, extension));
-        },
-        onDeactivate: (pluginId) => {
-          removePluginPiExtension(pluginId);
-        },
-        reconcile: (activeIds) => {
-          reconcilePluginPiExtensions(activeIds);
-        },
+    }),
+    // 壳插件携带的 pi 扩展：写 ~/.pi/agent/extensions/<pluginId>/（内核侧扩展位）。
+    // 中立面叫 createPluginExtensionSync —— 壳遍历注册表按内核 id 派发，不认内核名。
+    createPluginExtensionSync: () => ({
+      // 随壳分发的适配扩展（packages/my-harness-fit-pi-extension → ~/.pi/agent/extensions/…）。
+      // 资产路径由 pi 自己解析（installFitPiExtension 内部按 isPackaged 分流），壳不传参、不认路径。
+      syncFit: () => {
+        installFitPiExtension(ctx.isPackaged);
+        return FIT_PI_EXTENSION_ID;
+      },
+      onActivate: (pluginId, pluginPath, extensionDir) => {
+        syncPluginPiExtension(pluginId, join(pluginPath, extensionDir));
+      },
+      onDeactivate: (pluginId) => {
+        removePluginPiExtension(pluginId);
+      },
+      reconcile: (activeIds) => {
+        reconcilePluginPiExtensions(activeIds);
       },
     }),
   };

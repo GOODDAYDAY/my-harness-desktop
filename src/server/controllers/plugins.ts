@@ -14,7 +14,7 @@ import { notifyPluginsChanged, notifyPluginUnloaded } from "../routing/broadcast
 import type { MainContext } from "../application/context/main-context";
 
 export function registerPlugins(gateway: Gateway, ctx: MainContext): void {
-  const { registry, configStore, paths, pluginSkillsEnsure, pluginPiExtensionEnsure, pluginDshExtensionEnsure } = ctx;
+  const { registry, configStore, paths, pluginSkillsEnsure, pluginExtensionEnsure } = ctx;
 
   // 评估 P1-A2:此前 main 侧 pluginLoader 按 source 分轨——builtin 走 import.meta.glob
   // (编译期),第三方走 file:// 动态 import。但 main 进程不渲染插件 UI(React 组件在 renderer
@@ -36,8 +36,7 @@ export function registerPlugins(gateway: Gateway, ctx: MainContext): void {
     notifyPluginsChanged: () => notifyPluginsChanged(gateway),
     notifyPluginUnloaded: (pluginId: string, components: string[]) => notifyPluginUnloaded(gateway, pluginId, components),
     skillsEnsure: pluginSkillsEnsure,
-    piExtensionEnsure: pluginPiExtensionEnsure,
-    dshExtensionEnsure: pluginDshExtensionEnsure,
+    pluginExtensionEnsure,
   };
 
   function rediscoverPlugin(pluginId: string): { manifest: PluginManifest; path: string; source: "builtin" | "user" | "installed" | "project" } | undefined {

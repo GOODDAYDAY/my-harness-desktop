@@ -18,7 +18,10 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
 const EXT_DIR = join(homedir(), ".pi", "agent", "extensions");
-const EXT_DIR_TARGET = join(EXT_DIR, "my-harness-fit-pi-extension");
+/** 随壳分发的适配扩展在系统里注册的 id（= 扩展目录名）。壳经 createPluginExtensionSync().syncFit()
+ *  拿到它并入对账的 active 集合——这样"我们的适配扩展"不会在冷启动对账里被误判成孤儿摘掉。 */
+export const FIT_PI_EXTENSION_ID = "my-harness-fit-pi-extension";
+const EXT_DIR_TARGET = join(EXT_DIR, FIT_PI_EXTENSION_ID);
 const EXT_FILE_TARGET = join(EXT_DIR_TARGET, "index.ts");
 /** skills 镜像落点:~/.pi/agent/skills 是 pi 默认发现目录(includeDefaults 会扫),
  *  但发现规则只认"子目录里的 SKILL.md"——installer 把源文件 <name>.md 映射成 <name>/SKILL.md。 */

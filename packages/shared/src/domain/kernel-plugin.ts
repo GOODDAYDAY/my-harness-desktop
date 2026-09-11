@@ -140,10 +140,28 @@ export interface KernelPlugin {
 
   /** 扩展同步能力(dsh 专属:壳插件携带 dsh-extension → 同步目录 + 挂 cordis.yml 块)。
    *  缺省 undefined = 无此面。壳的 lifecycle 钩子 + 启动 syncFit/reconcile 经此委托给插件。 */
-  createExtensionSync?(): {
-    onActivate?(pluginId: string, pluginPath: string, extension: string): void;
-    onDeactivate?(pluginId: string): void;
-    syncFit?(sourceDir: string): void;
+  /**
+   * **壳插件携带的内核扩展**的同步面（neutral：不叫 piExtensionEnsure / dshExtensionEnsure）。
+   *
+   * 壳插件可以在自己目录里带一份"给某个内核补能力"的扩展（pi 的 TS 扩展、dsh 的 Cordis 插件），
+   * 并在 manifest 的 `extensions` 里声明 `{ 内核 id: 相对路径 }`。框架在插件启停时把这件事
+   * 转交给**对应内核的**同步实现——就是本方法。每个内核各交一份，壳遍历注册表按 id 派发，
+   * 圆心与生命周期层零内核名（加第四个内核只写它自己这一份）。
+   *
+   * 与 `createLifecycle().skillsEnsure` 的区别：那个是"内核自己的 skills 注册表"（pi 专属面），
+   * 这个是"别的插件的私货怎么进内核的扩展位"——是**同步机制**，每个内核都必须能兑现。
+   */
+  createPluginExtensionSync?(): {
+    onActivate(pluginId: string, pluginPath: string, extensionDir: string): void;
+    onDeactivate(pluginId: string): void;
+    /**
+     * 随壳分发的"**适配扩展**"（非壳插件携带，是壳自带的）的启动同步；无此形态的内核缺省 undefined。
+     * **不接参数**：资产路径与它在内核侧的注册 id 都是该内核的私有知识（"我们的适配扩展放在哪"
+     * 这件事，壳不该知道），由插件自己从 `ctx.isPackaged` 解析——与 cliPath/agentDir 同一套做法。
+     * 返回它在系统里注册的 id（供壳并入对账的 active 集合）；未装返回 null。
+     */
+    syncFit?(): string | null;
+    /** 冷启动对账：摘除已不在场的插件的扩展目录（缺省 undefined = 不做对账）。 */
     reconcile?(activeIds: ReadonlySet<string>): void;
   };
 
@@ -166,11 +184,6 @@ export interface KernelPlugin {
     skillsEnsure?: {
       onActivate(pluginId: string, pluginPath: string, source: string): Promise<boolean>;
       onDeactivate(pluginId: string, pluginPath: string, source: string): Promise<boolean>;
-    };
-    piExtensionEnsure?: {
-      onActivate(pluginId: string, pluginPath: string, extension: string): void;
-      onDeactivate(pluginId: string): void;
-      reconcile?(activeIds: ReadonlySet<string>): void;
     };
   };
 }

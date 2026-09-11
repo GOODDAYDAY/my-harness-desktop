@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 依赖方向审计(CLAUDE.md §6.3 四检验的自动化 + KernelId 单源 + 内核身份分支)——CI-able 守卫。
 // 用法:node scripts/dependency-audit.mjs(违规 exit 1,全绿 exit 0)。
-// 八检验:
+// 九检验:
 //   ① 圆心零外部 import(packages/shared/src/domain 不碰任何外部包/壳内部)
 //   ② application 不 import 内核实现(非 type-only)·不 import electron/react
 //      ——neutral-migration.ts 是 session-single-source.md §4.3 明文例外(离线迁移工具)
@@ -163,6 +163,31 @@ for (const f of walk(join(ROOT, "src/server/application"))) {
   }
 }
 
+
+// ⑨ 内核名不许当**契约字段名**（§1.3 契约单源 / §1.4 无特权差异）。
+//    这条为什么是结构性而不是"注意一下"：`piExtension`/`dshExtension` 这种按内核名分字段的写法，
+//    每接一个内核就要在**圆心**（contributions.ts）加一个字段、在生命周期/装配/能力广播各加一处
+//    对称分支——圆心是"拿掉所有会变的东西之后剩下的"，而内核清单恰恰是最会变的东西。
+//    实测该模式一度铺到 4 处（manifest 字段 / lifecycle deps / MainContext / SessionCapabilities）。
+//    现在统一成 `extensions: { 内核 id: 路径 }` + `createPluginExtensionSync()`（每个内核各交一份），
+//    本检验守住不让它回潮：壳机制层与圆心不许再出现 `<内核名>Extension` 形态的标识符。
+{
+  const out = execSync(
+    // 匹配 `<内核名>Extension…` 这个**前缀**（不带尾部 \b：piExtensionEnsureProbe 这类
+    // 派生名同样是"按内核名分字段"，尾界会让它从守卫旁边溜过去）。
+    `grep -rnE '\\b(pi|dsh|minimal)Extension' --include='*.ts' --include='*.tsx' packages/shared/src src/server/application src/server/bootstrap src/server/kernel/core src/web 2>/dev/null || true`,
+    { encoding: "utf-8", cwd: ROOT },
+  );
+  for (const l of out.split("\n").filter(Boolean)) {
+    const parts = l.split(":");
+    const file = parts[0];
+    const text = parts.slice(2).join(":").trim();
+    if (/^(\/\/|\*|\/\*)/.test(text)) continue; // 注释：历史说明里会提旧写法
+    if (/\.test\./.test(file)) continue;            // 测试：可用旧名做对照说明
+    violations.push(`⑨ 按内核名分字段的契约 ${file.replace(ROOT, "")}: ${text.slice(0, 80)}`);
+  }
+}
+
 // 这个数是**四个被 walk 的骨架目录的文件数之和**(含 plugin.json/locales 等非 ts 文件),
 // **不是整条审计的覆盖面**——⑤⑥⑦ 三条是 grep,另外覆盖 `src/web` / `packages/react/src`。
 // 原来只写"七检验,N 文件"会被读成"整条审计只看了 N 个文件",是**标签误导**(实测 289 里
@@ -174,7 +199,7 @@ const walked = [
   "src/plugins",
 ];
 const scope = walked.reduce((n, d) => n + walk(join(ROOT, d)).length, 0);
-console.log(`依赖方向审计(八检验): ${violations.length} 处违规`);
+console.log(`依赖方向审计(九检验): ${violations.length} 处违规`);
 console.log(`  覆盖:walk ${walked.length} 个骨架目录共 ${scope} 文件(${walked.join(" · ")});` +
   `另有 ⑤⑥⑦ 三条 grep 覆盖 src/web、packages/react/src 等(核 KernelId 字面量/内核身份分支/能力名中性化)`);
 for (const v of violations) console.log("  " + v);

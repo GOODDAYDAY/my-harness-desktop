@@ -510,17 +510,23 @@ export interface PluginManifest {
   /** 插件分类 tag(公共元数据)。声明式部分:框架推导(见 derivePluginTags)覆盖不了
    *  的语义在此追加,最终 tags = 推导 ∪ 声明(resolvePluginTags)。 */
   tags?: string[];
-  /** 插件携带的 pi 内核 extension 目录（插件目录内相对路径，如 "./pi-extension"）。
-   *  声明后框架在 activate 时把它同步到 ~/.pi/agent/extensions/<pluginId>/，
-   *  deactivate/uninstall 时摘除——内容插件私货的生命周期通道，区别于
-   *  toolgate 等内核基础设施的 bootstrap 常驻同步（llm-recorder-design.md §5）。 */
-  piExtension?: string;
-  /** 插件携带的 dsh cordis 插件目录（插件目录内相对路径，如 "./dsh-extension"）。
-   *  声明后框架在 activate 时把它同步到 ~/.dsh/.my-harness-desktop-plugins/<pluginId>/，
-   *  并在 cordis.yml 挂载相对路径块；deactivate/uninstall 时摘除。与 piExtension 对称：
-   *  读用户全局 CLAUDE.md 的能力，pi 侧走 piExtension（read-claude-md 内核扩展），
-   *  dsh 侧走本字段（dsh cordis 插件）——同一能力在两个内核里的对称实现。 */
-  dshExtension?: string;
+  /**
+   * 插件携带的**内核扩展目录**：`{ 内核 id: 插件目录内相对路径 }`，如
+   * `{ "pi": "./pi-extension", "dsh": "./dsh-extension" }`。
+   *
+   * 声明后框架在 activate 时把它交给**那个内核的**扩展同步实现（pi 写
+   * `~/.pi/agent/extensions/<pluginId>/`，dsh 同步到 `~/.dsh/.my-harness-desktop-plugins/`
+   * 并在 cordis.yml 挂块，第四个内核由它自己的插件实现），deactivate/uninstall 时摘除。
+   * 这是内容插件私货的生命周期通道，区别于 toolgate 等内核基础设施的 bootstrap 常驻同步。
+   *
+   * **为什么是按内核 id 的映射，而不是 `piExtension`/`dshExtension` 两个命名字段**
+   * （根因，勿改回）：后者是「按内核分字段」的假泛化——接第四个内核就要在**圆心**加一个
+   * `kimiExtension?: string`，再在生命周期、能力广播、装配点各加一处对称分支。
+   * 圆心是"拿掉所有会变的东西之后剩下的"，内核清单恰恰是最会变的东西（pi 曾是唯一，
+   * dsh 证明了它是一个抽象）。映射形态下，加内核 = 插件自己写一行声明，圆心零改动。
+   * 同一条纪律在 `KernelPluginManifest`/`KernelId`/`KernelPlugin` 上都已落地，这里是最后一处。
+   */
+  extensions?: Record<KernelId, string>;
   /**
    * **内核面声明**：这一个插件同时是一个内核插件（§kernel-plugin「一个内核 = 一个插件」）。
    *

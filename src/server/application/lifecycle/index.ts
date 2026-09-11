@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginState } from "@my-harness-desktop/shared";
+import type { PluginManifest, PluginState, KernelId } from "@my-harness-desktop/shared";
 import type { DiscoveredPlugin } from "../loader/discover";
 import type { PluginRegistry } from "../loader/registry";
 import type { ConfigStore } from "../config/config-store";
@@ -75,17 +75,17 @@ export interface PluginLifecycleDeps {
     onActivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
     onDeactivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
   };
-  /** 插件携带内核 extension 的挂摘(manifest.piExtension 声明才触发)。
-   *  实现在 client/pi(写内核目录是流出适配),此处只持接口——与 skillsEnsure 同一形状。 */
-  piExtensionEnsure?: {
-    onActivate(pluginId: string, pluginPath: string, piExtension: string): void;
-    onDeactivate(pluginId: string): void;
-  };
-  /** 插件携带 dsh cordis 插件的挂摘(manifest.dshExtension 声明才触发)。
-   *  实现在 client/dsh(同步目录 + 挂 cordis.yml 块),此处只持接口——与 piExtensionEnsure 对称。 */
-  dshExtensionEnsure?: {
-    onActivate(pluginId: string, pluginPath: string, dshExtension: string): void;
-    onDeactivate(pluginId: string): void;
+  /**
+   * 插件携带**内核扩展**的挂摘（manifest.extensions 声明才触发）。
+   *
+   * 按内核 id 派发，不是一个内核一个字段：装配点拿到的这一份实现自己知道"哪个 id 归我"，
+   * 其余 id 显式忽略（不静默吞——见装配点的实现注释）。实现在各内核插件里
+   * （pi = 写 ~/.pi/agent/extensions/，dsh = 同步目录 + 挂 cordis.yml 块），
+   * application 只持接口——与 skillsEnsure 同一形状。加第四个内核：圆心与生命周期层零改动。
+   */
+  pluginExtensionEnsure?: {
+    onActivate(kernel: KernelId, pluginId: string, pluginPath: string, extensionDir: string): void;
+    onDeactivate(kernel: KernelId, pluginId: string): void;
   };
 }
 
@@ -99,11 +99,9 @@ export async function activate(
     deps.registry.registerOne({ manifest, path: pluginPath, source });
     await deps.loader.load(manifest, pluginPath);
     if (deps.skillsEnsure) await deps.skillsEnsure.onActivate(manifest.id, pluginPath, source);
-    if (deps.piExtensionEnsure && manifest.piExtension) {
-      deps.piExtensionEnsure.onActivate(manifest.id, pluginPath, manifest.piExtension);
-    }
-    if (deps.dshExtensionEnsure && manifest.dshExtension) {
-      deps.dshExtensionEnsure.onActivate(manifest.id, pluginPath, manifest.dshExtension);
+    // 遍历插件声明的内核扩展（{内核 id: 相对路径}），逐个派发给对应内核的同步实现。
+    for (const [kernel, dir] of Object.entries(manifest.extensions ?? {})) {
+      deps.pluginExtensionEnsure?.onActivate(kernel, manifest.id, pluginPath, dir);
     }
     clearPluginState(manifest.id);
     deps.notifyPluginsChanged();
@@ -123,11 +121,8 @@ export async function deactivate(deps: PluginLifecycleDeps, pluginId: string): P
   if (deps.skillsEnsure && plugin) {
     await deps.skillsEnsure.onDeactivate(pluginId, plugin.path, plugin.source);
   }
-  if (deps.piExtensionEnsure && manifest.piExtension) {
-    deps.piExtensionEnsure.onDeactivate(pluginId);
-  }
-  if (deps.dshExtensionEnsure && manifest.dshExtension) {
-    deps.dshExtensionEnsure.onDeactivate(pluginId);
+  for (const kernel of Object.keys(manifest.extensions ?? {})) {
+    deps.pluginExtensionEnsure?.onDeactivate(kernel, pluginId);
   }
   const components = collectComponentNames(manifest);
   deps.notifyPluginUnloaded(pluginId, components);

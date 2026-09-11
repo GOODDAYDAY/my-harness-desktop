@@ -416,7 +416,7 @@ src/web/
 
 ```
 src/plugins/{domain}/{feature}/
-├── plugin.json        # manifest（声明 id/contributes/permissions/piExtension/dshExtension）
+├── plugin.json        # manifest（声明 id/contributes/permissions/extensions{内核id:路径}）
 ├── renderer/          # desktop 壳插件（UI 组件 + 槽位贡献 + 事件，index.tsx 是入口）
 ├── locales/           # i18n 文案（desktop UI 文案，zh-CN/en/de/zh-TW 四个 locale）
 ├── pi-extension/      # pi 内核插件（给 pi 补能力的 TS 扩展）
@@ -424,7 +424,7 @@ src/plugins/{domain}/{feature}/
 └── core/              # 纯逻辑（可被 renderer/pi-extension 共享的纯函数，可无）
 ```
 
-参考实现：`sessions/goal/`（`core/` + `renderer/` + `pi-extension/` + `dsh-extension/`）、`insight/llm-recorder/`（`core/` + `renderer/` + `pi-extension/` + `locales/`）、`sessions/sub-agent/`（`client/` + `core/` + `tools/` + `renderer/`）。「四件套」的意图是：一个功能的所有内核侧适配都内聚在同一个 plugin 下，改功能只动一个 plugin，动不到壳的内核。`plugin.json` 里的 `piExtension` / `dshExtension` 字段声明插件携带的内核扩展目录，框架在 activate 时同步、deactivate 时摘除。
+参考实现：`sessions/goal/`（`core/` + `renderer/` + `pi-extension/` + `dsh-extension/`）、`insight/llm-recorder/`（`core/` + `renderer/` + `pi-extension/` + `locales/`）、`sessions/sub-agent/`（`client/` + `core/` + `tools/` + `renderer/`）。「四件套」的意图是：一个功能的所有内核侧适配都内聚在同一个 plugin 下，改功能只动一个 plugin，动不到壳的内核。`plugin.json` 里的 `extensions`（`{ 内核 id: 相对路径 }`）声明插件携带的内核扩展目录，框架在 activate 时**按内核 id 派发**给那个内核自己的同步实现、deactivate 时摘除。
 
 ### 8.2 `themes/`（9 个，配色 + 字体）
 
@@ -545,7 +545,7 @@ src/plugins/{domain}/{feature}/
 **证据**：
 - `sessions/goal/` 是 `core/` + `renderer/` + `pi-extension/` + `dsh-extension/` 四件齐全的参考实现。
 - `insight/llm-recorder/` 是 `core/` + `renderer/` + `pi-extension/` + `locales/`。
-- `system/read-claude-md/` 带 `pi-extension/extension/`，dsh 侧走 `plugin.json` 的 `dshExtension` 字段——同一能力在两个内核的对称实现。
+- `system/read-claude-md/` 带 `pi-extension/extension/`；同一能力在另一个内核里的对称实现走 `plugin.json` 的 `extensions` 里那一项。
 
 **风格意义**：「非必要不修改薄壳内核」。给内核补能力写内核插件（pi-extension/dsh-extension），不写对方核心；改功能只动一个 plugin，diff 不该落在 `server/`。
 

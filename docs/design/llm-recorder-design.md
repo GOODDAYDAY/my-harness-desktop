@@ -64,12 +64,12 @@ llm-recorder 是一个桌面插件：把每次 LLM 调用的完整请求体和�
 
 ### 2.5 dsh 侧数据面：hook 不同名，行契约相同（**已落地**）
 
-> **实现现状**：本节正文仍是有效设计，标题不再是"待实现"——`plugin.json` 已装 `dshExtension` 键，
-> `dsh-extension/index.mjs` 已实现三 hook + `(turn, step)` 配对，由 `dshExtensionEnsure` 随插件启停
+> **实现现状**：本节正文仍是有效设计，标题不再是"待实现"——`plugin.json` 的 `extensions` 里已声明 dsh 项，
+> `dsh-extension/index.mjs` 已实现三 hook + `(turn, step)` 配对，由对应内核的 `createPluginExtensionSync` 随插件启停
 > 同步到 `~/.dsh/.my-harness-desktop-plugins/llm-recorder/`。守卫：`dsh-extension-flow.test.ts`
 > （与 pi 侧 `extension-flow.test.ts` 对称）。
 
-**曾经的缺口（记录在案，勿重蹈）**：`plugin.json` 起初只有 `piExtension`、**没有 `dshExtension`**，而记录能力整条实现落在 pi 扩展里。所以 **dsh 内核执行时右侧「请求记录」恒空**（不是坏了，是从没接过）。补法按 §7.6 三分法走「内核插件补面」：给同一个插件目录加 `dsh-extension/`（Cordis 插件）+ 在 manifest 里装 `dshExtension` 键，与 `goal` 插件的双内核形态同构。
+**曾经的缺口（记录在案，勿重蹈）**：`plugin.json` 起初只声明了 pi 一个内核的扩展、**没有 dsh 那一项**，而记录能力整条实现落在 pi 扩展里。所以 **dsh 内核执行时右侧「请求记录」恒空**（不是坏了，是从没接过）。补法按 §7.6 三分法走「内核插件补面」：给同一个插件目录加 `dsh-extension/`（Cordis 插件）+ 在 manifest 的 `extensions` 里加一项，与 `goal` 插件的双内核形态同构。
 
 **落地时暴露的两条不变量（都不在原设计里，是实测修出来的，必须一起守）**：
 
@@ -175,7 +175,7 @@ index.json 的另一个边界也说死：extension 只在自己写行时增量�
 
 `readFile` 的 1MB 上限是 §3.4 rotate 阈值的直接依据：单分片恒在限内，面板永远不需要 readFileBase64 的 25MB 通道。这是两半设计的咬合点——写侧按读侧的能力上限切分文件，读侧按写侧的分片约定合并，契约只有一句话：单分片 < 1MB；首片无编号，编号分片从 `.2.jsonl` 起递增。
 
-## 5 分发机制：piExtension 声明式字段
+## 5 分发机制：`extensions` 声明式字段（**注：本节正文写于该字段还叫 `piExtension` 时**）
 
 extension 写好了，怎么进底座进程？这是本设计唯一的内核改动，也是把先例升格为机制的地方。
 
@@ -185,11 +185,11 @@ extension 写好了，怎么进底座进程？这是本设计唯一的内核改�
 
 ### 5.2 manifest 声明 + 生命周期挂摘
 
-机制照搬 skills 的既有模式：`api/ipc/plugins.ts` 的 lifecycleDeps 里已有一段 `skillsEnsure`——插件 activate 时若插件目录有 `skills/`，就把 skills 条目挂进底座 settings.json，deactivate 时摘掉。本次加一个对称的 `piExtensionEnsure`：
+机制照搬 skills 的既有模式：`api/ipc/plugins.ts` 的 lifecycleDeps 里已有一段 `skillsEnsure`——插件 activate 时若插件目录有 `skills/`，就把 skills 条目挂进底座 settings.json，deactivate 时摘掉。本次加一个对称的扩展同步面（当时叫 `piExtensionEnsure`；现已中性化为 `createPluginExtensionSync()`，声明形态为 `extensions: { 内核 id: 路径 }`，见 docs/new-plugin.md §2）：
 
-- `PluginManifest` 加可选字段 `piExtension?: string`（插件目录内的相对路径，如 `"./pi-extension"`）。
+- `PluginManifest` 加可选字段（当时叫 `piExtension?: string`，现为 `extensions?: Record<KernelId, string>`）。
 
-- activate：若声明了该字段，把 `<插件路径>/<piExtension>/` 同步到 `~/.pi/agent/extensions/<pluginId>/`（按内容 diff 跳过，toolgate-installer 同款拷贝策略）。
+- activate：若声明了该字段，把 `<插件路径>/<相对路径>/` 同步到 `~/.pi/agent/extensions/<pluginId>/`（按内容 diff 跳过，toolgate-installer 同款拷贝策略）。
 
 - deactivate/uninstall：摘除 `~/.pi/agent/extensions/<pluginId>/` 目录。卸载即停止注入，底座侧不留痕。**注意摘的只是 extension 代码，不碰数据**：`<cwd>/.my-harness-desktop/llm-logs/` 下已写好的日志原样保留——日志是用户的项目资产，框架不替用户做「卸载即焚」的决定，清理入口在设置页（§4.3），由用户显式触发。
 

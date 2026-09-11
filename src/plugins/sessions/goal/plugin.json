@@ -3,25 +3,32 @@
   "version": "0.1.0",
   "tier": "official",
   "displayName": "目标",
+  "extensions": {
+    "pi": "./pi-extension",
+    "dsh": "./dsh-extension"
+  },
   "description": "goal 能力：内核无关的同会话持久目标（set_goal/achieve_goal）+ 壳层续跑驱动",
   "tags": [
     "session"
   ],
   "renderer": "./renderer/index.tsx",
-  "piExtension": "./pi-extension",
-  "dshExtension": "./dsh-extension",
   "contributes": {
     "blockRenderers": [
       {
         "id": "goal",
         "block": "toolCall",
-        "names": ["set_goal", "achieve_goal"],
+        "names": [
+          "set_goal",
+          "achieve_goal"
+        ],
         "component": "GoalCard"
       },
       {
         "id": "goal-round",
         "block": "auxBlock",
-        "names": ["goal_round"],
+        "names": [
+          "goal_round"
+        ],
         "component": "GoalRoundCard",
         "order": 90
       }
@@ -45,7 +52,12 @@
             "default": 1000,
             "titleKey": "goal.settings.maxRounds",
             "descKey": "goal.settings.maxRoundsDesc",
-            "options": [100, 500, 1000, 5000]
+            "options": [
+              100,
+              500,
+              1000,
+              5000
+            ]
           }
         ]
       }
@@ -57,10 +69,26 @@
       }
     ],
     "languages": [
-      { "id": "goal", "locale": "zh-CN", "resources": "./locales/zh-CN/goal.json" },
-      { "id": "goal", "locale": "en", "resources": "./locales/en/goal.json" },
-      { "id": "goal", "locale": "zh-TW", "resources": "./locales/zh-TW/goal.json" },
-      { "id": "goal", "locale": "de", "resources": "./locales/de/goal.json" }
+      {
+        "id": "goal",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/goal.json"
+      },
+      {
+        "id": "goal",
+        "locale": "en",
+        "resources": "./locales/en/goal.json"
+      },
+      {
+        "id": "goal",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/goal.json"
+      },
+      {
+        "id": "goal",
+        "locale": "de",
+        "resources": "./locales/de/goal.json"
+      }
     ]
   }
 }

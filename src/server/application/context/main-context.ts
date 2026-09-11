@@ -115,8 +115,6 @@ export interface MainContext {
   kernelExtensions: Record<KernelId, KernelExtensionSource>;
   /** 内核身份标(logo)注册表:每个内核在自己适配器(client/{kernel})声明,壳经此渲染。 */
   kernelLogos: Record<KernelId, KernelLogo>;
-  /** tool-gate 内核扩展可用性探测(pi 专属;bootstrap 绑定实现)。 */
-  fitPiExtensionAvailable: () => boolean;
   /** 一次性问内核能力(从 registry 遍历 createOneshot;pi 有、dsh/minimal 无 → undefined)。 */
   kernelOneshots: Record<KernelId, ((prompt: string, cwd?: string) => Promise<string>) | undefined>;
   /** 内置 skills 挂/摘(pi settings.json skills[];bootstrap 绑定实现)。 */
@@ -124,9 +122,9 @@ export interface MainContext {
   /** 插件技能挂/摘 hooks(pi settings.json skills[];bootstrap 绑定实现)。 */
   pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]>;
   /** 插件 pi 扩展挂/摘 hooks(client/pi;bootstrap 绑定实现)。 */
-  pluginPiExtensionEnsure: NonNullable<PluginLifecycleDeps["piExtensionEnsure"]>;
+  /** 插件携带内核扩展的挂摘（按内核 id 派发；加第四个内核 = 它自己的插件交一份实现，本行不动）。 */
+  pluginExtensionEnsure: NonNullable<PluginLifecycleDeps["pluginExtensionEnsure"]>;
   /** 插件 dsh cordis 扩展挂/摘 hooks(client/dsh;bootstrap 绑定实现)。 */
-  pluginDshExtensionEnsure: NonNullable<PluginLifecycleDeps["dshExtensionEnsure"]>;
   i18n: {
     resources: I18nResource;
     namespaces: string[];

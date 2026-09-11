@@ -19,6 +19,8 @@ import {
   reportLoadFailure,
   setPluginError,
   clearPluginState,
+  activate,
+  deactivate,
 } from "./index";
 
 type P = { id: string; dependsOn?: string[]; protected?: boolean };
@@ -89,5 +91,54 @@ describe("lifecycle:加载失败必须撤贡献(否则留'组件未注册'孤儿
     expect(checkDependents("core", r as never)).toEqual(["dep-a"]);
     setPluginError("dep-a");
     expect(checkDependents("core", r as never), "已置 error 的插件仍算依赖者").toEqual([]);
+  });
+});
+
+// ── 内核扩展的派发（§1.3 契约单源 / §1.4 无特权差异）─────────────────────────────
+// 这一组守的是"圆心与生命周期层零内核名"：manifest 声明的是 `extensions: { 内核 id: 相对路径 }`，
+// 生命周期层按 id 派发给对应内核的实现，**没有** piExtensionEnsure / dshExtensionEnsure 这种
+// 按内核命名的分支。加第四个内核 = 它自己的插件交一份实现，本层零改动。
+// 红绿证明：把 activate 里的遍历改回硬编码 `manifest.piExtension` 派发 → 第一条必红。
+describe("lifecycle:插件携带的内核扩展按内核 id 派发", () => {
+  /** 记录派发的最小替身。 */
+  function depsWithSpy(): { deps: any; calls: { kernel: string; pluginId: string; dir: string }[]; off: string[] } {
+    const calls: { kernel: string; pluginId: string; dir: string }[] = [];
+    const off: string[] = [];
+    const deps = {
+      registry: { registerOne: () => {}, unregister: () => {}, manifestOf: () => undefined, allPlugins: () => new Map() },
+      configStore: {},
+      loader: { load: async () => {}, unload: () => {} },
+      notifyPluginsChanged: () => {},
+      notifyPluginUnloaded: () => {},
+      pluginExtensionEnsure: {
+        onActivate: (kernel: string, pluginId: string, _pluginPath: string, dir: string) => calls.push({ kernel, pluginId, dir }),
+        onDeactivate: (kernel: string, pluginId: string) => off.push(`${kernel}:${pluginId}`),
+      },
+    };
+    return { deps, calls, off };
+  }
+
+  it("声明两个内核的扩展 → 两次派发，内核 id 原样传递（不认内核名、不做 if/else）", async () => {
+    const { deps, calls } = depsWithSpy();
+    const manifest = { id: "multi", extensions: { pi: "./pi-extension", dsh: "./dsh-extension", kimi: "./kimi-ext" } };
+    await activate(deps as never, manifest as never, "/plugins/multi", "builtin");
+    expect(calls.map((c) => `${c.kernel}${c.dir}`).sort()).toEqual(["dsh./dsh-extension", "kimi./kimi-ext", "pi./pi-extension"]);
+    for (const c of calls) expect(c.pluginId).toBe("multi");
+  });
+
+  it("未声明 extensions 的插件不派发（不无差别调用）", async () => {
+    const { deps, calls } = depsWithSpy();
+    await activate(deps as never, { id: "plain" } as never, "/plugins/plain", "builtin");
+    expect(calls).toEqual([]);
+  });
+
+  it("停用时按同样声明的内核 id 逐个摘（与挂对称，不漏摘）", async () => {
+    const { deps, off } = depsWithSpy();
+    deps.registry = {
+      registerOne: () => {}, unregister: () => {}, allPlugins: () => new Map(),
+      manifestOf: () => ({ id: "multi", extensions: { pi: "./pi-extension", dsh: "./dsh-extension" } }),
+    };
+    await deactivate(deps as never, "multi");
+    expect(off.sort()).toEqual(["dsh:multi", "pi:multi"]);
   });
 });

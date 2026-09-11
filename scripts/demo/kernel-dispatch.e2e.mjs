@@ -18,7 +18,7 @@
 //
 // 用法: npm run build && node scripts/demo/kernel-dispatch.e2e.mjs [--port 9372] [--keep]
 import { parseArgs } from "node:util";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -64,6 +64,20 @@ try {
   page.on("pageerror", (e) => pageErrors.push(e.message));
   await page.waitForSelector("[data-timeline-composer]", { timeout: 30000 });
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 25000 });
+
+  // ── 插件携带的内核扩展：同一个壳插件的 extensions 声明，要按内核 id 各落到各的内核侧 ──
+  // 这是「圆心/lifecycle/装配点零内核名」那条改动的端到端证据：框架只认 {内核 id: 相对路径}，
+  // 派发给对应内核自己的同步实现（pi 写 ~/.pi/agent/extensions/，dsh 同步目录 + 挂 cordis.yml 块）。
+  {
+    const piFit = join(home, ".pi", "agent", "extensions", "my-harness-fit-pi-extension", "index.ts");
+    const piPluginExt = join(home, ".pi", "agent", "extensions", "llm-recorder", "index.ts");
+    const dshPluginExt = join(home, ".dsh", ".my-harness-desktop-plugins", "llm-recorder", "index.mjs");
+    ok(existsSync(piFit), "随壳分发的 pi 适配扩展已同步（createPluginExtensionSync().syncFit 自解析资产）");
+    ok(existsSync(piPluginExt), "壳插件声明的 extensions.pi 落到了 pi 的扩展位");
+    ok(existsSync(dshPluginExt), "同一个壳插件的 extensions.dsh 落到了 dsh 的扩展位");
+    const cordis = existsSync(dshSetup.cordisPath) ? readFileSync(dshSetup.cordisPath, "utf-8") : "";
+    ok(/llm-recorder/.test(cordis), "dsh 侧同时挂上了 cordis.yml 块（不只是拷目录）");
+  }
 
   // ── 默认内核清单：pi + dsh 装载，minimal 默认不装载（§目标 16） ──
   const kernelIds = await page.evaluate(() => window.kernel.kernelIds);
