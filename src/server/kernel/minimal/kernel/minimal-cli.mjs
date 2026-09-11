@@ -9,7 +9,7 @@
 // 会话文件(§3.3,minimal 自己的线性格式):头行 {type:"session",id,...} + 条目行
 // {type:"message"|"session_info"|"model_change"|"tools_change",...},无 parentId(线性序即父子)。
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadModelConfig, streamModel } from "./minimal-model.mjs";
@@ -36,22 +36,48 @@ function readEntries(path) {
   } catch { return []; }
 }
 
+/**
+ * 追加一行(必要时空文件先补头行)。
+ *
+ * 为什么先把头行与首条内容**拼成一次 rename 写**(§3.2.3 原子写，根因，勿改回"先建文件再 append"):
+ * 原实现是 `writeFileSync(头行 + line)` —— 若在写头行之后、写 line 之前被 kill,
+ * 文件里就只有头行;更糟的是 `updateHeader` 那条路径(`writeFileSync` 整文件重写)会在
+ * 写一半时把**已有历史截断成半条 JSON**。kill 是真实场景(壳 stop/kill 子进程),不是理论边界。
+ * 现在所有**非追加语义**的写入都走 writeAtomicFile(写临时文件 → rename),
+ * 崩溃/被 kill 的结果只可能是"完整旧态"或"完整新态"。
+ */
 function appendLine(path, line) {
   if (!existsSync(path)) {
     mkdirSync(dirname(path), { recursive: true });
     const lineageId = path.split("/").pop().replace(/\.jsonl$/, "");
-    writeFileSync(path, JSON.stringify({ type: "session", id: lineageId, createdAt: new Date().toISOString(), name: undefined, model: { provider: "minimal", modelId: "echo" }, tools: "read-only" }) + "\n" + line + "\n", "utf-8");
+    const header = JSON.stringify({ type: "session", id: lineageId, createdAt: new Date().toISOString(), name: undefined, model: { provider: "minimal", modelId: "echo" }, tools: "read-only" });
+    writeAtomicFile(path, `${header}\n${line}\n`);
     return;
   }
+  // 已存在的文件用追加:单行 append 在 POSIX 上是 O_APPEND 的单次写,天然不会与自身交错;
+  // 真正的威胁是"整文件重写"(下面 updateHeader 那条),它已被原子化。
   appendFileSync(path, line + "\n", "utf-8");
 }
 
-/** 更新头行的当前值快照(§3.3.1/§4.10.1):name/model/tools 在 setXxx 时回头重写首行,条目是历史。 */
+/** 原子写整份文件:同目录临时文件 → rename(§3.2.3)。临时名带 pid,避免并发写互相覆盖临时文件。 */
+function writeAtomicFile(path, content) {
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, content, "utf-8");
+    renameSync(tmp, path);
+  } catch (e) {
+    try { rmSync(tmp, { force: true }); } catch { /* 清理失败不掩盖原始错误 */ }
+    throw e;
+  }
+}
+
+/** 更新头行的当前值快照(§3.3.1/§4.10.1):name/model/tools 在 setXxx 时回头重写首行,条目是历史。
+ *  整文件重写 ⇒ 必须原子(否则写一半被 kill 就留下半条 JSON，见 writeAtomicFile 注释)。 */
 function updateHeader(path, patch) {
   const entries = readEntries(path);
   if (entries[0]?.type !== "session") return;
   entries[0] = { ...entries[0], ...patch };
-  writeFileSync(path, entries.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+  writeAtomicFile(path, entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
 }
 
 function appendMessage(path, message) {
@@ -115,11 +141,34 @@ function handle(cmd) {
       out({ type: "pong" });
       return;
     case "send":
-      void handleSend(cmd); // fire-and-forget:send 是异步流式,主循环不阻塞(abort 可即时打断)
+      // 并发 send 显式拒绝(§9.8.2,根因,勿改回无条件 fire-and-forget):
+      // minimal 是**单线执行器**,同一时刻只跑一条回合。此前 `void handleSend(cmd)` 无条件发,
+      // 于是同一会话连发两条会各建一条 user 条目、各发一对 agentStart/agentSettled、
+      // 各写一条 assistant 条目 —— 事件交错、**会话文件被写坏**(两条回复互相插队)。
+      // 壳侧本来就有"生成中输入框禁用"的第一道防线;这里的拒绝是**第二道**:防协议层绕过壳并发。
+      // 拒绝要显式(回 busy 错误),不排队、不静默丢弃 —— 排队会把"我在忙"这个事实藏起来。
+      if (turnInFlight) {
+        out({ type: "error", error: "busy", errorDetail: "minimal 正在执行上一个回合,请先 abort 或等它结束" });
+        return;
+      }
+      turnInFlight = true;
+      // 异步流式,主循环不阻塞(abort 可即时打断)。互斥位用 finally 复位(handleSend 有多个出口:
+      // abort/模型失败/达工具轮数上限——漏一个就把内核永久卡在"忙"上,比并发更糟);
+      // 另接一个 catch:handleSend 只在"进程已停"时同步抛(!alive),不接住会变成
+      // **未捕获的 Promise 拒绝**(Node 默认打日志/退出),而壳那边什么都收不到。
+      // 失败也要走协议说出来(显式降级,不静默)。
+      handleSend(cmd)
+        .catch((e) => { out({ type: "error", error: "sendFailed", errorDetail: String(e?.message ?? e) }); })
+        .finally(() => { turnInFlight = false; });
       return;
     case "abort":
-      currentAbort?.abort(); // 掐断在飞 SSE 流(§4.6.2)
-      aborted = true;
+      // 只掐在飞流(§4.6.2)。**不要在这里记一个"已中断"标志位**:回合的停止事实由
+      // handleSend 从 controller.signal.aborted 读出来(messageEnd 带 stopped、agentSettled
+      // 带 reason=aborted),多一个没人读的变量只会腐烂——此前那句 `aborted = true` 的变量
+      // 声明在同一轮重构里被删掉,留下一句对**未声明标识符**的赋值:ESM 是严格模式,
+      // 它每次都抛 ReferenceError,被 stdin 的 try/catch 转成一个**多余的 error 事件**发给壳。
+      // abort 表面上还能用(abort() 已经先执行了),所以守卫只测"消息带 stopped"根本没发现。
+      currentAbort?.abort();
       return;
     case "setModel":
       model = { provider: cmd.provider, modelId: cmd.modelId };
@@ -158,7 +207,8 @@ function handle(cmd) {
         const msg = entry.message ?? { role: "user", content: "" };
         lines.push(JSON.stringify({ type: "message", id: entry.kernelEntryId ?? randomUUID(), timestamp: new Date(typeof msg.timestamp === "number" ? msg.timestamp : Date.now()).toISOString(), message: { role: msg.role, content: msg.content ?? "" } }));
       }
-      writeFileSync(p, lines.join("\n") + "\n", "utf-8");
+      // seed 是**覆盖写**(幂等重建整条线):必须原子——写一半被 kill 会留下半截会话。
+      writeAtomicFile(p, lines.join("\n") + "\n");
       out({ type: "seeded", sessionId: sessionId(), path: p });
       return;
     }
@@ -174,6 +224,11 @@ function handle(cmd) {
 
 /** 在飞回合的中断信号(§4.6.2):send 建一个、abort 掐一个,单线执行器同一时刻一个回合。 */
 let currentAbort = null;
+
+/** 是否有回合在飞(§9.8.2 单线执行器的互斥位)。handleSend 起手置位、finally 复位:
+ *  用 finally 而不是每条 return 前复位 —— handleSend 有多个出口(abort/失败/达上限),
+ *  漏一个就会把内核永久卡在"忙"上(那比并发更糟)。 */
+let turnInFlight = false;
 
 /** 工具回环轮数上限(§5.10.1):防「调工具失败又重试」死循环,超限强制收尾。 */
 const MAX_TOOL_ROUNDS = 8;

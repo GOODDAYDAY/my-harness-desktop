@@ -54,8 +54,14 @@ describe("minimal 中断(abort)", () => {
     let firstDeltaSeen: (() => void) | null = null;
     const firstDelta = new Promise<void>((r) => (firstDeltaSeen = r));
     let msgEnd: MinimalEvent | null = null;
+    /** 全部事件（含 error）——**必须一起收**：只看 messageEnd 的话，
+     *  "abort 命令自身抛错、被转成一个多余 error 事件"这种缺陷会从守卫旁边溜过去。
+     *  实测就这么漏过一次：`aborted = true` 指向一个已被删除的变量（ESM 严格模式 → ReferenceError），
+     *  每次 abort 都多发一个 error 事件，而原守卫只断言"消息带 stopped"，一路绿。 */
+    const allEvents: MinimalEvent[] = [];
     const settled = new Promise<void>((resolve) => {
       t.onEvent((e) => {
+        allEvents.push(e);
         if (e.type === "messageUpdate") firstDeltaSeen?.();
         if (e.type === "messageEnd") msgEnd = e;
         if (e.type === "agentSettled") resolve();
@@ -73,6 +79,11 @@ describe("minimal 中断(abort)", () => {
     const text = (m?.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("");
     expect(text).toContain("第一段"); // 已收部分内容保留
     expect(text).not.toContain("第二段"); // 中断后未收
+    // 中断**不是错误**:整个 abort 链路（含 abort 命令本身）不许产出任何 error 事件。
+    expect(
+      allEvents.filter((e) => e.type === "error"),
+      "abort 链路产出了 error 事件——中断语义被当成错误，且多半意味着命令处理里抛了异常",
+    ).toEqual([]);
     await t.stop();
   });
 });

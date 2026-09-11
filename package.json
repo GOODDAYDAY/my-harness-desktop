@@ -39,7 +39,8 @@
     "e2e:pi": "node scripts/demo/pi-smoke.e2e.mjs",
     "e2e:minimal": "node scripts/demo/minimal-smoke.e2e.mjs",
     "e2e:minimal:uninstall": "node scripts/demo/kernel-plugin-uninstall.e2e.mjs",
-    "e2e:session-list": "node scripts/demo/session-list-orphan-kernel.e2e.mjs"
+    "e2e:session-list": "node scripts/demo/session-list-orphan-kernel.e2e.mjs",
+    "e2e:dispatch": "node scripts/demo/kernel-dispatch.e2e.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

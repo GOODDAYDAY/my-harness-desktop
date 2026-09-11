@@ -3,12 +3,12 @@
 // 不用 minimal echo:发真实消息、等真实回复(非 echo 占位)、验 header.kernel=dsh。
 // 用法: npm run build && node scripts/demo/dsh-smoke.e2e.mjs [--port 9350] [--keep]
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, copyFileSync, symlinkSync } from "node:fs";
-import { homedir, platform } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchApp, killApp } from "./lib/app.mjs";
-import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
+import { makeRunRoot, setupBaseline, setupDshKernel } from "./lib/home.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -27,22 +27,10 @@ const home = join(runRoot, "zh-CN");
 mkdirSync(home, { recursive: true });
 setupBaseline({ home, realHome: homedir(), locale: "zh-CN" });
 
-// dsh 安装 symlink(同 pi 的 setupBaseline 方式)+ 复制 dsh 原生配置(cordis.yml/settings.yaml)。
-const dataRoot = join(home, ".my-harness-desktop-dev");
-const realDsh = join(homedir(), ".my-harness-desktop-dev", "dsh");
-if (existsSync(realDsh)) symlinkSync(realDsh, join(dataRoot, "dsh"), platform() === "win32" ? "junction" : undefined);
-const dshDir = join(home, ".dsh");
-mkdirSync(dshDir, { recursive: true });
-const realSettings = join(homedir(), ".dsh", "settings.yaml");
-const realCordis = join(homedir(), ".dsh", "cordis.yml");
-const realCreds = join(homedir(), ".dsh", ".credentials.yaml");
-if (existsSync(realSettings)) copyFileSync(realSettings, join(dshDir, "settings.yaml"));
-if (existsSync(realCordis)) copyFileSync(realCordis, join(dshDir, "cordis.yml"));
-if (existsSync(realCreds)) copyFileSync(realCreds, join(dshDir, ".credentials.yaml"));
-// dsh 内核 node_modules 符号链接(与 fork-cross-kernel 同款):FIT 扩展 import
-// @deepseek-ai/dsh-skill-filesystem 等 dsh 包,须经 .dsh/node_modules 解析(否则内核启动即崩)。
-const realDshNm = join(homedir(), ".dsh", "node_modules");
-if (existsSync(realDshNm)) symlinkSync(realDshNm, join(dshDir, "node_modules"), platform() === "win32" ? "junction" : undefined);
+// dsh 真实安装 + 原生配置（三件必须成对，收在 lib/home.mjs 单一来源；抄漏一件 = 内核起不来）。
+const dshSetup = setupDshKernel(home, homedir());
+if (!dshSetup.available) throw new Error("本机没装 dsh 内核（~/.my-harness-desktop-dev/dsh + ~/.dsh/cordis.yml），本 e2e 需要真实内核");
+const realSettings = dshSetup.settingsPath;
 
 // 读 dsh 模型名:优先 Free(compat.supportsDeveloperRole:false 已修 developer role,Free 即可用)。
 const dshSettings = readFileSync(realSettings, "utf8");

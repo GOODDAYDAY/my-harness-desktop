@@ -46,6 +46,46 @@ export function makeRunRoot() {
 
 /** 搭隔离 HOME 基线:目录骨架 + 符号链接借资产 + 底座/偏好默认状态。
  * 返回 ctx 供场景 seed 使用——场景只经 ctx 写状态,不自己拼隔离区路径。 */
+/**
+ * 给隔离 HOME 装上**真实 dsh 内核**（dsh 相关 e2e 的共同前置）。
+ *
+ * 为什么收进 lib 而不是各 e2e 自己抄一份：这段由三件"必须成对"的事组成——
+ *   ① 数据根 dsh 安装目录符号链接（内核二进制 + node_modules）；
+ *   ② ~/.dsh 原生配置三件套拷贝（settings.yaml / cordis.yml / .credentials.yaml）；
+ *   ③ ~/.dsh/node_modules 符号链接（FIT 扩展 import @deepseek-ai/dsh-* 要靠它解析，
+ *      漏了这条 dsh 内核**启动即崩**，而崩在子进程里、只表现为"没有回复"）。
+ * 少任何一件都不是"少一点功能"，是"内核起不来"——抄漏一件的排查成本远高于共用一份。
+ *
+ * 与 setupBaseline 里 pi 的 symlink 同款：借真实安装（功能可用），配置走拷贝（写不回真实 profile）。
+ * 返回 { available, settingsPath, cordisPath }；available=false 表示本机没装 dsh，调用方应跳过而非伪造。
+ */
+export function setupDshKernel(home, realHome) {
+  const dataRoot = join(home, ".my-harness-desktop-dev");
+  const realDsh = join(realHome, ".my-harness-desktop-dev", "dsh");
+  const dshDir = join(home, ".dsh");
+  mkdirSync(dshDir, { recursive: true });
+
+  const realSettings = join(realHome, ".dsh", "settings.yaml");
+  const realCordis = join(realHome, ".dsh", "cordis.yml");
+  const realCreds = join(realHome, ".dsh", ".credentials.yaml");
+  for (const [src, name] of [[realSettings, "settings.yaml"], [realCordis, "cordis.yml"], [realCreds, ".credentials.yaml"]]) {
+    if (existsSync(src)) copyFileSync(src, join(dshDir, name));
+  }
+  if (existsSync(realDsh) && !existsSync(join(dataRoot, "dsh"))) {
+    symlinkSync(realDsh, join(dataRoot, "dsh"), platform() === "win32" ? "junction" : undefined);
+  }
+  const realDshNm = join(realHome, ".dsh", "node_modules");
+  if (existsSync(realDshNm) && !existsSync(join(dshDir, "node_modules"))) {
+    symlinkSync(realDshNm, join(dshDir, "node_modules"), platform() === "win32" ? "junction" : undefined);
+  }
+  const bin = join(realDsh, "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "lib", "bin.js");
+  return {
+    available: existsSync(bin) && existsSync(realCordis),
+    settingsPath: join(dshDir, "settings.yaml"),
+    cordisPath: join(dshDir, "cordis.yml"),
+  };
+}
+
 export function setupBaseline({ home, realHome, locale = "zh-CN" }) {
   const dataRoot = join(home, ".my-harness-desktop-dev");
   const agentDir = join(home, ".pi", "agent");
