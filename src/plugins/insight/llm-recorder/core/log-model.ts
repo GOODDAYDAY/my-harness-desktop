@@ -103,11 +103,26 @@ export function mergeRecords(prev: RecordPair[], newLines: LogLine[]): RecordPai
   return [...bySeq.values()].sort((a, b) => b.seq - a.seq);
 }
 
-/** 分片匹配:name(首片)或 name.N.jsonl(N≥2)。命中返回分片号(首片=1),否则 null。 */
+/**
+ * 分片匹配：首片 `<标识>.jsonl`，续片 `<首片名>.<N>.jsonl`（N≥2，**没有 .1**）。
+ * 命中返回分片号（首片=1），否则 null。
+ *
+ * **`base` 是"会话标识"，不是"日志文件名"**（本轮修掉的根因，勿回退成直接比较）：
+ * 调用方传进来的 base 取自 `currentSessionPath` 的 basename，而那个路径的**形状是各内核自己的**：
+ *   · pi 的会话路径是 `<ns>.jsonl` → base 自带 `.jsonl`；
+ *   · dsh 的会话标识就是 `<ns>`（无后缀）。
+ * 写侧则恒把首片命名成 `<标识>.jsonl`。于是 dsh 上 base=`<ns>`、文件名=`<ns>.jsonl`：
+ * 既不相等、`mid` 又是空串 → 判 null → **分片一个都匹配不上 → 面板恒显示
+ * 「这个会话还没有请求记录」**，尽管盘上记录好好的。这是用户症状 #20 在 dsh 上的
+ * **第二个根因**，且只有走到面板 DOM 才看得见（盘上那层是好的）。
+ * 归一：base 无 `.jsonl` 后缀时补上，两种内核形状都对得上，且对 pi 完全向后兼容。
+ */
 export function shardNumber(fileName: string, base: string): number | null {
-  if (fileName === base) return 1;
-  if (!fileName.startsWith(base) || !fileName.endsWith(".jsonl")) return null;
-  const mid = fileName.slice(base.length, -".jsonl".length);
+  if (base === "") return null;
+  const first = base.endsWith(".jsonl") ? base : `${base}.jsonl`;
+  if (fileName === first) return 1;
+  if (!fileName.startsWith(`${first}.`) || !fileName.endsWith(".jsonl")) return null;
+  const mid = fileName.slice(first.length, -".jsonl".length);
   if (!/^\.\d+$/.test(mid)) return null;
   return Number(mid.slice(1));
 }

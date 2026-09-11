@@ -230,6 +230,34 @@ try {
     resps.every((r) => r.status === undefined || typeof r.status === "number"),
     "带状态码时它必须是数字（形状正确）",
   );
+  // ── #20 的**用户可见**判据：右侧面板里真的显示出这条记录 ──
+  // 上面验的是"盘上有没有"；用户报的是"右侧的请求记录就没有记录了"——
+  // 盘上有、面板不显示，症状对用户是一模一样的。所以必须走到面板 DOM。
+  await page.keyboard.down("Meta"); await page.keyboard.press("j"); await page.keyboard.up("Meta");
+  const tabReady = await page.waitForFunction(
+    () => [...document.querySelectorAll("[data-sidepanel-style] button[aria-label]")].some((b) => (b.getAttribute("aria-label") || "").includes("请求记录")),
+    { timeout: 15000, polling: 300 },
+  ).then(() => true).catch(() => false);
+  ok(tabReady, "右面板出现「请求记录」页签");
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll("[data-sidepanel-style] button[aria-label]")].find((x) => (x.getAttribute("aria-label") || "").includes("请求记录"));
+    b?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  const rowShown = await page.waitForFunction(
+    () => document.body.innerText.includes("#1"),
+    { timeout: 15000, polling: 300 },
+  ).then(() => true).catch(() => false);
+  const panelText = await page.evaluate(() => document.body.innerText);
+  if (!panelText.includes("#1")) {
+    const diag = await page.evaluate(() => ({
+      tails: [...document.querySelectorAll("[data-sidepanel-style]")].map((el) => (el.innerText || "").replace(/\s+/g, " ").slice(0, 160)),
+      activeTabs: [...document.querySelectorAll("[data-sidepanel-style] button[aria-label]")].map((b) => b.getAttribute("aria-label")),
+    }));
+    console.error("  诊断(面板):", JSON.stringify(diag));
+  }
+  ok(rowShown, "面板里出现 seq #1 的记录行（用户能看到这条记录）");
+  ok(!panelText.includes("未返回"), "该记录不是「未返回」（状态已流转 —— #20 的用户症状正是它恒为未返回）");
+
   ok(consoleTail.length === 0, `页面零报错（实际 ${consoleTail.length} 条）`);
 
   await killApp(app);

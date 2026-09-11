@@ -107,6 +107,20 @@ describe("shardNumber", () => {
     expect(shardNumber("other.jsonl", base)).toBeNull();
     expect(shardNumber(`${base}.jsonl`, base)).toBeNull(); // 双后缀不是分片
   });
+
+  it("★ base 是「会话标识」不是「会话文件名」：不带 .jsonl 的标识（dsh 的会话路径形状）同样命中", () => {
+    // dsh 的 currentSessionPath 就是中性会话 id 本身（无后缀），而日志文件恒为 <标识>.jsonl。
+    // 旧实现直接拿 base 比文件名 → 一个都匹配不上 → 面板在 dsh 上恒显示「还没有请求记录」
+    // （盘上明明有记录）。这条守卫钉住"两种内核形状都要认"。
+    const stem = "bedaf676-0eea-4537-a141-2ccaae38b3e2";
+    // 写侧约定：首片 = <标识>.jsonl，续片 = <首片名>.<N>.jsonl（在**完整首片名**后再接 .N.jsonl）
+    expect(shardNumber(`${stem}.jsonl`, stem)).toBe(1);
+    expect(shardNumber(`${stem}.jsonl.2.jsonl`, stem)).toBe(2);
+    expect(shardNumber(`${stem}.jsonl.10.jsonl`, stem)).toBe(10);
+    expect(shardNumber("index.json", stem)).toBeNull();
+    // 同前缀不同标识不能被误认（前缀判定必须带分隔）
+    expect(shardNumber(`${stem}-extra.jsonl`, stem)).toBeNull();
+  });
 });
 
 describe("parseIndex", () => {
