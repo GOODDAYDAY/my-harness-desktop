@@ -30,6 +30,7 @@ import { loadKernelPlugin, scanKernelPlugins, defaultEnabledEntries } from "../k
 import { mirrorBundledSkills } from "../application/skills/bundled-skills";
 import { SkillAggregator } from "../application/skills/skill-aggregator";
 import { mirrorManagedDir } from "../application/bundled/mirror";
+import { buildKernelSurfaces, makeExtensionDispatch, runKernelStartupMigrations } from "./kernel-surfaces";
 import { initKernelRuntime } from "../kernel/core/kernel-manager";
 import { reconcileMissingKernels } from "../kernel/core/kernel-reconcile";
 import { importLegacySessions } from "../application/sessions/legacy-import";
@@ -181,17 +182,11 @@ const unloadedKernelPluginIds = new Set(
     .filter((e) => !kernelEntries.some((k) => k.manifest.id === e.manifest.id))
     .map((e) => e.manifest.id),
 );
-// 内核**自己的历史遗留状态**一次性迁移（如 dsh 的 prefs 明文 apiKey → 凭证库）：
-// 注册表驱动，逐个问内核插件要不要迁移。壳不认内核名、不知道迁移内容——那些都是内核私有知识。
-// 放在任何内核 spawn 之前；实现方必须幂等（每次启动都会调）。
-for (const p of kernelRegistry.all()) {
-  try {
-    p.migrateLegacyState?.();
-  } catch (e) {
-    console.warn(`[kernel-migration] 内核 ${p.id} 的历史状态迁移失败(不阻断启动):`, e instanceof Error ? e.message : e);
-  }
-}
-const modelCatalog = new ModelCatalog(kernelRegistry.all().map((p) => p.createModelSource()));
+// 内核的历史遗留状态一次性迁移 + **全部内核面**一次投影（见 bootstrap/kernel-surfaces.ts：
+// 那一段单独成文件是为了让"加第四个内核零改动"这句可被测试直接证明，而不是靠读代码相信）。
+runKernelStartupMigrations(kernelRegistry);
+const surfaces = buildKernelSurfaces(kernelRegistry);
+const { modelCatalog, ids: kernelIds, defaultId: defaultKernelId } = surfaces;
 const bundledSkillsSource = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-skills")
   : resolve(process.cwd(), ".claude/skills");
@@ -251,9 +246,9 @@ sessionStore = new SessionStore(
   sessionCatalogFactory,
   {
     // 注册表派生的内核事实（会话根 / 已注册清单 / 默认内核）——三面同源，打成一包。
-    sessionRoots: kernelRegistry.all().map((p) => p.sessionRoot?.()).filter((r): r is string => !!r),
-    ids: kernelRegistry.ids(),
-    defaultId: kernelRegistry.ids()[0],
+    sessionRoots: surfaces.sessionRoots,
+    ids: kernelIds,
+    defaultId: defaultKernelId ?? undefined,
   },
   () => registry.systemPromptPaths(),
   new NeutralSessionStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),
@@ -282,44 +277,35 @@ sessionStore.onNeutralChange((change) => {
 
 // ---- 内核专属适配器组装(注入 MainContext,api/ipc 不直连 client/{kernel})----
 // 模型配置中性 API:从 registry 遍历 createModelsApi(加第四个内核 = 加插件 + 注册,此处零改动)。
-const kernelModels: KernelModelsRegistry = Object.fromEntries(
-  kernelRegistry.all().map((p) => [p.id, p.createModelsApi()]),
-) as KernelModelsRegistry;
+const kernelModels: KernelModelsRegistry = surfaces.modelsApis;
 // pi settings.json 中性面已由 pi 插件的 createConfigApi 提供(插件内部构造 PiSettingsApi),
 // 壳不再单独构造 piSettings 注入 MainContext。
 // 内核原生配置中性 API(配置 TAB 用):从 registry 遍历 createConfigApi(加第四个内核零改动)。
-const kernelConfig: Record<KernelId, KernelConfigApi> = Object.fromEntries(
-  kernelRegistry.all().map((p) => [p.id, p.createConfigApi()]),
-) as Record<KernelId, KernelConfigApi>;
+const kernelConfig: Record<KernelId, KernelConfigApi> = surfaces.configApis;
 // 内核版本管理中性 API:从 registry 遍历 createVersionApi(加第四个内核零改动)。
-const kernelVersionApis: Record<KernelId, KernelVersionApi> = Object.fromEntries(
-  kernelRegistry.all().map((p) => [p.id, p.createVersionApi()]),
-) as Record<KernelId, KernelVersionApi>;
+const kernelVersionApis: Record<KernelId, KernelVersionApi> = surfaces.versionApis;
 // 已注册内核 id 清单(运行时注册表顺序;替代 KERNEL_IDS 字面量数组,前端经 kernel.list IPC 拿)。
-const kernelIds: KernelId[] = kernelRegistry.all().map((p) => p.id);
 // 一次性问内核能力(从 registry 遍历 createOneshot;pi 有、dsh/minimal 无此面 → undefined)。
-const kernelOneshots: Record<KernelId, ((prompt: string, cwd?: string) => Promise<string>) | undefined> = Object.fromEntries(
-  kernelRegistry.all().map((p) => [p.id, p.createOneshot?.()]),
-) as Record<KernelId, ((prompt: string, cwd?: string) => Promise<string>) | undefined>;
+const kernelOneshots = surfaces.oneshots;
 // 内置 skills 挂/摘 + 旧命名迁移(从 registry 遍历 ensureSkills/migrateSkills;pi 有、dsh/minimal 无)。
-const skillsPlugins = kernelRegistry.all().filter((p) => p.ensureSkills);
+const skillsPlugins = surfaces.skillsPlugins;
 const ensureBundledSkills = (enabled: boolean): Promise<boolean> =>
   skillsPlugins[0]?.ensureSkills?.(enabled) ?? Promise.resolve(false);
 const migrateSkills = (): Promise<boolean> =>
   skillsPlugins[0]?.migrateSkills?.() ?? Promise.resolve(false);
 // 壳插件生命周期钩子(从 registry 遍历 createLifecycle;pi 有 skillsEnsure/piExtensionEnsure,
 // dsh/minimal 无)。onActivate/onDeactivate 返回 changed 供壳广播刷新。
-const lifecycles = kernelRegistry.all().map((p) => p.createLifecycle?.()).filter((l) => !!l);
+const lifecycles = surfaces.lifecycles;
 const pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]> = {
   async onActivate(pluginId, pluginPath, source) {
     for (const l of lifecycles) {
-      const changed = await l.skillsEnsure?.onActivate(pluginId, pluginPath, source);
+      const changed = await l.hook.skillsEnsure?.onActivate(pluginId, pluginPath, source);
       if (changed) broadcastSettingsChanged(gateway);
     }
   },
   async onDeactivate(pluginId, pluginPath, source) {
     for (const l of lifecycles) {
-      const changed = await l.skillsEnsure?.onDeactivate(pluginId, pluginPath, source);
+      const changed = await l.hook.skillsEnsure?.onDeactivate(pluginId, pluginPath, source);
       if (changed) broadcastSettingsChanged(gateway);
     }
   },
@@ -327,26 +313,7 @@ const pluginSkillsEnsure: NonNullable<PluginLifecycleDeps["skillsEnsure"]> = {
 // 插件携带**内核扩展**的挂/摘（一个内核一份实现，壳按 manifest.extensions 的内核 id 派发）。
 // 这里没有 `piExtensionEnsure` / `dshExtensionEnsure` 这种按内核命名的分支：加第四个内核 =
 // 它自己的插件交一份 createPluginExtensionSync，本文件零改动（§1.3 契约单源 / §1.4 无特权差异）。
-const kernelExtensionSyncs: { kernel: KernelId; sync: NonNullable<ReturnType<NonNullable<KernelPlugin["createPluginExtensionSync"]>>> }[] =
-  kernelRegistry.all()
-    .map((p) => ({ kernel: p.id, sync: p.createPluginExtensionSync?.() }))
-    .filter((e): e is typeof e & { sync: NonNullable<typeof e.sync> } => !!e.sync);
-
-const pluginExtensionEnsure: NonNullable<PluginLifecycleDeps["pluginExtensionEnsure"]> = {
-  onActivate(kernel, pluginId, pluginPath, extensionDir) {
-    const target = kernelExtensionSyncs.find((e) => e.kernel === kernel);
-    if (!target) {
-      // 显式降级 + 留痕：插件声明了内核 X 的扩展，但 X 没装载（或它没交同步面）。
-      // 不能静默——否则表现为"扩展装了、内核就是看不见"，是最难查的一类。
-      console.warn(`[plugin-extension] 插件 ${pluginId} 声明了内核 "${kernel}" 的扩展，但该内核没有扩展同步面（未装载？），已跳过`);
-      return;
-    }
-    target.sync.onActivate(pluginId, pluginPath, extensionDir);
-  },
-  onDeactivate(kernel, pluginId) {
-    kernelExtensionSyncs.find((e) => e.kernel === kernel)?.sync.onDeactivate(pluginId);
-  },
-};
+const pluginExtensionEnsure: NonNullable<PluginLifecycleDeps["pluginExtensionEnsure"]> = makeExtensionDispatch(surfaces);
 
 // 提问桥(从 registry 遍历 createQuestionBridge;dsh 有、pi/minimal 无此面)。
 // 监听问句目录 → 投中性提问事件 → 经 sessionStore.injectQuestion 汇入统一通道。
@@ -406,19 +373,17 @@ restartCoordinator.onStateChange((sessionKey, state) => {
 // 子类填数据源 + 落盘机制;onConfigChanged 统一接线 restartCoordinator(§extension-management §0)。
 // 内核拓展源(中性契约 KernelExtensionSource):从 registry 遍历 createExtensionSource
 // (加第四个内核 = 加插件 + 注册,此处零改动)。
-const kernelExtensions = Object.fromEntries(
-  kernelRegistry.all().map((p) => [p.id, p.createExtensionSource()]),
-) as Record<KernelId, KernelExtensionSource>;
+const kernelExtensions: Record<KernelId, KernelExtensionSource> = surfaces.extensionSources;
 
 // 技能聚合器:壳不读内核存储,只聚合各内核插件的 createSkillProvider(内核各自读自己的存储、回报)。
 const skillAggregator = new SkillAggregator(
-  kernelRegistry.all().map((p) => p.createSkillProvider?.()).filter((s): s is SkillProvider => !!s),
+  surfaces.skillProviders,
 );
 
 const ctx: MainContext = {
   // 注册表派生的两条路径面（configFile 白名单前缀 / 技能清单监视文件）。
-  kernelConfigRoots: kernelRegistry.all().map((p) => p.configRoot?.()).filter((r): r is string => !!r),
-  kernelSkillWatchPaths: (cwd: string) => kernelRegistry.all().flatMap((p) => p.skillWatchPaths?.(cwd) ?? []),
+  kernelConfigRoots: surfaces.configRoots,
+  kernelSkillWatchPaths: surfaces.skillWatchPaths,
   paths: {
     homeDir: HOME_DIR,
     myHarnessDesktopDir: MY_HARNESS_DESKTOP_DIR,
@@ -519,10 +484,11 @@ registerRemote(gateway, auth, {
     for (const [id, plugin] of registry.allPlugins()) {
       for (const l of lifecycles) {
         try {
-          const changed = await l.skillsEnsure?.onActivate(id, plugin.path, plugin.source);
+          const changed = await l.hook.skillsEnsure?.onActivate(id, plugin.path, plugin.source);
           if (changed) anyChanged = true;
         } catch (e) {
-          console.error(`[plugin-skills] ensure 失败 (${plugin.manifest.id}):`, e);
+          // 点名到内核：钩子带内核归属后，失败源不再是一个匿名数组下标。
+          console.error(`[plugin-skills] 内核 ${l.kernel} 的 ensure 失败 (${plugin.manifest.id}):`, e);
         }
       }
     }
@@ -537,7 +503,7 @@ registerRemote(gateway, auth, {
       const disabled = (await configStore.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
       const active = new Set<string>();
       // ① 随壳分发的适配扩展：各内核自报（syncFit 自己解析资产路径，并回报它注册的 id）。
-      for (const e of kernelExtensionSyncs) {
+      for (const e of surfaces.extensionSyncs) {
         const fitId = e.sync.syncFit?.();
         if (fitId) active.add(fitId);
       }
@@ -553,7 +519,7 @@ registerRemote(gateway, auth, {
         active.add(id);
       }
       // ③ 对账：各内核摘除自己目录下带 marker 但不在 active 的扩展（含历史遗留的几个）。
-      for (const e of kernelExtensionSyncs) e.sync.reconcile?.(active);
+      for (const e of surfaces.extensionSyncs) e.sync.reconcile?.(active);
     } catch (e) {
       console.error("[plugin-extension] 启动同步失败:", e);
     }
@@ -606,7 +572,7 @@ registerRemote(gateway, auth, {
   // dist-tag 最新版自动补装。fire-and-forget,不阻断启动;失败只 warn 不崩。进度不进 UI(后台静默),
   // 装完广播 refresh 让「未安装」只读条消失;进度/结果回调为后续插件安装/更新扫描预留同一形状。
   void reconcileMissingKernels(
-    kernelRegistry.all().map((p) => ({ kernel: p.id, versionApi: p.createVersionApi() })),
+    surfaces.plugins.map((p) => ({ kernel: p.id, versionApi: p.createVersionApi() })),
     (_kernel, _line) => { /* 后台静默,进度仅日志(不打扰用户) */ },
     (result) => {
       if (result.outcome === "installed") {
@@ -624,7 +590,7 @@ registerRemote(gateway, auth, {
   try {
     const store = sessionStore.neutralStoreRef;
     if (store) {
-      const r = importLegacySessions(kernelRegistry.all(), store);
+      const r = importLegacySessions(surfaces.plugins, store);
       if (r.imported > 0) {
         console.log(`[legacy-import] 内核旧会话导入中立层: ${r.imported} 个(跳过 ${r.skipped},失败 ${r.failed}${r.failedKernels.length ? `,内核读取失败 ${r.failedKernels.join(",")}` : ""})`);
         broadcastRefreshRequested(gateway);
