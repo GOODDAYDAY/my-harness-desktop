@@ -85,10 +85,12 @@ sequenceDiagram
     participant G as Gateway + HTTP/WS
 
     E->>A: assemble(host, {isPackaged, rendererDir})
-    A->>A: 算 HOME_DIR / 数据根 / PI_AGENT_DIR /<br/>DSH_SESSION_ROOT / DSH_CORDIS_PATH 等路径
+    A->>A: 算 HOME_DIR / 数据根 等**壳自己的**路径
     A->>A: 建 prefsStore / RemoteAuth / Gateway
     A->>A: initKernelRuntime(createNpmKernelRuntime())
-    A->>F: createPiKernelManager / createDshKernelManager
+    A->>A: scanKernelPlugins + loadKernelPlugin（内核插件逐个装载）
+    A->>A: buildKernelSurfaces(registry)（内核面一次投影）
+    A->>F: 各内核插件的 createVersionApi（版本管理）
     A->>A: 建 ModelCatalog([PiModelSource, DshConfigSource])
     A->>R: discoverPlugins × 4 → registry.registerAll
     A->>A: 合并 i18n 资源
@@ -105,7 +107,7 @@ sequenceDiagram
 
 装配链有四个「一眼看不出、但全是设计判断」的点：
 
-- **路径单源**：`MY_HARNESS_DESKTOP_DIR`、`PI_AGENT_DIR`、`DSH_SESSION_ROOT`、`DSH_CORDIS_PATH` 全部在 `assemble` 顶部算好，注入给下游。`DSH_SESSION_ROOT` 的注释点明了一个真 bug 的根因——活跃后端和目录 transport 必须共享同一会话根，否则目录永远列不出活跃后端的会话。**「真相源单一」不是口号，是每个路径只能被一个地方定义一次的纪律。**
+- **路径单源**：`assemble` 顶部只算**壳自己的**路径（`MY_HARNESS_DESKTOP_DIR`、`CONFIG_DIR`、内置资产目录…）。**内核专属路径由各内核插件自己解析**（pi 的 `~/.pi/agent`、dsh 的 `~/.dsh` 与会话根、minimal 的 `~/.minimal/agent`），壳只按需向注册表索取中性面（`sessionRoot()` / `configRoot()`）。`DSH_SESSION_ROOT` 那个注释点明的根因仍然成立——活跃后端和目录 transport 必须共享同一会话根，否则目录永远列不出活跃后端的会话；区别是这个「单一真相源」现在落在**内核插件内部**，而不是壳里的一个常量。**「真相源单一」不是口号，是每个路径只能被一个地方定义一次的纪律。**
 - **密钥不进契约**：`baseBackendFactory.create` 里，pi 走 `createPiBackend({ ...opts, cliPath: customCliPath() })`，dsh 走 `createDshBackend({ ...opts, provider, model, cliPath, cordisConfig, env })`。`cliPath`/`cordisConfig`/`apiKeyEnv` 这些内核专属 spawn 参数，全部在工厂闭包里捕获，**不进 `BackendCreateOptions` 契约**。这是「构造在内、执行在外」的落地：`session-store` 传的永远是中性的 `cwd/agentDir/kernel/provider/model/neutralSessionId/systemPromptPaths`，怎么把这些变成 `--session`、`--append-system-prompt`、`DSH_SESSION_ROOT` env，是各内核工厂的事。
 - **预 seed 的生命周期不对称**：`baseBackendFactory.seed` 里 `kernel === "pi"` 返回 `piSeedSession(...)`（纯文件写，先 seed 得路径再 spawn），dsh 返回 `null`（seed 是 RPC，需进程，走 `create → start → backend.seed`）。这是 `BackendFactory.seed?` 契约里写明的「生命周期不对称」，壳在 `materializeActiveLineage` 和 `switchKernel` 里据此分两条支路。
 - **禁用插件在注册后撤**：`registry.registerAll` 四目录后，读 `configStore` 的 `disabledPlugins` 逐个 `registry.unregister(id)`。此时 i18n 已合并（多合并几串文案无害），槽位查询和 `systemPromptPaths` 是懒求值（撤注册后自然不含它们）。**「禁用 = 撤贡献」不是「禁用 = 标个状态」**——无特权差异纪律要求禁用插件在槽位上彻底消失，不留「组件未注册」孤儿。

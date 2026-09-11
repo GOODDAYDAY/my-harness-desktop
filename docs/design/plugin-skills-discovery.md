@@ -165,7 +165,8 @@ export async function ensurePluginSkillsEntry(opts: EnsurePluginSkillsEntryOptio
 
 lifecycle 层拿到插件的 `source`，按 source 决定挂进哪个 settings.json：
 
-- `builtin` / `user` / `installed` → user scope，settings 路径 = `join(paths.piAgentDir, "settings.json")`
+- `builtin` / `user` / `installed` → user scope，settings 路径 = `join(<内核配置根>, "settings.json")`
+  （**不再是 `paths.piAgentDir`**：内核配置根由各内核插件的 `configRoot()` 自报、经注册表收集，见 §kernel-plugin「内核面投影」）
 - `project` → project scope，settings 路径 = `join(cwd, ".pi", "settings.json")`
 
 这个分流逻辑和 `getSettingsPath`（`skill-toggle.ts:8`）的语义一致。
@@ -304,7 +305,7 @@ project scope 的插件在 bootstrap 阶段有个特殊处理：桌面应用启�
 - `lifecycleDeps` 构造时注入 `skillsEnsure` 实现
 - `skillsEnsure.onActivate`：检查 `<pluginPath>/skills` 存在性且非空，按 source 分流 settingsPath，调 `ensurePluginSkillsEntry(active=true)`，写入发生时调 `broadcastSettingsChanged`
 - `skillsEnsure.onDeactivate`：同上，`active=false`
-- 需要 `ctx.paths`（拿到 `piAgentDir`、`homeDir`）和 `cwd`
+- 需要 `ctx.kernelConfigRoots`（注册表收集的内核配置根；**不再是 `paths.piAgentDir`**）与 `cwd`
 - **IPC handler 无需改动**——`disablePlugin`/`uninstallPlugin`/`reloadPlugin` 改前后均返回 `Promise<{ ok, error }>`（它们本来就是 async），`ipcMain.handle` 的 async handler 透传不受影响
 
 **`bootstrap/index.ts`**

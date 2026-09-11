@@ -18,7 +18,7 @@
 | `bootstrap/assemble.ts` | 三分支 `if kernel==="pi"/"dsh"/"minimal"` | 壳 |
 | `application/sessions/session-store.ts` | `kernel==="pi"` 判别、`capabilities.pi` 能力面 | 壳 |
 | `web/kernel/build-kernel.ts` | `kernels:{pi,dsh,minimal}` / `kernelModels` / `kernelConfig` Record 展开 | web |
-| `application/sessions/neutral-migration.ts` | 迁移里的内核判别 | 壳 |
+| `application/sessions/legacy-import.ts` | 旧会话导入（**已内核无关**：读各内核自报的 `readLegacySessions()`，壳只负责幂等落中立层） | 壳 |
 
 其余（`contributions.ts`/`kernel-event.ts`/`sessions.ts`）是注释或示例字面量，属内容泄漏，一并清。
 
@@ -125,7 +125,11 @@ readonly capabilities: {
 1. **阶段一 · 骨架（纯新增，零风险）**：`KernelPlugin` 接口（圆心）+ `KernelRegistry`（壳机制）+ 完整性校验。**不动 KernelId**（暂留字面量联合，避免全仓瞬时爆错）。
 2. **阶段二 · minimal 先行**：把 minimal 内核抽成第一个插件（`kernel/minimal/plugin.ts` 暴露 `minimalKernelPlugin`），验证接口闭环。
 3. **阶段三 · pi/dsh 迁移**：pi、dsh 各抽成插件（含 pi 扩展面中性化 `capabilities.steering`）。
-4. **阶段四 · 核心改用注册表**：assemble 三分支 → 注册表查；session-store 判别 → 能力探测；build-kernel Record 展开 → 注册表遍历；neutral-migration 判别 → 注册表。
+4. **阶段四 · 核心改用注册表**（**已落地**）：assemble 三分支 → 注册表查；session-store 判别 → 能力探测；build-kernel Record 展开 → 注册表遍历；旧会话导入判别 → `readLegacySessions()` 内核自报。
+   > 收口记录：`neutral-migration.ts` 已改名为 `application/sessions/legacy-import.ts`（壳侧只剩幂等落库），
+   > 读 pi 老格式搬进 pi 插件（`kernel/pi/backend/pi-legacy-sessions.ts`）。于是
+   > `scripts/dependency-audit.mjs` 的 `DOCUMENTED_EXCEPTIONS` **清空**——「application 不 import 内核实现」
+   > 这条红线不再有任何明文例外。
 5. **阶段五 · KernelId 去字面量化（最后一步）**：此时核心已注册表化，改 `KernelId = string` 只是删字面量 + 修 `Record<KernelId>` → `Map`，错误量可控。
 6. **阶段六 · N 内核测试**：单内核注册 / 任意双内核注册 / 三内核注册的适配性、可用性、鲁棒性。
 

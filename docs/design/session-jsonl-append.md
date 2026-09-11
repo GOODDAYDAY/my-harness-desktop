@@ -170,7 +170,7 @@ flowchart TD
 
 ### 5.3 renderer 插件 → config-file:append IPC
 
-- 通道常量 `configFile.append` / `"config-file:append"`，对齐 configFile 组既有命名（get/set/getLayered/...，ipc-channels.ts:17-24）。handler 落在 api/ipc/config.ts，复用 `resolveConfigFilePath` 白名单（:37-43）——`~/.pi/agent/` 已在 `paths.piAgentDir` 前缀内，白名单零改动。preload 暴露 `configFile.append`：`append: (path: string, entry: Record<string, unknown>) => Promise<void>`。
+- 通道常量 `configFile.append` / `"config-file:append"`，对齐 configFile 组既有命名（get/set/getLayered/...，ipc-channels.ts:17-24）。handler 落在 api/ipc/config.ts，复用 `resolveConfigFilePath` 白名单——各内核的配置根已在 `ctx.kernelConfigRoots`（注册表收集）内，白名单零改动。preload 暴露 `configFile.append`：`append: (path: string, entry: Record<string, unknown>) => Promise<void>`。
 
 - handler 里不调 `broadcastSettingsChanged()`。那个广播是"settings.json 变了、设置页刷新"的语义（对照 `config-file:set`，api/ipc/config.ts:50），session 文件追加不是设置变更，广播只会误触发设置页刷新。
 

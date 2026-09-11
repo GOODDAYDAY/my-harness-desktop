@@ -78,7 +78,7 @@
 - pi 头行 `pinned/archived` **零读者**——`piReadSessionHeader` 的内部消费者只有
   `piReadSessionCustom → piReadSessionToolConfig`(只读 toolConfig);列表/打开都读中立层;
   兜底重建(`snapshotNeutralSession`)今天就不从内核恢复 pinned/archived。
-- 一次性迁移 `importLegacyPiSessions` 读存量旧文件的 pinned/archived——读的是**过去**投影写下的
+- 一次性迁移（当时的 `importLegacyPiSessions`，现为内核自报的 `readLegacySessions()` + 壳侧 `importLegacySessions`）读存量旧文件的 pinned/archived——读的是**过去**投影写下的
   值,今后不再投影不影响存量;且该路径本就有「中立层已存在则跳过」的幂等守卫。
 - `name` 投影保留(pi `session_info` 条目是名字的内核侧真相源,有消费者);
   `toolConfig`/`custom` 投影保留(tool-gate 内核扩展在 pi 进程内读头行 toolConfig,真实消费者)。

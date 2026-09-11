@@ -215,14 +215,30 @@
 
 **两个广播的语义区分值得注意：** `setEnabled`（写 `settings.json` 的 `+/-` 或 disabled 名单）走 `broadcastSettingsChanged`，因为 pi 的 `settings.json` 是壳 settings 域的一部分；`setModelInvocable`（改 frontmatter 文件）走 `skills:changed`。这个区分让「设置变了」和「技能变了」是两个事件，下游订阅方各取所需。
 
-**`src/server/bootstrap/assemble.ts`：组装聚合器与内置技能。** 第 454-464 行构造 `skillAggregator`：
+**技能提供者由各内核插件交（`createSkillProvider()`），壳只做聚合。** 组装点是：
 
 ```
-const skillAggregator = new SkillAggregator([
-  new PiSkillProvider({ agentDir: PI_AGENT_DIR, homeDir: HOME_DIR, builtinSkillsDir: BUNDLED_SKILLS_DIR, getCwd: () => sessionStore.getActiveCwd() }),
-  new DshSkillProvider({ dshHome: join(HOME_DIR, ".dsh") }),
-]);
+// application 层（壳）
+new SkillAggregator(surfaces.skillProviders)   // ← 注册表投影：加第四个内核自动纳入
 ```
+
+各内核在自己的插件里构造自己的 provider，并注入**自己**的数据根：
+
+```
+// src/server/kernel/pi/plugin.ts（pi 插件）
+createSkillProvider: () => new PiSkillProvider({
+  agentDir,                      // ← 本插件从 KernelPluginContext 解析（~/.pi/agent）
+  homeDir: ctx.homedir,
+  builtinSkillsDir: ctx.builtinSkillsDir,
+  getCwd: ctx.getCwd,
+}),
+```
+
+**为什么这样分**：技能清单存在哪是**内核的私有知识**（pi 在 `~/.pi/agent/settings.json` 与
+`desktop-skills.json` 里），壳不该持有一个 `PI_AGENT_DIR` 常量再替内核读。同理，"监视哪些文件
+才算技能变了"也由内核自报（`skillWatchPaths(cwd)`，见 `kernel-plugin.md` 的「内核面投影」一节）。
+历史写法是 assemble 里直接 `new PiSkillProvider({ agentDir: PI_AGENT_DIR, ... })` ——
+那让壳同时知道了 pi 的路径、构造方式与监视文件三件事。
 
 这里 `PiSkillProvider` 的 `getCwd` 是一个闭包 `() => sessionStore.getActiveCwd()`——不直读 `process.cwd()`，由 session-store 提供当前活动项目，符合「内层不读环境信息、由外层注入」。`builtinSkillsDir: BUNDLED_SKILLS_DIR`（`~/.my-harness-desktop/skills`）让 pi provider 能把内置目录的技能标 `builtin`。`DshSkillProvider` 只注入 `dshHome`，其余路径由它内部推导。
 
