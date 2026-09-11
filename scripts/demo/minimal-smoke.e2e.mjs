@@ -100,6 +100,14 @@ try {
   await waitForDomIdle(page, { quietMs: 500, timeoutMs: 6000 }).catch(() => {});
   ok(true, "已选「Minimal Echo」");
 
+  // composer 模型锚点渲染（**只验"渲染出来了"，不验"发送后固定"**）。
+  // #17 的守卫**不在这里**：本 HOME 只把 minimal 的 `echo` 一个模型摆上台，
+  // 键漂之后显示掉到的"清单首项/应用默认"**恰好还是同一个模型**，现象不可观测
+  // （实测：删掉修复这条断言照样绿 —— 假守卫）。真守卫在 `composer-model-pin.e2e.mjs`：
+  // 那里种两个模型 + 默认≠所选 + MutationObserver 录序列，能抓到瞬态闪烁。
+  const modelBefore = await page.evaluate(() => document.querySelector("[data-composer-model]")?.textContent ?? "");
+  ok(modelBefore.length > 0, `发送前 composer 渲染出模型(${modelBefore})`);
+
   // 发消息(真实键盘)。
   await page.click("[data-timeline-composer]");
   await page.keyboard.type("你好 minimal");
@@ -126,6 +134,10 @@ try {
     { timeout: 45000, polling: 300 },
   ).then(() => true).catch(() => false);
   ok(echoed, "时间线出现 minimal echo 回复(端到端发送链路通)");
+
+  // 发送后锚点仍在、且仍渲染同一个模型（弱断言，理由见上；#17 的强守卫在专用 e2e）。
+  const modelAfter = await page.evaluate(() => document.querySelector("[data-composer-model]")?.textContent ?? "");
+  ok(modelAfter.length > 0, `发送后 composer 仍渲染模型(${modelAfter})`);
 
   // 文件对应守卫:中立层 header.kernel=minimal,且 minimal 会话文件落 .minimal/(非 .pi/)。
   const neutralDir = join(home, ".my-harness-desktop-dev", "sessions");
