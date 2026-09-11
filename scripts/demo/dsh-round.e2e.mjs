@@ -151,6 +151,9 @@ try {
         { timeout: 15000, polling: 300 },
       ).then(() => true).catch(() => false);
   ok(itemReady, "dsh 的模型（Mock DSH，来自隔离 settings.yaml）出现在下拉里");
+  // 不过就**说清为什么**（此前这里直接取 rect，item 为 undefined 时抛的是
+  // "Cannot read properties of undefined (reading 'getBoundingClientRect')" —— 看不出是"没等到"）。
+  if (!itemReady) throw new Error("dsh 的模型项「Mock DSH」始终没出现（看上面的下拉诊断）");
   const itemRect = await page.evaluate(() => {
     const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => (el.textContent || "").includes("Mock DSH") && el.getBoundingClientRect().width > 0);
     const r = item.getBoundingClientRect();
@@ -261,6 +264,14 @@ try {
   }
   ok(rowShown, "面板里出现 seq #1 的记录行（用户能看到这条记录）");
   ok(!panelText.includes("未返回"), "该记录不是「未返回」（状态已流转 —— #20 的用户症状正是它恒为未返回）");
+
+  // ── **回合不许被标成失败**：用户报的「生成失败: next is not a function」就在这里现形 ──
+  // 根因：llm-recorder 的 dsh 扩展在 `agent/turn-stopping`（dsh 用 **serial** 派发、**没有 next**）
+  // 上写了 `return next()` → 每次回合边界抛 TypeError → 回合被标失败。
+  // 而**记录其实已经落盘**（写在前、抛在后），所以"盘上正常、界面报生成失败"——
+  // 只断言文件或只断言回复都会漏掉它，必须直接断言"这一轮没被标失败"。
+  const failedBar = await page.evaluate(() => document.body.innerText.includes("生成失败"));
+  ok(!failedBar, "时间线里没有「生成失败」—— 回合没被扩展的钩子错误带崩（serial 钩子没有 next）");
 
   ok(consoleTail.length === 0, `页面零报错（实际 ${consoleTail.length} 条）`);
 

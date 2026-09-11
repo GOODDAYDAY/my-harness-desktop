@@ -114,3 +114,39 @@ export async function clickPointUntil(page, locate, predicate, { tries = 6, sett
   }
   return false;
 }
+
+/** **等**一个含指定文本的元素出现，返回它的中心点（找不到就抛，且错误说人话）。
+ *
+ *  为什么要有它：`page.evaluate(() => el.getBoundingClientRect())` 这种**一次性读**在元素
+ *  还没渲染时会拿到 null/undefined → 报 `Cannot read properties of null (reading 'x')`，
+ *  现场看着像被测代码崩了，其实是**尺子抢跑**（Virtuoso 分批挂行、菜单还在动画都会这样）。
+ *  一次性读的三个典型现场：答案行还没挂上、菜单项还没出现、下拉还在换内核。
+ *
+ *  判据：需要"某个元素的位置"时，一律先等它**可见**再取坐标——不要用固定 sleep 赌。
+ */
+export async function centerOfText(page, text, { scope = "body *", nth = -1, timeoutMs = 12000, visible = true, arg } = {}) {
+  const probe = ({ t, sel, n, vis }) => {
+    const hits = [...document.querySelectorAll(sel)].filter((e) => {
+      const s = (e.textContent || "");
+      if (!s.includes(t)) return false;
+      if (e.children.length >= 6) return false;
+      return !vis || e.getBoundingClientRect().width > 0;
+    });
+    const el = n < 0 ? hits[hits.length - 1] : hits[n];
+    if (!el) return null;
+    el.scrollIntoView({ block: "center" });
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  };
+  const args = { t: text, sel: scope, n: nth, vis: visible, ...(arg ?? {}) };
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const pt = await page.evaluate(probe, args).catch(() => null);
+    if (pt) return pt;
+    if (Date.now() > deadline) {
+      const seen = await page.evaluate((sel) => [...document.querySelectorAll(sel)].map((e) => (e.textContent || "").trim().slice(0, 24)).slice(0, 12), scope).catch(() => []);
+      throw new Error(`等不到含「${text}」的元素（scope=${scope}，超时 ${timeoutMs}ms；现场样本：${JSON.stringify(seen)}）`);
+    }
+    await sleep(150);
+  }
+}

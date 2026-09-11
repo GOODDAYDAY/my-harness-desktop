@@ -45,9 +45,17 @@ function makeFakeDsh(): FakeDsh {
       handlers.set(hook, handler);
     },
     async fire(hook, payload) {
-      // next() 在真实 dsh 里回传（可能被上游改写的）调用配置 —— 假体据此原样回传 payload.config，
-      // 否则 request 行的 payload 会是 undefined，测试就验不到"原样记 LlmCallConfig"这条契约。
-      await handlers.get(hook)?.(payload, () => (payload as { config?: unknown })?.config);
+      // ⚠ **按 dsh 真实的派发方式**决定给不给 next（这是本文件曾经漏掉一条真 bug 的地方）：
+      // dsh 的钩子分两类 —— `dispatch.waterfall`（有 next：要 await 它拿/改配置）与
+      // `dispatch.serial`（纯事件，**没有 next**）。此前这里给**每个**钩子都塞了一个 next，
+      // 于是 `agent/turn-stopping` 里那句 `return next()` 在测试里一路绿，
+      // 真机上每次都抛 `next is not a function` → 回合被标失败（用户看到「生成失败」）。
+      // 替身比现实多给一个参数，就会把这种 bug 挡在门外（skills §11.12）。
+      // 证据：`@deepseek-ai/dsh-agent-loop/lib/index.js:565`
+      //   `await this.dispatch.serial("agent/turn-stopping", …)`
+      const WATERFALL_HOOKS = new Set(["agent/request", "agent/request-error", "agent/pre-step"]);
+      const next = WATERFALL_HOOKS.has(hook) ? () => (payload as { config?: unknown })?.config : undefined;
+      await handlers.get(hook)?.(payload, next);
     },
   };
 }

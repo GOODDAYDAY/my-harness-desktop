@@ -1045,3 +1045,32 @@ mock 的回复**回显请求里的 model id**（`答复来自 <model>`），于�
 （`messages: []`、`Waiting failed: 8000ms exceeded`），逐个单跑又全绿。
 加了这个脚本之后一次全绿：`PASS=24 FLAKY=0 FAIL=0`。
 **单次结果不足以判定**——把"抖动"和"回归"分开报，广扫的结论才可信。
+
+### 15 「生成失败: next is not a function」——替身**多给一个参数**，把真 bug 挡在门外
+
+**用户症状**：界面上一条消息报「生成失败」，正文是 `next is not a function`。
+
+**根因**：dsh 的钩子**派发方式不同、参数就不同** ——
+`dispatch.waterfall("…")` 有 `next`（要 `await` 它拿上游值），`dispatch.serial("…")` 是纯事件
+**没有 `next`**，`ctx.events.dispatch("emit", […])` 也没有且 dsh 会**吞掉监听器异常**（只打 warn）。
+我们的 llm-recorder 扩展在 `agent/turn-stopping`（**serial**）上写了 `return next()` →
+**每次回合边界都抛 TypeError → 回合被标失败**。而记录是**先写后抛**，所以盘上看着正常、
+界面却报生成失败 —— 只断言文件、或只断言回复，都照不出它。
+
+**为什么单测没抓到**：假 ctx 的 `fire` 给**每个**钩子都塞了一个 `next`。替身比现实多给一个参数，
+正好把这个 bug 挡在门外（§11.12「替身的形状要真」的同一条，这次代价是线上可见的失败）。
+
+**三条纪律**：
+1. **替身的参数表要照抄现实**：不是"多给一个不会错"，而是"多给一个就测不到契约"。
+   现在 `dsh-extension-flow.test.ts` 的 `fire` 按钩子类型决定给不给 `next`（表里带 dsh 证据位置），
+   于是同样的 bug 会当场报 `TypeError: next is not a function`。
+2. **静态契约守卫**（`dsh-hook-contract.test.ts`）：扫我们自己的扩展源码取每个钩子的形参，
+   与"DISPATCH 表"（waterfall / serial / emit，每条都写了 dsh 里的证据位置）对比；
+   用 `next()` 的钩子必须是 waterfall，非 waterfall 不许声明 `next` 形参。装了 dsh 时还**顺便复核表本身**。
+3. **对外部宿主（内核）的 API，去它的**实现**里核对，别只信文档/注释**：
+   `grep -rhoE 'dispatch\.(waterfall|serial)\("[^"]+"' @deepseek-ai/*/lib/*.js` 一行就能列出
+   全部钩子的派发方式 —— 这一条比读文档可靠得多，也解释了"为什么同一个文件里三个钩子只有一个炸"。
+
+**e2e 判据**：`dsh-round.e2e.mjs` 增加"时间线里没有「生成失败」"——直接断言**这一轮没被标失败**
+（数据层断言照不出"回合被钩子带崩"，必须打用户看得见的那个面）。
+红绿证明：把 `return next()` 放回去，该断言当场红，正文与用户报的一模一样。

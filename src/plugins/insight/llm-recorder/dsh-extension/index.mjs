@@ -194,12 +194,24 @@ export function apply(ctx) {
   });
 
   // 回合边界:把该会话仍未结算的调用收成成功行(回合关闭即这次调用没失败)。
-  ctx.on("agent/turn-stopping", async (payload, next) => {
+  //
+  // ⚠ **这里没有 `next`，也不许有**（用户实测症状：「生成失败: next is not a function」）。
+  // dsh 对这三个钩子的派发方式**不一样**：
+  //   · `agent/request`         → `dispatch.waterfall`（有 next，要 await 它拿配置）
+  //   · `agent/request-error`   → `dispatch.waterfall`（有 next）
+  //   · `agent/turn-stopping`   → `dispatch.serial`    （**没有 next**）
+  //     （证据：`@deepseek-ai/dsh-agent-loop/lib/index.js:565` 的
+  //       `await this.dispatch.serial("agent/turn-stopping", …)`）
+  // 此前这个 handler 结尾写了 `return next()`：serial 派发下 next 是 undefined →
+  // 每次回合边界都抛 TypeError → **回合被标成失败**（而记录其实已经落盘了，
+  // 所以盘上看着正常、界面上却报「生成失败」）。
+  // 单测没抓到，是因为假 ctx 的 `fire` **给每个钩子都塞了一个 next** ——
+  // 替身比现实"多给了一个参数"，把 bug 挡住了（skills §11.12 的同一条）。
+  ctx.on("agent/turn-stopping", async (payload) => {
     try {
       const sid = payload?.agent?.id;
       if (typeof sid === "string" && sid) settleSuccess(stateOf(sid));
     } catch { /* ignore */ }
-    return next();
   });
 }
 

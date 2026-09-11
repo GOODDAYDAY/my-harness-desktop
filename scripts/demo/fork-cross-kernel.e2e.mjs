@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { centerOfText } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -81,18 +82,10 @@ try {
   });
   if (rowPt) await page.mouse.click(rowPt.x, rowPt.y);
   // 两阶段收敛(skills §10.3.1):泛条件(messages>0)通过 ≠ 目标那条在 DOM 里——必须等**目标内容**出现再取样。
-  await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length > 0, { timeout: 10000, polling: 300 }).catch(() => {});
-  await page.waitForFunction(
-    () => [...document.querySelectorAll("[data-message-id]")].some((r) => (r.textContent || "").includes("答完了。")),
-    { timeout: 10000, polling: 300 },
-  ).catch(() => {});
-  const box = await page.evaluate(() => {
-    const row = [...document.querySelectorAll("[data-message-id]")].find((r) => (r.textContent || "").includes("答完了。"));
-    if (!row) return null;
-    row.scrollIntoView({ block: "center" });
-    const r = row.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  });
+  // ⚠ 先前的写法是"等一次（**超时被吞**）+ 一次性读 rect"：负载高时那 10s 等不到行，
+  //   后面的一次性读拿到 null → 报「找到 assistant 消息行」失败——**错误指向了错误的地方**
+  //   （真相是"等超时了"，不是"行不存在"）。改用 centerOfText：等够 + 找不到时说人话。
+  const box = await centerOfText(page, "答完了。", { scope: "[data-message-id]", timeoutMs: 25000 });
   ok(!!box, "找到 assistant 消息行");
   await page.mouse.move(box.x, box.y);
   await new Promise((r) => setTimeout(r, 700));
