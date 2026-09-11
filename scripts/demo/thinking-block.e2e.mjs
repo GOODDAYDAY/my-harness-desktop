@@ -95,6 +95,29 @@ writeFileSync(join(sessionsDir, `${NS}.entries.json`), JSON.stringify({
   }],
 }));
 
+// 第二个会话：只为"切走再切回"用（#18 的判据在重挂，不在首次渲染）。
+const NS2 = "ns-seeded-plain";
+writeFileSync(join(sessionsDir, `${NS2}.header.json`), JSON.stringify({
+  neutralSessionId: NS2,
+  rootLineageId: NS2,
+  header: {
+    kernel: "pi", cwd: projectDir, createdAt: new Date(now - 60000).toISOString(),
+    name: "旁边的会话", lastMessage: "旁白。",
+    lastEntryId: `${NS2}:1`, updatedAt: new Date(now - 2000).toISOString(),
+  },
+}));
+writeFileSync(join(sessionsDir, `${NS2}.entries.json`), JSON.stringify({
+  neutralSessionId: NS2,
+  lineages: [{
+    lineageId: NS2,
+    fork: null,
+    entries: [
+      { neutralEntryId: `${NS2}:0`, message: { role: "user", content: "旁白", timestamp: now - 30000 } },
+      { neutralEntryId: `${NS2}:1`, message: { role: "assistant", content: [{ type: "text", text: "旁白。" }], timestamp: now - 29000 } },
+    ],
+  }],
+}));
+
 const app = await launchApp({ appDir: ROOT, port: PORT, env: { HOME: home, MHD_PORT: String(APP_PORT) }, timeoutMs: 90000 });
 const page = app.page;
 const consoleTail = [];
@@ -163,10 +186,60 @@ try {
   await page.waitForFunction(() => !document.body.innerText.includes("第二段思考"), { timeout: 5000, polling: 200 });
   ok(true, "再点收起(展开/收起双向可用)");
 
+  // ③ **#18 的真判据：重挂之后仍然保持展开**（用户原话「打开的话就一直打开，
+  //    别我看着看着，又自动收起来了」）。
+  //
+  //    为什么这一条必须在**真实 app** 里做、且必须靠"切走再切回"：
+  //    缺陷形态是 Virtuoso 因 computeItemKey 变化**换掉组件实例**（消息 id 从流式 id 变成
+  //    neutralEntryId），局部 state 归零 → 用户展开的那块又合上。jsdom 里能用
+  //    unmount+全新 render 复现（`thinking-chain-block.test.tsx` 已有那条），但
+  //    **只有真 app 的虚拟列表才会真的重挂**——切走再切回正是触发它的最短真实路径。
+  await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button")].find((b) => /思考已完成|思考过程/.test(b.textContent || ""));
+    btn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await page.waitForFunction(() => document.body.innerText.includes("第二段思考"), { timeout: 5000, polling: 200 });
+  ok(true, "重挂守卫前置：先把思考块展开");
+
+  /** 消息区里有没有这段文本（不用 body.innerText：侧栏预览会干扰，见上）。 */
+  const messagesContain = (page_, needle) =>
+    page_.evaluate((n) => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes(n)), needle);
+
+  if (!(await clickByText(page, "旁边的会话", { exact: true }))) throw new Error("未找到会话行: 旁边的会话");
+  // ⚠ 判据只看**消息区**，不用 body.innerText：侧栏会话行的 `lastMessage` 预览会把
+  //   "空思考的回复。"一直留在 body 里（skills §3.5），拿 body 判"切走了没"永远为假——
+  //   本轮实测被它卡住一次。
+  await page.waitForFunction(
+    () => {
+      const texts = [...document.querySelectorAll("[data-message-id]")].map((el) => el.textContent || "");
+      return texts.some((t) => t.includes("旁白。")) && !texts.some((t) => t.includes("空思考的回复。"));
+    },
+    { timeout: 8000, polling: 300 },
+  );
+  ok(true, "已切到旁边的会话(消息区只剩旁白)");
+
+  if (!(await clickByText(page, "思考块种子会话", { exact: true }))) throw new Error("未找到会话行: 思考块种子会话");
+  await page.waitForFunction(
+    () => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("空思考的回复。")),
+    { timeout: 8000, polling: 300 },
+  );
+  await waitForDomIdle(page, { quietMs: 600, timeoutMs: 8000 }).catch(() => {});
+  ok(!(await messagesContain(page, "旁白。")), "切回来了(消息区不含另一个会话的内容)");
+
+  const stillOpen = await page.evaluate(() => {
+    const t = document.body.innerText;
+    return { second: t.includes("第二段思考:逐字验证不截断——这一段必须在展开后完整可见。"), third: t.includes("第三段思考收尾") };
+  });
+  ok(
+    stillOpen.second && stillOpen.third,
+    `切走再切回后思考块**仍保持展开**(实际 second=${stillOpen.second} third=${stillOpen.third};` +
+      `收起即 #18 复发——用户展开的东西被重挂抹掉了)`,
+  );
+
   ok(consoleTail.length === 0, `页面零报错(实际 ${consoleTail.length} 条${consoleTail[0] ? `: ${consoleTail[0].slice(0, 120)}` : ""})`);
 
   await killApp(app);
-  console.log(`\n✅ PASS: ${passed} 项断言全部通过(思考块:空内容显式降级 + 有内容点击展开全文)`);
+  console.log(`\n✅ PASS: ${passed} 项断言全部通过(思考块:空内容显式降级 + 展开全文 + 重挂后仍保持展开)`);
   if (!args.keep) rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   process.exit(0);
 } catch (err) {
