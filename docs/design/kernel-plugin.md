@@ -193,6 +193,23 @@ src/plugins/kernels/<id>/
   └── （内核实现在 src/server/kernel/<id>/，其工厂编译到 out/main/server/kernel/<id>/plugin.js）
 ```
 
+**内核实现在哪：仍住 `src/server/kernel/<id>/`（这是一次**考虑过并否决**的搬迁，理由在下面）**
+
+插件目录与内核目录的分工是"声明 + 对接面"在插件、**内核本体**在 `src/server/kernel/<id>/`。
+曾经打算把内核本体也搬进 `src/plugins/kernels/<id>/server/` 做到"字面一个目录"，评估后不做：
+
+1. **职责边界不因搬家而变**。内核实现在洋葱里与 `client/fs`、`git`、`npm` 同一层——都是
+   「被壳管理的外部资源」，都经依赖倒置接入。把它挪进内容层，会让 `src/plugins/` 里出现
+   大量 node 重代码，并**必须放宽**「壳插件只 import shared+react」那条依赖审计（检验④）——
+   为一次搬迁削弱一道守卫，方向是反的。
+2. **"可卸载"已经成立且被验证**：删掉 `src/plugins/kernels/<id>/`（唯一 manifest）→
+   内核不注册、它的设置页也不装载，其余内核照常（`kernel-plugin-uninstall.e2e.mjs` 17 断言）。
+   留在原地的那些实现文件只是**变成死代码**，不影响任何行为。
+3. **"加第四个内核零改动"也已成立且被验证**：`kernel-surfaces.test.ts` 用 3 真实 + 1 合成
+   内核证明壳的每一面都从注册表投影（见下节）。搬家只省下"多建一个目录"，买不到上面两条。
+
+若将来真要做，判据是：**它是否让某条守卫变弱**。不变弱才做。
+
 `kernel` 块只写**内核面**要知道的事（`order` / `enabled` / 可选 `factory`），**不重复写 id**
 （id 单源 = 宿主 manifest 的 `id`）。壳扫壳插件根目录时，凡 manifest 带 `kernel` 块者，
 既是一个壳插件、也是一个内核插件。
