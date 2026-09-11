@@ -28,7 +28,7 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 **fork→切内核(r23)**:fork 派生会话 pendingSeed 豁免锁定(pendingSeed=未物化≠历史)——fork pi 后可切 dsh
 **in-mem harness(r19)**:Vite __vitePreload 相对 import 在 Node-ESM 挂起→直测预加载全 chunk 修复(87b072d5)
 **内核插件补面 + 实证纪律(§10)**:行契约不变/hook 不同名(llm-recorder 的 dsh 侧)|插桩改变时序→无插桩复跑定论|守卫要先证明能红|数据层对≠DOM 对(列表跨作用域 key 必带 cwd)
-**构建产物与测试基建的「假结果」(§11)**:|**全量 e2e 广扫抓到真 bug**(§12)|**先插桩再猜**(§12.2)改完 server 忘了 build→e2e 读旧代码|e2e 泄漏实例→下次连到旧进程|假守卫两副面孔(同实例 rerender / 行为对但机理不对)|静默 no-op 三例(缺关键帧/未声明变量/文档写的字段不存在)|常年红的门等于没有门|能力驱动渲染用 `=== true`|降级要成对验|断言写错"面"(同一件事两个投递口,11.9)|瞬态闪烁要录**序列**不是比两端(11.10)|重挂缺陷真 app 最短复现=切走再切回(11.11)|测试替身:身份要稳、形状要真(11.12)|运行态动效两条成因链,产物级守卫(11.13)|环境展不出该缺陷时守卫是假的(11.10)
+**构建产物与测试基建的「假结果」(§11)**:|**用 mock 模型给内核补零 token 真回合**(§13)||**全量 e2e 广扫抓到真 bug**(§12)|**先插桩再猜**(§12.2)改完 server 忘了 build→e2e 读旧代码|e2e 泄漏实例→下次连到旧进程|假守卫两副面孔(同实例 rerender / 行为对但机理不对)|静默 no-op 三例(缺关键帧/未声明变量/文档写的字段不存在)|常年红的门等于没有门|能力驱动渲染用 `=== true`|降级要成对验|断言写错"面"(同一件事两个投递口,11.9)|瞬态闪烁要录**序列**不是比两端(11.10)|重挂缺陷真 app 最短复现=切走再切回(11.11)|测试替身:身份要稳、形状要真(11.12)|运行态动效两条成因链,产物级守卫(11.13)|环境展不出该缺陷时守卫是假的(11.10)
 
 ## 1 基础设施(现成件,别重造)
 
@@ -891,3 +891,55 @@ fork/seed 物化出来的会话里，继承来的条目**都没有 kernelEntryId
 `[data-message-id]` 已出现 ≠ 那条行已经渲染完，Virtuoso 是分批挂行的）。
 改成 `waitForFunction` 轮询等目标行（事件驱动），并在超时时抛出**说人话**的错误。
 **判据**：DOM 查询若可能"还没到"，一律用等待而不是一次性读；一次性读的 null 会被误读成崩溃。
+
+
+## 13 用 mock 模型给内核补「零 token 真回合」（本轮新增 `dsh-round.e2e.mjs`）
+
+### 13.1 为什么 dsh 侧一直缺一条真回合 e2e
+
+dsh 的真回合此前**只能靠真 key**：`dsh-smoke` / `dsh-multiturn` / `dsh-credentials` 都写着
+"前置：app 已运行 + 真凭证"。于是：
+- 用户诉求「一定要有 pi 和 DSH 的调度测试」在 dsh 侧**只到派发为止**
+  （`kernel-dispatch` 验的是 setModel 路由 + 能力指纹，没有跑完一轮）；
+- #20（dsh 执行时右侧请求记录）**连能跑的 e2e 都没有**，只有两半单测。
+
+### 13.2 配方（照抄即可，`scripts/demo/dsh-round.e2e.mjs`）
+
+1. **本地 mock OpenAI 兼容 SSE**：`node:http` 起在 `127.0.0.1:0`（拿随机端口），
+   `/v1/chat/completions` 回两段 `data: {...delta...}` + `finish_reason` + `[DONE]`。
+2. **隔离的 provider 配置**：`setupDshKernel(home, realHome)` 会把根落到隔离 HOME，
+   再用一个**只含 mock provider** 的 `settings.yaml` 覆盖它
+   （`llm-pi-ai.providers.<id>`：`api: openai-completions` / `baseURL` / `apiKeyEnv`）。
+   key 走**环境变量**（`launchApp` 的 env），不落盘、不进仓库。
+3. 之后就是常规 e2e：选模型（多内核才有内核 TAB，**条件式**）→ 发送 → 等回复 → 落盘对账。
+
+**收益**：dsh 的**真内核、真 JSON-RPC、真会话落盘**整条链路变成零 token 可反复跑。
+本回合就靠它补上了 #20 的端到端守卫（request/response 记录真的落盘）。
+
+### 13.3 mock 必须**像**真协议：少一个字段，现场像内核坏了
+
+第一版 mock 的 SSE 只发了 `delta.content` 和 `[DONE]`，dsh 侧报
+**「生成失败：Stream ended without finish_reason」**——看着像 dsh 内核坏了，
+其实是我这个替身不像 OpenAI（末尾要有一帧 `finish_reason`）。
+**又一次「替身的形状要真」**（§11.12）：写协议级 mock 时，**照着真实协议帧补全**
+（role 帧 / content 帧 / finish_reason 帧 / [DONE]），别只发"够用"的那几帧。
+
+### 13.4 判据要照**契约**写，别自己加码
+
+补 #20 断言时我先写了「response 必须带数字状态码」——**红了**。查契约才发现
+`ResponseLine.status` 是可选的（扩展侧注释："连接级失败无 status(after_provider_response 未触发)"），
+dsh 的结算路径本来就不一定带。面板对 `undefined` 渲染 `—`，而**「未返回」的判据是
+response 行为 null（孤儿）**。改成"每条 request 都有配对的 response"就对了。
+**判据比契约强 = 假红**；写断言前先读一眼被断言字段是不是可选。
+
+### 13.5 又一次被自己吞掉的错误（§10.3.2 的复发）
+
+同一轮里，我的读日志辅助写成了：
+
+```js
+const readLogs = () => { try { return readdirSync(logDir)... } catch { return []; } };  // ✗
+```
+
+而 `readdirSync` **根本没 import** → ReferenceError 被这个 catch 吞掉 → 断言报"0 条记录"，
+现场看着像"扩展没写盘"，其实盘上**明明有**（我用手工 `cat` 一眼就看到了）。
+**诊断期的 catch 就是会这样骗你**：要么别 catch，要么至少把错误打出来。
