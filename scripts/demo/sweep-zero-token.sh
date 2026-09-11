@@ -24,9 +24,15 @@
 #      白跑了几次真请求才发现；判定标准是**看头注释/看它有没有 mock**，不是看它像不像"冒烟"）。
 #   · 已知抖动：session-single-source 的 ⑤（刷新重开→点行重开）偶发失败，已给它加了
 #     失败现场诊断（侧栏行/时间线消息数/body 头），下次失败能自证。
+#
+# ⚠ **清单本身也会漏**：本轮发现 kernel-dispatch（25 断言，纯派发不花 token）和
+#   dsh/pi-model-reasoning、pi-devrole、fork-cross-kernel、ask-question、ask-resume
+#   这 7 条零 token e2e 一直**没进清单**（我手跑过、却没写进来）。加新 e2e 时顺手加到这里，
+#   并顺手核一遍"头注释说零 token 的有几条、清单里有几条"。
 cd "$(dirname "$0")/../.." || exit 1
 
 LIST="
+kernel-dispatch dsh-model-reasoning pi-model-reasoning pi-devrole fork-cross-kernel ask-question ask-resume
 multi-kernel-round dsh-round minimal-model thinking-block session-list-orphan-kernel
 kernel-plugin-uninstall composer-model-pin minimal-smoke minimal-settings minimal-fork
 minimal-tool session-search rename message-actions bookmark-snapshot bookmark-fork
