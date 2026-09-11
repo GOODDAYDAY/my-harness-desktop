@@ -20,6 +20,7 @@ import { createServer } from "node:http";
 import { launchApp, killApp, assertPortFree } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline, setupDshKernel } from "./lib/home.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { clickPointUntil } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -131,21 +132,24 @@ try {
   if (!triggerRect) throw new Error("未找到模型下拉触发器");
   await page.mouse.click(triggerRect.x, triggerRect.y);
   await page.waitForSelector("[role='menu']", { timeout: 6000 }).catch(() => {});
-  const tabRect = await page.evaluate(() => {
-    const menu = document.querySelector("[role='menu']");
-    const tab = [...(menu?.querySelectorAll("button") ?? [])].find((b) => (b.textContent || "").trim().toLowerCase() === "dsh");
-    if (!tab) return null;
-    const r = tab.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  });
-  if (tabRect) {
-    await page.mouse.click(tabRect.x, tabRect.y);
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  const itemReady = await page.waitForFunction(
-    () => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes("Mock DSH") && el.getBoundingClientRect().width > 0),
-    { timeout: 15000, polling: 300 },
-  ).then(() => true).catch(() => false);
+  // 多内核时下拉按内核分 TAB。TAB 点击用**有界重试**（菜单动画未落定会打偏），
+  // 重试判据就是"目标模型项可见"。
+  const hasTab = await page.evaluate(() => [...document.querySelectorAll("[role='menu'] button")].some((b) => (b.textContent || "").trim().toLowerCase() === "dsh"));
+  const itemReady = hasTab
+    ? await clickPointUntil(
+        page,
+        () => {
+          const tab = [...document.querySelectorAll("[role='menu'] button")].find((b) => (b.textContent || "").trim().toLowerCase() === "dsh");
+          if (!tab) return null;
+          const r = tab.getBoundingClientRect();
+          return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        },
+        () => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes("Mock DSH") && el.getBoundingClientRect().width > 0),
+      )
+    : await page.waitForFunction(
+        () => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes("Mock DSH")),
+        { timeout: 15000, polling: 300 },
+      ).then(() => true).catch(() => false);
   ok(itemReady, "dsh 的模型（Mock DSH，来自隔离 settings.yaml）出现在下拉里");
   const itemRect = await page.evaluate(() => {
     const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => (el.textContent || "").includes("Mock DSH") && el.getBoundingClientRect().width > 0);

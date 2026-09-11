@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { clickPointUntil } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -62,21 +63,29 @@ try {
   ok(!!(await page.evaluate(() => !!document.querySelector("[role='menu']"))), "模型下拉已打开");
 
   // 点「minimal」内核 TAB(真实鼠标)。
-  const tabRect = await page.evaluate(() => {
-    const menu = document.querySelector("[role='menu']");
-    const tab = [...(menu?.querySelectorAll("button") ?? [])].find((b) => (b.textContent || "").trim().toLowerCase() === "minimal");
-    if (!tab) return null;
-    const r = tab.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  });
-  if (!tabRect) {
+  // 内核 TAB 用**有界重试点击**：菜单刚打开时还在动画，一次性取的坐标会打偏
+  // （现场表现为"点了没反应 → 模型没合流"，看着像插件坏了）。每次重试重新算坐标。
+  const tabClicked = await clickPointUntil(
+    page,
+    () => {
+      const menu = document.querySelector("[role='menu']");
+      const tab = [...(menu?.querySelectorAll("button") ?? [])].find((b) => (b.textContent || "").trim().toLowerCase() === "minimal");
+      if (!tab) return null;
+      const r = tab.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    },
+    () => {
+      // 判据：点完之后「Minimal Echo」这一项真的在菜单里可见
+      return [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes("Minimal Echo") && el.getBoundingClientRect().width > 0);
+    },
+  );
+  if (!tabClicked) {
     const tabs = await page.evaluate(() => {
       const menu = document.querySelector("[role='menu']");
       return [...(menu?.querySelectorAll("button") ?? [])].map((b) => (b.textContent || "").trim()).filter(Boolean);
     });
-    throw new Error(`未找到 minimal TAB(实际 TAB: ${JSON.stringify(tabs)})`);
+    throw new Error(`minimal TAB 点了 ${6} 次仍没让模型项出现(实际 TAB: ${JSON.stringify(tabs)})`);
   }
-  await page.mouse.click(tabRect.x, tabRect.y);
   ok(true, "已点击 minimal 内核 TAB");
 
   // 查「Minimal Echo」(role=menuitem,文本含显示名)。

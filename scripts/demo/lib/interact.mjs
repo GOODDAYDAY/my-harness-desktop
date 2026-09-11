@@ -90,3 +90,25 @@ export async function clickBySelector(page, selector, { timeoutMs = 6000, settle
     await sleep(150);
   }
 }
+
+/** 反复点一个**算出来的点**，直到 predicate 成立（有界重试）。
+ *
+ *  为什么需要它（实测）：菜单/弹层刚打开时元素还在动画，`getBoundingClientRect()` 取到的
+ *  位置与最终位置不一致 → 可信点击会**打偏**，表现为"点了没反应"。典型现场：
+ *  模型下拉的**内核 TAB** 偶发点不中 → 期望的模型项一直不出现 → 断言报"模型没合流"
+ *  （看着像内核插件坏了，其实是点击打偏）。全量广扫里这类偶发失败会污染对代码的判断。
+ *
+ *  做法：算点 → 点 → 每次都重新算（动画结束后位置才稳定）→ 直到 predicate 成立或次数用尽。
+ *  最后一次仍不成立时返回 false，让调用方给出**说人话**的失败信息（不吞、不伪造通过）。
+ */
+export async function clickPointUntil(page, locate, predicate, { tries = 6, settleMs = 300 } = {}) {
+  for (let i = 0; i < tries; i++) {
+    const pt = await page.evaluate(locate).catch(() => null);
+    if (pt) {
+      await page.mouse.click(pt.x, pt.y);
+      await sleep(settleMs);
+    }
+    if (await page.evaluate(predicate).catch(() => false)) return true;
+  }
+  return false;
+}

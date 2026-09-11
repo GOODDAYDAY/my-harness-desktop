@@ -13,6 +13,7 @@ import { createServer } from "node:http";
 import { launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { clickPointUntil } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -78,13 +79,20 @@ try {
   });
   await page.mouse.click(triggerRect.x, triggerRect.y);
   await page.waitForSelector("[role='menu']", { timeout: 4000 }).catch(() => {});
-  const tabRect = await page.evaluate(() => {
-    const tab = [...document.querySelectorAll("[role='menu'] button")].find((b) => (b.textContent || "").trim().toLowerCase() === "minimal");
-    if (!tab) return null;
-    const r = tab.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  });
-  await page.mouse.click(tabRect.x, tabRect.y);
+  // 有界重试点击（每次重算坐标）：菜单动画未落定时一次性取的坐标会**打偏**，
+  // 而"打偏"的现场与本文件下面注释里那个"点 TAB 后列表还没换"的假失败**长得一模一样**。
+  // 重试的判据直接就是"Mock 项可见"，所以两种情况一起被覆盖。
+  const tabClicked = await clickPointUntil(
+    page,
+    () => {
+      const tab = [...document.querySelectorAll("[role='menu'] button")].find((b) => (b.textContent || "").trim().toLowerCase() === "minimal");
+      if (!tab) return null;
+      const r = tab.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    },
+    () => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes("Mock") && el.getBoundingClientRect().width > 0),
+  );
+  if (!tabClicked) throw new Error("minimal TAB 点了多次仍未让「Mock」模型项出现");
   // 必须等列表真的换成 minimal 的:点 TAB → Radix 状态更新 → 重渲染是**异步**的,
   // 立刻取样会读到**上一个内核**的列表(实测「Mock 未找到」的假失败正是这么来的:
   // dump 显示 tabs 有 minimal 但 items 全是 pi 的)。纪律见 skills §10.3.1:等待谓词 W 必须覆盖断言谓词 X。
