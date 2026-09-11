@@ -7,7 +7,7 @@
 //
 // 用法: npm run build && node scripts/demo/thinking-block.e2e.mjs [--port 9337] [--keep]
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -236,10 +236,25 @@ try {
       `收起即 #18 复发——用户展开的东西被重挂抹掉了)`,
   );
 
+  // ④ **运行态动效真的进了产物**（构建产物级守卫，零 token）。
+  //
+  //   为什么要在 e2e 里查产物 CSS：既有守卫只到"源码里写了类名/关键帧"这一层，
+  //   而用户看到的"图标不动"还有第二条成因链 —— Tailwind 的 `@source` 扫描没覆盖到某个目录，
+  //   于是 `.animate-pulse` 这类**工具类根本没被生成**（本仓记录过两次：`@source ../../plugins`
+  //   指向不存在的旧目录，导致插件内整批工具类漏生成）。那时类名还在、DOM 断言还绿，
+  //   但样式表里没有规则 —— 元素就是不动。
+  //   产物 CSS 是"用户真正加载到的东西"，只有它能同时覆盖两条成因链。
+  const cssFiles = readdirSync(join(ROOT, "out", "renderer", "assets")).filter((f) => f.endsWith(".css"));
+  const css = cssFiles.map((f) => readFileSync(join(ROOT, "out", "renderer", "assets", f), "utf-8")).join("\n");
+  ok(cssFiles.length > 0, `产物 CSS 存在（${cssFiles.length} 个）`);
+  ok(/\.animate-pulse\s*\{[^}]*animation/.test(css), "`.animate-pulse` 规则进了产物（@source 没漏扫 → 工具类真被生成）");
+  ok(/@keyframes\s+tool-live-pulse/.test(css), "`@keyframes tool-live-pulse`（工具执行中呼吸条）进了产物");
+  ok(/@keyframes\s+stream-caret-breathe/.test(css), "`@keyframes stream-caret-breathe`（打印中光标）进了产物");
+
   ok(consoleTail.length === 0, `页面零报错(实际 ${consoleTail.length} 条${consoleTail[0] ? `: ${consoleTail[0].slice(0, 120)}` : ""})`);
 
   await killApp(app);
-  console.log(`\n✅ PASS: ${passed} 项断言全部通过(思考块:空内容显式降级 + 展开全文 + 重挂后仍保持展开)`);
+  console.log(`\n✅ PASS: ${passed} 项断言全部通过(思考块:空内容显式降级 + 展开全文 + 重挂后仍保持展开 + 产物动效落地)`);
   if (!args.keep) rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   process.exit(0);
 } catch (err) {
