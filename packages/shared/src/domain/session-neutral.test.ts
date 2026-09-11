@@ -199,6 +199,31 @@ describe("neutral-first 纯函数 mutation(§neutral-session-first)", () => {
     expect(out.lineages[0].entries[2].kernelEntryId).toBe("pi-id-2"); // 最后一个 user 回填
   });
 
+  it("★ 已绑定条目是**边界**：不越过它去绑上一段历史里未绑的同 role 条目（fork/物化丢回复的根因）", () => {
+    // 失败形态（实测，fork/seed 物化出来的会话）：
+    //   · 继承来的条目是**投影**出来的，没有 kernelEntryId；
+    //   · 本轮先把 user 落进中立层并绑上权威 id（已绑定 = 本回合内容的起点）；
+    //   · 紧接着新一轮 assistant 的 entryAppended 到了，带着**全新**的 kernelEntryId。
+    // 旧实现"一直往前找第一个未绑的同 role 条目"会穿过已绑的 user 条目，摸到**上一段历史**
+    // 里那条未绑的 assistant，把新 id 绑上去 → 同一条的 messageEnd 随后判"该 id 已存在"→
+    // 幂等跳过 → **这条回复在中立层里静默消失**（DOM 读中立层，用户看不到回复）。
+    let s = appendNeutralEntry(emptyNeutralSession("ns-1", header), "ns-1", e("user"));        // :0 继承 user（未绑）
+    s = appendNeutralEntry(s, "ns-1", e("assistant"));                                          // :1 继承 assistant（未绑）
+    s = appendNeutralEntry(s, "ns-1", { neutralEntryId: "", kernelEntryId: "div-1", message: { role: "divider", content: "" } });
+    s = appendNeutralEntry(s, "ns-1", { neutralEntryId: "", kernelEntryId: "this-turn-user", message: { role: "user", content: "分叉后的消息" } });
+
+    const out = backfillKernelEntryId(s, "ns-1", "brand-new-assistant-id", "assistant");
+    expect(out, "越过已绑定条目去绑旧条目 = 新回复随后被幂等跳过、静默丢失").toBe(s);
+    expect(out.lineages[0].entries[1].kernelEntryId, "上一段历史的条目不该被新 id 占用").toBeUndefined();
+  });
+
+  it("尾巴上的未绑同 role 条目仍照常回填（不能因为加了边界就把正常路径也堵死）", () => {
+    let s = appendNeutralEntry(emptyNeutralSession("ns-1", header), "ns-1", { neutralEntryId: "", kernelEntryId: "old-user", message: { role: "user", content: "上一条" } });
+    s = appendNeutralEntry(s, "ns-1", e("assistant")); // 本回合刚 append 的、还没 id 的 assistant
+    const out = backfillKernelEntryId(s, "ns-1", "fresh-assistant-id", "assistant");
+    expect(out.lineages[0].entries[1].kernelEntryId).toBe("fresh-assistant-id");
+  });
+
   it("backfillUserAuthority:回填 user 的 kernelEntryId + message.id + message.timestamp", () => {
     let s = appendNeutralEntry(emptyNeutralSession("ns-1", header), "ns-1", e("user"));
     s = appendNeutralEntry(s, "ns-1", e("assistant"));

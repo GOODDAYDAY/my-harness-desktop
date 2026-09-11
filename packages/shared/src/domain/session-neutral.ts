@@ -281,6 +281,17 @@ export function backfillKernelEntryId(
       const next = lineage.entries.map((x, j) => (j === i ? { ...x, kernelEntryId } : x));
       return { ...session, lineages: session.lineages.map((l, j) => (j === idx ? { ...l, entries: next } : l)) };
     }
+    // **遇到已绑定的条目就停**（勿回退成"一直往前找第一个未绑的同 role 条目"）。
+    //
+    // 根因（实测，fork/物化会话丢回复）：回填的语义是"写穿刚 append 的那条还没 id，
+    // 等 entryAppended 把权威 id 带回来补上"——候选**只可能在本回合的尾巴上**。
+    // 而"往前找第一个未绑同 role 条目"会穿过整个历史，摸到**上一段历史留下的未绑条目**：
+    // fork/seed 物化出来的会话，中立层里那些继承来的条目**都没有 kernelEntryId**
+    // （它们是投影出来的，不是内核写的）。于是新一轮 assistant 的 id 被绑到了**旧的**
+    // seeded assistant 条目上 → 紧接着同一条的 messageEnd 一看"该 id 已存在"→ **幂等跳过** →
+    // 这条回复**在中立层里静默消失**（DOM 读中立层，于是用户看不到回复）。
+    // 已绑定的条目是"上一回合的既成内容"的分界：越过它就说明本回合的尾巴已经结束。
+    if (e.kernelEntryId !== undefined) break;
   }
   return session;
 }

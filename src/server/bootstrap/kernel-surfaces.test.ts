@@ -18,7 +18,7 @@ import { piKernelPlugin } from "../kernel/pi/plugin";
 import { dshKernelPlugin } from "../kernel/dsh/plugin";
 import { minimalKernelPlugin } from "../kernel/minimal/plugin";
 import { makeRealCtx } from "../kernel/core/kernel-test-ctx";
-import { buildKernelSurfaces, makeExtensionDispatch, runKernelStartupMigrations } from "./kernel-surfaces";
+import { buildKernelSurfaces, ensureBundledSkillsOnAll, makeExtensionDispatch, migrateSkillsOnAll, runKernelStartupMigrations } from "./kernel-surfaces";
 import type { BaseBackend, KernelPlugin } from "@my-harness-desktop/shared";
 
 let homedir: string;
@@ -164,6 +164,49 @@ describe("第四个内核：不碰核心代码，能被每一面自动接上", (
     const failed = runKernelStartupMigrations(r);
     expect(log, "第四个内核的迁移面没被调到（壳只认 pi/dsh？）").toContain("migrateLegacyState");
     expect(failed).toEqual(["boom"]);
+  });
+});
+
+describe("内置技能面：**逐个内核都要挂**（不是「取第一个」）", () => {
+  /** 能记事的 ensureSkills/migrateSkills 面。 */
+  function withSkills(id: string, log: string[], behavior?: { throwOnEnsure?: boolean }) {
+    const { plugin } = makeFourthKernel(id);
+    plugin.ensureSkills = async (enabled: boolean) => {
+      log.push(`${id}:ensure:${enabled}`);
+      if (behavior?.throwOnEnsure) throw new Error(`${id} 挂了`);
+      return true;
+    };
+    plugin.migrateSkills = async () => { log.push(`${id}:migrate`); return false; };
+    return plugin;
+  }
+
+  it("两个内核都有内置技能面 → 两个都被调到（此前只调第一个，第二个静默不生效）", async () => {
+    const r = registryWithRealThree();
+    const log: string[] = [];
+    r.register(withSkills("kimi", log));
+    r.register(withSkills("qwen", log));
+    const surfaces = buildKernelSurfaces(r);
+    expect(surfaces.skillsPlugins.map((p) => p.id)).toEqual(["pi", "kimi", "qwen"]);
+
+    const changed = await ensureBundledSkillsOnAll(surfaces, true);
+    expect(log.filter((l) => l.endsWith(":ensure:true")), "第二个支持该面的内核被静默忽略了").toEqual(["kimi:ensure:true", "qwen:ensure:true"]);
+    expect(changed).toBe(true);
+
+    log.length = 0;
+    await migrateSkillsOnAll(surfaces);
+    expect(log, "迁移面也要逐个内核都跑").toEqual(["kimi:migrate", "qwen:migrate"]);
+  });
+
+  it("单个内核抛错：点名留痕、不阻断其余内核（一个坏的不能让别的挂不上）", async () => {
+    const r = registryWithRealThree();
+    const log: string[] = [];
+    r.register(withSkills("broken", log, { throwOnEnsure: true }));
+    r.register(withSkills("fine", log));
+    const surfaces = buildKernelSurfaces(r);
+
+    const changed = await ensureBundledSkillsOnAll(surfaces, false);
+    expect(log, "坏内核之后的那个没被调到 —— 一个内核抛错不该阻断其余").toContain("fine:ensure:false");
+    expect(changed, "只有一个内核真的改了也应报告 changed").toBe(true);
   });
 });
 

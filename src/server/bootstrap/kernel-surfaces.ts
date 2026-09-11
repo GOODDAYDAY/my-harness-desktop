@@ -127,6 +127,44 @@ export function runKernelStartupMigrations(registry: KernelRegistry): KernelId[]
 }
 
 /**
+ * 内置技能的挂/摘：**逐个内核都要挂**（不是"取第一个"）。
+ *
+ * 为什么单独成函数并在这里：`ensureSkills` 是可选面，此前 assemble 写的是
+ * `skillsPlugins[0]?.ensureSkills?.(enabled)` —— 取**第一个**支持该面的内核。
+ * 当时只有一个实现（pi），所以看不出问题；但形状与刚修掉的技能开关路由是同一个
+ * （"第一个赢、其余静默忽略"），加第二个支持内置技能的内核时，它的内置技能会被
+ * **静默地不挂也不摘**：用户点了开关，一半内核生效、一半没生效，且没有任何提示。
+ *
+ * 语义：**全部都要成功**才算 changed（有一个变了就该广播刷新）；单个内核抛错**点名留痕**
+ * 且不阻断其余内核（一个坏内核不该让其它内核的技能挂不上）。
+ * 返回"是否有任一内核真的改了东西"，供壳决定要不要广播设置变更。
+ */
+export async function ensureBundledSkillsOnAll(surfaces: KernelSurfaces, enabled: boolean): Promise<boolean> {
+  let changed = false;
+  for (const p of surfaces.skillsPlugins) {
+    try {
+      if (await p.ensureSkills?.(enabled)) changed = true;
+    } catch (e) {
+      console.error(`[skills] 内核 ${p.id} 的内置技能${enabled ? "挂载" : "摘除"}失败:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return changed;
+}
+
+/** 内置技能的旧命名迁移：同样**逐个内核都要跑**（理由见上）。 */
+export async function migrateSkillsOnAll(surfaces: KernelSurfaces): Promise<boolean> {
+  let changed = false;
+  for (const p of surfaces.skillsPlugins) {
+    try {
+      if (await p.migrateSkills?.()) changed = true;
+    } catch (e) {
+      console.error(`[skills] 内核 ${p.id} 的技能旧命名迁移失败:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return changed;
+}
+
+/**
  * 插件携带**内核扩展**的挂/摘派发器（壳的生命周期钩子接它）。
  * 按 manifest.extensions 的内核 id 找对应内核的同步实现；找不到时**显式降级 + 留痕**——
  * 不静默，否则表现为"扩展装了、内核就是看不见"，是最难查的一类。

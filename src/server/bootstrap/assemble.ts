@@ -30,7 +30,7 @@ import { loadKernelPlugin, scanKernelPlugins, defaultEnabledEntries } from "../k
 import { mirrorBundledSkills } from "../application/skills/bundled-skills";
 import { SkillAggregator } from "../application/skills/skill-aggregator";
 import { mirrorManagedDir } from "../application/bundled/mirror";
-import { buildKernelSurfaces, makeExtensionDispatch, runKernelStartupMigrations } from "./kernel-surfaces";
+import { buildKernelSurfaces, ensureBundledSkillsOnAll, makeExtensionDispatch, migrateSkillsOnAll, runKernelStartupMigrations } from "./kernel-surfaces";
 import { initKernelRuntime } from "../kernel/core/kernel-manager";
 import { reconcileMissingKernels } from "../kernel/core/kernel-reconcile";
 import { importLegacySessions } from "../application/sessions/legacy-import";
@@ -287,12 +287,10 @@ const kernelVersionApis: Record<KernelId, KernelVersionApi> = surfaces.versionAp
 // 已注册内核 id 清单(运行时注册表顺序;替代 KERNEL_IDS 字面量数组,前端经 kernel.list IPC 拿)。
 // 一次性问内核能力(从 registry 遍历 createOneshot;pi 有、dsh/minimal 无此面 → undefined)。
 const kernelOneshots = surfaces.oneshots;
-// 内置 skills 挂/摘 + 旧命名迁移(从 registry 遍历 ensureSkills/migrateSkills;pi 有、dsh/minimal 无)。
-const skillsPlugins = surfaces.skillsPlugins;
-const ensureBundledSkills = (enabled: boolean): Promise<boolean> =>
-  skillsPlugins[0]?.ensureSkills?.(enabled) ?? Promise.resolve(false);
-const migrateSkills = (): Promise<boolean> =>
-  skillsPlugins[0]?.migrateSkills?.() ?? Promise.resolve(false);
+// 内置 skills 挂/摘 + 旧命名迁移：**逐个内核都要挂**（此前是 `skillsPlugins[0]`，取第一个支持该面的
+// 内核——单实现时看不出问题，形状是"第一个赢、其余静默忽略"，与刚修掉的技能开关路由同一个坑）。
+const ensureBundledSkills = (enabled: boolean): Promise<boolean> => ensureBundledSkillsOnAll(surfaces, enabled);
+const migrateSkills = (): Promise<boolean> => migrateSkillsOnAll(surfaces);
 // 壳插件生命周期钩子(从 registry 遍历 createLifecycle;pi 有 skillsEnsure/piExtensionEnsure,
 // dsh/minimal 无)。onActivate/onDeactivate 返回 changed 供壳广播刷新。
 const lifecycles = surfaces.lifecycles;

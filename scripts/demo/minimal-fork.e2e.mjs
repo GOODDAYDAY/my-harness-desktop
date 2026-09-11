@@ -67,10 +67,29 @@ try {
   if (!(await clickByText(page, 'minimal 源会话', { exact: true }))) throw new Error("未找到会话行: minimal 源会话");
     opened = await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length > 0, { timeout: 10000, polling: 300 }).then(() => true).catch(() => false);
   }
+  if (!opened) {
+    // 现场：侧栏有哪些行、消息区有几个行、页面报了什么错 —— 区分"测试点错了"与"应用没打开"。
+    const diag = await page.evaluate(() => ({
+      sidebarRows: [...document.querySelectorAll("[data-session-path]")].map((el) => (el.textContent || "").replace(/\s+/g, " ").slice(0, 30)),
+      messageRows: document.querySelectorAll("[data-message-id]").length,
+      composerModel: document.querySelector("[data-composer-model]")?.dataset.composerModel ?? "",
+      bodyHead: document.body.innerText.replace(/\s+/g, " ").slice(0, 200),
+    }));
+    console.error("  诊断(打开失败):", JSON.stringify(diag));
+    console.error("  页面报错:", JSON.stringify(consoleTail.slice(0, 3)));
+  }
   ok(opened, "打开 minimal 源会话(消息行渲染)");
   await waitForDomIdle(page, { quietMs: 500, timeoutMs: 8000 }).catch(() => {});
 
   // 悬停 assistant 行 → 点「分叉」→ 点「确认分叉?」
+  // 事件驱动等目标行落位（**不一次性 evaluate**）：`[data-message-id]` 已出现 ≠ 那条 assistant
+  // 已经渲染完（Virtuoso 只渲染可视窗口，行是分批挂上的）。一次性读会偶发拿到 null，
+  // 报出来的却是 "Cannot read properties of null (reading 'x')" —— 像代码 bug，其实是尺子抢跑。
+  const rowReady = await page.waitForFunction(
+    () => [...document.querySelectorAll("[data-message-id]")].some((r) => (r.textContent || "").includes("答完了。")),
+    { timeout: 15000, polling: 200 },
+  ).then(() => true).catch(() => false);
+  if (!rowReady) throw new Error("等待 assistant 消息行超时（种子会话内容未渲染）");
   const box = await page.evaluate(() => {
     const rows = [...document.querySelectorAll("[data-message-id]")];
     const row = rows.find((r) => (r.textContent || "").includes("答完了。"));
@@ -164,8 +183,34 @@ try {
   await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
   const echoed = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("[minimal echo] 分叉后的消息")),
-    { timeout: 10000, polling: 300 },
+    // 与 minimal-smoke 的同类等待同源：这条前面已经耗掉两阶段收敛（各 20s/30s 且**失败会被吞**），
+    // 冷启动 + 模型加载会让 10s 预算在真没问题时也等不到 → **失败信息指向错误的组件**。
+    // 放宽到 45s 只影响"等多久才判失败"，不影响任何被测行为。
+    { timeout: 45000, polling: 300 },
   ).then(() => true).catch(() => false);
+  if (!echoed) {
+    // 失败时把现场端出来：DOM 里有什么、页面报了什么错 —— 别让人对着"echo 没出现"猜。
+    const diag = await page.evaluate(() => ({
+      composerModel: document.querySelector("[data-composer-model]")?.dataset.composerModel ?? "",
+      messages: [...document.querySelectorAll("[data-message-id]")].map((el) => (el.textContent || "").replace(/\s+/g, " ").slice(0, 60)),
+      busy: !!document.querySelector("[aria-label*='停止']"),
+    }));
+    console.error("  诊断(页面):", JSON.stringify(diag));
+    console.error("  页面报错:", JSON.stringify(consoleTail.slice(0, 3)));
+    // 中立层 vs 内核文件对账：这条链路的失败**十有八九不在 DOM**，而在"内核写了、中立层没落"。
+    // 把两侧的条目与 kernelEntryId 都打出来，一次就能看出是不是被幂等跳过（本轮实测就这么定位的）。
+    try {
+      const ne = JSON.parse(readFileSync(join(sessionsDir, `${derived.ns}.entries.json`), "utf-8"));
+      console.error("  诊断(中立层):", ne.lineages.map((l) => l.entries.map((e) => `${e.message.role}/${(e.kernelEntryId ?? "-").slice(0, 8)}`).join(" | ")).join(" || "));
+      const kf = join(home, ".minimal", "agent", "sessions");
+      const found = [];
+      for (const bucket of readdirSync(kf)) for (const f of readdirSync(join(kf, bucket))) if (f.endsWith(".jsonl")) found.push(join(kf, bucket, f));
+      for (const f of found) {
+        const rows = readFileSync(f, "utf-8").split("\n").filter((x) => x.includes('"message"'));
+        console.error("  诊断(内核文件):", rows.map((r) => { const e = JSON.parse(r); return `${e.message.role}/${String(e.id).slice(0, 8)}`; }).join(" | "));
+      }
+    } catch (e) { console.error("  诊断(对账失败):", String(e).slice(0, 120)); }
+  }
   ok(echoed, "派生会话首发物化 + echo(分叉→物化链路通)");
 
   // 物化后 pendingSeed 清除 + minimal 文件落盘。
