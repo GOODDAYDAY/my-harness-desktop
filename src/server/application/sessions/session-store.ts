@@ -284,9 +284,26 @@ export class SessionStore implements
   /** 会话路径 → 内核目录(文件操作按会话归属路由,非写死 pi):读中立头 kernel,
    *  无归属回落默认内核(§剩余演进:此前恒取 pi,minimal 会话的复制/删除/工具配置会错走 pi 目录)。 */
   private catalogForPath(sessionPath: string): SessionCatalog {
+    return this.catalogFor(this.kernelForPath(sessionPath));
+  }
+
+  /** 会话路径 → 内核归属（中立层 header.kernel）；无记录回落默认内核。
+   *  与 catalogForPath 同源：路由到哪个内核的目录，就返回哪个内核。 */
+  private kernelForPath(sessionPath: string): KernelId {
     const ns = this.neutralSessionIdFromPath(sessionPath);
-    const kernel = (ns ? this.neutralStore?.getHeader(ns)?.header.kernel : undefined) ?? this.defaultKernelId;
-    return this.catalogFor(kernel);
+    return (ns ? this.neutralStore?.getHeader(ns)?.header.kernel : undefined) ?? this.defaultKernelId;
+  }
+
+  /** 某个**运行中会话**的内核归属；未记录/无中立层返回 null。
+   *
+   *  总线用它实现一条中性规则：**子会话继承父会话的内核**——pi 的会话派 pi 的工人，
+   *  dsh 的会话派 dsh 的工人。此前 application 层写死 `"pi"`（三处：路径派生、两处 createProc），
+   *  那是"子代理机制只有 pi 有"这件**内容层事实**漏进了用例编排层；
+   *  继承规则不需要 application 知道任何内核名，换第四个内核自动成立。 */
+  kernelOfSessionKey(key: string): KernelId | null {
+    const { sessionPath } = this.getCwdAndSessionPath(key);
+    const ns = sessionPath ? this.neutralSessionIdFromPath(sessionPath) : undefined;
+    return (ns ? this.neutralStore?.getHeader(ns)?.header.kernel : undefined) ?? null;
   }
 
   /** 文件操作统一经 catalogForPath / catalogFor(proc.kernel) 按会话归属路由，没有"恒为某内核"的别名。
@@ -301,11 +318,11 @@ export class SessionStore implements
    *  另：`spawnSession`/`reopenSession` 也是总线的入口 —— 若将来第二个内核提供子代理面，
    *  这里的改动点就是"改成问那个能力面"，而不是再加一个 if。 */
 
-  /** 总线子代理的会话文件路径（恒 pi，理由见上）。newSessionId 必返回路径；
-   *  null 只在惰性创建会话的内核出现，pi 是文件态内核，不该碰到。 */
-  private newPiSessionPath(cwd: string): string {
-    const path = this.catalogFor("pi").newSessionId(cwd);
-    if (path == null) throw new Error("当前内核未预生成会话文件路径");
+  /** 在指定内核下派生一个全新会话文件路径。newSessionId 必返回路径；
+   *  null 只在惰性创建会话的内核出现（那类内核不该走到这条总线 spawn 路径）。 */
+  private newSessionFilePath(kernel: KernelId, cwd: string): string {
+    const path = this.catalogFor(kernel).newSessionId(cwd);
+    if (path == null) throw new Error(`内核 ${kernel} 未预生成会话文件路径`);
     return path;
   }
 
@@ -3028,13 +3045,16 @@ export class SessionStore implements
   }
 
   /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。
-   *  opts.role:会话级角色卡——role 文本内联进 argv(--append-system-prompt),createProc 注入。 */
-  async spawnSession(cwd: string, opts?: { role?: SessionRole }): Promise<{ key: string; sessionPath: string }> {
+   *  opts.role:会话级角色卡——role 文本内联进 argv(--append-system-prompt),createProc 注入。
+   *  opts.kernel:这个工人会话跑在哪个内核上。**调用方给**（总线传父会话的内核，见
+   *  `kernelOfSessionKey` 的继承规则）；缺省 = 注册表首个。本层不写死任何内核名。 */
+  async spawnSession(cwd: string, opts?: { role?: SessionRole; kernel?: KernelId }): Promise<{ key: string; sessionPath: string }> {
+    const kernel = opts?.kernel ?? this.defaultKernelId;
     const key = `bus:${randomUUID().slice(0, 8)}`;
-    const sessionPath = this.newPiSessionPath(cwd);
+    const sessionPath = this.newSessionFilePath(kernel, cwd);
     // 新会话路径文件名即 ns(§12.2),反查主键传给 createProc,避免 ns 与路径文件名不一致。
     const ns = this.neutralSessionIdFromPath(sessionPath) ?? randomUUID();
-    const proc = this.createProc(key, cwd, sessionPath, false, "pi", opts?.role, ns);
+    const proc = this.createProc(key, cwd, sessionPath, false, kernel, opts?.role, ns);
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
     kernels.set(proc.kernel, proc);
@@ -3055,7 +3075,10 @@ export class SessionStore implements
   async reopenSession(cwd: string, sessionPath: string, role?: SessionRole): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
     const ns = this.neutralSessionIdFromPath(sessionPath);
-    const proc = this.createProc(key, cwd, sessionPath, false, "pi", role, ns);
+    // 续在**这个会话自己的内核**上（从路径查中立头；无记录回落默认内核）——
+    // 此前写死 pi：续一个非 pi 的历史子会话会在错误的内核上重新起进程。
+    const kernel = this.kernelForPath(sessionPath);
+    const proc = this.createProc(key, cwd, sessionPath, false, kernel, role, ns);
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
     kernels.set(proc.kernel, proc);

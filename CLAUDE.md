@@ -371,7 +371,18 @@ scripts/           # 开发环境引导脚本
 - 打开 `src/server/kernel/{pi,dsh}/` 任何一个文件，如果有 `import ... from 'react'`、`import ... from '../bootstrap/...'`——违规。
 - 打开 `src/plugins/` 任何一个文件，如果有 `import ... from '@/server/...'`、`import ... from '@/core/...'`、`import ... from '@/client/...'`——违规。壳插件只从 `@my-harness-desktop/shared` 和 `@my-harness-desktop/react` 引用类型和 API。
 
-这条检验不依赖任何外部知识，CI 可以自动化——grep 每个目录下的 import 语句，凡是从内层 import 外层的，报警。另外两条多内核专属的 grep 检验：① 全仓 `"pi" | "dsh"` 字面量应收敛到 `packages/shared/src/domain/kernel.ts` 一处；② `src/server/application/` 生产代码对 `kernel/{pi,dsh}` 具体实现的 import 归零。
+这条检验不依赖任何外部知识，CI 可以自动化——grep 每个目录下的 import 语句，凡是从内层 import 外层的，报警。另外几条多内核专属的 grep 检验（都已落进 `npm run audit:deps`，现在共**十检验**）：
+
+① 全仓 `"pi" | "dsh"` 字面量联合应收敛到 `packages/shared/src/domain/kernel.ts` 一处；
+② `src/server/application/` 生产代码对 `kernel/{pi,dsh}` 具体实现的 import 归零（**豁免表已清空**，
+   不再有"明文例外"）；
+③ 内核之间不许互相 import（`kernel/pi` 不 import `kernel/dsh`）；
+④ 圆心与壳机制层不许出现 `<内核名>Extension` 形态的**契约字段名**（按内核名分字段 = 加内核要改圆心）；
+⑤ **壳机制层（application + bootstrap + kernel/core）生产代码里不许出现内核名字面量** ——
+   这一条是 §目标 11 的收口判据，已归零：路径常量（`PI_AGENT_DIR`/`DSH_INSTALL_DIR`）、
+   按内核名分字段（`manifest.piExtension`）、以及 `catalogFor("pi")` 这类"机制层写死某内核"
+   的形态全部消失。总线工人会话的内核改由**继承父会话**决定（`kernelOfSessionKey`），
+   application 因此不需要知道任何内核名。
 
 ### 6.4 四抽象与内核层
 

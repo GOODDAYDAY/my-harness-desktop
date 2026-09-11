@@ -14,9 +14,11 @@ import { SessionBus } from "./session-bus";
 import { sessionAddress, channelAddress, pluginAddress, type SessionBusMessage, type SessionEvent } from "@my-harness-desktop/shared";
 
 /** 记录型 store 替身：只实现 bus 调用的面，并记录投递（spawn 参数/streamingBehavior）。 */
-function makeStore(opts: { sessionRoots?: string[]; lastText?: string; sessionPath?: string | null } = {}) {
+function makeStore(opts: { sessionRoots?: string[]; lastText?: string; sessionPath?: string | null; kernelByKey?: Record<string, string> } = {}) {
   const prompts: { key: string; text: string; behavior: string }[] = [];
   const stops: string[] = [];
+  /** spawnSession 收到的入参（验"子会话继承父会话内核"）。 */
+  const spawnOpts: { cwd: string; opts?: { role?: unknown; kernel?: string } }[] = [];
   const store = {
     sessionRoots: opts.sessionRoots ?? ["/kernels/pi/sessions"],
     getRunningSessionKeys: () => ["s1", "s2"],
@@ -24,14 +26,19 @@ function makeStore(opts: { sessionRoots?: string[]; lastText?: string; sessionPa
     isBusy: () => false,
     sendPromptTo: (key: string, text: string, behavior: string) => { prompts.push({ key, text, behavior }); return Promise.resolve(); },
     stop: (key: string) => { stops.push(key); return Promise.resolve(); },
-    spawnSession: (cwd: string) => Promise.resolve({ key: "spawned1", sessionPath: `${cwd}/spawned1.jsonl` }),
+    spawnSession: (cwd: string, o?: { role?: unknown; kernel?: string }) => {
+      spawnOpts.push({ cwd, opts: o });
+      return Promise.resolve({ key: "spawned1", sessionPath: `${cwd}/spawned1.jsonl` });
+    },
+    // 会话的内核归属（中立层 header.kernel）——总线据此让子会话继承父会话的内核
+    kernelOfSessionKey: (key: string) => opts.kernelByKey?.[key] ?? null,
     reopenSession: (cwd: string, sessionPath: string) => Promise.resolve({ key: "reopened1", sessionPath }),
     getAdapter: () => null,
     getBackend: () => null,
     updateHeader: () => Promise.resolve(),
     getLastAssistantTextFor: (key: string) => Promise.resolve(opts.lastText ?? `output-of-${key}`),
   };
-  return { store, prompts, stops };
+  return { store, prompts, stops, spawnOpts };
 }
 
 function makeSink() {
@@ -337,6 +344,23 @@ describe("SessionBus:op 语义与清理", () => {
     expect(names, "死会话离开后空房间应删除").not.toContain("solo");
     expect(names).toContain("room");
     expect((bus.opWhoami(sessionAddress("s2")) as { taps: { tapId: string }[] }).taps.map((t) => t.tapId), "死会话的 tap 应被清理").not.toContain(tap.tapId);
+  });
+
+  it("**子会话继承父会话的内核**（application 层因此不需要知道任何内核名）", async () => {
+    const { store, spawnOpts } = makeStore({ kernelByKey: { s1: "dsh", s2: "pi" } });
+    const { sink } = makeSink();
+    const bus = new SessionBus(store as never, sink);
+
+    await bus.opSessionCreate(sessionAddress("s1"), { cwd: "/p" });
+    expect(spawnOpts[0].opts?.kernel, "父会话是 dsh，工人却跑在别处 —— 继承规则没生效").toBe("dsh");
+
+    await bus.opSessionCreate(sessionAddress("s2"), { cwd: "/p" });
+    expect(spawnOpts[1].opts?.kernel).toBe("pi");
+
+    // 父是**插件**（没有会话，也就没有可继承的内核）→ 不传，交会话存储的缺省
+    await bus.pluginSessionCreate("p1", { cwd: "/p" });
+    expect(spawnOpts[2].opts?.kernel, "插件发起时不该瞎猜一个内核").toBeUndefined();
+    expect(spawnOpts[2].opts, "role 缺省也不该塞进空对象（保持入参干净）").toEqual({});
   });
 
   it("session_abort：目标必须是 session 地址（否则显式抛，不静默）", async () => {
