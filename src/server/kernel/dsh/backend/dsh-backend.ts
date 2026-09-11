@@ -238,11 +238,19 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   /** 思考档位暂存:会话未物化(unknown session)时 setThinkingLevel 记此,首个 prompt 后补发。 */
   private pendingThinkingLevel: string | undefined;
 
-  /** 补发暂存的思考档位;一次性(成败都清账,不无限重试)。 */
+  /** 补发暂存的思考档位;一次性(成败都清账,不无限重试)。
+   *  补发前再校验一次(dsh-thinking-level):暂存发生在**会话未物化**时(模型可能还没定型,
+   *  或用户又切了模型),此刻会话已物化、清单可信——不支持的档位在此放弃补发,
+   *  否则 session/setThinkingLevel 抛「does not support reasoning effort」(本次报错的实际出口)。 */
   private async flushThinkingLevel(): Promise<void> {
     const level = this.pendingThinkingLevel;
     this.pendingThinkingLevel = undefined;
     if (level === undefined) return;
+    const levels = await this.fetchThinkingLevels().catch((): string[] => []);
+    if (!levels.includes(level)) {
+      console.warn(`[dsh-backend] 暂存档位 ${level} 不在当前模型清单(${levels.join(",") || "无"})，放弃补发`);
+      return; // 清账已在上面做过,只是不补发
+    }
     await this.requestSession(DSH_METHODS.sessionSetThinkingLevel, { sessionId: this.sessionId, level });
   }
 

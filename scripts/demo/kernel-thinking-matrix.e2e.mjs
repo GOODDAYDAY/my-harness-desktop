@@ -373,9 +373,20 @@ try {
   note("幕D 档位下拉当前值", d1.levelDropdownText);
   note("幕D 思考开关", JSON.stringify(d1.brain));
   ok(d1.levelDropdownText !== null, "幕D dsh 会话渲染思考档位下拉(补面生效)");
+  // 探针锚点正值断言(data-composer-thinking,cwd-session-restore 那侧只证了"未起内核→缺席正确"):
+  // 幕D 挑的模型**有** reasoning 面 → 档位控件必须在场,且锚**带值**(值即档位 id)。
+  // 两处互为两面,合起来才说明"锚的存在性与清单一致"。
+  const d1Anchor = await page.evaluate(() => document.querySelector("[data-composer-thinking]")?.getAttribute("data-composer-thinking") ?? null);
+  note("幕D 档位锚值(切档前)", JSON.stringify(d1Anchor));
+  // 断言"控件在场"(= 内核声明了非空档位清单)即可,别要求锚值非空——幕D 开场会话的档位是
+  // **未选**(实测 currentLevel=""、思考已关闭),控件照样该在场。锚值是否跟上由 D2 断言。
+  ok(d1Anchor !== null, `幕D 档位锚在场(= 内核声明了档位清单;值可为空串=未选,实际 ${JSON.stringify(d1Anchor)})`);
   // D2:开下拉选 low
+  // 用探针锚定位档位控件(item 3 的收益):此前按文案匹配,而正则里的 `—` 是**模型选择器与
+  // 档位选择器在空值时共用的占位符** → 会点中模型选择器、把会话切到别的模型(实测:幕D 本应是
+  // dsh,点完却成了 pi:…/glm-5.2,composer 只剩一个按钮)。锚是唯一、无语义的定位面。
   await page.evaluate(() => {
-    const btn = [...document.querySelectorAll("button")].find((b) => /^(off|minimal|low|medium|high|xhigh|关|极简|低|中|高|极高|—)$/i.test((b.textContent || "").trim()));
+    const btn = document.querySelector("[data-composer-thinking]");
     btn?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
     btn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
@@ -390,6 +401,26 @@ try {
   });
   await page.keyboard.press("Escape").catch(() => {});
   await waitForDomIdle(page, { quietMs: 400, timeoutMs: 6000 }).catch(() => {});
+  // 切档后锚值必须跟上(skills §10.3.1:等待谓词 W = 断言谓词 X,不是"泛等一下就取样")。
+  const d2AnchorOk = await page.waitForFunction(
+    () => (document.querySelector("[data-composer-thinking]")?.getAttribute("data-composer-thinking") ?? "") === "low",
+    { timeout: 8000, polling: 300 },
+  ).then(() => true).catch(() => false);
+  const d2AnchorVal = await page.evaluate(() => document.querySelector("[data-composer-thinking]")?.getAttribute("data-composer-thinking") ?? null);
+  note("幕D 档位锚值(选 low 后)", JSON.stringify(d2AnchorVal));
+  if (!d2AnchorOk) {
+    // 失败留证据(skills §10.3.2):控件是"整条 composer 变了吗"还是"只有档位控件没了"?
+    const diag = await page.evaluate(() => {
+      const ta = document.querySelector("[data-timeline-composer]");
+      const scope = ta?.closest("div")?.parentElement?.parentElement ?? document.body;
+      return {
+        modelAnchor: document.querySelector("[data-composer-model]")?.getAttribute("data-composer-model") ?? null,
+        btns: [...scope.querySelectorAll("button")].map((b) => (b.textContent || "").trim().slice(0, 10)).filter(Boolean),
+      };
+    });
+    note("幕D 现场", JSON.stringify(diag));
+  }
+  ok(d2AnchorOk, `幕D 选 low 后档位锚跟上(期望 low,实际 ${JSON.stringify(d2AnchorVal)})`);
   // D3:发送一条,下一请求的 request/header 带新档位 → 翻译器派生「思考强度 → low」分隔线
   ok(await setComposer("再说一遍 pong"), "幕D 输入框写入");
   ok(await clickSend(), "幕D 发送点击");

@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { clickByText } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -62,10 +63,8 @@ try {
   let opened = false;
   for (let i = 0; i < 3 && !opened; i++) {
     await page.waitForFunction(() => [...document.querySelectorAll("*")].some((e) => (e.textContent || "").trim() === "minimal 源会话" && e.children.length < 6), { timeout: 15000, polling: 300 });
-    await page.evaluate(() => {
-      const els = [...document.querySelectorAll("*")].filter((e) => (e.textContent || "").trim() === "minimal 源会话" && e.children.length < 6);
-      els[els.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+  // 会话行点击走可信点击(合成 MouseEvent 对 Radix 行点击实测翻车过)。
+  if (!(await clickByText(page, 'minimal 源会话', { exact: true }))) throw new Error("未找到会话行: minimal 源会话");
     opened = await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length > 0, { timeout: 10000, polling: 300 }).then(() => true).catch(() => false);
   }
   ok(opened, "打开 minimal 源会话(消息行渲染)");
@@ -136,6 +135,12 @@ try {
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
   await page.mouse.click(tabRect.x, tabRect.y);
+  // 必须等列表换成目标内核的(点 TAB → Radix 状态更新 → 重渲染是异步的;立刻取样会读到上一个内核的列表)。
+  // 同族假失败实测过(minimal-model「Mock 未找到」:tabs 有 minimal 但 items 全是 pi 的)。见 skills §10.3.1。
+  await page.waitForFunction(
+    () => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes('Minimal Echo')),
+    { timeout: 6000, polling: 200 },
+  ).catch(() => {});
   const itemRect = await page.evaluate(() => {
     const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => (el.textContent || "").includes("Minimal Echo") && el.getBoundingClientRect().width > 0);
     if (!item) return null;

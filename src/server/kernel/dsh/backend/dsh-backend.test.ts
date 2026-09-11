@@ -205,6 +205,17 @@ describe("dsh 思考深度补面(dsh-thinking-level.md)", () => {
     await expect(b.setThinkingLevel("xhigh")).rejects.toThrow(/does not support reasoning effort/);
   });
 
+  it("1b 补发前校验:暂存档位不在清单 → 不发 session/setThinkingLevel", async () => {
+    const { t, b } = makeBackend();
+    t.errors.set("session/setThinkingLevel", new Error("unknown session: s-test"));
+    t.results.set("session/getThinkingLevels", { levels: ["low", "medium"] });
+    await b.setThinkingLevel("high"); // 不炸:会话未物化 → 暂存
+    t.errors.delete("session/setThinkingLevel");
+    t.requests.length = 0;
+    await b.sendMessage("hi"); // 首 prompt 落定 → flushThinkingLevel(补发前校验)
+    expect(t.requests.some((r) => r.method === "session/setThinkingLevel")).toBe(false);
+  });
+
   it("getThinkingLevels 补面查询:答档位清单;缺面 → 空清单(壳藏控件)", async () => {
     const { t, b } = makeBackend();
     t.results.set("session/getThinkingLevels", { levels: ["off", "low", "high"] });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 依赖方向审计(CLAUDE.md §6.3 四检验的自动化 + KernelId 单源 + 内核身份分支)——CI-able 守卫。
 // 用法:node scripts/dependency-audit.mjs(违规 exit 1,全绿 exit 0)。
-// 六检验:
+// 七检验:
 //   ① 圆心零外部 import(packages/shared/src/domain 不碰任何外部包/壳内部)
 //   ② application 不 import 内核实现(非 type-only)·不 import electron/react
 //      ——neutral-migration.ts 是 session-single-source.md §4.3 明文例外(离线迁移工具)
@@ -109,10 +109,38 @@ for (const f of walk(join(ROOT, "src/server/application"))) {
   });
 }
 
-const scope = walk(join(ROOT, "packages/shared/src/domain")).length
-  + walk(join(ROOT, "src/server/application")).length
-  + walk(join(ROOT, "src/server/kernel/core")).length
-  + walk(join(ROOT, "src/plugins")).length;
-console.log(`依赖方向审计(六检验,${scope} 文件): ${violations.length} 处违规`);
+// ⑦ 能力名中性化(§1.5):源码里不许再出现**按内核分字段**的能力面(`capabilities.pi` / `.dsh` / …)。
+//    这条为什么比"更新 audit:docs 的手写退役表"更可靠:手写清单会随新人遗忘而失效(守卫慢慢瞎掉),
+//    而**模式**本身可以一直守——谁再把内核名写进能力字段,这条当场红。注释行豁免(历史说明里会提旧写法),
+//    测试文件豁免(测试用中性 id 是 skills 明文纪律)。
+{
+  const out = execSync(
+    `grep -rnE 'capabilities\\.(pi|dsh|minimal)\\b' --include='*.ts' --include='*.tsx' packages/shared/src src/server src/web src/plugins packages/react/src 2>/dev/null || true`,
+    { encoding: "utf-8", cwd: ROOT },
+  );
+  for (const l of out.split("\n").filter(Boolean)) {
+    const parts = l.split(":");
+    const file = parts[0];
+    const text = parts.slice(2).join(":").trim();
+    if (/^(\/\/|\*|\/\*)/.test(text)) continue;   // 注释行:历史说明里会提到旧写法
+    if (/\.test\./.test(file)) continue;             // 测试:用中性 id 是既定纪律
+    violations.push(`⑦ 按内核分字段的能力面 ${file.replace(ROOT, "")}: ${text.slice(0, 80)}`);
+  }
+}
+
+// 这个数是**四个被 walk 的骨架目录的文件数之和**(含 plugin.json/locales 等非 ts 文件),
+// **不是整条审计的覆盖面**——⑤⑥⑦ 三条是 grep,另外覆盖 `src/web` / `packages/react/src`。
+// 原来只写"七检验,N 文件"会被读成"整条审计只看了 N 个文件",是**标签误导**(实测 289 里
+// 四个目录各为 98+191;而 src/web 那 23 个 ts 压根不在这个数里)。标签要说清它数的是什么。
+const walked = [
+  "packages/shared/src/domain",
+  "src/server/application",
+  "src/server/kernel/core",
+  "src/plugins",
+];
+const scope = walked.reduce((n, d) => n + walk(join(ROOT, d)).length, 0);
+console.log(`依赖方向审计(七检验): ${violations.length} 处违规`);
+console.log(`  覆盖:walk ${walked.length} 个骨架目录共 ${scope} 文件(${walked.join(" · ")});` +
+  `另有 ⑤⑥⑦ 三条 grep 覆盖 src/web、packages/react/src 等(核 KernelId 字面量/内核身份分支/能力名中性化)`);
 for (const v of violations) console.log("  " + v);
 process.exit(violations.length > 0 ? 1 : 0);

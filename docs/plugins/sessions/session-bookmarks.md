@@ -257,7 +257,7 @@
 
 **sessionStore → 圆心 → 内核**：`bookmark` 调 `materializeLineagePrefix`（圆心纯函数）→ `BookmarkSnapshotStore.put`（应用层文件写）；`resume` 调 `BookmarkSnapshotStore.get` → `materializeActiveLineage` → `BackendFactory.seed`/`Backend.seed`（内核投影）。
 
-这条链的纪律是：**每一层只依赖下一层的抽象**。renderer 依赖 `SessionsApi`（圆心契约），`build-kernel` 依赖 `transport.invoke`（传输），controller 依赖 `sessionStore`（应用层），sessionStore 依赖 `BaseBackend`/`BackendFactory`/`BookmarkSnapshotStore`（圆心 + 应用层），内核实现归 `src/server/kernel/{pi,dsh}`。没有一层 import 具体内核实现（application 对 kernel 的 import 是 type-only 的 `PiBackendExtensions` 类型，见 `session-store.ts` 第 17 行）。
+这条链的纪律是：**每一层只依赖下一层的抽象**。renderer 依赖 `SessionsApi`（圆心契约），`build-kernel` 依赖 `transport.invoke`（传输），controller 依赖 `sessionStore`（应用层），sessionStore 依赖 `BaseBackend`/`BackendFactory`/`BookmarkSnapshotStore`（圆心 + 应用层），内核实现归 `src/server/kernel/{pi,dsh}`。没有一层 import 具体内核实现（application 对 kernel 的 import 是 type-only 的 `BackendExtensions` 类型，见 `session-store.ts` 第 17 行）。
 
 ## 七、与其他插件交互（专节）
 

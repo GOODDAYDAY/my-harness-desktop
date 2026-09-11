@@ -806,7 +806,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> {
 
 ### 14.4 pi 专属命令（扩展面，非 BaseBackend 契约）
 
-`PiBackend` 上还有 pi 专属命令，经 `SessionStore` 的类型守卫（`asPi`）访问，dsh 下缺面。这些是 pi 31 命令的透传，最终应收敛成 `PiBackendExtensions` 接口（§28 反模式）：
+`PiBackend` 上还有 pi 专属命令，经 `SessionStore` 的类型守卫（`asPi`）访问，dsh 下缺面。这些是 pi 31 命令的透传，最终应收敛成 `BackendExtensions` 接口（§28 反模式）：
 
 - **多路并发**：`steer` / `followUp` / `abortRetry` / `setSteeringMode` / `setFollowUpMode`；
 - **思考档位**：`getThinkingLevels` / `setThinkingLevel` / `cycleThinkingLevel`；
@@ -1051,7 +1051,7 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
 - **阶段 A**（基类落地）：抽 `AbstractBackend`，改继承。低风险，行为零变化。
 - **阶段 B**（启用现成 cordis 插件拉平）：`DEFAULT_CORDIS_YAML` 启用 `dsh-subagent`/`dsh-compaction-basic`。
 - **阶段 C**（补面 `steer`/`$bus`，视需求）：给 dsh 写 cordis 插件拉平 pi 专属能力，拉不平的显式降级。
-- **阶段 D**（接口收尾）：`PiBackendExtensions` / `DshConfigApi` 接口 + `SessionsApi` 拆出 pi 专属 API + 会话标识中性化收口。
+- **阶段 D**（接口收尾）：`BackendExtensions` / `DshConfigApi` 接口 + `SessionsApi` 拆出 pi 专属 API + 会话标识中性化收口。
 
 每阶段的验收标准在对应节列明；每阶段都独立可回滚（阶段 A 纯重构、阶段 B/C 改默认配置可回退、阶段 D 是接口平移）。
 
@@ -1104,7 +1104,7 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
 **目标**：把 G1（21 个 pi 形状 API）与 G2（21 处 `asPi`）从「pi 专属散落」收敛成「内核专属扩展面接口」。
 
 **步骤**：
-1. **`PiBackendExtensions` 接口**（放 `client/pi`）：把 `PiBackend` 的 pi 专属命令 + 内部通道（`send`/`onBusFrame`/`onExtensionUI`/`stderr`/`onProcessExit`）收成接口，`PiBackend implements BaseBackend, PiBackendExtensions`。`session-store` 的 `import type { PiBackend }` 换成 `import type { PiBackendExtensions }`，`asPi` 返回接口类型，经 `backend.kernel === "pi"` + 类型断言获取。
+1. **`BackendExtensions` 接口**（放 `client/pi`）：把 `PiBackend` 的 pi 专属命令 + 内部通道（`send`/`onBusFrame`/`onExtensionUI`/`stderr`/`onProcessExit`）收成接口，`PiBackend implements BaseBackend, BackendExtensions`。`session-store` 的 `import type { PiBackend }` 换成 `import type { BackendExtensions }`，`asPi` 返回接口类型，经 `backend.kernel === "pi"` + 类型断言获取。
 2. **`DshConfigApi` 接口**：把 `DshConfigSource` 的 15+ 方法收成接口（`listModels`/`listProviders`/`setProvider`/`addPlugin`/`getDefaultModel`/…），`DshConfigSource implements`，`MainContext.dshConfigSource` 换接口类型。
 3. **`SessionsApi` 拆 pi 专属 API**：把 21 个 pi 形状方法从 `domain/sessions.ts` 的 `SessionsApi` 拆出，收敛成 `PiExtensions`（内核专属扩展面），壳插件按「有则用、无则降级」访问。这是 G1 的终态——圆心契约只留六条意图，pi 专属能力回内核扩展面。
 
@@ -1208,7 +1208,7 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
 
 - 症状：`session-store.ts` `import type { PiBackend } from client/pi/pi-backend`（type-only 但 import 具体类）。
 - 根因：pi 专属能力经类型守卫分发，没走接口。
-- 正解：`PiBackendExtensions` 接口（§26 阶段 D），core 只 import 接口不 import 类。
+- 正解：`BackendExtensions` 接口（§26 阶段 D），core 只 import 接口不 import 类。
 
 ### 28.7 把内核专属 spawn 参数写进工厂契约
 

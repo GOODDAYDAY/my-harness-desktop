@@ -1,5 +1,5 @@
 // deduplicateAdjacent 单元测试 —— 针对「相邻 divider 判重」根因修复。
-// 圆心纯函数,零 mock(docs/test/testing-strategy.md §3:domain 测试 95%+ 目标)。
+// 圆心纯函数,零 mock(测试策略:domain 测试 95%+ 目标。原指向的 docs/test/testing-strategy.md 已不存在,去掉死指针保留目标)。
 // 数据形状取自真实会话 JSONL(~/.pi/agent/sessions/.../2026-08-03T15-12-41 文件实测):
 //   model_change 与 thinking_level_change entry 相邻写入,经 sessionEntryToNeutral
 //   后两条 divider 相邻——修复前第二条必被吞。

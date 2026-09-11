@@ -7,6 +7,11 @@
 
 ## 0. 摘要
 
+> ⚠ **本文的「现状」已过期,勿当现状读**：文中的"四条 RPC"、"`setThinkingLevel` 是 pi 专属扩展面(`PiCapabilities`)、
+> dsh 下静默 no-op"都是**写稿时**的样子。该收敛**已落地**：`setThinkingLevel` 已提升进 `BaseBackend` 契约、
+> dsh 走 thinking 补面(不支持的档位显式跳过,见 `session-store.ts` 的档位校验)、renderer 侧只调一个入口。
+> 下文的「现状」列保留作**改动前**的对照；`PiCapabilities` 这个类型名已退役(中性能力面 `capabilities.extensions` / `ThinkingCapabilities`)。
+
 现状里用户「发起一次 LLM」在 renderer 被拆成 **setModel + setThinkingLevel + sync + prompt 四条 RPC**，其中 `setThinkingLevel` 还是 pi 专属扩展面（`PiCapabilities`），dsh 下静默 no-op。本文把它收敛为一个原子意图：renderer 只调一个入口，main 侧 `SessionStore.prompt()` 一次编排「模型对齐 → 思考强度对齐 → 发消息」；契约保持**消息级 / 会话级分离**，把 `setThinkingLevel` 从 `PiCapabilities` 提升进 `BaseBackend`（dsh 显式降级，不再静默吞）。
 
 一句话判断：**「发送是原子的」这个诉求，落点是用例层的编排原子化，不是契约层把模型塞进 `sendMessage`。** 理由见 §2.2。

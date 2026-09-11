@@ -1709,3 +1709,133 @@ describe("fork dsh → 切 pi 的 header.kernel 更新(reverse 方向,r24 待查
     expect(headerAfter.kernel).toBe("pi");
   });
 });
+
+describe("思考档位校验(1a:不在内核声明的清单里就不进内核,dsh-thinking-level)", () => {
+  /** 带思考档位面的假后端:清单只有 low/medium(模拟 deepseek-v4-flash 无 high)。 */
+  class FakeThinkingBackend {
+    alive = false;
+    thinkingCalls: string[] = [];
+    capabilities = { thinking: { getThinkingLevels: async (): Promise<string[]> => ["low", "medium"] } };
+    constructor(public neutralSessionId?: string) {}
+    get sessionId(): string | undefined { return undefined; }
+    async start(): Promise<void> { this.alive = true; }
+    async stop(): Promise<void> { this.alive = false; }
+    onEvent(): () => void { return () => {}; }
+    async sendMessage(): Promise<void> {}
+    async setModel(): Promise<void> {}
+    async setSessionName(): Promise<void> {}
+    async seed(): Promise<string> { return "seeded"; }
+    async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+    async getEntries(): Promise<NeutralMessage[]> { return []; }
+    async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
+    async deleteBookmark(): Promise<void> {}
+    async abort(): Promise<void> {}
+    async setThinkingLevel(level: string): Promise<void> { this.thinkingCalls.push(level); }
+  }
+
+  it("不在清单的档位零调用(不炸发送);在清单的正常下发", async () => {
+    const gateNeutral = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "think-gate-")));
+    const backends: FakeThinkingBackend[] = [];
+    const factory: BackendFactory = {
+      create: () => { const b = new FakeThinkingBackend(); backends.push(b); return b as unknown as BaseBackend; },
+    };
+    const dshSource: KernelModelSource = { listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }] };
+    const catalog = new ModelCatalog([dshSource]);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, gateNeutral, catalog);
+    s.setContext(CWD, null);
+    await s.prompt("首发", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" });
+    const b = backends[backends.length - 1];
+    b.thinkingCalls.length = 0;
+    // high 不在 ["low","medium"] → 校验拦下,不进内核(此前会抛 does not support reasoning effort)
+    await s.setThinkingLevel("high");
+    expect(b.thinkingCalls).toEqual([]);
+    // low 在清单 → 正常下发
+    await s.setThinkingLevel("low");
+    expect(b.thinkingCalls).toEqual(["low"]);
+  });
+});
+
+describe("交叠态:内核切换进行中的互斥(§15.1)", () => {
+  /** 假后端:switchKernel 只要求「活的、内核不同的 proc」;其余能力本用例用不到。 */
+  class FakeOverlapBackend {
+    alive = true;
+    calls: string[] = [];
+    // 不给 extensions 面:给了它,store 会去绑 pid 扩展的 onBusFrame(需要整套扩展实现)。
+    // 本用例只验"切换在飞时被拒",不需要扩展面。
+    capabilities = {};
+    constructor(public kernel: string, public neutralSessionId?: string) {}
+    get sessionId(): string | undefined { return undefined; }
+    async start(): Promise<void> { this.alive = true; }
+    async stop(): Promise<void> { this.alive = false; }
+    onEvent(): () => void { return () => {}; }
+    async sendMessage(): Promise<void> { this.calls.push("sendMessage"); }
+    async setModel(): Promise<void> {}
+    async setSessionName(): Promise<void> {}
+    async seed(): Promise<string> { return "seeded"; }
+    async getTree(): Promise<LineageTree> { return { rootId: "", lineages: [] }; }
+    async getEntries(): Promise<NeutralMessage[]> { return []; }
+    async bookmark(): Promise<Anchor> { return { lineageId: "", entryId: "" }; }
+    async deleteBookmark(): Promise<void> {}
+    async abort(): Promise<void> { this.calls.push("abort"); }
+  }
+
+  it("切换在飞时并发 prompt 被显式拒绝:不命中「半换」的 proc", async () => {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "overlap-")));
+    const factory: BackendFactory = {
+      create: (opts) => new FakeOverlapBackend(opts.kernel, opts.neutralSessionId) as unknown as BaseBackend,
+    };
+    const catalog = new ModelCatalog([
+      { listModels: () => [{ kernel: "pi", provider: "p", id: "a", name: "a" }] },
+      { listModels: () => [{ kernel: "dsh", provider: "us-new", id: "dsh-model", name: "dsh-model" }] },
+    ]);
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, catalog);
+    (s as unknown as { switchKernelEnabled: boolean }).switchKernelEnabled = true;
+    s.setContext(CWD, null);
+    await s.prompt("起一个 pi 会话", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "", kernel: "pi" });
+
+    // 不 await:switchKernel 在**第一个 await 之前**同步置位 switching(实测源码 1285-1286),
+    // 于是这一刻就是"切换进行中"的交叠态——确定性构造,不靠 sleep 赌时序。
+    const switching = s.switchKernel("dsh");
+    const inFlight = (s as unknown as { switching: boolean }).switching;
+    expect(inFlight).toBe(true); // 前提断言:交叠态真的构造出来了(否则下面的拒绝会假绿)
+
+    // 两道闸都算数,别把正则写窄(实测本次命中的是 switchKernel 自身的互斥「切换进行中」,
+    // 而不是 ensureForSend 的「内核切换进行中,请稍后」——两条都对,断言只该要求"被显式拒绝")。
+    await expect(
+      s.prompt("并发发一条", undefined, undefined, { provider: "us-new", modelId: "dsh-model", thinkingLevel: "", kernel: "dsh" }),
+    ).rejects.toThrow(/切换进行中/);
+
+    await switching.catch(() => { /* 假后端不完整,切换本身可能失败;本用例只验"在飞时被拒" */ });
+  });
+});
+
+describe("交叠态:锚点不在中立层时(fork/bookmark)必须显式拒绝,不静默派生", () => {
+  // 交叠态第三个面:回合未收敛时,用户看到的锚点(entryId)可能还没写穿到中立层;
+  // 压缩也可能把锚点移除。这两种情况下 fork/bookmark **不能**静默产出一个空/半截会话。
+  function setup(): { s: SessionStore; ns: string } {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "anchor-gone-")));
+    const ns = "ns-anchor-gone";
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-09-04T00:00:00.000Z" }),
+      lineages: [{ lineageId: ns, fork: null, entries: [
+        { neutralEntryId: `${ns}:0`, message: { role: "user", content: "唯一一条" } },
+      ] }],
+    });
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: opts.agentDir }) };
+    const s = new SessionStore(factory, catalogFactory, dir, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    s.setContext(CWD, ns);
+    return { s, ns };
+  }
+
+  it("bookmark:锚点不在会话内容里 → 显式报错(不产出空快照)", async () => {
+    const { s, ns } = setup();
+    await expect(s.bookmark(CWD, `${ns}:999`, "bm-1", "标签", "预览")).rejects.toThrow(/锚点不在会话内容里|快照存储|无法/);
+  });
+
+  it("fork:boundary 不在会话内容里 → 显式报错(不派生半截会话)", async () => {
+    const { s, ns } = setup();
+    // 断言必须钉到**锚点**那条错(源码 2293),不能用 /./ ——任何错误都能过 /./,
+    // 那样连"设置步骤就炸了"都会绿(正是 §10.3 第 5 条批的弱断言)。
+    await expect(s.fork(ns, `${ns}:999`, "at")).rejects.toThrow(/分叉锚点不在会话内容里/);
+  });
+});

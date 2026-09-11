@@ -71,11 +71,21 @@ try {
 
   // 打开源会话 → fork
   await page.waitForFunction(() => [...document.querySelectorAll("*")].some((e) => (e.textContent || "").trim() === "forkxk 源" && e.children.length < 6), { timeout: 15000, polling: 300 });
-  await page.evaluate(() => {
+  // 点会话行必须用**可信点击**:合成 MouseEvent 对 Radix/React 的行点击不可靠(与 session-single-source 同款修法)。
+  const rowPt = await page.evaluate(() => {
     const els = [...document.querySelectorAll("*")].filter((e) => (e.textContent || "").trim() === "forkxk 源" && e.children.length < 6);
-    els[els.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const el = els[els.length - 1];
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   });
+  if (rowPt) await page.mouse.click(rowPt.x, rowPt.y);
+  // 两阶段收敛(skills §10.3.1):泛条件(messages>0)通过 ≠ 目标那条在 DOM 里——必须等**目标内容**出现再取样。
   await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length > 0, { timeout: 10000, polling: 300 }).catch(() => {});
+  await page.waitForFunction(
+    () => [...document.querySelectorAll("[data-message-id]")].some((r) => (r.textContent || "").includes("答完了。")),
+    { timeout: 10000, polling: 300 },
+  ).catch(() => {});
   const box = await page.evaluate(() => {
     const row = [...document.querySelectorAll("[data-message-id]")].find((r) => (r.textContent || "").includes("答完了。"));
     if (!row) return null;

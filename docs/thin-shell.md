@@ -80,7 +80,7 @@ my-harness-desktop 是一个多内核（pi + dsh 同级）AI agent 桌面壳。�
 
 中立契约是壳和内核之间的接口定义——"壳只认一份中立契约、内核各交一个适配器"这件事不会变，留在圆心。
 
-- 中立契约的完整形状在 `packages/shared/src/domain/backend.ts` 的 `BaseBackend` 接口：`kernel`/`alive`/`sessionId` 三个只读属性 + `start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed` 十四条必实现意图 + `resume?`/`continue?`/`listTools?`/`answerQuestion?` 四个可缺面意图 + `setThinkingLevel`（思考强度设置，dsh 显式降级抛错）+ `capabilities`（内核专属能力探测面，`{ pi?: unknown; dsh?: DshCapabilities }`）。
+- 中立契约的完整形状在 `packages/shared/src/domain/backend.ts` 的 `BaseBackend` 接口：`kernel`/`alive`/`sessionId` 三个只读属性 + `start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed` 十四条必实现意图 + `resume?`/`continue?`/`listTools?`/`answerQuestion?` 四个可缺面意图 + `setThinkingLevel`（思考强度设置，dsh 显式降级抛错）+ `capabilities`（内核专属能力探测面，`{ pi?: unknown; dsh?: ThinkingCapabilities }`）。
 
 - 关键的设计判断是**什么不进契约**：`steer`/`followUp`/`onExtensionUI`/思考档位清单与循环切换，这些 pi 专属能力不进 `BaseBackend`，它们挂在 `capabilities.pi` 扩展面上，壳经能力探测"有则用、无则降级"。`packages/shared/src/domain/sessions.ts` 的 `PiExtensions` 接口（约 18 个方法）就是这块扩展面的形状。
 
@@ -385,7 +385,7 @@ VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI 
 
 **Q：`asPi()` 出现在 `session-store.ts` 里，这是不是内核身份泄漏？**
 
-不是。`asPi` 的实现是 `proc.backend.capabilities.pi` 探测，不是 `if (kernel === "pi")` 硬分支。它访问的是 pi 扩展面（`PiExtensions`/`PiBackendExtensions`），dsh 无此面时 `capabilities.pi` 为 undefined，`asPi` 抛"当前后端不支持 pi 专属命令"——这是显式降级，不是按内核身份分流。真正的内核身份分支只允许出现在组装根（`assemble.ts` 的工厂闭包），因为那是接口与实现相遇的唯一地点。判据是：能力探测是"有则用、无则降级"，内核身份分支是"是 pi 就 A、是 dsh 就 B"——前者是机制，后者是内容。
+不是。`asPi` 的实现是 `proc.backend.capabilities.pi` 探测，不是 `if (kernel === "pi")` 硬分支。它访问的是 pi 扩展面（`PiExtensions`/`BackendExtensions`），dsh 无此面时 `capabilities.pi` 为 undefined，`asPi` 抛"当前后端不支持 pi 专属命令"——这是显式降级，不是按内核身份分流。真正的内核身份分支只允许出现在组装根（`assemble.ts` 的工厂闭包），因为那是接口与实现相遇的唯一地点。判据是：能力探测是"有则用、无则降级"，内核身份分支是"是 pi 就 A、是 dsh 就 B"——前者是机制，后者是内容。
 
 **Q：这套纪律适用于别的项目吗？**
 

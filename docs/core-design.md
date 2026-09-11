@@ -21,7 +21,7 @@
 - **中立契约**：`BaseBackend`、`SessionCatalog`、`BackendFactory`、`KernelModelSource`、`Host`。这是「壳需要内核/运行时提供什么」的意图集合。
 - **槽位契约**：`contributions.ts` 里 27 个槽的形状。这是「壳和壳插件之间的接口定义」。
 
-圆心不装任何 IO、任何环境感知、任何框架、任何内核实现。`kernel.ts` 里只有 `type KernelId = "pi" | "dsh"` 和一个 `KERNEL_IDS` 数组——这是全仓唯一能出现内核身份字面量的地方。加第三个内核，就是在这里加一个字面量，编译器会逼着补全所有 `switch(kernel)` 和 `KERNEL_IDS` 消费处。
+圆心不装任何 IO、任何环境感知、任何框架、任何内核实现。`kernel.ts` 里 `KernelId = string`（**不透明 id，无字面量联合**）——内核清单由 `KernelRegistry` 运行时驱动（`registry.ids()`）。加第三个内核 = **写一个插件目录（`plugin.json` + factory）+ 注册一行**，圆心与壳零改动；`KERNEL_IDS` 常量数组已随插件化退役。
 
 ### 1.1 为什么圆心要放 packages/shared 而不是 src 里
 
@@ -65,7 +65,7 @@
 
 **工具发现与提问**：`listTools?()`（可缺面）、`answerQuestion?(questionId, answers)`（可缺面）。
 
-**能力探测面**：`capabilities: { pi?: unknown; dsh?: DshCapabilities }`——壳经 `backend.capabilities.pi` / `.dsh` 探测「有则用、无则降级」，不按内核身份硬分支。`configDepPaths?: string[]`——内核 spawn 时读取的配置文件路径清单，变了壳重建进程。
+**能力探测面**：`capabilities: { extensions?: unknown; thinking?: ThinkingCapabilities; fileBacked?: boolean }`——壳经 `backend.capabilities.extensions` / `.thinking` / `.fileBacked` 探测「有则用、无则降级」，不按内核身份硬分支。（**能力名是中性的**：按内核分字段的 `capabilities.pi` / `.dsh` 已退役——那是把「N 个内核」建模成「N 个互斥命名字段」，插件化后改为「一个注册表 + 一个能力字典」。）`configDepPaths?: string[]`——内核 spawn 时读取的配置文件路径清单，变了壳重建进程。
 
 `BoundaryRef` 是不透明字符串：pi 后端把它当 entryId，dsh 后端把它当 seq 的字符串化。语义上它总指向「父 lineage 里一个完整回合之后的位置」——两个内核各自的锚点表示，归一成同一个不透明引用。壳不解析它的内容，只当 token 在 fork/bookmark/resume 间回传。这是「适配器翻译」的一个典型例子：同一个语义（分叉点），两种形状（entryId vs seq），在适配器里抹平。
 
@@ -235,9 +235,9 @@ transport 层是 HTTP（静态 + `/rpc`）+ WS（`session:event` 等广播），
 
 判断该翻译还是补面，只问一句：内核有没有「同一个语义、只是形状不同」的对应物。有 → 翻译；没有 → 补面；补不了 → 降级。不允许的状态只有一种：**静默缺面**——壳调了内核没有的能力，既不翻译也不补面也不降级，静默吞掉或假装成功。
 
-能力探测靠 `capabilities` 而不是内核身份硬分支：壳经 `backend.capabilities.pi`（`PiBackendExtensions`，pi 扩展面形状定义在 src/server/kernel/pi/backend，application 经 type-only import 收窄）和 `backend.capabilities.dsh`（`DshCapabilities`，懒探测缺面方法）探测「有则用、无则降级」。会话意图链路上出现 `if (kernel === "pi")` 或 `asPi()` 类型守卫，就是壳在漏内核身份。
+能力探测靠 `capabilities` 而不是内核身份硬分支：壳经 `backend.capabilities.extensions`（`BackendExtensions`，pi 扩展面形状定义在 src/server/kernel/pi/backend，application 经 type-only import 收窄）和 `backend.capabilities.thinking`（`ThinkingCapabilities`，懒探测缺面方法）探测「有则用、无则降级」。会话意图链路上出现 `if (kernel === "pi")` 或 `asPi()` 类型守卫，就是壳在漏内核身份。
 
-`DshCapabilities` 的懒探测值得一提：装上的 dsh 版本可能缺某些 `session/*` 方法，首次调用失败（unknown method）时记录进 `missing`，之后壳据此显式降级——不静默、不伪造成功。这是「运行时能力探测」而不是「版本号硬编码」的落地。
+`ThinkingCapabilities` 的懒探测值得一提：装上的 dsh 版本可能缺某些 `session/*` 方法，首次调用失败（unknown method）时记录进 `missing`，之后壳据此显式降级——不静默、不伪造成功。这是「运行时能力探测」而不是「版本号硬编码」的落地。
 
 ---
 
@@ -383,7 +383,7 @@ pi 侧的五能力（toolgate / context-probe / bus / subagent / skills）被合
 
 壳要区分「这个内核有没有某能力」，被拒绝的方案是 `if (kernel === "pi")` 硬分支。拒绝的理由是硬分支把「内核身份」漏进了壳的会话意图链路——每加一个内核，壳里就多一处「如果这是新内核就……」，而「内核可替换」要求加内核时壳一行不改。
 
-选中的方案是能力探测：`backend.capabilities.pi` / `.dsh` 分桶，壳经「有则用、无则降级」探测，不按内核身份硬分支。pi 的扩展面（`PiBackendExtensions`）在圆心里是 opaque（`unknown`），application 经 type-only import 收窄——圆心不 import pi 实现，依赖方向不倒。dsh 的能力面（`DshCapabilities`）是懒探测：首次调用失败（unknown method）才记录进 `missing`，之后显式降级——这是「运行时探测」而非「版本号硬编码」。
+选中的方案是能力探测：`backend.capabilities.pi` / `.dsh` 分桶，壳经「有则用、无则降级」探测，不按内核身份硬分支。pi 的扩展面（`BackendExtensions`）在圆心里是 opaque（`unknown`），application 经 type-only import 收窄——圆心不 import pi 实现，依赖方向不倒。dsh 的能力面（`ThinkingCapabilities`）是懒探测：首次调用失败（unknown method）才记录进 `missing`，之后显式降级——这是「运行时探测」而非「版本号硬编码」。
 
 ### 13.6 为什么每会话一进程，而不是进程池或单进程
 
@@ -439,7 +439,7 @@ seed 是把中立 lineage 物化到内核，涉及两边的数据。失败处理
 
 ### 15.4 缺面：显式降级，不静默吞
 
-内核可能缺某个能力（dsh 旧版本缺 `session/continue`、缺 `session/setModel`）。壳的处理是三分法里的「显式降级」：能力探测 `capabilities`，缺面方法首次调用失败时记录、之后广播 `capabilityDegraded` 事件、UI 把入口置灰。关键是「不静默吞、不伪造成功」——`AbstractBackend` 的缺面默认是「抛错」（`continue`/`answerQuestion`/`setThinkingLevel` 都 reject，`listTools` 返回 null 让壳走降级），而不是「返回假成功」。dsh 的懒探测（`DshCapabilities.missing` + `onMissing`）让「装了缺方法的版本」也能显式降级，而不是靠版本号硬编码判断。
+内核可能缺某个能力（dsh 旧版本缺 `session/continue`、缺 `session/setModel`）。壳的处理是三分法里的「显式降级」：能力探测 `capabilities`，缺面方法首次调用失败时记录、之后广播 `capabilityDegraded` 事件、UI 把入口置灰。关键是「不静默吞、不伪造成功」——`AbstractBackend` 的缺面默认是「抛错」（`continue`/`answerQuestion`/`setThinkingLevel` 都 reject，`listTools` 返回 null 让壳走降级），而不是「返回假成功」。dsh 的懒探测（`ThinkingCapabilities.missing` + `onMissing`）让「装了缺方法的版本」也能显式降级，而不是靠版本号硬编码判断。
 
 ### 15.5 竞态：并发护栏，根因修复
 
@@ -528,9 +528,9 @@ composer（输入框）是会话流交互密度最高的区域，壳把它拆成
 
 不用它。内核降级成单线执行器，它的 fork 语义（pi parentId 树、dsh session forest）退成「历史存储格式」，只被各自的 SessionCatalog 读（getTree 读历史树），不再被壳的 fork 路径调用。壳的 fork 是中立层纯操作：`fork(parentLineageId, boundary)` 新开 lineage 记 fork 点，下次 prompt 前 `lineageContent` 拼出完整线性内容 seed 进去。这样 pi 和 dsh 的 fork 差异对壳完全不可见。
 
-**Q：`capabilities` 为什么用 `{ pi?: unknown }` 而不是直接把 PiBackendExtensions 写进圆心？**
+**Q：`capabilities` 为什么用 `{ pi?: unknown }` 而不是直接把 BackendExtensions 写进圆心？**
 
-因为 `PiBackendExtensions` 的形状是 pi 专属的，定义在 `src/server/kernel/pi/backend/pi-backend-extensions.ts`。如果圆心 import 它，圆心就依赖了 pi 的实现——依赖方向反了。所以圆心里 pi 槽是 opaque（unknown），application 经 type-only import 收窄。这是「内核专属能力不进中立契约、圆心不依赖内核实现」的落地：壳经能力接口探测，pi 扩展面形状在外层。
+因为 `BackendExtensions` 的形状是 pi 专属的，定义在 `src/server/kernel/pi/backend/pi-backend-extensions.ts`。如果圆心 import 它，圆心就依赖了 pi 的实现——依赖方向反了。所以圆心里 pi 槽是 opaque（unknown），application 经 type-only import 收窄。这是「内核专属能力不进中立契约、圆心不依赖内核实现」的落地：壳经能力接口探测，pi 扩展面形状在外层。
 
 **Q：`projectionPath` 和 `rawFilePath` 为什么要分成两个方法，不能合并吗？**
 

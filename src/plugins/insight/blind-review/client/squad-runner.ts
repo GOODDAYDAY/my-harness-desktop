@@ -1,6 +1,6 @@
 // 出站执行器 —— 唯一碰 ctx 的逻辑单元:串行蓝队 + 裁判 + 会话恢复。
 //
-// 流程(对齐 docs/plugins/blind-review.md §3.4):
+// 流程(对齐 docs/plugins/insight/blind-review.md §3.4):
 //   逐队:setContext(cwd, null) 开全新会话(信息屏障)→ prompt → 等生成完成
 //        → getLastAssistantText 收报告 → renameSession 打标记(best-effort)
 //   裁判:同样独立会话,输入 = 内容 + 全部各队报告

@@ -49,6 +49,10 @@ TransferLayer 的物理落位（CLAUDE.md §6.1）：
 
 ## 2. 现状数据流与穿透点
 
+> ⚠ **本节的「现状」已过期（本文**已交付**）**：`ask-design.md` 开头即写"`ask-transfer-layer.md`（2026-08-19，翻译归位，**已交付**）"。
+> 源码侧同样佐证：`src/plugins/sessions/ask/` 已有 `pi-extension/` + `dsh-extension/` + `renderer/` 三件
+> （即本文定义的翻译层 + 壳持有的持久实体）。所以下面列的"穿透点"是**改动前**的清单,勿当现状读。
+
 ### 2.1 pi 侧
 
 ```mermaid

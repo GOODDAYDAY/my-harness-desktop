@@ -1,6 +1,6 @@
 // 抽象后端基类 —— BaseBackend 契约的骨架 + 缺面默认。
 //
-// 依据 docs/design/abstract-backend.md + kernel-layer.md §9.4。BaseBackend 是契约(接口),
+// 依据 docs/design/abstract-backend.md + CLAUDE.md §9.4(继承 + 实现的三段式)。BaseBackend 是契约(接口),
 // PiBackend / DshBackend 是两个平行实现。两个实现各自的「会话模型、事件形状、fork 语义」
 // 处处相反,那些差异保持 abstract;只有「可缺面能力的默认」才收进基类共享。
 //

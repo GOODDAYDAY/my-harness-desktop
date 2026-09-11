@@ -1,5 +1,13 @@
 # 如何新增一个内核：抽象是否合理
 
+> ⚠️ **历史文档（插件化之前）**：本文是「内核插件化」落地**之前**做的抽象体检，正文里的
+> `KERNEL_IDS` / `KernelId = "pi" | "dsh"` 字面量联合 / `capabilities.pi|dsh` 两硬桶 /
+> 6 处字面量分叉，都是**当时**的现状。它的核心论断——「加第三个内核一行不改这句口号不成立，
+> 需要动 6 个文件」——**已被插件化推翻**：现在加内核 = 写一个插件目录（`plugin.json` + factory）
+> + `registry.register` 一行，圆心与壳零改动。**现行指引见 `docs/design/kernel-plugin.md`**。
+> 本文保留的价值在于：它记录了这一串「假泛化」当初长什么样，以及为什么必须收掉。
+
+
 本文回答一个具体问题：如果要接第三个内核（假设的 "kimi"，或任何新 agent 运行时），要交什么、现有抽象哪里够用、哪里不合理需要补。论证对象是 my-harness-desktop 的多内核壳——`packages/shared/src/domain`（圆心契约）+ `src/server/kernel/`（内核层）+ `src/server/application/sessions/session-store.ts`（编排）+ `src/server/bootstrap/assemble.ts`（组装根）。每一句论断都落到具体文件/函数/类型名，不空谈。
 
 先给总判定，再展开清单、覆盖度、不合理处、逐条裁定，最后 QA。
@@ -8,7 +16,7 @@
 
 **结论：核心抽象（BaseBackend / SessionCatalog / KernelModelSource / KernelSpec）是合理且偏保守的，但"加第三个内核一行不改"这句口号不成立——它需要动 6 个文件、补约 6 处字面量分叉、且暴露出四处结构性缺陷：`capabilities` 只有 pi/dsh 两个硬桶、`BackendCreateOptions` 字段偏 pi/dsh 对称、`SessionCatalog` 的同步/惰性二分会把第三个内核逼进"文件型 vs RPC 型"的错误选项、以及 pi 特权在 application 层仍有残留。这些缺陷今天能被 pi/dsh 两个实现掩盖，第三个内核会逐个戳穿。**
 
-一句话概括抽象的健康度：**骨架是对的，接缝是脏的。** 骨架 = 圆心契约 + 抽象基类 + 工厂注入 + 注册表绑定，这条链上"加内核"的增量子集清晰、可编译器强制。接缝 = 内核身份泄漏进 `session-store` 的 `asPi()`/`KERNEL_IDS[0]`/`"pi"` 字面量、`assemble.ts` 的 `if (kernel !== "dsh")`、`controllers/kernel.ts` 的 dsh-优先-pi-兜底、以及圆心里 `DshCapabilities`/`SessionCapabilities.piExtension/dshExtension`/`manifest.piExtension/dshExtension` 这一串"按内核分字段"的假泛化。假泛化是最大的债：它把"N 个内核"建模成了"N 个互斥命名字段"，而不是"一个注册表 + 一个能力字典"。
+一句话概括抽象的健康度：**骨架是对的，接缝是脏的。** 骨架 = 圆心契约 + 抽象基类 + 工厂注入 + 注册表绑定，这条链上"加内核"的增量子集清晰、可编译器强制。接缝 = 内核身份泄漏进 `session-store` 的 `asPi()`/`KERNEL_IDS[0]`/`"pi"` 字面量、`assemble.ts` 的 `if (kernel !== "dsh")`、`controllers/kernel.ts` 的 dsh-优先-pi-兜底、以及圆心里 `ThinkingCapabilities`/`SessionCapabilities.piExtension/dshExtension`/`manifest.piExtension/dshExtension` 这一串"按内核分字段"的假泛化。假泛化是最大的债：它把"N 个内核"建模成了"N 个互斥命名字段"，而不是"一个注册表 + 一个能力字典"。
 
 ---
 
@@ -138,12 +146,12 @@
 
 ### 4.1 `capabilities` 只有 pi/dsh 两个硬桶，没有通用扩展机制
 
-- **证据**：`backend.ts:145` `readonly capabilities: { pi?: unknown; dsh?: DshCapabilities };`。`AbstractBackend` 默认 `capabilities = {}`（`abstract-backend.ts:48`），`PiBackend` override 成 `{ pi: this as PiBackendExtensions }`（`pi-backend.ts:111`），`DshBackend` override 成 `{ dsh: { missing, onMissing } }`（`dsh-backend.ts:85-87`）。
-- **缺陷**：能力面被建模成"每个内核一个命名字段"——`pi` 槽对圆心是 opaque `unknown`，`dsh` 槽是具体 `DshCapabilities`。加 kimi 后，要么在圆心再加一个 `kimi?: KimiCapabilities` 字段，要么把 kimi 塞进现有的 pi/dsh 桶里 hack。前者是圆心每加一个内核改一次契约（违反"圆心不加内核专属概念"），后者是灾难（kimi 的能力探测要借 pi 或 dsh 的槽位语义）。
+- **证据**：`backend.ts:145` `readonly capabilities: { pi?: unknown; dsh?: ThinkingCapabilities };`。`AbstractBackend` 默认 `capabilities = {}`（`abstract-backend.ts:48`），`PiBackend` override 成 `{ pi: this as BackendExtensions }`（`pi-backend.ts:111`），`DshBackend` override 成 `{ dsh: { missing, onMissing } }`（`dsh-backend.ts:85-87`）。
+- **缺陷**：能力面被建模成"每个内核一个命名字段"——`pi` 槽对圆心是 opaque `unknown`，`dsh` 槽是具体 `ThinkingCapabilities`。加 kimi 后，要么在圆心再加一个 `kimi?: KimiCapabilities` 字段，要么把 kimi 塞进现有的 pi/dsh 桶里 hack。前者是圆心每加一个内核改一次契约（违反"圆心不加内核专属概念"），后者是灾难（kimi 的能力探测要借 pi 或 dsh 的槽位语义）。
 - **第三个内核会戳穿**：kimi 大概率既没有 pi 的 `steer/followUp/resync` 面，也没有 dsh 的 `missing/onMissing` 懒探测面，它有它自己的第三套能力形状（比如多模态、子 agent 树、或自有的降级协议）。现有两个桶装不下它，装不下就得改圆心。
-- **正确的形状**：能力面应该是**内核自己声明、壳按 key 探测**的字典，而不是圆心预列名字。即 `capabilities: Readonly<Record<string, unknown>>`，内核放什么 key 它自己说了算，壳经 `capabilities["pi.steer"]` 或更窄的 `hasCapability("steer")` 探测；或者至少把 `pi`/`dsh` 这两个字段名从"圆心硬编码"改成"内核侧注册的 capability id"。当前 pi 槽用 `unknown` 已经是"我放弃在圆心描述你"的妥协，方向是对的，但 dsh 槽用了具体 `DshCapabilities` 又把圆心拉回了 dsh 专属——**一半妥协一半回退，最糟的中间态**。
+- **正确的形状**：能力面应该是**内核自己声明、壳按 key 探测**的字典，而不是圆心预列名字。即 `capabilities: Readonly<Record<string, unknown>>`，内核放什么 key 它自己说了算，壳经 `capabilities["pi.steer"]` 或更窄的 `hasCapability("steer")` 探测；或者至少把 `pi`/`dsh` 这两个字段名从"圆心硬编码"改成"内核侧注册的 capability id"。当前 pi 槽用 `unknown` 已经是"我放弃在圆心描述你"的妥协，方向是对的，但 dsh 槽用了具体 `ThinkingCapabilities` 又把圆心拉回了 dsh 专属——**一半妥协一半回退，最糟的中间态**。
 
-裁定：**不合理，需补。** 优先级最高——它是"内核无特权差异"（§1.4）在能力面这条线被悄悄违反的地方：pi 用 opaque 逃过了圆心污染，dsh 没逃过。补法：把 `DshCapabilities` 挪进 `src/server/kernel/dsh/`（它本就在那定义更合适，圆心只留 `unknown` 或一个通用 `Capabilities` 字典），或把整个 `capabilities` 改成 `ReadonlyMap<string, unknown>` + 每个内核声明自己的 capability id 常量。
+裁定：**不合理，需补。** 优先级最高——它是"内核无特权差异"（§1.4）在能力面这条线被悄悄违反的地方：pi 用 opaque 逃过了圆心污染，dsh 没逃过。补法：把 `ThinkingCapabilities` 挪进 `src/server/kernel/dsh/`（它本就在那定义更合适，圆心只留 `unknown` 或一个通用 `Capabilities` 字典），或把整个 `capabilities` 改成 `ReadonlyMap<string, unknown>` + 每个内核声明自己的 capability id 常量。
 
 ### 4.2 `BackendCreateOptions` 里有三个字段各自只服务一个内核
 
@@ -248,7 +256,7 @@
 | `KernelModelSource` + `ModelCatalog` | 合理（最干净） | 零改动，维持现状 |
 | `KernelSpec`/`KernelManager`/`KernelRuntime`/`KernelReconcile` | 合理 | 维持；`KernelRuntime.installNpm` 命名可泛化为 `installPackage` |
 | `BackendFactory` + 工厂注入 | 合理 | 维持；工厂入参已 extends，圆心契约该瘦身 |
-| `capabilities: { pi?, dsh? }` | **不合理** | 改通用 capability 字典，`DshCapabilities` 下放 dsh 目录 |
+| `capabilities: { pi?, dsh? }` | **不合理** | 改通用 capability 字典，`ThinkingCapabilities` 下放 dsh 目录 |
 | `BackendCreateOptions` 半中性字段（`maxTokens`/`systemPrompt*`/`provider`/`model`） | **不合理** | 下放到各内核工厂入参，契约只留真中性字段 |
 | `isKernelId` / `resolveSessionKernel` 的字面量第二、三份 | **不合理** | 全部收口到 `KERNEL_IDS.includes` 派生的单一 `isKernelId` |
 | `asPi`/`piSend`/`KERNEL_IDS[0]`/`newPiSessionPath`/`spawnSession("pi")` | **不合理** | `asPi` 泛化为按 capability key 探测；`KERNEL_IDS[0]` 删或显式化 |
@@ -291,4 +299,4 @@
 
 **Q8：这些缺陷里，哪一条是"今天必须修"、哪一条是"接 kimi 时再修"？**
 
-必须今天修（不修会继续腐烂）：`isKernelId` 字面量收敛（§4.3）、`capabilities` 的 `DshCapabilities` 下放（§4.1）、注释"15→14"（§4.8）——这三条都是纯收尾，零行为风险。接 kimi 时再修（跟着 kimi 一起动）：`BackendCreateOptions` 瘦身（§4.2）、manifest extensions 泛化（§4.5）、`SessionCatalog` 异步化 + 身份形态（§4.6）、`asPi` 泛化（§4.4）、seed 时序声明化（§4.7）——这些动了接口签名或编排，应该借"接 kimi"这个真实需求驱动，而不是空转重构。**总原则：骨架不动，接缝跟着下一个真实内核一起收。**
+必须今天修（不修会继续腐烂）：`isKernelId` 字面量收敛（§4.3）、`capabilities` 的 `ThinkingCapabilities` 下放（§4.1）、注释"15→14"（§4.8）——这三条都是纯收尾，零行为风险。接 kimi 时再修（跟着 kimi 一起动）：`BackendCreateOptions` 瘦身（§4.2）、manifest extensions 泛化（§4.5）、`SessionCatalog` 异步化 + 身份形态（§4.6）、`asPi` 泛化（§4.4）、seed 时序声明化（§4.7）——这些动了接口签名或编排，应该借"接 kimi"这个真实需求驱动，而不是空转重构。**总原则：骨架不动，接缝跟着下一个真实内核一起收。**

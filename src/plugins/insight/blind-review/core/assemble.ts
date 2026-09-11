@@ -1,6 +1,6 @@
 // prompt 组装纯函数 —— 构造与执行分开:这里只拼文本,发送在 client/squad-runner。
 //
-// 组装规则(对齐 docs/plugins/blind-review.md §3.4–§3.6):
+// 组装规则(对齐 docs/plugins/insight/blind-review.md §3.4–§3.6):
 // - {{content}} 被审内容(截断保护),{{tree}} 项目文件树(仅白盒队),{{reports}} 各队报告(裁判)
 // - 占位符缺席 = 用户的选择,不注入、不报错(与旧版 {{content}} 语义一致)
 // - 截断标注写进 prompt 正文,让审查方知道输入不完整——不静默
@@ -40,13 +40,18 @@ export function truncateContent(text: string, labels: AssembleLabels): string {
 /** 文件树 → 缩进文本,超行数截断 + 标注。 */
 export function serializeTree(root: FileTreeNode, labels: AssembleLabels): string {
   const lines: string[] = [];
+  // 用**显式标志**记录"是否真的被切断",而不是靠"行数到达上限"反推:
+  // 后者在**恰好** TREE_MAX_LINES 个节点时也会成立,于是给一棵**完整**的树打上"已截断"——
+  // 那等于对模型说了一句假话(它以为有信息缺失)。兄弟函数 truncateContent 用的是 `<=` 边界
+  // (恰好等于上限不标注),两者此前在同一边界上给出相反行为;此处按同一语义统一。
+  let cut = false;
   const walk = (node: FileTreeNode, depth: number): void => {
-    if (lines.length >= TREE_MAX_LINES) return;
+    if (lines.length >= TREE_MAX_LINES) { cut = true; return; }
     lines.push(`${"  ".repeat(depth)}${node.name}${node.isDir ? "/" : ""}`);
     for (const child of node.children ?? []) walk(child, depth + 1);
   };
   walk(root, 0);
-  if (lines.length >= TREE_MAX_LINES) lines.push(labels.treeTruncated);
+  if (cut) lines.push(labels.treeTruncated);
   return lines.join("\n");
 }
 

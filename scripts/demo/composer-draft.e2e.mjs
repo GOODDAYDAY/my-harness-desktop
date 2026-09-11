@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { clickByText } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -69,11 +70,10 @@ const newChat = async () => {
   await waitForDomIdle(page, { quietMs: 700, timeoutMs: 6000 }).catch(() => {});
 };
 const openSession = async () => {
-  await page.evaluate(() => {
-    const els = [...document.querySelectorAll("*")].filter((e) => (e.textContent || "").trim() === "草稿源会话" && e.children.length < 6);
-    els[els.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
-  await waitForDomIdle(page, { quietMs: 700, timeoutMs: 6000 }).catch(() => {});
+  // 会话行点击走**可信点击**(lib/interact 的 clickByText → page.mouse.click)。合成 dispatchEvent
+  // 对 Radix/React 的行点击实测翻过车(session-single-source、fork-cross-kernel),这里收敛到助手。
+  const hit = await clickByText(page, "草稿源会话", { settle: () => waitForDomIdle(page, { quietMs: 700, timeoutMs: 6000 }).catch(() => {}) });
+  if (!hit) throw new Error("未找到「草稿源会话」行");
 };
 
 try {

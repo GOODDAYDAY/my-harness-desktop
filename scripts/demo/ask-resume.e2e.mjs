@@ -19,6 +19,7 @@ import { assertPortFree, launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { loadScenario, applySeed } from "./lib/seed/engine.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { clickByText } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -162,10 +163,8 @@ try {
       () => [...document.querySelectorAll("*")].some((e) => (e.textContent || "").includes("请立即调用 ask_user_quest") && e.children.length < 8),
       { timeout: 15000, polling: 300 },
     );
-    await page.evaluate(() => {
-      const els = [...document.querySelectorAll("*")].filter((e) => (e.textContent || "").includes("请立即调用 ask_user_quest") && e.children.length < 8);
-      els[els.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    // 会话行点击走可信点击(同上)。
+    if (!(await clickByText(page, "请立即调用 ask_user_quest", { exact: false }))) throw new Error("未找到 ask 会话行");
     opened = await page.waitForFunction(() => !!document.querySelector("[data-ask-question]"), { timeout: 8000, polling: 300 })
       .then(() => true)
       .catch(() => false);

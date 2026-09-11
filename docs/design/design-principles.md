@@ -387,7 +387,7 @@ pi 专属能力（`refreshThinkingLevels`/`abortRetry`）在非 pi 内核下要�
 14. **未验证即交付 / 假成功**：不亲自跑一遍就交付、功能点没测过、测试失败还不展示错误。
     正确：交付前亲自点一遍、连通性实测、失败显式报错。
 
-15. **契约单源漂移**：同一概念两套接口（如 domain 的 `PiExtensions` 与 client 的 `PiBackendExtensions` 并存）、路径规则多处复制。
+15. **契约单源漂移**：同一概念两套接口（如 domain 的 `PiExtensions` 与 client 的 `BackendExtensions` 并存）、路径规则多处复制。
     正确：圆心定义唯一源，外层 re-export，删掉副本。
 
 16. **文档与实现矛盾**：dependsOn 加载顺序、fork 返回类型、插件 tier 级别等文档与代码不一致。

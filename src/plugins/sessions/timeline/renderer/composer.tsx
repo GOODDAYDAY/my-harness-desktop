@@ -382,7 +382,12 @@ export function Composer({
                 {models && onPickModel && models.length > 0 && (
                   <DropdownMenu.Root onOpenChange={(open) => { if (open) setModelKernel(null); }}>
                     <DropdownMenu.Trigger asChild>
-                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[length:var(--font-size-base)] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]">
+                      <button
+                        // 探针锚点:模型选择器的稳定锚(此前探针只能按文本/子串猜,e2e 易落空——
+                        // 纪律见 .claude/skills/interaction-testing §10.3「没找到」必须可区分)。
+                        data-composer-model={currentModel ? `${currentModel.kernel}:${currentModel.id}` : ""}
+                        className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[length:var(--font-size-base)] text-[var(--color-fg)] bg-transparent border-none cursor-pointer max-w-[160px]"
+                      >
                         {currentModel && <PluginIcon name={currentModel.kernel} className="size-3.5 shrink-0" />}
                         <span className="truncate">{currentModel ? (currentModel.name || currentModel.id) : "—"}</span>
                         <ChevronDown className="size-3 shrink-0 text-[var(--color-muted)]" />
@@ -453,7 +458,12 @@ export function Composer({
                 {levels && onPickLevel && levels.length > 0 && (
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger asChild>
-                      <button className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[length:var(--font-size-base)] text-[var(--color-muted)] bg-transparent border-none cursor-pointer">
+                      <button
+                        // 探针锚点:思考档位选择器(值即档位 id;无档位/清单空时为 "",可据此断言
+                        // 「该内核没有档位」)。纪律同模型锚。
+                        data-composer-thinking={currentLevel ?? ""}
+                        className="flex items-center gap-1 px-1.5 py-0 rounded-full text-[length:var(--font-size-base)] text-[var(--color-muted)] bg-transparent border-none cursor-pointer"
+                      >
                         <span className="truncate">{currentLevel ? levelLabel(currentLevel) : "—"}</span>
                         <ChevronDown className="size-3" />
                       </button>

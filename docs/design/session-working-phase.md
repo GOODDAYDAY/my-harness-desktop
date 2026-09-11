@@ -12,6 +12,11 @@ AI 干活不是"思考中"三个字。一次会话轮次里，模型在请求等
 
 ### 0.2 现状的三个缺口
 
+> ⚠ **本文多处「现状」（§0.2 / §2.2 等）已过期**：本文提议的会话工作阶段**已落地**——圆心现有
+> `packages/shared/src/domain/working-phase.ts`（`WorkingPhase` + `phaseFromView`，文件头即写"依据
+> docs/design/session-working-phase.md"），`sessions-list` 每行也已用阶段图标而非二元 busy。
+> 下文描述的"三个缺口"（含"后台会话置忙不可达"）是**改动前**的样子,勿当现状读。
+
 **全局指示只有一档，而且经常说错话。** 会话流底部（timeline 末条消息下方）的圆点由全局 `streaming` 单独驱动，文案写死 `shell.thinking`（"agent 思考中…"）。但 `streaming` 覆盖整个轮次：工具执行时它亮着，显示"思考中"——AI 明明在等 bash 结果；thinking level 设为 off（思考已关）时它还是"思考中"——误导；模型在流式输出正文时它依然是"思考中"——该说"生成中"。
 
 **"请求中"阶段完全没有标识。** `agentStart` 之后、首个 `messageStart` 之前有一段等待窗口：请求已发出、底座在等供应商返回首 token。思考强度（thinking level，底座/模型的思考深度档位，在 timeline 输入框（composer）的下拉选择 off/low/medium/high 等）调高时这段能持续数秒。此时消息流底部只有一个含糊的"思考中"圆点，没有任何"请求已发出、在等响应"的提示。阶段一不是"没有标识"而是"被错误标识"。

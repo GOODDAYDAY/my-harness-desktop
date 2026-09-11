@@ -117,7 +117,13 @@ try {
   await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
   const echoed = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("[minimal echo] 你好 minimal")),
-    { timeout: 10000, polling: 300 },
+    // ⚠ 这条是整条链上**唯一不吞超时、且最紧**的预算(第 241/242 轮定位):
+    //   前面两阶段收敛(等停止起跑/消失)最多可耗 20s+30s,且**失败会被吞**,
+    //   于是"这一轮跑得久"(冷启动+模型加载)会让本行在 10s 内等不到 echo →
+    //   报出"端到端发送链路不通" ✗ —— **失败信息指向了错误的组件**。
+    //   故把预算放宽到 45s(仍是等待、不是 sleep):它只影响"等多久才判失败",
+    //   不影响任何被测行为 ✓。真正的就绪问题仍会由它如实报出 ✓。
+    { timeout: 45000, polling: 300 },
   ).then(() => true).catch(() => false);
   ok(echoed, "时间线出现 minimal echo 回复(端到端发送链路通)");
 
@@ -183,8 +189,22 @@ try {
   });
   if (!rowRect) throw new Error("未找到 minimal 会话行(你好 minimal)");
   await page.mouse.click(rowRect.x, rowRect.y);
+  // 两阶段收敛(skills §3.3 Virtuoso 只渲染可视窗口 / §3.4 收敛必须两阶段):
+  // 先等"有任何消息"落位,再等**目标那条**进 DOM。此前是「泛等一下就一次性取样」
+  // ——泛条件先满足时目标那条可能还没进 DOM,产生间歇假红(实测约 2 次 1 次)。
   await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length > 0, { timeout: 10000, polling: 300 }).catch(() => {});
-  const reopened = await page.evaluate(() => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("[minimal echo] 第二条消息")));
+  const reopened = await page.waitForFunction(
+    () => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("[minimal echo] 第二条消息")),
+    { timeout: 10000, polling: 300 },
+  ).then(() => true).catch(() => false);
+  if (!reopened) {
+    // 失败时留证据:区分「全空」(真 bug)与「有消息但没这条」(渲染窗口/内容问题)。
+    const dump = await page.evaluate(() => ({
+      n: document.querySelectorAll("[data-message-id]").length,
+      texts: [...document.querySelectorAll("[data-message-id]")].map((e) => (e.textContent || "").trim().slice(0, 20)),
+    }));
+    console.log(`   [诊断] 重开后消息数=${dump.n} 文本=${JSON.stringify(dump.texts)}`);
+  }
   ok(reopened, "重开后历史消息仍在(中立层读路径通)");
 
   // 第三条续跑(重开后重新 seed minimal 后端再发)。

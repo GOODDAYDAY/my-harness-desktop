@@ -262,7 +262,7 @@ dsh-manager 在 `src/plugins/manager/`，是内容层（壳插件）。它之上
 ### 8.2 三条可检验不变量
 
 - **不变量一：渲染纯函数**。`ModelConfigPage`/`KernelConfigForm`/`KernelVersionPage`/`KernelExtensionsPage` 四个 base 组件不含 `if (kernel === "pi")` 或 `asPi()`；dsh-manager 的四个 renderer 文件也不含。内核差异由 `capabilities={{ reasoning: false }}`（能力旗标）、`api={ctx.kernelModels.dsh}`（注入不同 adapter）、`i18nPrefix="dsh"`（注入不同文案）抹平。
-- **不变量二：内核身份单源**。dsh-manager 的 `plugin.json` 里出现 `"kernelConfig": "dsh"`、`"kernelModels": "dsh"`、`"kernel": "dsh"` 这些字符串，但它们是 `KernelId = "pi" | "dsh"` 联合的字面量取值，不是「复制一份内核身份定义」——类型定义单源在 `packages/shared/src/domain/kernel.ts`。`extensions.tsx` 里的 `kernel="dsh"` 也是 `KernelId` 类型的字面量赋值，经类型系统校验合法取值。
+- **不变量二：内核身份单源**。dsh-manager 的 `plugin.json` 里出现 `"kernelConfig": "dsh"`、`"kernelModels": "dsh"`、`"kernel": "dsh"` 这些字符串，但它们是内核 id 的字面量取值（`KernelId = string`,不透明;曾为 `"pi" | "dsh"` 联合,已随插件化退役），不是「复制一份内核身份定义」——类型定义单源在 `packages/shared/src/domain/kernel.ts`。`extensions.tsx` 里的 `kernel="dsh"` 也是 `KernelId` 类型的字面量赋值，经类型系统校验合法取值。
 - **不变量三：字段知识不复制**。`createDshConfigApi.fields()` 返回 `[]` 而非「把 dsh 的字段清单硬编码进桌面」——dsh 的 schema 在它的运行时，桌面读不到就不猜、退化成通用 JSON 编辑器。这是「不复制内核字段知识」的纪律，与 pi 的「解析 .d.ts 拿 schema」形成对照（pi 有文件可解析，dsh 没有，各走各的合法路径，但都不硬编码字段清单）。
 
 ## 9 如果没有这个插件，系统会有什么影响

@@ -101,4 +101,22 @@ describe("ThinkingChainBlock 流式计时", () => {
     fireEvent.click(btn);
     expect(screen.queryByText(/第一段/)).not.toBeInTheDocument();
   });
+
+  it("默认折叠不随流式自动翻转:流式中保持折叠、结束不自动收起(用户诉求 #18 守卫)", () => {
+    vi.setSystemTime(1700000000000);
+    const full = "思考正文第一段";
+    const { rerender } = render(
+      <ThinkingChainBlock content={{ type: "thinking", thinking: full }} streaming={true} startedAt={1000} collapseDefault={true} />,
+    );
+    // 流式中:保持默认折叠(此前实现流式中强制展开,用户嫌跳)
+    expect(screen.queryByText(new RegExp(full))).not.toBeInTheDocument();
+    // 用户手动展开
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText(new RegExp(full))).toBeInTheDocument();
+    // 流式结束:保持展开(此前实现回落折叠默认 →「看着看着自动收起」的根因)
+    rerender(
+      <ThinkingChainBlock content={{ type: "thinking", thinking: full }} streaming={false} startedAt={1000} completedAt={4200} collapseDefault={true} />,
+    );
+    expect(screen.getByText(new RegExp(full))).toBeInTheDocument();
+  });
 });

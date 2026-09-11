@@ -83,6 +83,23 @@ try {
     ok(true, "单内核无 TAB,pi 模型直接铺开");
   }
 
+  // item 16 真 app 守卫:默认不装载 minimal(其 manifest enabled=false)。
+  // 本 e2e **不设** MHD_ENABLE_KERNELS → 装载清单 = [pi, dsh] → 模型下拉的内核 TAB
+  // **不得**出现 minimal。与 minimal-smoke(设了开关 → minimal 模型在场)互为对照两面。
+  const tabTexts = await page.evaluate(() => {
+    const menu = document.querySelector("[role='menu']");
+    return [...(menu?.querySelectorAll("button") ?? [])]
+      .map((b) => (b.textContent || "").trim().toLowerCase())
+      .filter((x) => x.length > 0 && x.length <= 12);
+  });
+  ok(!tabTexts.includes("minimal"), `默认不装载 minimal(下拉里无 minimal TAB;实际 TAB=[${tabTexts.join(",")}])`);
+  // 更强的正面信号:minimal 的模型项(Minimal Echo)不得出现在清单里。
+  // 只断 TAB 不够——本 e2e 的基础设施不带 dsh 安装,可能一个 TAB 都不渲染(TAB=[]),
+  // 「没有 minimal TAB」就退化成恒真;模型项缺席才是"这个内核没装载"的用户可见证据。
+  const modelTexts = await page.evaluate(() =>
+    [...document.querySelectorAll("[role='menuitem']")].map((el) => (el.textContent || "")));
+  ok(!modelTexts.some((t) => /minimal/i.test(t)), `默认不装载 minimal:模型清单无 Minimal 项(实际 ${modelTexts.length} 项)`);
+
   // 选真实模型(按显示名匹配)。
   const itemRect = await page.evaluate((name) => {
     const item = [...document.querySelectorAll("[role='menuitem']")].find((el) =>

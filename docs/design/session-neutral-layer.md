@@ -441,6 +441,10 @@ export interface SessionBinding {
 
 ## §17 现状：stop 旧 + 拿私有 token + seed 线性
 
+> ⚠ **本文 §17 的「现状」已过期**：§17 说"现在的 `switchKernel` 是五步: stop 旧 + 拿私有 token + seed 线性"——
+> 实现早已换成"**读中立层(唯一真相源)** + seed 活跃 lineage(id 派生自 lineageId,幂等)"(见 `session-store.ts`
+> 的步骤注释与 `kernel-forkless-branch.md`)。§17 保留作改动前的对照,勿当现状读。
+
 现在的 `switchKernel`（`session-store.ts`）是五步：
 
 1. `abort()` 在飞回合；

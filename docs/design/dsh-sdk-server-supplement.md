@@ -1,5 +1,8 @@
 # dsh SDK server 补面规格（阶段二：session/listTools + session/answer）
 
+> 📌 **现状已核,无需标记**：本节「现状与参考锚点」盘的是 **dsh 仓库的 SDK server 方法面**
+> （`packages/sdk/server/src/server.ts`）——是**外部参考锚点**,不是本仓的实现现状,不会因本仓改动而过期。
+
 > **2026-08-21 首版**：给 deepseek-harness 仓库执行。目标是把 pi-desktop 的 dsh 侧"工具发现"与"提问往返"从文件侧车桥收敛到内核协议——补 `session/listTools` 与 `session/answer` 两个 SDK server 方法 + 一条提问通知，废掉 pi-desktop 侧的 `dsh-question-bridge.ts` 文件侧车。本仓库（pi-desktop）改不动 deepseek-harness，本文是交接规格。
 
 ## 1. 定位与目标

@@ -1,6 +1,6 @@
 // 配置契约与解析 —— 纯 TS,不 import react、不碰 ctx,可裸单测。
 //
-// 蓝队编制模型(对齐 docs/plugins/blind-review.md §3.2):
+// 蓝队编制模型(对齐 docs/plugins/insight/blind-review.md §3.2):
 // - 一个模板 = 一个蓝队:access 定访问级别(黑盒/白盒),enabled 定是否加入编制
 // - judge = 裁判:汇总各队报告(去重/分级/标共识),不是对答案的判分者
 // - 旧配置兼容:无 access/enabled/judge 时 resolveConfig 补默认

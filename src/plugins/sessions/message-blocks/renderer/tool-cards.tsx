@@ -99,7 +99,9 @@ function CardHeader({ toolName, summary, isStreaming, isError, collapsed, onTogg
           }}
         />
       )}
-      <span className="text-[var(--color-muted)]">{toolIcon(toolName)}</span>
+      {/* 运行中图标明暗交替(诉求 15):此前整卡只有文案 shimmer + 左侧呼吸条,图标本身是静态的
+          ——「只要运行中,图标要么动、要么明暗交替」是逐图标的纪律,不是整卡的。 */}
+      <span className={`text-[var(--color-muted)]${isStreaming ? " animate-pulse" : ""}`}>{toolIcon(toolName)}</span>
       <span className="text-[var(--color-fg)] flex-1 truncate">{summary || toolName}</span>
       {isStreaming && (
         <span className="text-xs text-[var(--color-accent-success)]" style={{ animation: "shimmer 2s linear infinite" }}>
@@ -455,7 +457,7 @@ export function DefaultCard({ toolCall, collapseDefault = true }: { toolCall: To
       onClick={() => hasDetail && setCollapsed(!collapsed)}
     >
       <div className="flex items-center gap-2 text-[length:var(--font-size-sm)] font-[var(--font-family-mono)]">
-        <span className="text-[var(--color-muted)]">{toolIcon(toolCall.name)}</span>
+        <span className={`text-[var(--color-muted)]${isStreaming ? " animate-pulse" : ""}`}>{toolIcon(toolCall.name)}</span>
         <span className="text-[var(--color-fg)] flex-1 truncate">{toolCall.name}</span>
         {isStreaming && (
           <span className="text-xs text-[var(--color-muted)]" style={{ animation: "shimmer 2s linear infinite" }}>

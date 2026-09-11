@@ -1,6 +1,7 @@
 # AbstractBackend:契约骨架 + 缺面默认（abstract / pi / dsh 同级别）
 
-> 依据 `kernel-layer.md` §9.4（继承 + 实现的三段式）。本文把「计划中」的 `AbstractBackend`
+> 依据 `CLAUDE.md` §9.4（继承 + 实现的三段式）。**注:原写的是 kernel-layer.md 的 §9.4,但那篇只到 §7、没有 §9;**
+> "接口 → 抽象基类 → 具体实现"三段式的正文在 `CLAUDE.md` §9.4。本文把「计划中」的 `AbstractBackend`
 > 落成具体设计：abstract / pi / dsh 三个同级别的后端，一条一条对应实现。
 
 ## 1. 目标

@@ -86,7 +86,7 @@ token-stats 是 `src/plugins/insight/` 域下的一个壳插件，回答一个�
 
 - 拿 `activeProc()`，若进程未起直接 `throw new Error("内核未启动")`——这不是 bug，是「诚实态」的上游保证：renderer 侧 `refreshStats()` 的 `.catch` 会吞掉这个 throw，保持现状。
 - 从 `proc` 里拼出 `local = { tps, turn, lastTurn, turns, steps }`（第 1470 行），这五个是壳自算字段。
-- 判 `proc.backend.capabilities.pi` 是否为 `PiBackendExtensions`：**不是 pi（即 dsh 或其它缺面内核）→ 直接 `shellSessionStats(local)`**，基座字段全部留空（0/undefined），不伪造；是 pi → `pi.getSessionStats(local)` 拿 RPC 真值。
+- 判 `proc.backend.capabilities.pi` 是否为 `BackendExtensions`：**不是 pi（即 dsh 或其它缺面内核）→ 直接 `shellSessionStats(local)`**，基座字段全部留空（0/undefined），不伪造；是 pi → `pi.getSessionStats(local)` 拿 RPC 真值。
 - 上下文信任序：若 `!proc.lastPromptAnchorReal`，读 `catalog.contextProbeTokens(proc.boundSessionPath)` 的实测值，喂给 `resolveContextUsage(stats.contextUsage, false, measured)`（`session-state.ts` 第 346 行）。
 
 `toSessionStats`（`context-binding.ts` 第 149 行）做协议翻译：把 RPC 返回的 `d`（防御性 `(data ?? {}) as Record<string, unknown>`）里的数字字段逐个 `num(k)` 提取回退 0，把 `d.contextUsage` 映射成 `ContextUsage`，最后 `{...local}` 把壳自算的五项盖进去。注意 `local` 是 `Pick<SessionStats, "tps"|"turn"|"lastTurn"|"turns"|"steps">`，与 `shellSessionStats` 的参数形状一致——两处共享同一份「壳自算字段」概念，不重复声明。
@@ -235,6 +235,12 @@ token-stats 不直接跟内核说话，它消费的 `SessionStats` 是内核统�
 - **context-probe 内核扩展**：当 pi 的 usage 锚点不可信（供应商不报 prompt token），`resolveContextUsage` 用 context-probe 实测值兜底（§4.1）。这个实测值来自 `piReadContextProbeTokens`（`pi-catalog.ts` 第 489 行）读的 `desktop-context-probe.json` 侧车文件，写方是 `my-harness-fit-pi-extension` 的 context-probe 扩展。token-stats 组件自己**不知道**这些存在，它只看到 `contextUsage.tokens` 最终是某个数还是 `null`。
 
 ### 6.5 项目总的多内核现状：当前钉在 pi 文件目录
+
+> 📌 **现状已核（结论仍成立,机制描述已更新）**：本节结论——`projectStats` 读的是 **pi 的**目录——
+> **现在仍然成立**（`session-store.ts:976` 仍是 `this.catalogFor("pi").projectStats(cwd)`）。
+> 但文中"`get catalog()` 钉死 `catalogFor("pi")`"的说法**已不准确**：现在没有那个 `get catalog()`，
+> 改为 `catalogFor(proc.kernel)` 按会话归属路由，**剩余 3 处显式 `catalogFor("pi")` 是 pi 专属面**
+> （源码 269 行注释明写，其中 976 行就是 `projectStats`）。
 
 §4.3 已经点出：`session-store.ts` 的 `get catalog()` 钉死 `catalogFor("pi")`，所以 `projectStats` 当前读的是 pi 的 JSONL 文件。这是 token-stats「项目总」层的一个多内核事实，需要精确陈述而不是含糊带过：
 

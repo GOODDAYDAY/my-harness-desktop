@@ -1,0 +1,4 @@
+{
+  "displayName": "LLM Recorder (dsh)",
+  "description": "把 dsh 的 agent/request 等 hook 投成与 pi 侧同一个 llm-log 行契约（seq/ts/kind），供右面板「请求记录」读取；dsh 的 hook 只给 LlmCallConfig，故原样记配置、不伪造请求体"
+}

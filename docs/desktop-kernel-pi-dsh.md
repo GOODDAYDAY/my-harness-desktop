@@ -68,7 +68,7 @@
 依赖箭头永远指向圆心；跨层协作靠依赖倒置（接口定义在内层、实现在外层、启动期注入）。三条物理防线：
 
 - `packages/shared/src/domain/` 零 import——放不下 electron/react/任何内核，物理上 import 不了。
-- `src/server/application/` 对 `kernel/{pi,dsh}` 具体实现**非 type-only** import 归零——`session-store.ts` 只 import `PiBackendExtensions` 接口（`import type`），不 import `PiBackend` 类。
+- `src/server/application/` 对 `kernel/{pi,dsh}` 具体实现**非 type-only** import 归零——`session-store.ts` 只 import `BackendExtensions` 接口（`import type`），不 import `PiBackend` 类。
 - `src/server/kernel/core/` 只 import `packages/shared`，绝不 import `pi`/`dsh`——`AbstractBackend`、`KernelManager` 是机制不是内容。
 
 内核层的位置：`src/server/kernel/pi` 与 `src/server/kernel/dsh` 是洋葱里同一层（内核层）的两个实现，与 `src/server/client/{fs,git,npm,remote}` 并列——内核和 git、文件系统是同一层抽象，都是"被壳管理的资源"。内核连接是双向的（命令出、事件入），但它是应用驱动的外部资源——我们 spawn 它、持有它、kill 它——所以执行件（`rpc-adapter.ts`、`json-rpc.ts`、`subprocess-lifecycle.ts`）都归各自内核目录。
@@ -89,7 +89,7 @@
 
 `AbstractBackend`（`src/server/kernel/core/abstract-backend.ts`）把其中 **14 个声明为 abstract**（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`），加第 N 个内核时编译器逼着它实现全量意图，漏一条就编译错；**3 个给默认成员**（`capabilities={}`、`configDepPaths` getter→`[]`、`sessionId` getter→`ctx.sessionId`）；**4 条可缺面给缺面默认**（`listTools`→`null`、`answerQuestion`/`continue`/`setThinkingLevel`→`Promise.reject`，不静默吞、不伪造成功）。
 
-> 注：CLAUDE.md 的"15 必实现 + 4 缺面 + 3 默认成员"口诀里那个第 15 条是 `fork`，但 `fork` 实际上**从未进过 `BaseBackend`**——pi 的 fork 是扩展面 `PiBackend.forkCommand`（`implements PiBackendExtensions`），返回 `RpcResponse` 让 `SessionStore` 查 `cancelled`。`resume?` 也不在基类——dsh 覆盖、pi 不实现，属可选意图。本文以代码为准。
+> 注：CLAUDE.md 的"15 必实现 + 4 缺面 + 3 默认成员"口诀里那个第 15 条是 `fork`，但 `fork` 实际上**从未进过 `BaseBackend`**——pi 的 fork 是扩展面 `PiBackend.forkCommand`（`implements BackendExtensions`），返回 `RpcResponse` 让 `SessionStore` 查 `cancelled`。`resume?` 也不在基类——dsh 覆盖、pi 不实现，属可选意图。本文以代码为准。
 
 ### 2.2 六条核心意图 + 之上叠的意图，逐条说明
 
@@ -115,7 +115,7 @@
 
 **提问（`answerQuestion?`）**。pi = `extension_ui_response` 帧翻译（`adapter.sendExtensionUIResponse`，取首个答案的 `custom ?? selected[0]`，空值转 `cancelled: true`）；dsh = `writeDshAnswer(questionId, answers)`（写 `<requestId>.answer.json` 文件侧车，dsh ask 扩展轮询读取）。
 
-**能力探测（`capabilities`）**。`{ pi?: unknown; dsh?: DshCapabilities }`。pi 给 `{ pi: this as PiBackendExtensions }`（对圆心是 opaque unknown，`src/server/application` 经 type-only import 收窄）；dsh 给 `{ dsh: { missing: Set<string>, onMissing: (m)=>void | null } }`——懒探测的运行时能力面。壳经 `backend.capabilities.pi`/`backend.capabilities.dsh` 探测"有则用、无则降级"，不按内核身份硬分支。
+**能力探测（`capabilities`）**。`{ pi?: unknown; dsh?: ThinkingCapabilities }`。pi 给 `{ pi: this as BackendExtensions }`（对圆心是 opaque unknown，`src/server/application` 经 type-only import 收窄）；dsh 给 `{ dsh: { missing: Set<string>, onMissing: (m)=>void | null } }`——懒探测的运行时能力面。壳经 `backend.capabilities.pi`/`backend.capabilities.dsh` 探测"有则用、无则降级"，不按内核身份硬分支。
 
 ### 2.3 逐意图对照表（pi vs dsh）
 
@@ -141,7 +141,7 @@
 | seed | `seed` | `piSeedSession` 写 JSONL 文件（返回派生路径，幂等） | `buildDshSeedSession` 包树 + `session/seed` RPC（**重绑 `this.sessionId`**） |
 | 工具发现 | `listTools?` | `readKnownTools(cwd)`（tool-gate 播报） | 继承缺面默认 `null` |
 | 提问 | `answerQuestion?` | `extension_ui_response` 帧（stdin 写回） | `writeDshAnswer`（写 answer 文件侧车） |
-| 能力面 | `capabilities` | `{ pi: this }`（`PiBackendExtensions`） | `{ dsh: { missing, onMissing } }` |
+| 能力面 | `capabilities` | `{ pi: this }`（`BackendExtensions`） | `{ dsh: { missing, onMissing } }` |
 | 配置依赖 | `configDepPaths` | `[agentDir/models.json, agentDir/settings.json]` | `[cordisConfig, settingsPath]` |
 
 ### 2.4 `SessionCatalog`：per-kernel 跨会话目录/CRUD 的中立面
@@ -409,12 +409,12 @@ dsh 内核插件是 Cordis 插件，两条挂载路径（`dsh-extension-installe
 
 写了/启用了插件还拉不平的，壳把该能力入口隐藏/置灰 + tooltip，不静默、不伪造成功。
 
-- **pi 专属扩展面在 dsh 下**：`steer`/`followUp`/`cycleModel`/`getThinkingLevels`/`compact`/`setAutoCompaction`/`setAutoRetry`/`exportHtml`/`bash`/`clone` 等（`PiBackendExtensions`）在 dsh 下经 `asPi` 抛错降级——`SessionStore.asPi(proc)` 探测 `proc.backend.capabilities.pi`，无则抛"当前后端不支持 pi 专属命令"。renderer 据 `SessionCapabilities.piExtension` 置灰入口。
+- **pi 专属扩展面在 dsh 下**：`steer`/`followUp`/`cycleModel`/`getThinkingLevels`/`compact`/`setAutoCompaction`/`setAutoRetry`/`exportHtml`/`bash`/`clone` 等（`BackendExtensions`）在 dsh 下经 `asPi` 抛错降级——`SessionStore.asPi(proc)` 探测 `proc.backend.capabilities.extensions`，无则抛"当前后端不支持 pi 专属命令"。renderer 据 `SessionCapabilities.piExtension` 置灰入口。
 - **思考强度**：`setThinkingLevel` 已进契约（dsh 继承缺面默认抛错），档位清单/循环切换（`getThinkingLevels`/`cycleThinkingLevel`）仍留 pi 扩展面。
 - **工具发现**：dsh `listTools` 缺面默认 null，壳走降级。
 - **copy 复制**：dsh `DshSessionCatalog.copy` 抛 `NOT_WIRED` 降级。
 - **contextProbeTokens**：dsh 返回 null（context usage 由原生暴露，不经此探针）。
-- **懒探测缺面**：dsh 的 `session/setModel`/`session/rename`/`session/continue` 等 unknown method 时记缺面 + 清晰错误/降级，`capabilities.dsh.missing`/`onMissing` 驱动 UI 置灰对应入口。
+- **懒探测缺面**：dsh 的 `session/setModel`/`session/rename`/`session/continue` 等 unknown method 时记缺面 + 清晰错误/降级，`capabilities.thinking.missing`/`onMissing` 驱动 UI 置灰对应入口。
 
 ## 7 进程模型与内核切换
 
@@ -560,7 +560,7 @@ src/server/kernel/dsh/manager/dsh-kernel.ts     DshKernelManager extends（DSH_S
 - **壳不读任何内核的存储**（pi 的 JSONL、dsh 的 session log 都不碰，只认 `NeutralSessionStore` 的中立层 + 不透明 `sessionId` + `LineageTree`）。会话列表/打开/树读的唯一源是中立层，内核目录降级为兜底（`getTree` 中立层缺失才走 `catalog.getTree`）。
 - **壳只认中性事件**（内核事件由适配器投喂，翻译器是喂线、不是第二套语义）。
 - **壳的渲染是纯函数**（给定同一条中性事件流，timeline 怎么画与内核无关）。
-- **会话意图链路上不出现 `if (kernel === "pi")`**——理想是能力接口（`backend.capabilities.pi`）探测。例外是 `session-store.ts` 里少量 `capabilities.pi` 探测（如 `!proc.backend.capabilities.pi` 判断 dsh），这是能力探测不是身份硬分支。
+- **会话意图链路上不出现 `if (kernel === "pi")`**——理想是能力接口（`backend.capabilities.extensions`）探测。例外是 `session-store.ts` 里少量 `capabilities.extensions` 探测（如 `!proc.backend.capabilities.extensions` 判断 dsh），这是能力探测不是身份硬分支。
 - **内核 = 模型的派生量**：选模之前不起任何内核进程（`kernel-follows-model`），选模型 = 激活对应内核的槽位。
 - **dsh 的 `session/prompt` 只新建空会话、不加载磁盘日志**：app 重启后重开旧会话再发会撞 "id collision"，须先 `session/continue` 把持久化会话载入新进程（`prompt` 里 `neutralHasHistory` 时 `backend.continue?.()`）。
 - **pi 的 `session_start`/`model_select`/`thinking_level_select` 是纯扩展事件**（RPC stdout 永不见），`session-store` 在 `setContext`/`prompt`/`sync` 主动推 synthetic `sessionStart` 水合 renderer。

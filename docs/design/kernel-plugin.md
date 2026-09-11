@@ -6,6 +6,10 @@
 
 ## 现状病灶（侦察结论）
 
+> ⚠ **本节「现状病灶」已过期**：本文设计的**内核插件化已完整落地**——`src/server/kernel/` 下
+> `pi/`、`dsh/`、`minimal/` 各带 `plugin.json`，`core/kernel-registry.ts` 提供 `KernelPlugin`/`KernelRegistry`/
+> `scanKernelPlugins`。所以下面列的"病灶"是**改动前**的形态,勿当现状读（本节的侦察结论正是这次改动的输入）。
+
 核心代码里内核字面量分布在 12 个文件，真「判别/路由/注册」集中在 5 处：
 
 | 文件 | 病灶 | 层 |
@@ -105,11 +109,11 @@ function validateKernel(plugin: KernelPlugin): void {
 `capabilities.pi` / `capabilities.dsh` 这个字眼也要从核心去掉。改为**能力探测面**（能力名中性，不带内核名）：
 
 ```ts
-// 之前：capabilities: { pi?: PiBackendExtensions; dsh?: DshCapabilities; fileBacked?: boolean }
+// 之前：capabilities: { pi?: BackendExtensions; dsh?: ThinkingCapabilities; fileBacked?: boolean }
 // 之后：能力按语义分桶，壳经能力名探测，不按内核名
 readonly capabilities: {
   steering?: SteeringCapabilities;   // steer/followUp/onExtensionUI 等（原 pi 扩展面）
-  sessionRpc?: DshCapabilities;      // 原 dsh 能力面
+  sessionRpc?: ThinkingCapabilities;      // 原 dsh 能力面
   fileBacked?: boolean;
 };
 ```

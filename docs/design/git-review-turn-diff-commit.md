@@ -6,6 +6,11 @@ git-review 从一个"只读工作区查看器"演进为"AI 改动审查器 + 最
 
 ### 1.1 现状：一个半成品的只读查看器
 
+> ⚠ **本节「现状」已过期**：本文提议的"本轮/本对话 + commit"**已落地**——git-review 插件头现在写着
+> "三个子页签：**本轮**(最近一个有改动的轮次) / **本对话**(轮次分组) / Git 工作区(真数据 + **commit/push**)",
+> 且 commit/push 走 `ctx.gitWrite`(**git:write**)、AI commit message 走 `ctx.llm.oneshot`。
+> 所以下面两条（"写操作为零——没有 git:write"、"本轮/本对话是空态占位"）都是**改动前**的样子,勿当现状读。
+
 - 内核 git 能力是三个只读方法（`status` / `fileDiff` / `fileContent`，`git:read` 权限门控），`client/git/git-status.ts` 用 simple-git 包装。写操作为零——没有 `git:write`。
 - git-review 插件三个子页签："本轮""本对话"是空态占位（文档标注"等底座提供 turn 元数据"），只有"Git 工作区"有真数据。
 - 用户想提交 AI 的改动，得切回终端跑 `git add && git commit && git push`。

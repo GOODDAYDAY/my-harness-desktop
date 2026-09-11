@@ -62,6 +62,35 @@ llm-recorder 是一个桌面插件：把每次 LLM 调用的完整请求体和�
 
 `before_provider_headers` 能拿到完整请求头——**含 Authorization，即 API Key 明文**。这条 hook 整个不碰：request 行只存 `before_provider_request` 的 payload（payload 里不含凭证，凭证在传输层 header），response 行只存 status 和组装消息，`after_provider_response` 的 headers 丢弃。日志文件落盘在项目目录下，记了 Key 就是事故，这个口子从设计上焊死，不留「可选开启」。
 
+### 2.5 dsh 侧数据面：hook 不同名，行契约相同（待实现）
+
+**现状缺口**：`plugin.json` 只有 `piExtension`、**没有 `dshExtension`**，而记录能力整条实现落在 pi 扩展里。所以 **dsh 内核执行时右侧「请求记录」恒空**（不是坏了，是从没接过）。补法按 §7.6 三分法走「内核插件补面」：给同一个插件目录加 `dsh-extension/`（Cordis 插件）+ 在 manifest 里装 `dshExtension` 键，与 `goal` 插件的双内核形态同构。
+
+**dsh 能给的 hook（实测 `@deepseek-ai/dsh-agent` 的 runtime-types）**：
+
+| hook | payload | next | 能拿到的 |
+|---|---|---|---|
+| `agent/request` | `{agent, turn, step, signal}` | `() => Promise<LlmCallConfig>` | **调用配置**（provider/model/参数）——不是请求体 |
+| `agent/request-error` | `{agent, turn, step, provider, failure, retryPolicy, signal}` | `() => Promise<RequestErrorAction>` | 失败信号（可当「无 status 的失败响应」） |
+| `agent/pre-step` | `{agent, messages: UserMessage[], turn, step, signal}` | `() => Promise<PreStepDecision>` | 本步**入队消息**（不是完整对话投影） |
+| `agent/turn-stopping` / `agent/status` | turn/状态 | — | 回合边界（计时收尾可用） |
+
+**与 pi 的差异（这是为什么不能照抄 pi 扩展）**：
+
+1. **请求侧不对等**：pi 的 `before_provider_request` 给**完整请求体**（含 messages/tools），dsh 的 `agent/request` 只给 `LlmCallConfig`（配置）。dsh 侧的「请求内容」要另找载体（`agent/pre-step` 的 `messages` 只是本步入队增量，拼成完整请求需要在扩展内**自持会话投影**）。
+2. **没有对 `message_end` 的响应 hook**：pi 靠 `message_end(assistant)` 出栈写 response 行；dsh 没有同名事件，response 行只能由 `agent/request-error`（失败）+ 回合边界（成功）拼，**得先确定「成功的这次调用」在哪个 hook 落定**。
+3. **配对语义**：pi 是「进程内 pending 队列 + message_end 出栈」；dsh 用 `turn`/`step` 二元组天然配对（`agent/request` 已带 `turn/step`），比 pi 的隐式队列更可靠——**dsh 侧应按 `(turn, step)` 配对，而不是抄 pi 的出栈队列**。
+
+**行契约不变**：`<cwd>/.my-harness-desktop/llm-logs/<会话文件名>.jsonl`、`seq`/`ts`/`kind: request|response`/`payload|message`/`status`/`durationMs`、512KB rotate、`index.json` 统计——**读侧（desktop 渲染面板）一行不改**，这正是「换内核 = 换投影实现」在中立层之外的第二处落点。
+
+**已定（自主设计，落地前以此为准）**：
+
+1. **请求行 `payload` = `LlmCallConfig` 原样**。dsh 只给配置，就记配置——**不在扩展内复刻对话投影**去凑「等效请求体」，那是造影子实现（违反 §1.6 只写插件 / §3.1 消费而非翻译）。代价是 dsh 的 request 行内容比 pi 薄（无 messages/tools），这是**诚实反映内核能力差**，读侧按字段存在性渲染即可（面板已容忍缺字段）。
+2. **response 行以 `(turn, step)` 配对，边界到达即结算**。`agent/request` 记 request 行（带 turn/step）；后续**任一**边界到达即给「最近一条未结算的 (turn,step)」补 response 行：`agent/request-error` 优先（带 `failure`，且 `status` 缺省）；否则 `agent/turn-stopping` / 下一次 `agent/request` 的 turn/step 变化即视为上一次**成功**（`message`/`status` 均缺省——dsh 不把 HTTP status 与组装消息给插件，**不伪造**）。孤儿 request（进程崩）与 pi 侧同形态，面板照常容忍。
+3. **会话文件名 = `<sessionId>.jsonl`**，由 dsh 会话根 + sessionId 派生（与 dsh 侧其它 sidecar 同口径）。dsh 没有 pi 那种会话文件路径，但「一会话一文件」的落盘契约不变，读侧按会话切分不受影响。
+
+**纪律**：`seq`/`ts`/`kind`/512KB rotate/`index.json` 与 pi 侧同一套实现（复制过来，不共用代码——两侧运行时不同）；任何 hook 异常静默吞掉，记录扩展炸了不带走会话；`agent/request` 只读 `next()` 的返回值，**不改写配置**（waterfall 里必须原样 `return cfg`）。
+
 ## 3 落盘：pi extension 的设计
 
 extension 是插件目录里的 `pi-extension/index.ts`，随插件分发，运行在每个 pi 进程内（每会话一进程）。它和 toolgate 遵守同一纪律：不 import 底座类型包（类型在底座 node_modules 里，仓库 tsconfig 够不到），手写用到的窄接口，任何 hook 内异常静默吞掉——记录扩展炸了不该带走会话。

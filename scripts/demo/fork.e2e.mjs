@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { clickByText } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -63,10 +64,8 @@ try {
   let opened = false;
   for (let i = 0; i < 3 && !opened; i++) {
     await page.waitForFunction(() => [...document.querySelectorAll("*")].some((e) => (e.textContent || "").trim() === "fork 源会话" && e.children.length < 6), { timeout: 15000, polling: 300 });
-    await page.evaluate(() => {
-      const els = [...document.querySelectorAll("*")].filter((e) => (e.textContent || "").trim() === "fork 源会话" && e.children.length < 6);
-      els[els.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+  // 会话行点击走可信点击(合成 MouseEvent 对 Radix 行点击实测翻车过)。
+  if (!(await clickByText(page, 'fork 源会话', { exact: true }))) throw new Error("未找到会话行: fork 源会话");
     // 真渲染信号 = [data-message-id] 行出现(侧栏预览里也有"答完了。",body 文本是假阳性)
     opened = await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length > 0, { timeout: 10000, polling: 300 }).then(() => true).catch(() => false);
   }

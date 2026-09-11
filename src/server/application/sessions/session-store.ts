@@ -1801,6 +1801,7 @@ export class SessionStore implements
     if (prefs?.thinkingLevel) {
       const be = this.activeProc()?.backend;
       const canSwitchThinking = !!be && (be.capabilities.extensions != null || be.capabilities.thinking?.getThinkingLevels != null);
+      // 档位校验收在 setThinkingLevel(1a 集中一处):这里只判「内核支持不支持运行时切档」。
       if (canSwitchThinking) await this.setThinkingLevel(prefs.thinkingLevel);
     }
     const proc = this.activeProc();
@@ -2149,6 +2150,19 @@ export class SessionStore implements
     // 根因同 setModel:进程没活不能静默 return(pref flush 被吞),未起则起。
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
+    // 档位校验(dsh-thinking-level):档位清单是**内核声明的能力面**——不支持该档位就不进内核
+    // (否则 session/setThinkingLevel 抛「does not support reasoning effort」,如 dsh 的
+    // deepseek-v4-flash 无 high)。集中在这一处:prompt 的 ensureForSend 与 dsh 补发都经此。
+    // pi 走 extensions 面(全局枚举、不按模型)→ 无 thinking.getThinkingLevels → 整段不进;
+    // dsh 走 thinking.getThinkingLevels(模型特定)。清单本身抛错 → 回落空 → 跳过(宁可不设档也不发坏的)。
+    const getLevels = proc.backend.capabilities.thinking?.getThinkingLevels;
+    if (getLevels) {
+      const levels = await getLevels().catch((): string[] => []);
+      if (!levels.includes(level)) {
+        console.warn(`[session-store] 思考档位 ${level} 不在当前模型清单(${levels.join(",") || "无"})，跳过`);
+        return; // 不进内核、不写 pref(模型用握手默认档)
+      }
+    }
     // 思考强度是契约意图(§atomic-send):dsh 无此面经 AbstractBackend 缺面默认抛错,不再静默吞。
     // 差量执行同 setModel:进程已持目标档位时同值 RPC 是纯噪声(内核落
     // thinking_level_change 分隔线),跳过;快照缺失(实况未知)回落为必发。

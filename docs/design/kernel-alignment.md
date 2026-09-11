@@ -134,7 +134,7 @@ export abstract class AbstractBackend implements BaseBackend {
 - **阶段 A（基类落地，低风险）**：抽 `AbstractBackend`，`PiBackend`/`DshBackend` 改继承，删 dsh 的两份重复抛错。验收：typecheck + 既有 403 测试 + build 全绿，行为零变化。
 - **阶段 B（启用现成 cordis 插件拉平）**：`DEFAULT_CORDIS_YAML` 默认启用 `dsh-subagent`、`dsh-compaction-basic`，把「子代理 / 压缩」在 dsh 下拉平到 pi 同级。验收：dsh 会话能跑子代理、能压缩。
 - **阶段 C（补面 `steer` / `$bus`，视需求）**：给 dsh 写 `dsh-steer`（多路并发）或 `dsh-bus`（会话总线）cordis 插件，拉平 pi 的专属能力；拉不平的（`onExtensionUI`、思考档位）走显式降级。验收：壳插件在 dsh 下不出现 pi 专属入口、不静默失败。
-- **阶段 D（`PiBackendExtensions` / `DshConfigApi` 接口收尾）**：把 `session-store` 的 `import type { PiBackend }` 换成只 import `PiBackendExtensions` 接口，`MainContext.dshConfigSource` 换成 `DshConfigApi` 接口（`kernel-layer.md` §7 的剩余演进项）。
+- **阶段 D（`BackendExtensions` / `DshConfigApi` 接口收尾）**：把 `session-store` 的 `import type { PiBackend }` 换成只 import `BackendExtensions` 接口，`MainContext.dshConfigSource` 换成 `DshConfigApi` 接口（`kernel-layer.md` §7 的剩余演进项）。
 
 ## 7. 验收
 

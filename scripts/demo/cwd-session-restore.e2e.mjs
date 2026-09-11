@@ -116,6 +116,10 @@ const openSessionRow = async (page, name, timeout = 20000) => {
   await clickEl(page, "[data-session-path]", name);
 };
 
+/** 左栏会话列表里是否还有标题含该名字的行(切项目后旧项目的行必须消失)。 */
+const hasRow = async (page, name) =>
+  page.evaluate((n) => [...document.querySelectorAll("[data-session-path]")].some((el) => (el.textContent || "").includes(n)), name);
+
 let app = null;
 try {
   // ── 第一段:真实点击串(项目切换 + 恢复) ──
@@ -126,6 +130,27 @@ try {
 
   await page.waitForSelector("[data-timeline-composer]", { timeout: 30000 });
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 25000 });
+
+  // 探针锚点守卫(item 3「DOM 组装是否混乱」):e2e 探针必须能靠稳定锚定位,而不是按文本/子串猜。
+  // 此前 project 行只有 title(绝对路径)、composer 模型/档位钮无锚,#19 的复现脚本正因
+  // found:false 而误判「现象不存在」——纪律见 skills §10.3。
+  const anchors = await page.evaluate(() => {
+    const proj = [...document.querySelectorAll("[data-project-path]")].map((e) => e.getAttribute("data-project-path"));
+    const modelEl = document.querySelector("[data-composer-model]");
+    const thinkEl = document.querySelector("[data-composer-thinking]");
+    return {
+      projectRows: proj,
+      modelAnchor: modelEl ? modelEl.getAttribute("data-composer-model") : null,
+      thinkingPresent: thinkEl !== null,
+    };
+  });
+  ok(anchors.projectRows.length >= 2, `项目行有 data-project-path 锚(实际 ${anchors.projectRows.length} 行)`);
+  ok(anchors.projectRows.includes(dirA) && anchors.projectRows.includes(dirB), "锚值 = 项目绝对路径(可按 cwd 精确点选,不必拼 title)");
+  ok(anchors.modelAnchor !== null, `composer 模型选择器有 data-composer-model 锚(值「${anchors.modelAnchor}」)`);
+  // 档位控件是**条件渲染**(`levels.length > 0` 才画):未起内核 → 无清单 → 缺席是正确行为,
+  // 而「缺席」本身就是「该内核没有档位」的可断言信号。**正值断言**(有清单 → 锚在且带值)
+  // 落在起内核的 e2e(dsh-smoke)里——此处不写恒真断言(那等于没断言)。
+
   await shot(page, "cold-start-a-no-memory");
 
   // A) 首次访问 A(无记忆)→ 新会话壳:两个种子会话都没被打开
@@ -134,6 +159,11 @@ try {
   // B) 切到 B(无记忆 → 新会话)→ 打开 B 的会话 → 切回 A → 打开 A 的会话
   await switchTo(page, dirB);
   await waitForDomIdle(page, { quietMs: 700, timeoutMs: 15000 });
+  // 列表必须换成 B 的会话(根因守卫):此前 GroupBlock key=g.kind+g.label 跨项目重复,
+  // React 复用实例 + dnd-kit 状态残留 → 旧项目的行不卸载,A 的会话与 B 的叠加
+  // (观感「切项目后左侧根本不刷新」)。key 带 cwd 后旧行必须消失。
+  ok(!(await hasRow(page, NAME_A)), "切到 B 后左栏不得残留 A 的会话行(旧行必须卸载)");
+  ok(await hasRow(page, NAME_B), "切到 B 后左栏出现 B 的会话行");
   await openSessionRow(page, NAME_B);
   ok(await waitMarker(page, MARK_B), "打开 B 的会话 → 内容进入时间线(记忆写入的起点)");
   await shot(page, "b-session-open");

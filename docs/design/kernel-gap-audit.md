@@ -15,7 +15,7 @@
 | G5 | dsh 显式缺面（`dsh-backend.ts`） | **3 处 throw** + 5 项能力缺口 | seed/deleteBookmark/图片 + oneshot/$bus/steer/扩展UI/思考档位 | 高（seed 阻塞跨内核切换） |
 | G6 | 插件层 pi 假设（专属 API 调用） | **6 处** | timeline 3 + renderer store 3 | 中 |
 | G7 | 内核管理 UI 不对称（pi-manager vs dsh-manager） | pi 5 文件 / dsh 1 文件 | 功能等价但实现厚度不同 | 低 |
-| G8 | 收尾项（基类 + 接口化） | 3 项 | AbstractBackend / PiBackendExtensions / DshConfigApi | 中 |
+| G8 | 收尾项（基类 + 接口化） | 3 项 | AbstractBackend / BackendExtensions / DshConfigApi | 中 |
 
 ## 2. G1 壳契约层：pi 形状 API（21 个）
 
@@ -40,7 +40,7 @@
 - **`asPi(proc)` 调用 21 处**，覆盖约 13 种 pi 专属方法：`steer` / `followUp` / `abortRetry` / `cycleModel` / `cycleThinkingLevel` / `setThinkingLevel` / `setSessionName` / `compact`（经 `piSend`）/ `getSessionStats` / `getLastAssistantText` / `abortBash` / `sendExtensionUIResponse` / `sendMessage(streamingBehavior)`。
 - **`kernel === "pi" / "dsh"` 判断 9 处**（行 297 / 563 / 576 / 593 / 855 / 886 / 1024 / 1205 / 1382），其中 6 处是 pi 专属通道绑定与能力分发，3 处是 dsh 分支（test/模型测试）。
 
-- **缺口**：这些分支是「壳漏内核身份」的实据（`multi-kernel-shell.md` §5.7）。理想是换成能力接口——`asPi` 返回 `PiBackendExtensions`（而非 `import type { PiBackend }` 具体类），pi 专属通道经 `backend.capabilities` 探测而非 `kernel === "pi"` 硬判断。
+- **缺口**：这些分支是「壳漏内核身份」的实据（`multi-kernel-shell.md` §5.7）。理想是换成能力接口——`asPi` 返回 `BackendExtensions`（而非 `import type { PiBackend }` 具体类），pi 专属通道经 `backend.capabilities` 探测而非 `kernel === "pi"` 硬判断。
 
 - **switchKernel 的两个既有缺口**（`session-store.ts` 的 `switchKernel`）：① 切内核后新后端**不重新注入 system prompt**（`factory.create({ cwd, agentDir, kernel })` 没传 `systemPromptPaths`，角色卡/系统提示在切换后丢失）；② 会话头 `kernel` 归属重绑未完成（`boundSessionPath` 重绑了，会话头里的 `custom-my-harness-desktop.kernel` 未同步）。
 
@@ -89,13 +89,13 @@
 ## 9. G8 收尾项（需要修改的）
 
 1. **`AbstractBackend` 抽象基类**（`kernel-alignment.md` §5）：抽基类承载缺面默认，`PiBackend`/`DshBackend` 改继承，删 dsh 的 `deleteBookmark`/`seed` 重复抛错。
-2. **`PiBackendExtensions` 接口**：`session-store.ts` 的 `import type { PiBackend }` 换成只 import 接口，`asPi` 返回接口类型。
+2. **`BackendExtensions` 接口**：`session-store.ts` 的 `import type { PiBackend }` 换成只 import 接口，`asPi` 返回接口类型。
 3. **`DshConfigApi` 接口**：`MainContext.dshConfigSource: DshConfigSource` 换成接口，`DshConfigSource implements`。
 4. **switchKernel 补两个缺口**（§3）：system prompt 重注入 + 会话头 kernel 重绑。
 
 ## 10. 优先级建议
 
 - **P0（阻塞性）**：dsh `seed`（不补则跨内核切换 pi→dsh 恒失败）；switchKernel 的 system prompt 重注入。
-- **P1（高）**：`AbstractBackend` 基类 + `PiBackendExtensions` 接口（把 G2 的 21 处 `asPi` + 9 处 kernel 判断收敛）；G1 的 21 个 pi 形状 API 拆出 `SessionsApi`。
+- **P1（高）**：`AbstractBackend` 基类 + `BackendExtensions` 接口（把 G2 的 21 处 `asPi` + 9 处 kernel 判断收敛）；G1 的 21 个 pi 形状 API 拆出 `SessionsApi`。
 - **P2（中）**：dsh `deleteBookmark`/图片输入；启用现成 cordis 插件拉平子代理/压缩（`kernel-alignment.md` §6 阶段 B）；`DshConfigApi` 接口。
 - **P3（低）**：`steer`/`$bus`/`onExtensionUI` 的补面或显式降级；内核管理 UI 三页抽 base + 继承（G7，`kernel-design-spec.md` §12.4/§12.5/§12.6）；`llm:oneshot` 的 dsh 补面或降级。

@@ -1,5 +1,8 @@
 # pi 进程预热：把就绪从发送路径提前到上下文设定
 
+> 📌 **现状已核,无需标记**：本文提议的 pi 进程预热**尚未落地**（`src/server/kernel/pi/` 下没有任何预热实现），
+> 所以 §1.1「现状：懒启动把就绪成本压在首消息」**现在仍然是真的**。
+
 > **术语约定**：本文档涉及几个核心概念，先一次性交代：
 >
 > - **pi 进程**（本文简称 pi）：一个独立子进程，`spawn("node", [cli.js, "--mode", "rpc"])` 起来，经 stdin/stdout 收发 JSONL 消息。它是 pi 底座（`@earendil-works/pi-coding-agent`，一个开源 AI coding agent）的运行实例——my-harness-desktop 不直接跑 AI 模型，而是驱动 pi 底座子进程。会话是文件，进程是按需的临时工——每会话一进程，多会话多进程并存。

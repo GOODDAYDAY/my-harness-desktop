@@ -4,7 +4,7 @@
 // 旧 applyEvent 的内容拼装/id 水合/文本相亲全部退役——锚点身份由中立 entryId 结构保证。
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  applyOverlayEvent, mergeMirrorWithOverlay, applySnapshot, useSessionStore, initSessionStore, hydrateSessionStart,
+  applyOverlayEvent, mergeMirrorWithOverlay, applySnapshot, useSessionStore, initSessionStore, hydrateSessionStart, refreshThinkingLevels,
 } from "./session-store";
 import { useUiStore } from "./ui-store";
 import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent, type SessionModelPrefs } from "@my-harness-desktop/shared";
@@ -615,5 +615,22 @@ describe("切项目:记忆上次会话 + 恢复(不再无条件新会话)", () =
     expect(ui.currentSessionPath).toBeNull();
     expect(ui.currentNeutralSessionId).toBeNull();
     expect(ui.sessionTitle).toBeNull();
+  });
+});
+
+describe("refreshThinkingLevels → 档位清单跟着 session 的内核走(3:空清单置空,不串味)", () => {
+  it("内核回空清单 → thinkingLevels 置空(非保留上一个内核的档位)", async () => {
+    vi.stubGlobal("window", {
+      kernel: { sessions: { pi: { getThinkingLevels: async () => [] } } },
+    });
+    // 前一个内核残留三档 + 当前会话有 thinking 面
+    useSessionStore.setState({
+      capabilities: { kernel: "dsh", locked: false, extension: false, thinking: true },
+      thinkingLevels: ["off", "low", "high"],
+    });
+    refreshThinkingLevels();
+    await new Promise((r) => setTimeout(r, 0));
+    // 空清单是「该内核没有档位」的如实表达 → 置空(此前 `ls.length > 0` 会让旧值留着)
+    expect(useSessionStore.getState().thinkingLevels).toEqual([]);
   });
 });

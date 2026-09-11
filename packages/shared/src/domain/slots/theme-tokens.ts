@@ -1,6 +1,8 @@
 // 主题 token 清单 —— 圆心拥有的稳定视觉契约。
 //
-// 依据 docs/plugins/06-plugin-theme.md §3、§4.1、§870。
+// 依据 docs/plugins/manager/theme-manager.md（旧编号系列 `06-plugin-theme.md` 已随
+// docs/plugins/ 重组退役,theme-manager 是同一插件现在的文档;节号 §3/§4.1 是**旧编号**,按名查现行小节）。
+// (原还写了 `§870`,显系笔误,已删。)
 // core 在此定义 token key 清单与默认值,主题插件(plugin.json contributes.themes)
 // 给 key 填值;core 渲染时只认这些 key、不内嵌任何视觉常量。
 //

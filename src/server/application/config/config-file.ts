@@ -7,7 +7,7 @@
 // withDirLock 是各 store 共用的"锁目录 → fn → 释放"原语(消除 5 处重复 lockfile 模板)。
 // appendJsonlLine 是 JSONL 追加原语(同一把目录锁,尾字节补换行),服务 session 文件等
 // append-only 文件;条目形状是内容层的事,原语中性(设计:docs/design/session-jsonl-append.md)。
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { appendFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import * as lockfile from "proper-lockfile";
@@ -41,6 +41,31 @@ export function readJsonFile(absPath: string): Record<string, unknown> {
   }
 }
 
+/**
+ * deep 合并前的读取:**区分"不存在"与"损坏"**。
+ *
+ * 为什么不能直接用 `readJsonFile`:`readJsonFile` 把"损坏"和"不存在"都归成 `{}`——对**只读**是对的
+ * (健壮),但 deep 合并是**读-改-写**:文件损坏时读回 `{}`、合并后写回,就会把原文件里**其余键整段抹掉**
+ * 且无任何告警。实测可达路径:`pi-bundled-skills` 用 `deep` 写 `~/.pi/agent/settings.json`——
+ * 一旦该文件损坏,pi 自己的设置会被清空。所以这里在写回前**先把损坏文件原样备份**,
+ * 让"损坏"这件事可恢复、可见;**不改任何调用方的语义**(仍然按 `{}` 继续合并)。
+ */
+function readJsonFileForDeepMerge(absPath: string): Record<string, unknown> {
+  if (!existsSync(absPath)) return {};   // 不存在 → 空,正常路径,不备份
+  try {
+    return JSON.parse(readFileSync(absPath, "utf-8")) as Record<string, unknown>;
+  } catch {
+    const backup = `${absPath}.corrupt-${Date.now()}`;
+    try {
+      copyFileSync(absPath, backup);
+      console.warn(`[config-file] ${absPath} 解析失败;已原样备份到 ${backup},本次按空对象继续 deep 合并`);
+    } catch {
+      console.warn(`[config-file] ${absPath} 解析失败,且备份未成功(将以空对象继续 deep 合并,原内容可能丢失)`);
+    }
+    return {};
+  }
+}
+
 /** 读白名单内文件为 base64(不存在返回 null)。banner 等二进制资源的通用读取原语,与 readJsonFile 并列。 */
 export function readBinaryFile(absPath: string): string | null {
   if (!existsSync(absPath)) return null;
@@ -65,7 +90,7 @@ export async function writeJsonFile(
   const dir = dirname(absPath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   await withDirLock(dir, async () => {
-    const toWrite = mergeMode === "deep" ? deepMergeJson(readJsonFile(absPath), data) : data;
+    const toWrite = mergeMode === "deep" ? deepMergeJson(readJsonFileForDeepMerge(absPath), data) : data;
     await writeFile(absPath, JSON.stringify(toWrite, null, 2), "utf-8");
   });
 }

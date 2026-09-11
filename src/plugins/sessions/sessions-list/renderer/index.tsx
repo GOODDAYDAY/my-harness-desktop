@@ -495,7 +495,12 @@ export function SessionsSection(): React.ReactNode {
           .filter((s) => !removing.has(s.path));
         return (
         <GroupBlock
-          key={g.kind + g.label}
+          // key 必须带 cwd(根因修复):分组键 g.kind+g.label 跨项目高度重复(每个项目都有
+          // 「今天」组),切项目时 React 复用同一 GroupBlock 实例 + dnd-kit SortableContext/
+          // useSortable 的内部状态残留 → 旧项目的 SortableRow 不卸载,列表里两个目录的会话
+          // 叠加(观感是「切项目后左侧根本不刷新」)。带 cwd 后切项目即整体重挂,行的身份
+          // 与它的归属项目绑定。
+          key={`${currentCwd}:${g.kind}${g.label}`}
           group={g}
           orderedItems={orderedItems}
           onReorder={(paths) => setGroupOrder(g.groupId, paths)}

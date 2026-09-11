@@ -126,6 +126,10 @@ flowchart TD
 
 ### 4.1 现状与根因
 
+> ⚠ **本文的「现状」已过期**：§4.1 说的"`sessions.list` 四个消费方各有各的拉取和刷新逻辑"已被**收编框架**取代——
+> `sessions-list` 的源码注释现写着"会话元数据收编框架 store(设计 docs/design/plugin-decoupling.md §4.2)""列表重拉已收编框架"。
+> 改动前的对照保留在文中,勿当现状读。
+
 `sessions.list` 四个消费方各有各的拉取和刷新逻辑。sessions-list 最完整——它订阅 kernel 事件流（`onKernelEvent`，sessionStart/messageEnd/agentSettled 触发 reload），还顺手维护 phase（会话工作阶段，`eced5b8` 的产物）和未读增量（entryAppended 到达即推进的已读位标）。session-colors 最弱——只在 `currentCwd` 变化时拉一次存进本地 `sessionInfos` map（`renderer/index.tsx:89-95`），会话改名、新建后钉子的名字不更新，切走再切回才恢复。timeline 为取 custom 字段拉一整份 list。sub-agent 的 ports 封装里也有一份。
 
 根因是一句话：**会话元数据是框架状态（内核 session-store 持有、经 IPC 暴露），多消费方，却没进框架 store——每个插件各写一遍"拉取 + 刷新"**。这违反 CLAUDE.md §3.3"框架管通用"：同一逻辑在四个入口各写一遍，差异只在参数，该收进框架一个实现。

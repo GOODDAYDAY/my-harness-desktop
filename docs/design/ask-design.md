@@ -16,6 +16,11 @@ Anthropic / OpenAI 的消息协议里**没有"提问"这个概念**，只有 `to
 
 ### 1.2 现状的病：把"等一个 tool_result"实现成了"进程内挂起的 Promise"
 
+> ⚠ **本节「现状的病」已过期**：本文要求的"提问升级为**壳持有的持久实体**"**已落地**——契约里有
+> `answerQuestion`（`session-store.ts:1568` 经 `proc.backend.answerQuestion` 回答），且
+> `scripts/demo/ask-resume.e2e.mjs`（13 断言）实测的就是**杀内核 → 重启 → 卡片复活 → 续路作答 → 模型继续**，
+> 即"进程一死挂起点蒸发"这个病已经被治掉。本节保留作**改动前**的描述,勿当现状读。
+
 现在的实现把等待建模为**内核进程内挂起的 continuation**：pi 的 `pendingExtensionRequests`（内核 `rpc-mode.ts` 的内存 Map）、dsh 的 `waitForAnswer` 轮询循环，都住在内核进程里。进程一死，挂起点蒸发——还没走到"填 tool_result"那一步，路先没了。这是实现的偶然形态，不是协议要求的形态。
 
 ### 1.3 设计翻转：壳持有请求单，tool_result 是唯一产物

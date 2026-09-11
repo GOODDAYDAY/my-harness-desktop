@@ -80,13 +80,6 @@ HarnessSdkJsonRpcServer.prototype.handleRequest = async function (method, params
     const llm = this.ctx.get("llm");
     if (!llm) throw new Error("llm 服务不可用(无法解析思考档位)");
     const info = await llm.resolveModelInfo(provider, model);
-    // DEBUG(临时,定位后删):档位清单为空的原因定位——连设置缝服务的原始段落一起倒出来
-    try {
-      const { appendFileSync } = await import("node:fs");
-      const served = this.ctx.get("settings")?.get?.("llm-pi-ai");
-      const servedModel = served?.providers?.[provider]?.models?.find?.((m) => m?.id === model);
-      appendFileSync(join(homedir(), ".dsh", "levels-debug.log"), `${Date.now()} reasoning=${JSON.stringify(info?.reasoning ?? null)} servedModel=${JSON.stringify(servedModel ?? "NO-MODEL")}\n`);
-    } catch { /* ignore */ }
     // 无推理元数据的模型:reasoning 缺席 → 空清单(壳据此藏档位控件,显式降级,不伪造可切)。
     return { levels: (info.reasoning?.efforts ?? []).map((e) => e.id) };
   }

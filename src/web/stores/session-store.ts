@@ -201,8 +201,11 @@ export interface SessionStoreState {
   loadSessionInfos: (cwd: string) => Promise<void>;
   /** 列表行本地补丁(§neutral-storage-split §2.6):headerChanged 广播/插件写成功后调用,
    *  就地改 sessionInfos 里那一行(path 与 ns 双键同改),不再全量重拉。patch 只认
-   *  name/pinned/archived 三键(与广播 payload 契约一致)。 */
-  applyHeaderPatch: (sessionPaths: string | string[], patch: { name?: string; pinned?: boolean; archived?: boolean }) => void;
+   *  name/pinned/archived 三键(与广播 payload 契约一致);custom 是「模型域等头域变更」
+   *  的补丁口——model 域写盘只广播 neutralChange(kind:header,见 neutral-mirror),
+   *  不经 headerChanged,列表行的 custom 必须由此同步(否则时间线模型展示链读到陈旧
+   *  custom,发送后回落兜底模型——「发送后输入框模型没固定」的根因)。 */
+  applyHeaderPatch: (sessionPaths: string | string[], patch: { name?: string; pinned?: boolean; archived?: boolean; custom?: Record<string, unknown> }) => void;
   /** 列表行本地摘除(delete 广播/删除成功后):path 与 ns 别名键一起摘。 */
   removeSessionRows: (paths: string[]) => void;
   /** 打开历史会话:纯文件读,秒开,不启 pi。
@@ -362,14 +365,17 @@ function refreshStats(): void {
 
 /** thinkingLevels 框架唯一拉取口:快照到达/模型切换时调(档位清单随模型变)。
  *  能力探测门槛(§7.6):pi 扩展面 或 dsh 补面(dsh-thinking-level.md)任一在才拉——
- *  避免对无切档面的会话静默发一个注定失败的 RPC。空清单不覆盖——内核异常回空时保持现值,
- *  与 stats 的 catch 兜底同语义。 */
-function refreshThinkingLevels(): void {
+ *  避免对无切档面的会话静默发一个注定失败的 RPC。
+ *  清单是**内核声明的能力面**,展示必须反映**当前 session 的那个内核**:空清单就是「该内核
+ *  没有档位」的如实表达,不能用上一个内核的档位顶上(跨 session 串味——「展示不是跟着 session
+ *  走」的根因)。失败路径由 .catch 兜住(保持现值),成功返回空就该清空。此前 `ls.length > 0`
+ *  让空清单不覆盖,正是串味的来源。 */
+export function refreshThinkingLevels(): void {
   const caps = useSessionStore.getState().capabilities;
   if (!caps.extension && !caps.thinking) return;
   const gen = sessionGen;
   void window.kernel.sessions.pi.getThinkingLevels()
-    .then((ls) => { if (gen === sessionGen && ls.length > 0) useSessionStore.setState({ thinkingLevels: ls }); })
+    .then((ls) => { if (gen === sessionGen) useSessionStore.setState({ thinkingLevels: ls }); })
     .catch(() => { /* 内核中途退出/补面缺位:保持现状,下次快照/切模型再试 */ });
 }
 
@@ -425,6 +431,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       if (patch.name !== undefined) next.name = patch.name;
       if (patch.pinned !== undefined) next.pinned = patch.pinned;
       if (patch.archived !== undefined) next.archived = patch.archived;
+      if (patch.custom !== undefined) next.custom = patch.custom;
       if (!map) map = { ...infos };
       map[p] = next;
       if (cur.neutralSessionId) map[cur.neutralSessionId] = next;
@@ -806,6 +813,8 @@ export function initSessionStore(): void {
   // 中立层镜像变化 → 重算合并视图;活跃分支切换(整树换内容)→ 递增 syncNonce
   // 驱动 timeline Virtuoso 重挂(与 openSession 的 openNonce 同语义)。
   let lastLineage = useNeutralMirror.getState().activeLineageId;
+  // 镜像头域引用(变了才同步 sessionInfos,避免每条 entry 变更都重写列表行)。
+  let lastMirrorHeader = useNeutralMirror.getState().session?.header ?? null;
   useNeutralMirror.subscribe((m) => {
     if (m.activeLineageId !== lastLineage) {
       const wasNull = lastLineage === null;
@@ -819,6 +828,25 @@ export function initSessionStore(): void {
         useSessionStore.setState((s) => ({ syncNonce: s.syncNonce + 1 }));
       }
     }
+    // **关键路径先跑**:消息重算是渲染命脉,排在列表行同步之前——后者会 setState 触发渲染,
+    // 让命脉依赖一个非命脉副作用是不必要的耦合。注意:这**不是**「重开后空时间线」的修复
+    // ——把本文件回退到 HEAD 版本后该症状同样间歇复现(已隔离实测),属既有缺陷,见 skills §10.3 第 3 条。
     recomputeMessages();
+    // 头域同步(根因修复):model 域(provider/modelId/thinkingLevel/kernel)写盘只广播
+    // neutralChange(kind:header)进镜像,不经 headerChanged——sessionInfos 列表行的 custom
+    // 因此陈旧,时间线模型展示链(headerPrefs = parseSessionModelPrefs(sessionInfos[ns].custom))
+    // 在发送后回落兜底模型(「发送后输入框模型没固定」的根因)。镜像头域是当前会话的新鲜真相,
+    // 引用一变即补丁到 sessionInfos(按 ns 键,与 loadSessionInfos 的双键同源)。
+    const h = m.session?.header ?? null;
+    if (h !== lastMirrorHeader) {
+      lastMirrorHeader = h;
+      if (h && m.ns) {
+        try {
+          useSessionStore.getState().applyHeaderPatch(m.ns, {
+            name: h.name, pinned: h.pinned, archived: h.archived, custom: h.custom,
+          });
+        } catch { /* 列表行同步失败不影响会话读路径 */ }
+      }
+    }
   });
 }

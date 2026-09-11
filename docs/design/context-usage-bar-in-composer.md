@@ -4,6 +4,10 @@
 
 ### 1.1 现状：统计行整体挂在窗口右上角
 
+> ⚠ **本节「现状」已过期**：本文提议的"统计行进 composer"**已落地**——`context-usage-bar.tsx` 现在挂在
+> composer 中段的 **`composerStats` 槽**（该文件自己写着"当前经 composerStats 槽挂 composer 中段思考控件右侧"），
+> 组件本身已做到零 props / 位置无关。"挂在窗口右上角"是**改动前**的样子,勿当现状读。
+
 titlebar 槽贡献组件 `SessionStatsTitlebar`（`src/plugins/sessions/timeline/renderer/stats-titlebar.tsx`）在窗口右上角渲染一行统计：**上下文比例条**（主视觉，`▬▬▬░░ 72%`）+ **次级统计**（↑上传 / ↓下载 / ⚡TPS / Σ总消耗）。数据经 `useSessionStore` 订阅——main 进程 session-store 的 renderer 侧缓存，双源（文件聚合基线 + 活会话 RPC 真值），store 更新即重渲，组件零拉取、零刷新时机。
 
 ### 1.2 诉求：只搬上下文条这一个元素

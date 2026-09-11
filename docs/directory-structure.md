@@ -128,7 +128,7 @@ packages/shared/
 `domain/` 是圆心。装的东西只有两类：**纯类型**（契约、事件、配置形状）和**纯函数**（无 IO、无环境、无状态）。没有任何一个文件 import 外部包。逐文件过一遍：
 
 - **`kernel.ts`**（内核身份单源，最内层原子）：`KernelId = "pi" | "dsh"` + `KERNEL_IDS` 常量 + `KernelLogo` 接口。全仓唯一一处能出现 `"pi" | "dsh"` 字面量联合的地方。它零依赖——不 import 任何 domain 内外的类型。加第三个内核 = 这里加一个字面量，编译器逼着补全所有 `switch(kernel)` 消费处。
-- **`backend.ts`**（中立契约核心）：`BaseBackend` 接口（14 必实现 + 4 缺面默认 `listTools?`/`answerQuestion?`/`continue?`/`setThinkingLevel` + 接口可选 `resume?` + 能力探测 `capabilities`）、`BackendFactory`、`BackendCreateOptions`、`SessionCatalog`、`SessionCatalogFactory`、`KernelModelSource`、`Lineage`/`LineageTree`/`LineageFork`、`Anchor`（= `NeutralAnchor` re-export）、`SeedOptions`、`DshCapabilities`、纯函数 `projectLineageTree`。这是壳和内核之间的「最小意图」集合——消息/中断/模型/分支/会话标识/流式事件六条核心，之上叠命名、续跑、seed、工具发现、提问、能力探测。
+- **`backend.ts`**（中立契约核心）：`BaseBackend` 接口（14 必实现 + 4 缺面默认 `listTools?`/`answerQuestion?`/`continue?`/`setThinkingLevel` + 接口可选 `resume?` + 能力探测 `capabilities`）、`BackendFactory`、`BackendCreateOptions`、`SessionCatalog`、`SessionCatalogFactory`、`KernelModelSource`、`Lineage`/`LineageTree`/`LineageFork`、`Anchor`（= `NeutralAnchor` re-export）、`SeedOptions`、`ThinkingCapabilities`、纯函数 `projectLineageTree`。这是壳和内核之间的「最小意图」集合——消息/中断/模型/分支/会话标识/流式事件六条核心，之上叠命名、续跑、seed、工具发现、提问、能力探测。
 - **`session-neutral.ts`**（中立会话坐标系）：`NeutralSession` / `NeutralAnchor` / `NeutralEntry` / `NeutralSessionHeader` + 纯函数（`neutralEntryId`、`lineageContent`、拓扑排序 `sortLineagesTopologically`）。这是「中立契约的另一半」：把消息/事件/树形投影都落到内核无关的坐标系。
 - **`sessions.ts`**（会话能力契约）：`SessionsApi` / `MessagingApi` / `ModelApi` / `SessionTreeApi` / `PiExtensions` / `BashApi` 等壳暴露给插件的 API 形状。圆心只定义接口，实现归 `application/sessions/session-store`（依赖倒置）。
 - **`kernel-manager.ts`**（内核版本管理契约）：`KernelSpec` 纯数据（包名/路径段/cli.js 位置）+ `RegistryVersions` + `CustomCliResolution`。pi/dsh 共用同一套版本管理机制，差异只是「包名 + 安装路径段 + cli.js 位置」这几条数据。
@@ -271,7 +271,7 @@ src/server/
 
 **`kernel/pi/`（pi 内核实现）**：
 
-- `backend/pi-backend.ts`：`PiBackend extends AbstractBackend` + `implements PiBackendExtensions`——BaseBackend 的 pi 实现。
+- `backend/pi-backend.ts`：`PiBackend extends AbstractBackend` + `implements BackendExtensions`——BaseBackend 的 pi 实现。
 - `backend/pi-catalog.ts`：`PiSessionCatalog implements SessionCatalog`——pi 的跨会话目录/CRUD。
 - `backend/correlator.ts`：pi 事件相关性处理。
 - `backend/rpc-adapter.ts`：RPC 适配——构造命令对象但不 spawn 进程（构造与执行分离）。

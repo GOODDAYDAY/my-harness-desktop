@@ -1,5 +1,8 @@
 # pi 内核 goal 与 ask 能力移植设计（DSH 蓝本 → pi 扩展 + 桌面 UI 接入）
 
+> 📌 **现状已核,无需标记**：本节「现状盘点」盘的是 **DSH 的 goal/ask 能力**（移植蓝本的来源,
+> `packages/goal/` 下四个插件）——同样是**上游形状**,不是本仓现状。
+
 > **修订记录**：
 >
 > **2026-08-19 首版**：确立"DSH 是蓝本、pi 侧抄成扩展、桌面侧只做 UI 接入"的总纲。本文把 DSH 的 goal（`tool-goal` + `goal` + `goal-round-driver` + `command-goal`）与 ask（`tool-ask-user` + `user-questions`）两套能力逐模块拆解，落成 pi 扩展的抄写映射表与桌面壳的接入点清单。决策口径：ask 的 `multi_select`/`custom` 先降级（1A）、goal 持久化走会话头行快照（2A）、goal 不含 auto 续跑（3A）——三处均为"不动 pi 内核"的完整可交付形态，未拍板处已在本文明文标出待确认。

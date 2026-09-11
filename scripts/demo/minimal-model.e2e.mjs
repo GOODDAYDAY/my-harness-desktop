@@ -85,6 +85,13 @@ try {
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
   await page.mouse.click(tabRect.x, tabRect.y);
+  // 必须等列表真的换成 minimal 的:点 TAB → Radix 状态更新 → 重渲染是**异步**的,
+  // 立刻取样会读到**上一个内核**的列表(实测「Mock 未找到」的假失败正是这么来的:
+  // dump 显示 tabs 有 minimal 但 items 全是 pi 的)。纪律见 skills §10.3.1:等待谓词 W 必须覆盖断言谓词 X。
+  await page.waitForFunction(
+    () => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes("Mock")),
+    { timeout: 6000, polling: 200 },
+  ).catch(() => {});
   const itemRect = await page.evaluate(() => {
     const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => (el.textContent || "").includes("Mock") && el.getBoundingClientRect().width > 0);
     if (!item) return null;

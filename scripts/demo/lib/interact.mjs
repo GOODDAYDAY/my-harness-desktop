@@ -37,3 +37,56 @@ export async function waitAgent(page, stopTitle, { appearMs = 45000, doneMs = 18
   await page.waitForFunction((s) => !document.querySelector(s), { timeout: doneMs }, sel);
   await waitForDomIdle(page);
 }
+
+/** 可信点击:按**文本**找元素并算中心点,再用 `page.mouse.click` 真点(而非合成 dispatchEvent)。
+ *  为什么必须有它:合成 `MouseEvent` 对 Radix/React 的行点击**不可靠**——本仓实测两次翻车
+ *  (`session-single-source` 的会话行、`fork-cross-kernel` 的会话行),而同一写法在普通按钮上又
+ *  经常没事,于是它成了"潜在风险"而非"必然缺陷"(全仓 19 个 e2e / ~60 处用了合成点击)。
+ *  收敛成一个助手,才能**按需增量迁移并逐个验证**,而不是批量替换 60 处、每处都要重新验证。
+ *  @returns 是否找到并点了(找不到返回 false,调用方据此判失败,不静默吞) */
+export async function clickByText(page, text, { exact = true, nth = -1, timeoutMs = 6000, settle = null, scope = "body *" } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    // `scope` 必须可指定:会话行有专属锚点(`[data-session-path]`),而 `body *` 会匹配到**消息气泡**
+    // 等同样含该文本的元素——实测漏改一处差点点错(原代码就是限定在行锚点内找的)。
+    const pt = await page.evaluate(({ t, ex, n, sel }) => {
+      const hit = [...document.querySelectorAll(sel)].filter((e) => {
+        const s = (e.textContent || "").trim();
+        const okText = ex ? s === t : s.includes(t);
+        return okText && e.children.length < 6 && e.getBoundingClientRect().width > 0;
+      });
+      const el = n < 0 ? hit[hit.length - 1] : hit[n];
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, { t: text, ex: exact, n: nth, sel: scope }).catch(() => null);
+    if (pt) {
+      await page.mouse.click(pt.x, pt.y);
+      if (settle) await settle();
+      return true;
+    }
+    if (Date.now() > deadline) return false;
+    await sleep(150);
+  }
+}
+
+/** 可信点击:按**选择器**取第一个可见元素再真点(行/项点击的通用形态)。 */
+export async function clickBySelector(page, selector, { timeoutMs = 6000, settle = null } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const pt = await page.evaluate((sel) => {
+      const el = [...document.querySelectorAll(sel)].find((e) => e.getBoundingClientRect().width > 0);
+      if (!el) return null;
+      el.scrollIntoView({ block: "center" });
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, selector).catch(() => null);
+    if (pt) {
+      await page.mouse.click(pt.x, pt.y);
+      if (settle) await settle();
+      return true;
+    }
+    if (Date.now() > deadline) return false;
+    await sleep(150);
+  }
+}

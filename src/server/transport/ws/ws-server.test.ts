@@ -69,14 +69,42 @@ function nextMessage(ws: WebSocket): Promise<any> {
   });
 }
 
+/** 等到**满足条件**的那条消息 —— 期间可能插入无关推送(实测:连接鉴权成功后服务端还会推一条
+ *  `remote:connectionsChanged`)。一次性 `nextMessage` 会取到无关那条,断言随即失败——
+ *  这是**偶发**(取决于两条推送的到达次序),本文件第 3 行的稳定性注记记的就是它。
+ *  只等"我要的那条",与到达次序无关。 */
+/** "是一条回复,不是无关推送"。插队的**永远是 push**(实测:`remote:connectionsChanged`),
+ *  所以"等下一条非 push 消息"对本文件所有"等具体回复"的断言都成立,且与到达次序无关。 */
+const isReply = (m: any): boolean => m.kind !== "push";
+
+function nextMessageWhere(ws: WebSocket, pred: (m: any) => boolean): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      ws.off("message", onMsg);
+      ws.off("close", onClose);
+    };
+    const onMsg = (d: unknown): void => {
+      const m = JSON.parse(String(d));
+      if (!pred(m)) return;                       // 无关推送:继续等,不当作结果
+      cleanup();
+      resolve(m);
+    };
+    const onClose = (): void => { cleanup(); reject(new Error("ws closed before matching message")); };
+    const timer = setTimeout(() => { cleanup(); reject(new Error("nextMessageWhere timeout(5s)")); }, WAIT_CAP);
+    ws.on("message", onMsg);
+    ws.on("close", onClose);
+  });
+}
+
 describe("ws-server", () => {
   it("hello 鉴权通过 → invoke echo 返回 ok 结果", async () => {
     const { url } = await startServer();
     const ws = await connect(url);
     ws.send(JSON.stringify({ kind: "hello", token: "secret" }));
-    await expect(nextMessage(ws)).resolves.toEqual({ kind: "hello", ok: true });
+    await expect(nextMessageWhere(ws, isReply)).resolves.toEqual({ kind: "hello", ok: true });
     ws.send(JSON.stringify({ kind: "invoke", id: 1, channel: "echo", args: ["hi"] }));
-    await expect(nextMessage(ws)).resolves.toEqual({ kind: "result", id: 1, ok: true, result: "hi" });
+    await expect(nextMessageWhere(ws, isReply)).resolves.toEqual({ kind: "result", id: 1, ok: true, result: "hi" });
     ws.close();
   });
 
@@ -84,7 +112,7 @@ describe("ws-server", () => {
     const { url } = await startServer();
     const ws = await connect(url);
     ws.send(JSON.stringify({ kind: "invoke", id: 2, channel: "echo", args: ["x"] }));
-    const res = await nextMessage(ws);
+    const res = await nextMessageWhere(ws, isReply);
     expect(res.ok).toBe(false);
     expect(res.error.code).toBe("AUTH_REQUIRED");
     ws.close();
@@ -94,7 +122,7 @@ describe("ws-server", () => {
     const { url } = await startServer();
     const ws = await connect(url);
     ws.send(JSON.stringify({ kind: "hello", token: "wrong" }));
-    await expect(nextMessage(ws)).resolves.toEqual({ kind: "hello", ok: false });
+    await expect(nextMessageWhere(ws, isReply)).resolves.toEqual({ kind: "hello", ok: false });
     ws.close();
   });
 
@@ -102,9 +130,12 @@ describe("ws-server", () => {
     const { url, gateway } = await startServer();
     const ws = await connect(url);
     ws.send(JSON.stringify({ kind: "hello", token: "secret" }));
-    await nextMessage(ws);
+    await nextMessageWhere(ws, isReply);
     gateway.broadcast("session:event", { type: "x" });
-    await expect(nextMessage(ws)).resolves.toEqual({ kind: "push", channel: "session:event", args: [{ type: "x" }] });
+    // 等**我要的那条**:鉴权成功后服务端还会推 remote:connectionsChanged,
+    // 用一次性 nextMessage 会偶发取到它(见 nextMessageWhere 注释)。
+    await expect(nextMessageWhere(ws, (m) => m.channel === "session:event"))
+      .resolves.toEqual({ kind: "push", channel: "session:event", args: [{ type: "x" }] });
     ws.close();
   });
 
@@ -112,7 +143,7 @@ describe("ws-server", () => {
     const { url } = await startServer({ trustLoopback: true });
     const ws = await connect(url); // 不发 hello,直接 invoke
     ws.send(JSON.stringify({ kind: "invoke", id: 3, channel: "whoami", args: [] }));
-    await expect(nextMessage(ws)).resolves.toEqual({ kind: "result", id: 3, ok: true, result: "local" });
+    await expect(nextMessageWhere(ws, isReply)).resolves.toEqual({ kind: "result", id: 3, ok: true, result: "local" });
     ws.close();
   });
 });

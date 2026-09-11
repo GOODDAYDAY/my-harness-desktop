@@ -6,6 +6,10 @@
 
 ### 0.1 现状：点「+」列表零反馈
 
+> ⚠ **本节「现状」已过期**：本文提议的乐观新建条目**已落地**——`sessions-list` 现在有
+> `showOptimistic`（`!loading && !!currentCwd && currentNeutralSessionId === null && !query`）并在列表顶部渲染
+> `NewChatRow`（`renderer/index.tsx`）。所以"点「+」列表零反馈"是**改动前**的样子,勿当现状读。
+
 `sessions-list` 的 `newSession()` 当前只做两件事：
 
 ```ts

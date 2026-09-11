@@ -621,11 +621,11 @@ desktop 起 minimal，走和 pi/dsh 同构的子进程生命周期：一个 `cre
 
 #### 7.3.1 minimal 事件和中性事件未必同形
 
-minimal 的协议事件是它自己的形状，中性事件是壳的形状，两者可能同名（minimal 可以有意把事件名取成和中性事件一致，省翻译），也可能不同名（那就翻译）。不管哪种，适配器里有一个纯函数 `translateMinimalEvent`，把 minimal 的事件对象投成中性 `SessionEvent`。这个函数是"喂线"，不是"第二套语义"——它只做形状对齐，不重新解释事件的含义。
+minimal 的协议事件是它自己的形状，中性事件是壳的形状。**实现选了"同名"那条路**：minimal 的 CLI 事件名**有意取成与中性事件一致**（`messageStart` / `messageUpdate` / `messageEnd` …），于是根本不需要字段重映射——适配器里没有 `translateMinimalEvent` 这样一个纯函数，而是 `minimal-backend.ts` 里的一个**白名单过滤**：`SESSION_EVENT_TYPES.has(e.type)` 命中的才透传给壳，其余（`pong`/`tree`/`entries`/`seeded` … 协议响应）滤掉。
 
 #### 7.3.2 翻译是喂线，不是第二套语义
 
-这条是 `kernel-design-spec.md` §16.3 的纪律，对 minimal 同样成立：翻译层的职责是"把 minimal 的 `message_update` 投成中性的 `messageUpdate`"，不是"在这里重新发明一套事件语义"。壳只认中性事件，minimal 只认自己的事件，中间这条线越薄越好。薄到什么程度是检验标准：`translateMinimalEvent` 的每个分支都只做"minimal 的某个字段填进中性的某个字段"，不出现"在这里重新计算回合状态、重新聚合消息"这类有自己语义的分支——出现了，就说明翻译层越界成了第二套语义。
+这条是 `kernel-design-spec.md` §16.3 的纪律，对 minimal 同样成立：翻译层的职责只是"让 minimal 的事件能被壳当中性事件用"，不是"在这里重新发明一套事件语义"。壳只认中性事件，minimal 只认自己的事件，中间这条线越薄越好——**薄到极点就是没有翻译层**（同名 + 白名单，本实现走的就是这条），而不是"有一个只做字段搬运的翻译函数"。检验标准随之更硬：既然连字段搬运都没有，适配器里就**不该出现任何重算回合状态、重新聚合消息**的分支；出现了，就说明这条线越界成了第二套语义。
 
 ### 7.4 会话模型映射：minimal 文件 → 中性形状
 
@@ -651,6 +651,8 @@ minimal 的协议事件是它自己的形状，中性事件是壳的形状，两
 
 ### 7.6 五个 Record 槽位逐一补全
 
+> ⚠️ **本节同 §7.5，属插件化前的历史**（`KERNEL_IDS` / 字面量联合 / Record 槽位 / 工厂路由均已退役）。现行接入见 `src/server/kernel/minimal/plugin.json` + `plugin.ts`。
+
 #### 7.6.1 logo / 模型 / 配置 / 扩展 / 版本
 
 五个槽位是 `KernelId` 联合驱动出来的 `Record<KernelId, X>`：`KERNEL_LOGOS`（内核 logo）、`kernelModels`（模型管理 API，类型 `KernelModelsRegistry`）、`kernelConfig`（原生配置 API）、`kernelExtensions`（扩展源）、`kernels`（web 侧版本管理 `KernelVersionApi`）。minimal 要在这五处各交一个实现——前三处是诚实实现，后两处是诚实桩，见 7.9。
@@ -661,6 +663,8 @@ minimal 的协议事件是它自己的形状，中性事件是壳的形状，两
 
 ### 7.7 工厂路由
 
+> ⚠️ **本节同 §7.5，属插件化前的历史**（`KERNEL_IDS` / 字面量联合 / Record 槽位 / 工厂路由均已退役）。现行接入见 `src/server/kernel/minimal/plugin.json` + `plugin.ts`。
+
 #### 7.7.1 createMinimalBackend / createMinimalCatalog
 
 装配层加两个工厂：`createMinimalBackend(opts)`（拼 minimal 的 spawn 参数 + 建 transport + 建 `MinimalBackend`）和 `createMinimalCatalog(agentDir)`（建 `MinimalCatalog`）。它们和 `createPiBackend`/`createDshBackend`、`createPiCatalog`/`createDshCatalog` 并列，注册进 `kernel-factories.ts`，由 bootstrap 组装。
@@ -670,6 +674,8 @@ minimal 的协议事件是它自己的形状，中性事件是壳的形状，两
 这是接入 minimal 时暴露的一处真问题（§7.8 细讲）：现在的 `baseBackendFactory.create` 写的是 `if (opts.kernel !== "dsh") return createPiBackend(...)`，`sessionCatalogFactory.create` 写的是 `kernel === "dsh" ? ... : createPiCatalog(...)`。两个内核时"不是 dsh 就是 pi"碰巧成立，三个内核时 minimal 会被静默当成 pi——路由必须改成显式三分支：`minimal → createMinimal*`、`dsh → createDsh*`、`pi → createPi*`。这是编译器抓不住的逻辑分支，只能靠"加第三个内核"这个动作逼人发现。
 
 ### 7.8 三处字面量谓词漂移
+
+> ⚠️ **本节同 §7.5，属插件化前的历史**（`KERNEL_IDS` / 字面量联合 / Record 槽位 / 工厂路由均已退役）。现行接入见 `src/server/kernel/minimal/plugin.json` + `plugin.ts`。
 
 #### 7.8.1 isKernelId / resolveSessionKernel / 工厂路由
 
@@ -756,6 +762,11 @@ minimal 切到 pi，如果当前档位引用（壳的中立概念，§8.4.1 的 
 ### 8.5 门禁与风险
 
 #### 8.5.1 switchKernelEnabled = false 的现状
+
+> ⚠ **本节已过期（最直白的一例：`false` → `true`）**：§8.5.2 说的"门禁必须翻"**已经翻了**——
+> `session-store.ts:196` 现在是 `private switchKernelEnabled = true;`（第 1281 行的 `if (!this.switchKernelEnabled) throw ...` 仍在，
+> 但已不再触发）。运行期切换现在可跑 `pi ↔ dsh ↔ minimal`，由 `stream-switch-session` / `fork-cross-kernel` 等 e2e 覆盖。
+> 本节保留作**门禁关闭期**的记录,勿当现状读。
 
 现在的 `session-store.ts` 里有个 `switchKernelEnabled = false` 的门禁，`switchKernel` 入口直接抛"跨内核切换暂未启用"。这个门禁是历史遗留的谨慎——七步编排里的 seed 投影、模型中立化、非对称生命周期当年还没完全验证，于是先关掉。minimal 要真正参与运行期切换，这个门禁必须翻。
 

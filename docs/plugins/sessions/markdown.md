@@ -58,7 +58,7 @@
   - `StreamingCaret()`（第 4–21 行）：`<span class="stream-caret" aria-hidden>`，内联样式写死 `width: 1.5px`、`height: 1.05em`、`background: color-mix(in srgb, var(--color-fg) 50%, transparent)`、`borderRadius: 1px`、`transform: translateY(2px)`——**静态竖线，不闪烁**（头注「与 message-blocks 同规格」）。
   - `useDebouncedValue<T>(value, delayMs = 50)`（第 24–31 行）：`useState` 存 debounced 值 + `useEffect` 里 `setTimeout(setDebounced, delayMs)`，清理函数 `clearTimeout` 防泄漏，依赖 `[value, delayMs]`。
 - **已知重复**：这两个件是 `src/plugins/sessions/message-blocks/renderer/stream-text-reveal.tsx` 里 `StreamingCaret`（第 19–36 行）和 `useDebouncedValue`（第 87–96 行）的**逐字节拷贝**——`stream-text-reveal.tsx` 的头注第 14 行还写着「markdown 富文本由 markdown.tsx 处理」，但 markdown 迁出时把流式件自持了一份，没有从 message-blocks import。这是「同一逻辑多处各写」的既有重复，写新代码时不应再复制第三份；严格看应把这两个流式件上提到 `packages/react` 让两边共用，但当前仓库里它们是两份平行实现。
-- 防抖根因（抄自 stream-text-reveal.tsx 第 83–85 行注释）：高频 `message_update` 每 token 触发一次，防抖到 50ms 攒批后重渲染，避免每个 token 都跑一次 markdown 解析 + highlight。50ms 是设计锚定值（`docs/design-style-guide.md` §2.3.4）。
+- 防抖根因（抄自 stream-text-reveal.tsx 第 83–85 行注释）：高频 `message_update` 每 token 触发一次，防抖到 50ms 攒批后重渲染，避免每个 token 都跑一次 markdown 解析 + highlight。50ms 是设计锚定值（`docs/design/timeline-block-renderers.md`；原指向的 `docs/design-style-guide.md` 已不存在，该内容现落在本文档）。
 
 ### 3.3 `markdown-body.tsx`：GFM 渲染 + 代码块卡 + 围栏分发
 

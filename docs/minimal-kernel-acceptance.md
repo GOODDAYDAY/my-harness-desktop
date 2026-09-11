@@ -35,7 +35,7 @@
 8. 模型失败静默（error 事件被白名单过滤）
 9. 模型源脱节（ModelSource 写死 vs CLI 读真配置）
 10. 工具回环达上限 reason 缺 maxToolRounds
-11. capabilities.pi 被当文件态代理（→ fileBacked 能力位）
+11. ~~capabilities.pi 被当文件态代理~~ **（迁移已完成）**：按内核分字段的 `capabilities.pi`/`.dsh` 已退役，文件态改用中性能力位 `capabilities.fileBacked`。
 12. newSessionId 返 null 误判惰性内核（→ 文件态预生成）
 13. messageEnd 先发后写（→ 写穿先于发事件）
 14. updateHeader 写 toolConfig 但 readToolConfig 返 null（→ 反向映射）

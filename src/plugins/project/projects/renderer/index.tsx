@@ -170,6 +170,11 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={dir}
+      // 探针锚点(docs 纪律:探针的「没找到」必须与「现象不存在」可区分)。此前只有 title
+      // (绝对路径),e2e 探针按 title 查要拼完整路径、按文本查又撞基名歧义;#19 的复现
+      // 脚本正是因此 found:false 而误判「现象不存在」。project-path 是稳定、唯一、可读的锚。
+      data-project-path={dir}
+      data-project-active={active ? "true" : "false"}
       className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap"
       style={{
         padding: "var(--sidebar-row-py) var(--sidebar-row-px)",

@@ -15,6 +15,7 @@ import { assertPortFree, launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { loadScenario, applySeed } from "./lib/seed/engine.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { clickByText } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -83,10 +84,8 @@ try {
       () => [...document.querySelectorAll("*")].some((e) => (e.textContent || "").trim() === "种子会话" && e.children.length < 6),
       { timeout: 15000, polling: 300 },
     );
-    await page.evaluate(() => {
-      const els = [...document.querySelectorAll("*")].filter((e) => (e.textContent || "").trim() === "种子会话" && e.children.length < 6);
-      els[els.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+  // 会话行点击走可信点击(合成 MouseEvent 对 Radix 行点击实测翻车过)。
+  if (!(await clickByText(page, '种子会话', { exact: true }))) throw new Error("未找到会话行: 种子会话");
     opened = await page.waitForFunction(() => document.body.innerText.includes("看完了，没问题。"), { timeout: 8000, polling: 300 })
       .then(() => true)
       .catch(() => false);

@@ -131,7 +131,7 @@ composer = 会话流底部的输入框区域（模型/档位下拉在其左下�
 
 - pi 侧一切从简：`PiBackend.setModel` 把 `buildSetModelCommand({provider, modelId})` 写进进程 stdin（`pi-backend.ts:203`），一条同步 JSONL RPC，resolve 即内核处理完。进程不动、会话不动、事件流不动——这是「运行时切模型」的标杆语义，也是 §11 修法要把 dsh 拉到的水位。
 
-- 两个配套面：pi 扩展面另有一对 `cycleModel`/`cycleThinkingLevel` RPC（`pi-backend.ts:233-239`）——「pi 扩展面」= pi 后端在契约之外独有的一包命令，`capabilities.pi` 是它的探测标记，形状 `{ pi?: PiBackendExtensions, dsh?: { missing, onMissing } }`；这对 RPC 是 main 侧 `ModelApi` 的循环入口（`SessionStore.cycleModel` 直接转发），与 §2.3 的 renderer 快捷键通道是两条独立路径、互不相干。旁路变更（用户在 pi CLI 里 `/model`、扩展自切）由 sync 回写收敛——每次 resync 比对进程实况与头行，不一致以进程为真相补头（`session-store.ts:1106-1116`），壳不假设自己是唯一写入方。
+- 两个配套面：pi 扩展面另有一对 `cycleModel`/`cycleThinkingLevel` RPC（`pi-backend.ts:233-239`）——「pi 扩展面」= pi 后端在契约之外独有的一包命令，`capabilities.pi` 是它的探测标记，形状 `{ pi?: BackendExtensions, dsh?: { missing, onMissing } }`；这对 RPC 是 main 侧 `ModelApi` 的循环入口（`SessionStore.cycleModel` 直接转发），与 §2.3 的 renderer 快捷键通道是两条独立路径、互不相干。旁路变更（用户在 pi CLI 里 `/model`、扩展自切）由 sync 回写收敛——每次 resync 比对进程实况与头行，不一致以进程为真相补头（`session-store.ts:1106-1116`），壳不假设自己是唯一写入方。
 
 ## 6. dsh 的兑现：握手定模与三个切模型面
 
@@ -226,7 +226,7 @@ dsh 侧的模型语义和 pi 相反：模型是**进程级参数**。这一节�
 
 ### 10.3 判别准则：契约内差异走轴探测，契约外面才用整面探针
 
-- 修法遵循的判据一句话：**`BaseBackend` 契约内意图的「生效方式」差异，一律按轴探测（这根轴此刻在不在）；契约之外的内核专属扩展面，才用 `capabilities.pi` 这类整面探针。** 契约的 14 条 abstract 是每个内核都必须兑现的意图，差异只在兑现方式、随内核版本演化，探针必须问「轴在不在」，不能问「内核是谁」；`PiBackendExtensions`（快照/steer/思考档位清单）是契约不承诺、pi 独有的面，探整张面的存在性才对。
+- 修法遵循的判据一句话：**`BaseBackend` 契约内意图的「生效方式」差异，一律按轴探测（这根轴此刻在不在）；契约之外的内核专属扩展面，才用 `capabilities.pi` 这类整面探针。** 契约的 14 条 abstract 是每个内核都必须兑现的意图，差异只在兑现方式、随内核版本演化，探针必须问「轴在不在」，不能问「内核是谁」；`BackendExtensions`（快照/steer/思考档位清单）是契约不承诺、pi 独有的面，探整张面的存在性才对。
 
 - 按这条准则回扫，除本文要修的 `ensureForSend` 外还有两处同款错绑：`prompt` 里「要不要 `continue` 恢复历史」用的 `!capabilities.pi`（`session-store.ts:1243`，想探的是「惰性会话需重放」这根轴），和强度对齐的 `capabilities.pi` gate（`session-store.ts:1230`，想探的是「运行时切档」这根轴——`setThinkingLevel` 已进契约）。两处都**标注演进**、不在本文修：今天没有第三个内核让它们出错，且各要各的轴定义，一并修会让本文失焦。
 
@@ -309,3 +309,52 @@ A：先对齐粒度：dsh 的一个回合（turn）内含多个 step，一个 st
 
 **Q：`reasoningEffort` 为什么不随本文一起打通？**
 A：`ModelSelection` 原生支持 effort（`ref.current` 带 `reasoningEffort` 字段），机制上是同一根轴的延伸；但壳的中立契约里 `setModel` 不带 effort、`setThinkingLevel` 是独立意图，打通要动契约与 renderer 档位链两处——另起一篇，本文标注演进（§11.4）。
+
+## 15. 交叠态：切换在飞时,谁拒谁
+
+切换是**异步多步**的(abort → 等落定 → 读中立层 → 重挂槽位 → seed → 起新进程),中途系统处于
+「半换」状态:老 proc 已停、新 proc 未就绪。这段时间里用户可能再点切、再发消息——**这些都必须被
+显式拒绝,而不是命中半个 proc**。本节把交叠态与守门钉死。
+
+### 15.1 切换互斥闸
+
+**位置**:`SessionStore.switchKernel` 入口。**条件**:已在切换中又调 `switchKernel`。**报错**:`切换进行中`。
+
+`private switching` 旗在**第一个 `await` 之前同步置位**,所以「切换进行中」这个状态**可以确定复现**,
+不需要靠 sleep 赌时序:
+
+```ts
+const switching = s.switchKernel("dsh");   // 不 await → 旗已置位,函数停在首个 await
+expect(s.switching).toBe(true);            // 前提:交叠态真的构造出来了
+await expect(s.prompt(…)).rejects.toThrow(/切换进行中/);
+await switching.catch(() => {});           // 收尾,免得留悬挂 promise
+```
+
+守卫:`src/server/application/sessions/session-store.test.ts` 的「交叠态:内核切换进行中的互斥」。
+注意那条**前提断言**(`expect(switching).toBe(true)`)——没有它,若 `switchKernel` 根本没进去,
+`prompt` 会因为别的原因失败而"看起来通过"。
+
+### 15.2 发送/切模互斥闸
+
+**位置**:`SessionStore.ensureForSend` 入口(发送与切模都经此)。**条件**:切换在飞时走 `prompt` / `setModel`。
+**报错**:`内核切换进行中,请稍后`。
+
+**为什么 15.1 之外还要这一道**:15.1 只拦"从切换入口进来"的调用。用户在切换期间**发一条消息**命中的是这道闸
+——两道都读同一个 `switching` 旗,守的是两个入口。
+
+> 断言时**别把正则写窄到只认其中一条的措辞**:实测并发发送命中的是 15.1 那条(`切换进行中`),
+> 而非本节的 `内核切换进行中,请稍后`。**两条都是合法拒绝,要断言的是"被显式拒绝"**。
+
+### 15.3 另两处交叠态,与它们的守卫
+
+| 交叠态 | 风险 | 守卫 |
+|---|---|---|
+| **流式中切走会话**(回合未收敛就 ⌘N / 点别的会话) | 新壳残留上一条的「思考中」/消息;切回内容丢失 | `scripts/demo/stream-switch-session.e2e.mjs`(9 断言,真 dsh 模型;抓不到流式态则 SKIP 而非假绿) |
+| **锚点还没落盘就 fork/bookmark**(未收敛,或已被压缩移除) | 静默派生空/半截会话 | `session-store.test.ts` 两条:收藏/分叉锚点不在中立层 → **显式报错**(`分叉锚点不在会话内容里`) |
+
+### 15.4 不做什么
+
+- **不引入队列**:交叠时**显式拒绝**而不是排队重试——排队会让"我点了切换,它却先把我那条消息发了"这种
+  反直觉行为出现。用户看得见错误,才知道要重试。
+- **不把旗做成计数器**:嵌套切换没有语义(切到一半再切去哪儿?),互斥才是模型。
+- **不靠 sleep 等切换完成**:等的是状态(旗 / 落定事件),不是时间(§3.6 事件驱动)。

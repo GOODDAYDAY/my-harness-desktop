@@ -1,6 +1,6 @@
 // dsh-config-source cordis.yml 块编辑测试 —— addPluginBlock / removePluginBlock（dsh 内核插件随附通道的挂摘原语）。
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DshConfigSource, assertPiAiRouteServiceable } from "./dsh-config-source";
@@ -244,5 +244,47 @@ describe("DshConfigSource 模型 reasoning 标记 → settings.yaml reasoningEff
     const us = provs.find((p) => p.provider === "us-new")!;
     expect(us.models.find((m) => m.id === "dsv4-pro")?.reasoning).toBe(true);
     expect(us.models.find((m) => m.id === "plain")?.reasoning).toBeUndefined();
+  });
+});
+
+// ── disabled.json:「损坏」≠「缺失」 ────────────────────────────────────────
+// 该名单是**读-改-写**的(disable/enable 都是 read → 改 → write)。损坏时静默按空继续,
+// 写回会把"此前所有已禁用插件"整段抹掉 → 全部被静默重新启用。此处置:先备份再按空继续,
+// **不改调用方语义**,只让损坏可恢复、可见。
+describe("DshConfigSource disabled 名单遇损坏文件(根因:损坏被当成缺失 → 静默重新启用全部插件)", () => {
+  const disabledPath = (): string => `${cordisPath}.disabled.json`;
+  const backups = (): string[] =>
+    readdirSync(dir).filter((f) => f.startsWith("cordis.yml.disabled.json.corrupt-"));
+
+  it("损坏时:原内容被原样备份,且仍按空名单继续(语义不变)", () => {
+    const corrupt = '{ "a": "A",,, }';
+    writeFileSync(disabledPath(), corrupt, "utf-8");
+
+    expect(src.listDisabledPlugins()).toEqual([]);          // 语义不变:仍按空继续
+
+    const b = backups();
+    expect(b.length, "损坏名单未被备份(禁用记录将静默丢失)").toBe(1);
+    expect(readFileSync(join(dir, b[0]), "utf-8"), "备份内容与损坏前不一致").toBe(corrupt);
+  });
+
+  it("合法时:正常读出(展示名从块文本里缩进的 `name:` 行抽),且不产生备份", () => {
+    // 值存的是该插件的 cordis.yml **块文本**,展示名由其中的 `- name:` 行抽出
+    writeFileSync(
+      disabledPath(),
+      JSON.stringify({ "my-plugin": "- id: my-plugin\n  name: '我的插件'" }),
+      "utf-8",
+    );
+    expect(src.listDisabledPlugins()).toEqual([{ id: "my-plugin", name: "我的插件" }]);
+    expect(backups().length, "合法文件被误备份").toBe(0);
+  });
+
+  it("块文本里没有 name 行时回落到 id(如实,不伪造展示名)", () => {
+    writeFileSync(disabledPath(), JSON.stringify({ "no-name": "- id: no-name" }), "utf-8");
+    expect(src.listDisabledPlugins()).toEqual([{ id: "no-name", name: "no-name" }]);
+  });
+
+  it("不存在时:空名单,且不产生备份(不存在 ≠ 损坏)", () => {
+    expect(src.listDisabledPlugins()).toEqual([]);
+    expect(backups().length, "不存在被误判为损坏").toBe(0);
   });
 });

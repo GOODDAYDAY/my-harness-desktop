@@ -93,6 +93,11 @@ export interface KernelModelSource {
 
 ## 3. 现状泄漏清单（对照）
 
+> ⚠ **本节「现状泄漏清单」已过期**：本文设计的**内核插件化已完整落地**——三个内核各带 `plugin.json`
+> （`src/server/kernel/{pi,dsh,minimal}/plugin.json`）、`core/kernel-registry.ts` 提供注册表，
+> 且 `audit:deps` 第 ⑦ 检验（能力名中性化）现在守着"核心代码里不出现按内核分字段的能力面"。
+> 下表是**改动前**的泄漏面,作为对照保留,勿当现状读。
+
 | # | 泄漏 | 现状位置 | 处置 |
 |---|---|---|---|
 | L1 | `"pi" \| "dsh"` 字面量散落 60+ 处 | session-store / sessions.ts / session-state.ts / context-binding / bootstrap | 收敛为 `KernelId` |
@@ -145,7 +150,7 @@ export interface KernelModelSource {
 
 ## 7. 剩余演进（诚实标注，不阻塞）
 
-- **能力接口替代 type-only 类**：`session-store.ts` 的 `import type { PiBackend }` 是 type-only import 具体类（`asPi` 类型标注用），运行时零依赖但可进一步抽成 `PiBackendExtensions` 接口（放 `client/pi`），让 core 只 import 接口、不 import 类。属「依赖只向内」的加分项，非硬违规。
+- **能力接口替代 type-only 类**：`session-store.ts` 的 `import type { PiBackend }` 是 type-only import 具体类（`asPi` 类型标注用），运行时零依赖但可进一步抽成 `BackendExtensions` 接口（放 `client/pi`），让 core 只 import 接口、不 import 类。属「依赖只向内」的加分项，非硬违规。
 - **dsh 配置能力接口化**：`MainContext.dshConfigSource: DshConfigSource` 是 api→client 具体类依赖（外层依赖外层，非硬违规）。可抽 `DshConfigApi` 接口（含 listProviders/setProvider/addPlugin 等 15+ 方法 + dsh 专属返回类型）让 `DshConfigSource implements`。涉及面大，独立收尾。
 - **`context-binding.ts` 写死 `kernel: "pi"`**：这是 pi 专属 RPC 映射（`Model → ModelInfo`），`kernel` 写死是正确语义（来源是 pi），标注即可。
 - **会话标识中性化**：`DshBackend` 的 `sessionId` 仍退化为 `cwdToBucketName(cwd)`（每项目一会话），真正 session-id 化待 `base-interface-lineage.md` 的会话标识中性化收口。

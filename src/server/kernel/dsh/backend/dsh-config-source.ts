@@ -8,7 +8,7 @@
 // dsh 侧用 `!!js` 自定义 YAML tag(仅 cordis.yml base);settings.yaml 是纯字面量用户文档。
 //
 // 依赖方向:本层 import domain(纯类型),是 client/dsh 的流出适配器(与 client/pi 对称)。
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { parse, parseDocument, stringify } from "yaml";
@@ -541,12 +541,25 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
 
   private get disabledPath(): string { return `${this.cordisPath ?? ""}.disabled.json`; }
 
+  /** 读 disabled 名单。**区分"不存在"与"损坏"**:损坏时先备份再按空继续(见下)。 */
   private readDisabled(): Record<string, string> {
+    if (!this.cordisPath || !existsSync(this.disabledPath)) return {};
     try {
-      if (!this.cordisPath || !existsSync(this.disabledPath)) return {};
       const raw = JSON.parse(readFileSync(this.disabledPath, "utf-8")) as Record<string, string>;
       return raw && typeof raw === "object" ? raw : {};
-    } catch { return {}; }
+    } catch {
+      // 损坏 ≠ 缺失:此名单是**读-改-写**的(disablePlugin/enablePlugin 都是 read → 改 → write),
+      // 静默按空继续会让写回把"此前所有已禁用插件"整段抹掉 → 它们全部被静默重新启用,且无任何告警。
+      // 这里不改调用方语义(仍按空继续),只把损坏**变成可恢复、可见**。
+      const backup = `${this.disabledPath}.corrupt-${Date.now()}`;
+      try {
+        copyFileSync(this.disabledPath, backup);
+        console.warn(`[dsh-config-source] ${this.disabledPath} 解析失败;已原样备份到 ${backup},本次按空名单继续(禁用记录可能需人工恢复)`);
+      } catch {
+        console.warn(`[dsh-config-source] ${this.disabledPath} 解析失败,且备份未成功(将以空名单继续,禁用记录可能丢失)`);
+      }
+      return {};
+    }
   }
 
   private writeDisabled(map: Record<string, string>): void {
@@ -556,7 +569,10 @@ export class DshConfigSource implements KernelModelSource, DshConfigApi {
 
   listDisabledPlugins(): { id: string; name: string }[] {
     return Object.entries(this.readDisabled()).map(([id, text]) => {
-      const nameM = /^\s*- name:\s*(.+)$/m.exec(text);
+      // 块文本来自 cordis.yml 的 `- id: <id>` → `  name: <...>`(缩进,**无横杠**;
+      // 见 disablePlugin 存的 lines.slice(block.start, block.end))。原正则要求行首 `- name:`,
+      // 与真实存法不符 → **永不匹配** → 展示名一直回落到 id。这里两种写法都认。
+      const nameM = /^\s*(?:-\s*)?name:\s*(.+)$/m.exec(text);
       return { id, name: nameM ? nameM[1].trim().replace(/^['"]|['"]$/g, "") : id };
     });
   }

@@ -33,9 +33,11 @@ export function ThinkingChainBlock({
 }: ThinkingChainBlockProps): ReactNode {
   const { t } = useTranslation();
   const [open, setOpen] = useState(!collapseDefault);
-  // 流式中强制展开:思考过程要「一点一点可见」(用户诉求),不能藏在折叠头后只露计时;
-  // 流式结束回落折叠默认(设置项驱动)。用户流式中手动收起尊重其选择(仅流转时重置)。
-  useEffect(() => { if (streaming) setOpen(true); else setOpen(!collapseDefault); }, [collapseDefault, streaming]);
+  // 默认折叠(设置项 collapseDefault 驱动),**不随流式自动翻转**——用户诉求「默认收起来,
+  // 打开就保持打开,别我看着看着又自动收起来」。此前流式中强制展开、流式结束回落折叠默认,
+  // 造成「思考中自动展开 → 跑完又自动收起」的跳变;现在只在设置项变化时重置默认,
+  // 用户手动展开/收起后状态保持不变(不再有自动操作)。
+  useEffect(() => { setOpen(!collapseDefault); }, [collapseDefault]);
   const stalled = useStalledHint(streaming, content.thinking.length);
   const [elapsed, setElapsed] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);

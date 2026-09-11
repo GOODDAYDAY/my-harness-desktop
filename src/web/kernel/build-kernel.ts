@@ -336,6 +336,10 @@ const kernel = {
       transport.invoke(IPC.session.runBash, command, excludeFromContext),
     abortBash: (): Promise<void> => transport.invoke(IPC.session.abortBash),
     // pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensions 探测「有则用、无则降级」
+    // 名称提醒:`pi` 是**pi 扩展面的宿主分组**(steer / followUp / cycleModel …是 pi 专属扩展),
+    // 但组内也有**中性成员**(getThinkingLevels / cycleThinkingLevel —— 它们直接调 `IPC.session.*`,
+    // 与内核无关)。所以**不要**因为看到组名叫 pi 就判定"这里写死了内核身份":
+    // 判据看该成员**打到哪个 IPC**,不是看它挂在哪个分组下。
     pi: {
       steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
         transport.invoke(IPC.session.steer, text, images),

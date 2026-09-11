@@ -3,6 +3,11 @@
 ## 场景 A：正在流式生成时点选（最强差异点）
 
 ### A-1 immediate（现状）
+
+> ⚠ **本节的「现状」标注已过期**：本文写于 `composerApplyTiming` 落地前,当时把 `immediate` 当现状。
+> 现实现默认为 **`"onSend"`**（点选只记内存 pending、`send()` 时回灌），`"immediate"` 是可选项
+> （见 `timeline/renderer/index.tsx:574-580` 与 `composer-apply-timing.md` 的过期横幅）。
+> 本文作为 A/B 低保真对比仍有价值,但"现状"二字请按改动前读。
 ```
 ┌────────────────────────────────────────┐
 │ ⏺ assistant                            │

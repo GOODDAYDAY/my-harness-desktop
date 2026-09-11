@@ -5,6 +5,10 @@
 
 ### 1.1 现状触发时机
 
+> ⚠ **本文多处「现状」（§1.1 / §1.4 / §1.6）已过期**：本文提议的落盘时机**已落地**——`timeline` 现在读
+> `generalConfig["composerApplyTiming"]`（默认 `"onSend"`：点选只记内存 pending、`send()` 时回灌；`"immediate"` 走另一分支），
+> 见 `renderer/index.tsx:574-580`。下文的"现状"是**改动前**的样子,勿当现状读。
+
 composer 左下角的模型选择器与思考强度选择器，点选那一瞬间就经 `ctx.models.setModel` / `ctx.models.setThinkingLevel` 发 RPC 到 pi 底座。底座立即写入 JSONL 的 `model_change` / `thinking_level_change` 条目并推 `entryAppended`，时间线在点选瞬间落分隔线。
 
 ### 1.2 语义混乱的来源

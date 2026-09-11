@@ -1,5 +1,5 @@
 // working-phase 单元测试 —— WorkingPhase 推导纯函数(设计 docs/design/session-working-phase.md §1.2)。
-// 圆心纯函数,零 mock(docs/test/testing-strategy.md §3:domain 测试 95%+ 目标)。
+// 圆心纯函数,零 mock(测试策略(原指向的 docs/test/testing-strategy.md 已不存在):domain 测试 95%+ 目标)。
 // 覆盖三件事:phaseFromMessage 优先级、phaseFromView 组合逻辑、advancePhase 转移表。
 import { describe, it, expect } from "vitest";
 import { phaseFromMessage, phaseFromView, advancePhase } from "./working-phase";

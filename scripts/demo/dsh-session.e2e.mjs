@@ -21,6 +21,7 @@ import { assertPortFree, launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { loadScenario, applySeed } from "./lib/seed/engine.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
+import { clickByText } from "./lib/interact.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..");
@@ -268,13 +269,8 @@ try {
     // 点会话列表行重开。锚点是 sessions-list 的 data-session-path 行;
     // 历史上的 [data-sidebar-style] 选择器匹配不到任何节点(那是主题预览卡的私有锚),
     // 回退静默落空、断言超时——锚点必须跟真实渲染源走。
-    const clicked = await page.evaluate(() => {
-      const rows = [...document.querySelectorAll("[data-session-path]")];
-      const row = rows.find((r) => (r.innerText || "").includes("ping"));
-      if (!row) return false;
-      row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      return true;
-    });
+    // 会话行点击走可信点击,且**限定在行锚点内**(scope)——`body *` 会匹配到含 "ping" 的消息气泡。
+    const clicked = await clickByText(page, "ping", { exact: false, scope: "[data-session-path]" });
     if (clicked) await waitForDomIdle(page, { quietMs: 1200, timeoutMs: 15000 }).catch(() => {});
   }
   // Virtuoso 只渲染可视窗口:重开后视图停在底部,模型分隔线在顶部、未挂载即不在 DOM——

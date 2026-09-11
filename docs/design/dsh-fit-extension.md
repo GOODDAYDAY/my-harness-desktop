@@ -31,6 +31,14 @@
 
 ## 4. 仍显式降级的（按规则判断「该不该进本包」）
 
+> ⚠ **本表「现状」列有两行已过期**（"判定"列的结论仍可参考，但"现状"已不准）：
+> - `setThinkingLevel` 那行写"抛「当前内核不支持思考强度切换」"——**已不成立**：`setThinkingLevel` **已进中立契约**
+>   （`docs/design/atomic-send.md`），dsh 走 thinking 补面，不支持的档位**显式跳过**（`session-store.ts` 的档位校验），不再抛错。
+> - `getThinkingLevels` 那行写"pi 扩展面，dsh 无清单"——**已不成立**：dsh 经其适配插件提供
+>   `session/getThinkingLevels`（这正是"思考档位补发失败"那个 bug 的成因：dsh **有**清单、只是该模型返回空）。
+>
+> （`listTools` 那行"缺面默认 → null"仍然成立。）
+
 | 能力 | 现状 | 判定 |
 |---|---|---|
 | `listTools`（工具发现） | `AbstractBackend` 缺面默认 → null | **不进本包**：这是 SDK server 方法面，属 deepseek-harness（`dsh-sdk-server-supplement.md` 阶段二 `session/listTools`）。本包是 cordis 插件，加不了 JSON-RPC 方法。 |

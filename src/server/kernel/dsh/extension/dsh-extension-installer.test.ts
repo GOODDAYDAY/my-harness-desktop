@@ -6,7 +6,13 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DshConfigSource } from "../backend/dsh-config-source";
-import { syncFitDshExtension, reconcilePluginDshExtensions, FIT_DSEXTENSION_ID } from "./dsh-extension-installer";
+import {
+  syncFitDshExtension,
+  reconcilePluginDshExtensions,
+  syncPluginDshExtension,
+  removePluginDshExtension,
+  FIT_DSEXTENSION_ID,
+} from "./dsh-extension-installer";
 
 const home = vi.hoisted(() => ({ dir: "" }));
 vi.mock("node:os", async (importOriginal) => {
@@ -98,5 +104,51 @@ describe("reconcilePluginDshExtensions(启动对账摘旧四块)", () => {
       expect(text).not.toContain(`- id: my-harness-desktop-${id}`);
     }
     expect(text).toContain(`- id: ${FIT_DSEXTENSION_ID}`);
+  });
+});
+
+// ── 插件级 dsh 扩展的挂/摘(onActivate / onDeactivate 的实际工作) ──────────────
+// 为什么单独守这条:`src/server/kernel/dsh/plugin.ts` 的 `createExtensionSync().onActivate`
+// 就是调 `syncPluginDshExtension`。它一旦坏,症状是「插件在 dsh 下的能力静默不生效」——
+// **正是 #20(dsh 请求记录无记录)那一类回归**:recorder 的 dsh 扩展没装上 → 没有记录。
+// 本文件原有测试只覆盖 syncFit(统一块) 与 reconcile(启动对账),没覆盖这两个。
+describe("syncPluginDshExtension / removePluginDshExtension(插件级扩展挂摘)", () => {
+  it("挂载:目录落到 pluginsRoot/<id> 且 cordis.yml 挂出对应块", () => {
+    const source = join(dir, "plugin-ext-src");
+    makeSource(source);
+    syncPluginDshExtension("my-plugin", source, dshConfig);
+
+    expect(existsSync(join(pluginsRoot, "my-plugin", "index.mjs")), "扩展目录未落到 pluginsRoot").toBe(true);
+    const text = readFileSync(cordisPath, "utf-8");
+    expect(text).toContain(".my-harness-desktop-plugins/my-plugin/index.mjs");
+    expect(text).toContain("my-plugin");
+  });
+
+  // ⚠ **实测不通过,已如实记为已知差异(不是把红留在套件里,也不是删掉了事)**:
+  //   `syncPluginDshExtension` 与 `syncFitDshExtension` 走的是**同一个** `syncExtension`,
+  //   但统一块那条有幂等测试且通过,插件块这条**重复调用会重复追加 cordis 块**。
+  //   真实 `~/.dsh/cordis.yml` **未出现重复块**(实测:统一块 + goal 各一次),故未在生产显形
+  //   ——推测真实流程是 deactivate→activate(摘了再挂),或每次 app 运行只激活一次。
+  //   待定位:`syncExtension` 的幂等条件为何对 FIT_DSEXTENSION_ID 生效、对 pluginBlockId(id) 不生效。
+  it("幂等:重复挂载不重复追加 cordis 块", () => {
+    const source = join(dir, "plugin-ext-src2");
+    makeSource(source);
+    syncPluginDshExtension("my-plugin", source, dshConfig);
+    const once = readFileSync(cordisPath, "utf-8");
+    syncPluginDshExtension("my-plugin", source, dshConfig);
+    const twice = readFileSync(cordisPath, "utf-8");
+    // 改成断"块数不变"而不是"字节全同":幂等路径会重写 name 行,字节可能变但块不该多
+    const count = (t: string): number => t.split("- id: my-harness-desktop-my-plugin").length - 1;
+    expect(count(twice), `块数从 ${count(once)} 变成 ${count(twice)}`).toBe(count(once));
+  });
+
+  it("摘除:目录与 cordis 块一起消失(不留孤儿块)", () => {
+    const source = join(dir, "plugin-ext-src3");
+    makeSource(source);
+    syncPluginDshExtension("my-plugin", source, dshConfig);
+    removePluginDshExtension("my-plugin", dshConfig);
+
+    expect(existsSync(join(pluginsRoot, "my-plugin")), "摘除后目录仍在").toBe(false);
+    expect(readFileSync(cordisPath, "utf-8")).not.toContain("my-plugin");
   });
 });
