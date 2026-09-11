@@ -13,7 +13,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadModelConfig, streamModel } from "./minimal-model.mjs";
-import { activeToolSchemas, activeToolSetId, executeTool, listTools, setActiveToolSet } from "./minimal-tools.mjs";
+import { activeToolSchemas, activeToolSetId, executeTool, listTools, setActiveToolSet, setProjectRoot } from "./minimal-tools.mjs";
 import { loadPlugins, dispatchPluginEvent, dispatchCommand } from "./minimal-plugin.mjs";
 import { EVENTS } from "./minimal-events.mjs";
 
@@ -141,6 +141,9 @@ function defaultSessionId(cwd) {
 const sessionId = () => cfg.sessionId ?? defaultSessionId(cfg.cwd);
 
 const path = () => sessionPath(cfg.agentDir, cfg.cwd, sessionId());
+
+// write 的受控范围（§5.7.1「限定在项目目录内」）：项目根 = --cwd。
+setProjectRoot(cfg.cwd);
 
 /** 处理一条命令,产出一串事件。 */
 function handle(cmd) {
@@ -297,7 +300,9 @@ async function handleSend(cmd) {
           try { args = JSON.parse(tc.arguments || "{}"); } catch { /* 参数损坏按空对象 */ }
           // 分片阶段没发过 Start（有些网关不 streams 参数）时补发一次：toolCallStart 必须每调用恰好一次。
           if (!seenToolCallStart.has(tc.index ?? 0)) out({ type: EVENTS.toolCallStart, toolCallId: tc.id, toolName: tc.name, args });
-          const result = executeTool(tc.name, args);
+          // 工具是异步的（§5.3.2 强制超时要求异步，不能同步阻塞事件循环）——必须 await，
+          // 否则 result 是 Promise，把它当结果序列化会写出一个 {} 且工具实际没跑完。
+          const result = await executeTool(tc.name, args);
           out({ type: EVENTS.toolCallEnd, toolCallId: tc.id, toolName: tc.name, result, isError: result.isError === true });
           dispatchPluginEvent(EVENTS.toolCallEnd, { toolCallId: tc.id, toolName: tc.name, result, isError: result.isError === true });
           toolCallsAll.push({ id: tc.id, name: tc.name, args, result });
