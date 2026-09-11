@@ -1,0 +1,84 @@
+{
+  "id": "minimal",
+  "version": "0.1.0",
+  "tier": "official",
+  "displayName": "Minimal Manager",
+  "description": "minimal 内核的 desktop 对接面：内核版本 + 配置 + 拓展 + 模型（一个入口三个 TAB，与 pi/dsh 同级）",
+  "kernel": {
+    "order": 3,
+    "enabled": false
+  },
+  "contributes": {
+    "settings": [
+      {
+        "id": "minimal",
+        "title": "Minimal",
+        "icon": "minimal",
+        "order": 2,
+        "tabs": [
+          {
+            "id": "minimal-kernel",
+            "title": "Minimal",
+            "component": "MinimalManagerPage",
+            "kernelConfig": "minimal"
+          },
+          {
+            "id": "minimal-ext",
+            "title": "Minimal 拓展",
+            "component": "MinimalExtensionsPage",
+            "saveMode": "manual"
+          },
+          {
+            "id": "minimal-models",
+            "title": "Minimal 模型",
+            "component": "MinimalModelsPage",
+            "saveMode": "framework",
+            "kernelModels": "minimal"
+          }
+        ]
+      }
+    ],
+    "languages": [
+      {
+        "id": "minimal.kernel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/minimal.json"
+      },
+      {
+        "id": "minimal.models",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/minimal-models.json"
+      },
+      {
+        "id": "minimal.kernel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/minimal.json"
+      },
+      {
+        "id": "minimal.models",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/minimal-models.json"
+      },
+      {
+        "id": "minimal.kernel",
+        "locale": "en",
+        "resources": "./locales/en/minimal.json"
+      },
+      {
+        "id": "minimal.models",
+        "locale": "en",
+        "resources": "./locales/en/minimal-models.json"
+      },
+      {
+        "id": "minimal.kernel",
+        "locale": "de",
+        "resources": "./locales/de/minimal.json"
+      },
+      {
+        "id": "minimal.models",
+        "locale": "de",
+        "resources": "./locales/de/minimal-models.json"
+      }
+    ]
+  }
+}

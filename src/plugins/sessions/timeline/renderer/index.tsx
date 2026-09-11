@@ -426,11 +426,17 @@ export function TimelineView(): React.ReactNode {
     () => phaseFromView(messages, streaming, { retrying: retrying !== null, compacting }),
     [messages, streaming, retrying, compacting],
   );
-  // 「设为默认」广播(设计 session-model-config §4.3):订阅语义收窄为刷新壳显示——
+  // 内核外部状态变更 → 重探壳显示(设计 session-model-config §4.3):订阅语义收窄为刷新壳显示——
   // 显示链「默认」环读的是 fallbackModel(getFallbackModel),这里触发重探即刷新,
   // 不镜像任何本地状态(写口只认持久层,读口只认 refreshExternals)。
+  //
+  // 订阅的是**框架中性信号** `system:refreshRequested`,不是某个内核管理插件的私有频道:
+  // 此前这里写着 `pi-manager:defaultChanged`——timeline 插件硬编码了**另一个插件的 id**
+  // （§8.3 零硬编码不许插件认插件 id），而且 dsh/minimal 各自换过默认模型都不会触发刷新，
+  // 第四个内核还得再加一个频道。现在由 main 侧在 kernelModels.setDefault 后统一广播
+  // （controllers/kernel.ts），所有内核走同一条中性信号。
   useEffect(() => {
-    const off = ctx.events.on("pi-manager:defaultChanged", () => void refreshExternals());
+    const off = ctx.events.on("system:refreshRequested", () => void refreshExternals());
     return off;
   }, [ctx, refreshExternals]);
 

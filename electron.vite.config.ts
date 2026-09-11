@@ -3,32 +3,17 @@
 //   server 宿主:  src/server/bootstrap/server.ts  → out/main/server.js(node out/main/server.js)
 //   renderer:    src/web/index.html(由后端 HTTP 服务)
 import { defineConfig } from "electron-vite";
-import { resolve, join } from "node:path";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-// 内核插件 manifest(plugin.json)是运行时资产,vite 不自动复制。做成 vite 插件,
-// 在 writeBundle(每次 main 编译完成,含 dev watch 重编译)复制——避免只靠 build 脚本
-// (electron-vite dev 清空 out/ 后不跑 build 脚本的 copy → plugin.json 缺失 → registry 空 → 白屏)。
-function copyKernelManifests() {
-  const KERNELS = ["pi", "dsh", "minimal"];
-  return {
-    name: "copy-kernel-manifests",
-    writeBundle() {
-      for (const k of KERNELS) {
-        const src = resolve(__dirname, "src/server/kernel", k, "plugin.json");
-        const dstDir = resolve(__dirname, "out/main/server/kernel", k);
-        mkdirSync(dstDir, { recursive: true });
-        copyFileSync(src, join(dstDir, "plugin.json"));
-      }
-    },
-  };
-}
+// 内核 manifest 不再需要单独复制：内核插件与壳插件**共用同一份 plugin.json**，
+// 它住在 src/plugins/kernels/<id>/，随内置插件目录一起分发（dev 直接读源码树，
+// 打包由 electron-builder 的 extraResources 拷进 resources/my-harness-desktop-builtin/）。
+// 这里只需保证各内核的**工厂产物**被编译到约定的构建根 out/main/server/kernel/<id>/plugin.js。
 
 export default defineConfig({
   main: {
-    plugins: [copyKernelManifests()],
     build: {
       rollupOptions: {
         input: {

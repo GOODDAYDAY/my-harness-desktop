@@ -4,6 +4,7 @@
 // 各槽位贡献项的形状在此定义,加载器按它校验,渲染层按它消费。
 // 零外部依赖:不 import react/electron/pi(圆心纯度纪律,structure/16 §10.1)。
 import type { KernelId } from "./kernel";
+import type { KernelPluginManifest } from "./kernel-plugin";
 
 /** 设置子页槽(settings)贡献项:插件自己的配置页(DESIGN.md §3.3 / 952 行)。 */
 export interface SettingsContribution {
@@ -520,6 +521,17 @@ export interface PluginManifest {
    *  读用户全局 CLAUDE.md 的能力，pi 侧走 piExtension（read-claude-md 内核扩展），
    *  dsh 侧走本字段（dsh cordis 插件）——同一能力在两个内核里的对称实现。 */
   dshExtension?: string;
+  /**
+   * **内核面声明**：这一个插件同时是一个内核插件（§kernel-plugin「一个内核 = 一个插件」）。
+   *
+   * 有了它，内核与它的 desktop 对接面就同属一个插件目录、共用一份 manifest：
+   *   · 内核面 = 本块 + 内核实现（编译产物由壳按 `<内核构建根>/<id>/plugin.js` 约定定位）；
+   *   · 对接面 = 同目录的 `renderer/` + `locales/` + 本 manifest 的 contributes。
+   * 卸载这一个插件 = 内核与它的设置页一起消失，其余内核照常——这正是「内核可卸载」要的形态。
+   *
+   * `id` 由本 manifest 的 `id` 单源提供（不在此重复写一遍，避免两份定义漂移）。
+   */
+  kernel?: Omit<KernelPluginManifest, "id" | "factory">;
   /** 加载器发现时填的来源标记(project>user>installed>builtin),不在 manifest 里声明。 */
   source?: "project" | "user" | "installed" | "builtin";
 }

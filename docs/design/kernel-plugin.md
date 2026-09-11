@@ -182,17 +182,30 @@ typecheck 0 · **577 全量测试**（60 文件）· 5 e2e · build OK · 零 pu
 
 "代码级插件"（KernelPlugin 接口 + registry）之上，进一步落成"物理插件"——内核是独立目录 + manifest + 运行时动态加载，可插拔。
 
-### 形态
+### 形态（**已统一：一个内核 = 一个插件目录**）
+
+内核面与它的 desktop 对接面同属**一个插件目录**、共用**一份** `plugin.json`：
 
 ```
-src/server/kernel/{pi,dsh,minimal}/
-  ├── plugin.json    ← manifest(id + factory + order)
-  ├── plugin.ts      ← KernelPluginFactory(default 导出)
-  └── backend/ manager/ model/ ...  ← 内核实现
+src/plugins/kernels/<id>/
+  ├── plugin.json          ← 唯一 manifest：壳插件字段 + `kernel` 块（内核面声明）
+  ├── renderer/ locales/   ← desktop 对接面（内核的设置页、文案）
+  └── （内核实现在 src/server/kernel/<id>/，其工厂编译到 out/main/server/kernel/<id>/plugin.js）
 ```
 
-- **加第四个内核** = 加一个目录 + 一个 `plugin.json`，核心和装配点**零改动**（动态扫描自动注册）。
-- **卸载** = 删某内核的 `plugin.json` → 扫描不返回它 → 壳缺面降级、照常启动。
+`kernel` 块只写**内核面**要知道的事（`order` / `enabled` / 可选 `factory`），**不重复写 id**
+（id 单源 = 宿主 manifest 的 `id`）。壳扫壳插件根目录时，凡 manifest 带 `kernel` 块者，
+既是一个壳插件、也是一个内核插件。
+
+- **加第四个内核** = 加**一个**插件目录（`kernel` 块 + `renderer/` + 一个 rollup 入口），核心与装配点零改动。
+- **卸载** = 删这一个目录 → 内核**与它的设置页一起消失**，其余内核照常。
+- **默认不装载** = `kernel.enabled: false` → 两面一起不装载（没有内核却显示它的设置页，只会得到一堆报错）。
+
+> **变更记录（勿按旧形状读）**：此前内核 manifest 单住在
+> `src/server/kernel/<id>/plugin.json`，而 desktop 对接面是**另一个壳插件**
+> （`src/plugins/manager/<id>-manager/`）。两份 manifest、两个目录、两次生命周期：
+> 删掉内核插件后设置页还在（点进去全是报错），"卸载 = 删一个插件"这句话就不成立。
+> 统一后 id 也归位（`pi-manager` → `pi`），插件 id 与内核 id 同源。
 
 ### 契约 + 加载器
 
@@ -209,7 +222,8 @@ src/server/kernel/{pi,dsh,minimal}/
 
 ### 卸载验收（第 13 点）
 
-`minimal-uninstall.e2e.mjs`：删 minimal 的 manifest → 起 app → 内核清单不含 minimal + 模型下拉无 minimal TAB + 其余内核照常 + app 不崩。加载器单测（`kernel-plugin-loader.test.ts`）覆盖扫描/卸载/空目录/动态 require。
+`kernel-plugin-uninstall.e2e.mjs`（17 断言）：默认（`enabled:false`）内核清单不含 minimal **且设置页没有 Minimal 入口** → 强制启用后**两面一起出现**（内核清单 + 设置页导航锚点 `[data-settings-id]`，DOM 面复核）→ 删这一个插件的 `plugin.json` 后**两面一起消失**、pi/dsh 照常、app 不崩。
+加载器单测（`kernel-plugin-loader.test.ts`）覆盖扫描/普通壳插件不误收/id 单源/卸载/坏 JSON/根目录不存在/工厂路径约定；N 内核注册矩阵（`kernel-registry-n.test.ts`）覆盖单内核 ×3、双内核 ×3、三内核、卸载 ×3，全部跑在**真实插件目录 + 真实编译产物**上。
 
 ### 内核之间零 import（可卸载性的物理前提）
 

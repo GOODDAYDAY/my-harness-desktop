@@ -433,7 +433,10 @@ export function SettingsPage(): React.ReactNode {
               const activeNow = activeId === item.id;
               return (
                 <ListItem key={item.id} active={activeNow} onClick={() => guardNavigate(() => { setActiveId(item.id); setActiveTabIndex(0); })} style={{ border: "none", background: activeNow ? "var(--sidebar-row-bg-active)" : "transparent", fontSize: "var(--font-size-lg)", padding: "14px 14px" }}>
-                  <div className="flex items-center gap-2">
+                  {/* data-settings-id：设置页入口的**稳定探针锚点**。此前导航项只有文案（还经 i18n 查表、
+                      缺 key 时回落 defaultValue），e2e 只能按文本猜——「某个插件在不在设置页里」这类断言
+                      因此写不可靠（skills §10.3：探针必须靠稳定锚，不靠文本子串）。 */}
+                  <div className="flex items-center gap-2" data-settings-id={item.id}>
                     <PluginIcon name={item.icon} className="size-5 shrink-0" />
                     <span>{t(`settings.${item.id}`, { defaultValue: item.title })}</span>
                   </div>

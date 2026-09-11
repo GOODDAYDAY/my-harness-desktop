@@ -1,0 +1,21 @@
+{
+  "ext.search": "Suchen...",
+  "ext.empty": "Noch keine Erweiterungen",
+  "ext.noMatch": "Keine Treffer",
+  "ext.source": "Quelle",
+  "ext.sourcePlaceholder": "@scope/pkg oder git-url oder /path",
+  "ext.install": "Installieren",
+  "ext.installing": "Installiere...",
+  "ext.installFailed": "Installation fehlgeschlagen",
+  "ext.protected": "Geschützt",
+  "ext.pendingRestart": "Sitzung(en) müssen neu geladen werden",
+  "ext.reload": "Neu laden",
+  "ext.reloadAll": "Alle neu laden",
+  "ext.filterReset": "Filter zurücksetzen",
+  "ext.tag.file": "Datei",
+  "ext.tag.local": "Lokal",
+  "ext.tag.desktop": "Desktop",
+  "ext.tag.npm": "npm",
+  "ext.tag.git": "Git",
+  "ext.tag.protected": "Geschützt"
+}

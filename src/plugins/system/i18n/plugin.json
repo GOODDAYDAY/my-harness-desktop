@@ -87,6 +87,26 @@
         "id": "i18n.shell",
         "locale": "de",
         "resources": "./locales/de/shell.json"
+      },
+      {
+        "id": "i18n.ext",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/ext.json"
+      },
+      {
+        "id": "i18n.ext",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/ext.json"
+      },
+      {
+        "id": "i18n.ext",
+        "locale": "en",
+        "resources": "./locales/en/ext.json"
+      },
+      {
+        "id": "i18n.ext",
+        "locale": "de",
+        "resources": "./locales/de/ext.json"
       }
     ],
     "settings": [

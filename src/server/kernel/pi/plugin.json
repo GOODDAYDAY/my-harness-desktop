@@ -1,5 +1,0 @@
-{
-  "id": "pi",
-  "factory": "./plugin.js",
-  "order": 1
-}

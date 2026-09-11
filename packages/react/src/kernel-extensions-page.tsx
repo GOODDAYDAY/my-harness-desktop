@@ -19,15 +19,25 @@ export interface KernelExtensionsPageProps {
   kernel: KernelId;
   /** 区块标题(内核专属文案:pi = "PI 拓展",dsh = "DSH 拓展",由外层薄封装传翻译好的值)。 */
   title: string;
+  /**
+   * 安装来源输入框的占位符（内核专属：提示该内核的插件包名形状，如 `@deepseek-ai/dsh-xxx`）。
+   * 不传则用语言插件里的通用占位符。
+   *
+   * 为什么是 prop 而不是本组件自己查 `ext.sourcePlaceholder`：那是内核专属内容，而本组件是
+   * **内核无关的共享 base**（薄壳：机制在共享层、内容归插件）。此前该 key 由 pi 与 dsh 各交一份
+   * 到同一个 namespace（值还不一样）——按 i18n 合并规则「同优先级先处理者胜」，
+   * **谁生效取决于插件加载顺序**，于是「装哪个内核多一些」会决定另一个内核页面提示什么。
+   */
+  sourcePlaceholder?: string;
   refreshSignal?: number;
 }
 
-export function KernelExtensionsPage({ kernel, title, refreshSignal = 0 }: KernelExtensionsPageProps): React.ReactNode {
+export function KernelExtensionsPage({ kernel, title, sourcePlaceholder, refreshSignal = 0 }: KernelExtensionsPageProps): React.ReactNode {
   return (
     <>
       <ListSection kernel={kernel} title={title} refreshSignal={refreshSignal} />
       <div style={{ borderTop: "2px solid var(--color-border)" }} />
-      <InstallSection kernel={kernel} />
+      <InstallSection kernel={kernel} sourcePlaceholder={sourcePlaceholder} />
       <PendingRestartSection />
     </>
   );
@@ -311,7 +321,7 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () =>
   );
 }
 
-function InstallSection({ kernel }: { kernel: KernelId }): React.ReactNode {
+function InstallSection({ kernel, sourcePlaceholder }: { kernel: KernelId; sourcePlaceholder?: string }): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
   const [installSource, setInstallSource] = useState("");
@@ -343,7 +353,7 @@ function InstallSection({ kernel }: { kernel: KernelId }): React.ReactNode {
           </span>
           <input
             type="text"
-            placeholder={t("ext.sourcePlaceholder")}
+            placeholder={sourcePlaceholder ?? t("ext.sourcePlaceholder")}
             value={installSource}
             onChange={(e) => setInstallSource(e.target.value)}
             disabled={installing}

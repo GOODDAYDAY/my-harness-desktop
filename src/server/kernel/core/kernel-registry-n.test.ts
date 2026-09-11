@@ -4,7 +4,7 @@
 // 不调 listVersions(fetch registry 是远程交互,纯本地不碰;status 读本地 installDir 不碰网络)。
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, symlinkSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { KernelRegistry, validateKernelPlugin } from "./kernel-registry";
@@ -126,28 +126,38 @@ describe("N 内核注册验收(真实插件工厂 + 真实 ctx)", () => {
 });
 
 
-/** 临时插件 root:对真实构建产物目录做**符号链接**(而非改名/拷贝),被"卸载"的那个不链接。
- *  为什么不直接 rename 真实 manifest:那是在**改共享构建产物**——测试中途被杀会留下 .bak
- *  把后续 build/e2e 弄脏,且与任何并发扫描该目录的测试竞争。链接方案零侵入:
- *  scan 看到的是临时 root(少一个),loadKernelPlugin 经链接解析回真实目录(plugin.js 与其
- *  chunks 的相对路径仍然成立)。 */
+/** 内核插件所在的真实目录（一个内核 = 一个插件目录）。 */
+const KERNEL_PLUGIN_SRC = join(process.cwd(), "src", "plugins", "kernels");
+/** 内核工厂的编译产物根（rollup 独立入口，见 electron.vite.config.ts）。 */
+const KERNEL_BUILD_ROOT = join(process.cwd(), "out", "main", "server", "kernel");
+
+/** 临时插件 root:对真实内核插件目录做**符号链接**(而非改名/拷贝),被"卸载"的那个不链接。
+ *  为什么不直接 rename 真实目录:那是在**改源码树**——测试中途被杀会留下 .bak
+ *  把后续构建/e2e 弄脏,且与任何并发扫描该目录的测试竞争。链接方案零侵入:
+ *  扫描看到的是临时 root(少一个),而工厂产物仍从构建根按约定解析(与宿主目录无关)。 */
 function linkRootExcept(skip: string): string {
-  const src = join(process.cwd(), "out", "main", "server", "kernel");
   const root = mkdtempSync(join(tmpdir(), "kernel-link-root-"));
-  for (const name of readdirSync(src)) {
+  for (const name of readdirSync(KERNEL_PLUGIN_SRC)) {
     if (name === skip) continue;
-    symlinkSync(join(src, name), join(root, name), "dir");
+    symlinkSync(join(KERNEL_PLUGIN_SRC, name), join(root, name), "dir");
   }
   return root;
 }
 
-describe("真实编译产物加载 + 默认装载过滤 + 真实卸载", () => {
-  it("默认装载:minimal(enabled=false)默认不装载,MHD_ENABLE_KERNELS 强制启用", async () => {
-    // 真实编译产物目录(out/main/server/kernel/*/plugin.js 由 rollup 独立打包 + plugin.json)。
-    const pluginRoot = join(process.cwd(), "out", "main", "server", "kernel");
+describe("真实插件目录加载 + 默认装载过滤 + 真实卸载", () => {
+  // 「一个内核 = 一个插件」（§目标 11/13）的验收：内核面与其 desktop 对接面同属
+  // src/plugins/kernels/<id>/，共用一份 plugin.json —— 所以**扫壳插件目录**就能拿到内核清单，
+  // 且卸载 = 删这一个目录（内核与它的设置页一起消失）。
+  const pluginRoot = join(process.cwd(), "src", "plugins");
+
+  it("默认装载:minimal(kernel.enabled=false)默认不装载,MHD_ENABLE_KERNELS 强制启用", () => {
     const before = scanKernelPlugins(pluginRoot);
-    // 扫描 = 存在性:三个 manifest 都在(含 enabled=false 的 minimal)。
+    // 扫描 = 存在性:三个内核面都在(含 enabled=false 的 minimal)。
     expect(before.map((e) => e.manifest.id)).toEqual(["pi", "dsh", "minimal"]);
+    // 三者的宿主目录就是各自的插件目录（内核面与对接面同处一地，不再有两份 manifest）。
+    for (const e of before) {
+      expect(e.dir.endsWith(join("plugins", "kernels", e.manifest.id))).toBe(true);
+    }
 
     // 装载 = 默认开关(§目标 16):minimal 默认 off,清单 = [pi, dsh]。
     const def = defaultEnabledEntries(before);
@@ -157,14 +167,19 @@ describe("真实编译产物加载 + 默认装载过滤 + 真实卸载", () => {
     expect(forced.map((e) => e.manifest.id)).toEqual(["pi", "dsh", "minimal"]);
   });
 
-  it("从 out/main 加载真实 plugin.js + 注册三内核(强制启用 minimal)+ 真实 spawn", async () => {
-    const pluginRoot = join(process.cwd(), "out", "main", "server", "kernel");
-    const entries = defaultEnabledEntries(scanKernelPlugins(pluginRoot), new Set(["minimal"]));
+  it("内核 id 单源：由宿主插件 manifest 的 id 提供，`kernel` 块不重复声明", () => {
+    for (const e of scanKernelPlugins(pluginRoot)) {
+      const raw = JSON.parse(readFileSync(join(e.dir, "plugin.json"), "utf-8")) as { id: string; kernel?: { id?: string } };
+      expect(e.manifest.id).toBe(raw.id);
+      expect(raw.kernel?.id, `${raw.id} 的 kernel 块又写了一遍 id（两份定义会漂移）`).toBeUndefined();
+    }
+  });
 
-    // 真实 loadKernelPlugin(require 真实编译产物 plugin.js,含其 chunks 依赖)。
+  it("从真实构建产物加载三内核(强制启用 minimal)+ 真实 spawn", async () => {
+    const entries = defaultEnabledEntries(scanKernelPlugins(pluginRoot), new Set(["minimal"]));
     const registry = new KernelRegistry();
-    for (const { dir, manifest } of entries) {
-      loadKernelPlugin(registry, dir, manifest, makeRealCtx(homedir, cwd).ctx);
+    for (const entry of entries) {
+      loadKernelPlugin(registry, entry, KERNEL_BUILD_ROOT, makeRealCtx(homedir, cwd).ctx);
     }
     expect(registry.ids()).toEqual(["pi", "dsh", "minimal"]);
 
@@ -175,47 +190,53 @@ describe("真实编译产物加载 + 默认装载过滤 + 真实卸载", () => {
     await backend.stop();
   });
 
-  it("真实卸载:minimal 缺席(临时链接 root 不含它)→ 扫描与默认装载都只剩其余 → 真实构建产物未被触碰", () => {
-    const src = join(process.cwd(), "out", "main", "server", "kernel");
-    const before = readdirSync(src).sort();
+  it("真实卸载:minimal 插件目录缺席 → 扫描与默认装载都只剩其余 → 源码树未被触碰", () => {
+    const before = readdirSync(KERNEL_PLUGIN_SRC).sort();
     const root = linkRootExcept("minimal");
     try {
-      // 卸载 = 该内核不在扫描 root 里 → 缺面;强制启用也找不到(壳照常)。
       expect(scanKernelPlugins(root).map((e) => e.manifest.id)).toEqual(["pi", "dsh"]);
-      expect(defaultEnabledEntries(scanKernelPlugins(root), new Set(["minimal"])).map((e) => e.manifest.id)).toEqual(["pi", "dsh"]);
+      const registry = new KernelRegistry();
+      for (const entry of scanKernelPlugins(root)) {
+        loadKernelPlugin(registry, entry, KERNEL_BUILD_ROOT, makeRealCtx(homedir, cwd).ctx);
+      }
+      expect(registry.get("minimal")).toBeUndefined();
+      expect(registry.ids()).toEqual(["pi", "dsh"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-    // 关键:真实构建产物一个字节没动(此前是 rename 真 manifest 再改回)。
-    expect(readdirSync(src).sort()).toEqual(before);
-    expect(scanKernelPlugins(src).map((e) => e.manifest.id)).toEqual(["pi", "dsh", "minimal"]);
+    expect(readdirSync(KERNEL_PLUGIN_SRC).sort()).toEqual(before);
   });
 
-  // item 13 补口:上面卸载只验了 minimal,而「**任一**内核都能卸载且壳照常」才是纪律的内核
-  // (§1.4 无特权差异:pi 不因"曾是唯一内核"而不可摘)。三个内核逐个摘,断言其余照常在场。
+  // 卸载矩阵:任意一个内核插件目录缺席,其余照常装配(§目标 12「任意双内核注册」的物理形态)。
   it.each([
     ["pi", ["dsh", "minimal"]],
     ["dsh", ["pi", "minimal"]],
     ["minimal", ["pi", "dsh"]],
-  ])("真实卸载:%s 缺席 → 扫描缺席、其余内核照常在、注册表装配不炸 → 真实构建产物未动", (gone, rest) => {
-    const src = join(process.cwd(), "out", "main", "server", "kernel");
-    const before = readdirSync(src).sort();
+  ])("真实卸载:%s 缺席 → 扫描缺席、其余内核照常在、注册表装配不炸 → 源码树未动", (gone, rest) => {
+    const before = readdirSync(KERNEL_PLUGIN_SRC).sort();
     const root = linkRootExcept(gone);
     try {
       expect(scanKernelPlugins(root).map((e) => e.manifest.id)).toEqual(rest);
       // 缺面是「未注册」的诚实信号:默认装载清单同样只剩其余内核(minimal 仍按开关过滤)。
       expect(defaultEnabledEntries(scanKernelPlugins(root)).map((e) => e.manifest.id))
         .toEqual(rest.filter((id) => id !== "minimal"));
-      // 真实注册表:经链接装真实编译产物,缺席的那个不在,其余照常装配完成。
       const registry = new KernelRegistry();
-      for (const { dir, manifest: m } of scanKernelPlugins(root)) {
-        loadKernelPlugin(registry, dir, m, makeRealCtx(homedir, cwd).ctx);
+      for (const entry of scanKernelPlugins(root)) {
+        loadKernelPlugin(registry, entry, KERNEL_BUILD_ROOT, makeRealCtx(homedir, cwd).ctx);
       }
       expect(registry.get(gone)).toBeUndefined();
       expect(registry.ids().length).toBe(rest.length);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-    expect(readdirSync(src).sort()).toEqual(before);
+    expect(readdirSync(KERNEL_PLUGIN_SRC).sort()).toEqual(before);
+  });
+
+  it("鲁棒性:工厂产物缺失 → 显式报错(不静默注册半截内核)", () => {
+    const registry = new KernelRegistry();
+    const entry = scanKernelPlugins(pluginRoot).find((e) => e.manifest.id === "pi")!;
+    expect(() =>
+      loadKernelPlugin(registry, { ...entry, manifest: { ...entry.manifest, factory: "./nope-missing.js" } }, KERNEL_BUILD_ROOT, makeRealCtx(homedir, cwd).ctx),
+    ).toThrow(/工厂产物不存在/);
   });
 });

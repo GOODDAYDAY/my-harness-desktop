@@ -1,0 +1,21 @@
+{
+  "ext.search": "搜索...",
+  "ext.empty": "还没有拓展",
+  "ext.noMatch": "没有匹配结果",
+  "ext.source": "来源",
+  "ext.sourcePlaceholder": "@scope/pkg 或 git-url 或 /path",
+  "ext.install": "安装",
+  "ext.installing": "安装中...",
+  "ext.installFailed": "安装失败",
+  "ext.protected": "受保护",
+  "ext.pendingRestart": "个会话需要重载使配置生效",
+  "ext.reload": "重载",
+  "ext.reloadAll": "全部重载",
+  "ext.filterReset": "重置筛选",
+  "ext.tag.file": "文件",
+  "ext.tag.local": "本地",
+  "ext.tag.desktop": "桌面",
+  "ext.tag.npm": "npm",
+  "ext.tag.git": "Git",
+  "ext.tag.protected": "受保护"
+}

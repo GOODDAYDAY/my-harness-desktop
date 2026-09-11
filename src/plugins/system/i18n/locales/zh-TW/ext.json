@@ -1,0 +1,21 @@
+{
+  "ext.search": "搜尋...",
+  "ext.empty": "還沒有拓展",
+  "ext.noMatch": "沒有匹配結果",
+  "ext.source": "來源",
+  "ext.sourcePlaceholder": "@scope/pkg 或 git-url 或 /path",
+  "ext.install": "安裝",
+  "ext.installing": "安裝中...",
+  "ext.installFailed": "安裝失敗",
+  "ext.protected": "受保護",
+  "ext.pendingRestart": "個會話需要重載使配置生效",
+  "ext.reload": "重載",
+  "ext.reloadAll": "全部重載",
+  "ext.filterReset": "重置篩選",
+  "ext.tag.file": "檔案",
+  "ext.tag.local": "本地",
+  "ext.tag.desktop": "桌面",
+  "ext.tag.npm": "npm",
+  "ext.tag.git": "Git",
+  "ext.tag.protected": "受保護"
+}

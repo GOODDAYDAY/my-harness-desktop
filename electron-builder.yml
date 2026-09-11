@@ -39,7 +39,12 @@ extraResources:
     to: my-harness-desktop-stickers
   - from: packages/my-harness-fit-pi-extension
     to: pi-my-harness-fit-pi-extension
-  - from: src/client/dsh/dsh-extension
+  # dsh 适配插件源(ask/goal/read-claude-md/skill-manager/llm-recorder 五个 dsh cordis 插件合并成一块,
+  # 由 dshExtensionEnsure 同步进 ~/.dsh/.my-harness-desktop-plugins/)。
+  # **路径曾长期写成已不存在的 src/client/dsh/dsh-extension**(前后端分离搬迁后没同步)——
+  # 打包产物因此**不带 dsh 扩展**,而 dev 态路径是对的,所以本地怎么跑都发现不了。
+  # 现行守卫:src/packaging-paths.test.ts 逐条校验本文件每个 from: 指向真实存在的路径。
+  - from: src/server/kernel/dsh/extension/dsh-extension
     to: my-harness-desktop-dsh-extension
   # minimal 内核本体(.mjs 独立 CLI + 模型/工具/插件模块,spawn 用;相对 import 须整目录同层拷贝)
   - from: src/server/kernel/minimal/kernel

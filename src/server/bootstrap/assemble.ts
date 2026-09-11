@@ -162,22 +162,14 @@ const pluginCtx = {
 // assemble 可能被 rollup 拆进 chunks/(import.meta.url 是 chunk 路径),故用 process.cwd() 定位:
 // dev/build(electron-vite 输出到 out/):process.cwd() = 项目根 → out/main/server/kernel/;
 // packaged(electron-builder):asar 内 → process.resourcesPath/app.asar/out/main/server/kernel/。
-const KERNEL_PLUGINS_DIR = opts.isPackaged
+// 内核工厂的**构建根**：rollup 把每个内核的 plugin.ts 独立打包成
+// out/main/server/kernel/<id>/plugin.js（见 electron.vite.config.ts 的 rollup input）。
+// assemble 可能被 rollup 拆进 chunks/(import.meta.url 是 chunk 路径),故用 process.cwd() 定位:
+// dev/build(electron-vite 输出到 out/):process.cwd() = 项目根 → out/main/server/kernel/;
+// packaged(electron-builder):asar 内 → process.resourcesPath/app.asar/out/main/server/kernel/。
+const KERNEL_BUILD_ROOT = opts.isPackaged
   ? join(process.resourcesPath, "app.asar", "out", "main", "server", "kernel")
   : join(process.cwd(), "out", "main", "server", "kernel");
-// 默认装载过滤(§目标 16):manifest.enabled===false 的内核默认不装载(如 minimal=验证用内核,生产无意义)。
-// MHD_ENABLE_KERNELS(逗号分隔内核 id)运行时强制启用被声明为 off 的内核(测试/演示);
-// 扫描 = 存在性(卸载 = 删 manifest → 扫描不存在),装载 = 默认开关(enabled),两轴正交。
-const forceEnableKernels = new Set(
-  (process.env["MHD_ENABLE_KERNELS"] ?? "").split(",").map((s) => s.trim()).filter(Boolean),
-);
-for (const { dir, manifest } of defaultEnabledEntries(scanKernelPlugins(KERNEL_PLUGINS_DIR), forceEnableKernels)) {
-  loadKernelPlugin(kernelRegistry, dir, manifest, {
-    ...pluginCtx,
-    testModel: (cwd, p, m) => sessionStore.test(cwd, p, m, manifest.id),
-  });
-}
-const modelCatalog = new ModelCatalog(kernelRegistry.all().map((p) => p.createModelSource()));
 
 // ---- 加载器:发现 builtin/installed/user/project 四目录插件,按优先级注册(低到高) ----
 // 开发期扫 src/plugins;打包后扫 process.resourcesPath/my-harness-desktop-builtin。
@@ -188,6 +180,34 @@ const builtinDir = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-builtin")
   : resolve(process.cwd(), "src/plugins");
 const userPluginsDir = join(MY_HARNESS_DESKTOP_DIR, "plugins");
+
+// 内核插件注册(§kernel-plugin):**扫的就是壳插件根目录**——manifest 带 `kernel` 块者，
+// 既是一个壳插件、也是一个内核插件(内核面与它的 desktop 对接面同属一个目录)。
+// 必须先于 modelCatalog(modelSource 从 registry 遍历),也先于下面的壳插件注册。
+// 默认装载过滤(§目标 16):kernel.enabled===false 的内核默认不装载(如 minimal=验证用内核,生产无意义)。
+// MHD_ENABLE_KERNELS(逗号分隔内核 id)运行时强制启用被声明为 off 的内核(测试/演示);
+// 扫描 = 存在性(卸载 = 删 plugin.json → 扫描不存在),装载 = 默认开关(enabled),两轴正交。
+const forceEnableKernels = new Set(
+  (process.env["MHD_ENABLE_KERNELS"] ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+);
+// builtin 在前、user 在后:用户装的第三方内核插件可覆盖同名(registry 对重复 id 会 fail-fast)。
+const kernelEntries = defaultEnabledEntries(
+  [...scanKernelPlugins(builtinDir), ...scanKernelPlugins(userPluginsDir)],
+  forceEnableKernels,
+);
+for (const entry of kernelEntries) {
+  loadKernelPlugin(kernelRegistry, entry, KERNEL_BUILD_ROOT, {
+    ...pluginCtx,
+    testModel: (cwd, p, m) => sessionStore.test(cwd, p, m, entry.manifest.id),
+  });
+}
+/** 未被装载的内核插件 id:它们的**对接面也不进壳插件清单**。 */
+const unloadedKernelPluginIds = new Set(
+  scanKernelPlugins(builtinDir)
+    .filter((e) => !kernelEntries.some((k) => k.manifest.id === e.manifest.id))
+    .map((e) => e.manifest.id),
+);
+const modelCatalog = new ModelCatalog(kernelRegistry.all().map((p) => p.createModelSource()));
 const bundledSkillsSource = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-skills")
   : resolve(process.cwd(), ".claude/skills");
@@ -203,10 +223,13 @@ const bundledStickersSource = opts.isPackaged
 const projectPluginsDir = join(process.cwd(), ".my-harness-desktop", "plugins");
 const installedDir = join(MY_HARNESS_DESKTOP_DIR, "installed");
 const registry = new PluginRegistry();
-registry.registerAll(discoverPlugins(builtinDir, "builtin"));
-registry.registerAll(discoverPlugins(installedDir, "installed"));
-registry.registerAll(discoverPlugins(userPluginsDir, "user"));
-registry.registerAll(discoverPlugins(projectPluginsDir, "project"));
+/** 过滤掉"内核面未装载"的内核插件:没有内核却显示它的设置页,只会得到一堆报错。 */
+const withoutUnloadedKernels = (list: ReturnType<typeof discoverPlugins>): ReturnType<typeof discoverPlugins> =>
+  list.filter((p) => !unloadedKernelPluginIds.has(p.manifest.id));
+registry.registerAll(withoutUnloadedKernels(discoverPlugins(builtinDir, "builtin")));
+registry.registerAll(withoutUnloadedKernels(discoverPlugins(installedDir, "installed")));
+registry.registerAll(withoutUnloadedKernels(discoverPlugins(userPluginsDir, "user")));
+registry.registerAll(withoutUnloadedKernels(discoverPlugins(projectPluginsDir, "project")));
 
 // ---- i18n:合并所有插件的 languages 贡献项成 i18next resources(05-plugin-i18n §6)----
 // main 只合并 + 给 renderer;renderer 端 init i18next + react-i18next(跨堆,各持实例)。

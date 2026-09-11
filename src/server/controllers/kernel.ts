@@ -36,7 +36,17 @@ export function registerKernel(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.kernelModels.remove, (_e, kernel: KernelId, provider: string) => modelsApi(kernel).remove(provider));
   gateway.register(IPC.kernelModels.rename, (_e, kernel: KernelId, oldId: string, newId: string) => modelsApi(kernel).rename(oldId, newId));
   gateway.register(IPC.kernelModels.getDefault, (_e, kernel: KernelId) => modelsApi(kernel).getDefault());
-  gateway.register(IPC.kernelModels.setDefault, (_e, kernel: KernelId, sel) => modelsApi(kernel).setDefault(sel));
+  // 设默认模型后广播**中性刷新信号**（不是内核专属频道）。
+  // 此前 renderer 侧"默认模型变了"靠插件私有频道传递（`<内核名>-manager:defaultChanged`），
+  // 于是 timeline 插件里硬编码了**另一个插件的 id** —— 违反 §8.3 零硬编码，
+  // 且每加一个内核就要多一个频道、多一处订阅。改用与 kernel:install / setCustomCliDir
+  // 同族的 `refresh.requested`（语义就是"内核外部状态变了，重探"）：第四个内核自动被覆盖，
+  // timeline 只需订阅这一个中性信号（订阅点见 timeline/renderer/index.tsx）。
+  gateway.register(IPC.kernelModels.setDefault, async (_e, kernel: KernelId, sel) => {
+    const r = await modelsApi(kernel).setDefault(sel);
+    broadcastRefreshRequested(gateway);
+    return r;
+  });
   gateway.register(IPC.kernelModels.test, (_e, kernel: KernelId, cwd: string, provider: string, modelId: string) => modelsApi(kernel).test(cwd, provider, modelId));
   gateway.register(IPC.kernelModels.readConfig, (_e, kernel: KernelId) => modelsApi(kernel).readConfig());
   gateway.register(IPC.kernelModels.saveConfig, (_e, kernel: KernelId, config) => modelsApi(kernel).saveConfig(config));

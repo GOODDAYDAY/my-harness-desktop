@@ -1,0 +1,21 @@
+{
+  "ext.search": "Search...",
+  "ext.empty": "No extensions yet",
+  "ext.noMatch": "No matching results",
+  "ext.source": "Source",
+  "ext.sourcePlaceholder": "@scope/pkg or git-url or /path",
+  "ext.install": "Install",
+  "ext.installing": "Installing...",
+  "ext.installFailed": "Install failed",
+  "ext.protected": "Protected",
+  "ext.pendingRestart": "session(s) need reload to apply changes",
+  "ext.reload": "Reload",
+  "ext.reloadAll": "Reload All",
+  "ext.filterReset": "Reset filters",
+  "ext.tag.file": "file",
+  "ext.tag.local": "local",
+  "ext.tag.desktop": "desktop",
+  "ext.tag.npm": "npm",
+  "ext.tag.git": "git",
+  "ext.tag.protected": "protected"
+}

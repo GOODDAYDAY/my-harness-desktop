@@ -49,15 +49,25 @@ export interface KernelPluginContext {
 export type KernelPluginFactory = (ctx: KernelPluginContext) => KernelPlugin;
 
 /**
- * 内核插件清单(manifest):一个内核插件的声明文件(plugin.json)。
- * 壳启动时扫描内核插件目录 → 读各自 manifest → 动态 import factory 模块 → 取工厂 → register。
- * 加第四个内核 = 加一个插件目录 + 一个 manifest;卸载 = 删目录/禁 manifest,壳照常启动。
+ * 内核插件的**面声明**：一个壳插件同时是一个内核插件时，在它自己的 manifest 里写的这一块。
+ *
+ * 「一个内核 = 一个插件」（§目标 11/13）落到物理形态上就是：内核本体与它的 desktop 对接面
+ * 同属一个插件目录、共用一份 `plugin.json`。壳扫描壳插件根目录时，凡 manifest 带 `kernel` 块的
+ * 即同时把它注册进 `KernelRegistry`；`enabled: false` 则**两面一起不装载**
+ * （内核面不注册、对接面也不进壳插件清单——没有内核却显示它的设置页只会得到一堆报错）。
+ *
+ * 加第四个内核 = 加一个插件目录（含 `kernel` 块 + `renderer/`），核心零改动；
+ * 卸载 = 删这一个目录，内核与它的设置页一起消失，其余内核照常。
  */
 export interface KernelPluginManifest {
-  /** 内核 id(插件声明,核心不硬编码)。 */
+  /** 内核 id(单源：由宿主壳插件 manifest 的 `id` 提供，不在此重复声明)。 */
   id: KernelId;
-  /** 工厂模块入口(相对插件目录;动态 import 它,取其 default 导出 = KernelPluginFactory)。 */
-  factory: string;
+  /**
+   * 工厂模块入口。**缺省按约定定位**：壳把每个内核的工厂编译成
+   * `<内核构建根>/<id>/plugin.js`（dev = `out/main/server/kernel/<id>/plugin.js`）。
+   * 显式给出时才按它解析（相对宿主插件目录）——留给"不经构建、直接放一个 .js"的第三方内核。
+   */
+  factory?: string;
   /** 注册顺序(越小越先注册;registry.ids()[0] 即默认内核)。缺省按字母序。 */
   order?: number;
   /** 默认装载开关(§目标 16):false = 默认不装载(demo/验证用内核,如 minimal,生产无意义)。

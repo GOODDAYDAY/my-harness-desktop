@@ -30,6 +30,13 @@ export async function assertPortFree(port) {
 
 /** 拉起应用并连上 renderer 页。env 可覆盖(隔离 HOME 用)。返回 { child, browser, page }。 */
 export async function launchApp({ appDir, port = 9222, timeoutMs = 40000, env: extraEnv } = {}) {
+  // **先断言端口空闲**（根因修复，勿删）。此前 launchApp 只等 CDP 就绪：若端口上已有**上一次泄漏
+  // 的实例**（某个 e2e 失败路径没 kill 掉 app），`cdpAlive` 立刻为真 → 直接连上**旧实例**，
+  // 而新 spawn 的 child 绑不上端口（静默失败）。后果不是报错，而是**断言读到旧进程的状态**：
+  // 实测 kernel-plugin-uninstall 第二次运行时，本该是"默认不装载 minimal"的那一步读到了
+  // 上一轮 `MHD_ENABLE_KERNELS=minimal` 实例的内核清单，于是假红/假绿都可能出现 ——
+  // 这正是"测试说绿但其实测的不是它"的最坏形态。宁可在这一步响亮地失败。
+  await assertPortFree(port);
   // node 语境下 require("electron") 返回 electron 可执行文件路径(字符串)
   const electronPath = require("electron");
   const env = { ...process.env, ...extraEnv };
