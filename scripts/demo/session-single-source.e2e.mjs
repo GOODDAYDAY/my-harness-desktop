@@ -171,6 +171,19 @@ try {
       await waitForDomIdle(page, { quietMs: 900, timeoutMs: 15000 }).catch(() => {});
     }
   }
+  if (!(await timelineHasPing())) {
+    // 失败现场：侧栏有没有这一行、时间线有没有消息、当前会话是谁 —— 区分"行没列出（列表问题）"
+    // 与"行在但点不开（重开问题）"。别让人对着"时间线没有 ping"猜。
+    const diag = await page.evaluate(() => ({
+      sidebarRows: [...document.querySelectorAll("[data-session-path]")].map((el) => ({
+        path: el.getAttribute("data-session-path"),
+        text: (el.innerText || "").replace(/\s+/g, " ").slice(0, 40),
+      })),
+      messageIds: [...document.querySelectorAll("[data-message-id]")].length,
+      bodyHead: document.body.innerText.replace(/\s+/g, " ").slice(0, 200),
+    }));
+    console.error("  诊断(⑤):", JSON.stringify(diag));
+  }
   ok(await timelineHasPing(), "⑤ 刷新重开后时间线会话内容仍在(中立层单源)");
 
   const errs = consoleTail.filter((l) => l.startsWith("[error]") || l.startsWith("[pageerror]"));

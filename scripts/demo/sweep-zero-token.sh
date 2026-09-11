@@ -13,8 +13,13 @@
 #   单次结果不足以判定；这样广扫的结论才可信，也不会把抖动误报成回归。
 #
 # 用法: npm run build && bash scripts/demo/sweep-zero-token.sh
-# 排除在外的：attach 型 e2e（连接运行中的 app，默认 CDP 9222）——
-#   dsh-credentials / dsh-multiturn / pi-smoke / dsh-smoke / ask-* / *-thinking 等需要真模型或真凭证。
+# 排除在外的（**别往里加**，加了就是花真 token）：
+#   · attach 型：dsh-credentials / dsh-multiturn（连接运行中的 app，默认 CDP 9222）；
+#   · 真模型型：pi-smoke / dsh-smoke / ask-* / *-thinking / **session-single-source**
+#     （它头注释写着"花真实 token(一次 pi ping)"——本轮我一度把它加进清单，
+#      白跑了几次真请求才发现；判定标准是**看头注释/看它有没有 mock**，不是看它像不像"冒烟"）。
+#   · 已知抖动：session-single-source 的 ⑤（刷新重开→点行重开）偶发失败，已给它加了
+#     失败现场诊断（侧栏行/时间线消息数/body 头），下次失败能自证。
 cd "$(dirname "$0")/../.." || exit 1
 
 LIST="
@@ -22,7 +27,7 @@ multi-kernel-round dsh-round minimal-model thinking-block session-list-orphan-ke
 kernel-plugin-uninstall composer-model-pin minimal-smoke minimal-settings minimal-fork
 minimal-tool session-search rename message-actions bookmark-snapshot bookmark-fork
 composer-draft cwd-session-restore sidebar-panel sidepanel-resize sticker-picker
-goal-command session-single-source fork
+goal-command fork
 "
 
 pass=0; flaky=0; fail=0

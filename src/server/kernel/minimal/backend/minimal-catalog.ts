@@ -4,11 +4,11 @@
 // 只有 minimal 适配器读写。格式是 minimal 自己的(不是 pi 的 parentId 树、不是 dsh 的
 // session forest):一个 JSONL 文件,头行 + 线性条目(无 parentId,线性序即父子),分叉归壳。
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { SessionCatalog, SessionToolConfig, HeaderPatch, ProjectStats, LineageTree, Anchor, NeutralMessage, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
-import { cwdToBucketName } from "@my-harness-desktop/shared";
+import { cwdToBucketName, messageUsageOf } from "@my-harness-desktop/shared";
 
 /** minimal 会话文件路径派生(§3.2.2):由 lineageId 确定性导出,幂等。 */
 export function minimalDerivedSessionPath(agentDir: string, cwd: string, lineageId: string): string {
@@ -178,8 +178,60 @@ export class MinimalCatalog implements SessionCatalog {
     return existsSync(p) ? p : null;
   }
 
-  async projectStats(_cwd: string): Promise<ProjectStats> {
-    return { tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 };
+  /**
+   * 项目统计：**从 minimal 自己的会话文件里算**（此前恒返全零）。
+   *
+   * 全零的代价不是"少几个数字"，而是**读起来像"这个项目一条会话都没有"**：
+   * 壳侧 `SessionStore.projectStats` 会把各内核的数字**相加**（pi/dsh/minimal 各报一份），
+   * 于是 minimal 的会话在统计面板里等于不存在。dsh 走 `sessionProjectStats` 由内核算，
+   * pi 有自己的扫描；minimal 这里是第三条实现，必须**同等诚实**地报它能报的：
+   *   · sessionCount / turns —— 从自己的文件数得出来，就报真数（`turns` = user 消息条数）；
+   *   · tokens —— 从 `message.usage` 累加（圆心 `messageUsageOf` 是唯一解析处，壳与内核同源）；
+   *   · cost —— minimal 不做计价（没有价格表），**留 0**，不编造（§4.9 的"不伪造"口径）。
+   * 单个文件损坏跳过、不炸整次统计（与列出会话同一条降级纪律）。
+   */
+  async projectStats(cwd: string): Promise<ProjectStats> {
+    const zero: ProjectStats = { tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0, sessionCount: 0, turns: 0 };
+    const dir = join(this.agentDir, "sessions", cwdToBucketName(cwd));
+    if (!existsSync(dir)) return zero;
+    let files: string[];
+    try {
+      files = readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
+    } catch {
+      return zero;
+    }
+    const acc = { ...zero, tokens: { ...zero.tokens } };
+    for (const f of files) {
+      let text: string;
+      try {
+        text = readFileSync(join(dir, f), "utf-8");
+      } catch {
+        continue; // 不可读：跳过，不炸整次统计
+      }
+      acc.sessionCount += 1;
+      for (const line of text.split("\n")) {
+        const t = line.trim();
+        if (!t) continue;
+        try {
+          const e = JSON.parse(t) as { type?: unknown; message?: unknown };
+          if (e.type !== "message") continue; // 头行与分隔条目不计
+          const msg = e.message as { role?: unknown } | undefined;
+          if (msg?.role === "user") acc.turns += 1;
+          const u = messageUsageOf(msg);
+          if (u) {
+            acc.tokens.input += u.tokens.input;
+            acc.tokens.output += u.tokens.output;
+            acc.tokens.cacheRead += u.tokens.cacheRead;
+            acc.tokens.cacheWrite += u.tokens.cacheWrite;
+            acc.tokens.total += u.tokens.total;
+            acc.cost += u.cost;
+          }
+        } catch {
+          continue; // 单行损坏跳过
+        }
+      }
+    }
+    return acc;
   }
 
   async getTree(sessionId: string): Promise<LineageTree> {

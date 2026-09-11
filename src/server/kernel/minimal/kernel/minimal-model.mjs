@@ -57,7 +57,14 @@ export async function streamModel(config, agentDir, providerId, modelId, message
       "Content-Type": "application/json",
       ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
     },
-    body: JSON.stringify({ model: modelId, messages, ...(tools?.length ? { tools } : {}), stream: true }),
+    // `stream_options.include_usage`：OpenAI 兼容端点在**最后一帧**才带 usage；
+    // 不显式要，多数网关就不发 → 用量永远拿不到（文档 §3.3.3 明确要求 message 里含 usage）。
+    body: JSON.stringify({
+      model: modelId, messages,
+      ...(tools?.length ? { tools } : {}),
+      stream: true,
+      stream_options: { include_usage: true },
+    }),
     signal,
   });
   if (!res.ok) {
@@ -68,6 +75,11 @@ export async function streamModel(config, agentDir, providerId, modelId, message
   const decoder = new TextDecoder();
   let buffer = "";
   let acc = "";
+  /** 用量与停止原因（§3.3.3：message 里要含 usage / stopReason）。
+   *  两者都在流里出现，此前**整个丢掉**——于是 minimal 会话没有用量基线，
+   *  项目统计里 minimal 的会话恒为 0（pi/dsh 都有真数字），"同等功能"缺一块。 */
+  let usage;
+  let stopReason;
   // tool_call 分片聚合(§4.8.2):按 index 缓冲,arguments 追加拼接(非覆盖)。
   const toolBufs = new Map();
   for (;;) {
@@ -81,10 +93,26 @@ export async function streamModel(config, agentDir, providerId, modelId, message
       if (!line.startsWith("data:")) continue;
       const data = line.slice(5).trim();
       if (data === "[DONE]") {
-        return { text: acc, toolCalls: [...toolBufs.values()].filter((t) => t.name) };
+        return { text: acc, toolCalls: [...toolBufs.values()].filter((t) => t.name), usage, stopReason };
       }
       try {
         const j = JSON.parse(data);
+        // usage 归一成**中性用量形状**（圆心 messageUsageOf 是唯一解析处，这里按它的字段写）：
+        // OpenAI 的 prompt_tokens 已含缓存命中，且 total = prompt + completion，与
+        // pi 的 `input + output = totalTokens` 同口径（对照真实 pi 会话文件实证）。
+        if (j.usage && typeof j.usage === "object") {
+          const u = j.usage;
+          const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+          usage = {
+            input: n(u.prompt_tokens),
+            output: n(u.completion_tokens),
+            cacheRead: n(u.prompt_tokens_details?.cached_tokens),
+            cacheWrite: n(u.prompt_tokens_details?.cache_creation_tokens ?? u.cache_creation_input_tokens),
+            totalTokens: n(u.total_tokens) || n(u.prompt_tokens) + n(u.completion_tokens),
+          };
+        }
+        const fr = j.choices?.[0]?.finish_reason;
+        if (typeof fr === "string" && fr) stopReason = fr;
         const delta = j.choices?.[0]?.delta;
         if (typeof delta?.content === "string") { acc += delta.content; onDelta(delta.content); }
         if (Array.isArray(delta?.tool_calls)) {
@@ -108,5 +136,7 @@ export async function streamModel(config, agentDir, providerId, modelId, message
       }
     }
   }
-  return { text: acc, toolCalls: [...toolBufs.values()].filter((t) => t.name) };
+  // 流没给 [DONE] 就断了（网关提前关流）：已有内容照常返回，usage/stopReason 可能缺——
+  // 缺就是缺，不编造（口径：拿不到的东西不写假值）。
+  return { text: acc, toolCalls: [...toolBufs.values()].filter((t) => t.name), usage, stopReason };
 }

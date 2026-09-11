@@ -197,7 +197,9 @@ minimal 的会话 id 不从时间戳或随机数来，而从 `neutralSessionId` 
 
 #### 3.3.2 条目行：最常见的 message 条目 + 分隔条目，线性序即父子
 
-头行之后每一行是一个条目。最常见的条目是 `type: "message"`：`id`（条目 id）、`timestamp`、`message`（role + content，含 toolCall 块、usage、stopReason 等）。除 message 外，还有几种**分隔条目**：`session_info`（改名）、`model_change`（切模型）、`tools_change`（切工具集），见 §3.3.3——它们的 `type` 不是 `message`，但也是文件里的一行条目，共同组成线性序列。所有条目都**没有 parentId**——因为文件里只有一条线，上一行天然是下一行的父，线性序本身就是父子关系，不需要再存一个指针。这是 minimal 和 pi 老格式最根本的区别：pi 用 parentId 是因为它一个文件里塞了整棵树，minimal 一个文件只有一条线，树已经在壳侧的中立层了。
+头行之后每一行是一个条目。最常见的条目是 `type: "message"`：`id`（条目 id）、`timestamp`、`message`（role + content，含 toolCall 块、usage、stopReason 等）。
+
+> **`usage` / `stopReason` 已落地（本轮补）**：此前流式响应里的 `usage` 帧**从没解析过**、`finish_reason` 也没留 —— 文档写了、代码没有，属「文档说有、代码没有」的漂移。代价是连锁的两处功能缺失：① 会话的**文件统计基线**（壳侧 `SessionDetail.stats` 明写「message.usage 累加」）在 minimal 上恒空；② `projectStats` 恒返全零 → 壳把各内核的数字**相加**，于是 **minimal 的会话在统计面板里等于不存在**（dsh 由内核算、pi 有自己扫描，只有 minimal 是 0）。现在：请求带 `stream_options.include_usage`、解析 `usage` 归一成中性用量形状（圆心 `messageUsageOf` 是唯一解析处）、`finish_reason` 落成 `stopReason`；`projectStats` 从自己的会话文件算 sessionCount / turns / tokens（cost 留 0 —— 不做计价就不编造）。**拿不到就不写那个键**，不写 0（写 0 会被读成「这一轮真没花 token」）。除 message 外，还有几种**分隔条目**：`session_info`（改名）、`model_change`（切模型）、`tools_change`（切工具集），见 §3.3.3——它们的 `type` 不是 `message`，但也是文件里的一行条目，共同组成线性序列。所有条目都**没有 parentId**——因为文件里只有一条线，上一行天然是下一行的父，线性序本身就是父子关系，不需要再存一个指针。这是 minimal 和 pi 老格式最根本的区别：pi 用 parentId 是因为它一个文件里塞了整棵树，minimal 一个文件只有一条线，树已经在壳侧的中立层了。
 
 #### 3.3.3 改名、切模型、切工具集怎么落盘：三种分隔条目
 
@@ -734,6 +736,25 @@ minimal 的协议事件是它自己的形状，中性事件是壳的形状。**�
 #### 7.9.3 桩不能静默、不能伪造成功
 
 桩的纪律是 §7.6 的收口：返回"不支持/空/内置态"，让 UI 显式置灰或隐藏入口，而不是返回一个编造的值让 UI 以为能操作。版本管理返回 `available: true, source: "installed"`（诚实的"内置可用"），而不是编一个 `v1.0.0` 装成"可升级"；扩展管理返回 `[]`（诚实的"没有扩展"），而不是伪造一个"read-claude-md"装成有插件。这条是 `kernel-design-spec.md` §7.6 三条出路的第三条——显式降级，不静默、不伪造。
+
+#### 7.9.4 哪些**可选面** minimal 不提供，以及为什么
+
+「同等地位、同等功能」不等于"逐项相同"——`KernelPlugin` 的可选面本来就是"有则用、无则降级"（§1.5）。
+把这件事写清楚，是因为**灰区比差异更危险**：文档不表态，下一个人就会以为它是 bug 而"补"上一个假的。
+按 §7.6 三分法逐项表态（判据：**内核有没有这个能力**，不是"pi 有没有"）：
+
+| 可选面 | minimal | 为什么 |
+|---|---|---|
+| `createSkillProvider` / `ensureSkills` / `skillWatchPaths` | **无** | minimal 内核**没有技能加载机制**（§5 的工具是另一回事：工具是模型可调用的函数，技能是按需载入的提示词包）。pi 的技能住在 `settings.json` + `skills/` 目录，dsh 有 fork 插件扫目录 —— minimal 两者都没有。**显式降级**：技能面板里 minimal 不贡献任何行；若一个内核都不提供，面板显式写「当前装载的内核都不提供技能清单」，而不是一句含糊的「暂无」。**将来若要补**，正路是在 minimal 内核里实现技能发现/载入（内核能力），而不是在壳里造一个影子读 pi 的目录。 |
+| `createOneshot` | **无** | 一次性问内核（pi 的 headless 单轮）是 pi 的能力面；minimal 的等价物是"起一个会话发一条"，壳不需要单开面。 |
+| `createPluginExtensionSync` | **无** | minimal 没有"内核扩展"这套机制（pi 是 TS 扩展、dsh 是 Cordis 插件）。所以声明了 `extensions.minimal` 的壳插件会在启动同步时打日志跳过（**显式**，不静默）。 |
+| `createQuestionBridge` | **无** | 交互式提问（dsh 的 question bridge）是 dsh 的能力面。 |
+| `createLifecycle` / `migrateSkills` | **无** | 同上一条族的 pi 专属面。 |
+| `readLegacySessions` | **无** | minimal 没有"前一代格式"要迁移（它就是第一版格式）。 |
+| `sessionRoot` / `configRoot` / `createVersionApi` / `createModelsApi` / `createConfigApi` / `createExtensionSource` / `createModelSource` / `createCatalog` / `seed` / `createBackend` | **有** | 这些是"可托管 + 可管理"的必需面，minimal 一个不少（§7.9.1 的两套缝）。 |
+
+**自检**：这张表里任何一行从"无"变成"有"，都应该是**内核长出了那个能力**（在内核侧实现），
+而不是壳或插件里多了一段特判。
 
 ### 7.10 无特权差异
 

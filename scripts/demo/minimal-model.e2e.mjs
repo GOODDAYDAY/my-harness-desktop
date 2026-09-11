@@ -5,7 +5,7 @@
 // 零真实 LLM、零外网。
 // 用法: npm run build && node scripts/demo/minimal-model.e2e.mjs [--port 9352] [--keep]
 import { parseArgs } from "node:util";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,6 +32,9 @@ const mockServer = createServer((req, res) => {
   res.write('data: {"choices":[{"delta":{"content":"这是 mock"}}]}\n\n');
   setTimeout(() => {
     res.write('data: {"choices":[{"delta":{"content":" 模型的流式回复"}}]}\n\n');
+    // usage 帧（OpenAI 在 `stream_options.include_usage` 下的形状）+ finish_reason：
+    // 文档 §3.3.3 要求 message 里含 usage/stopReason，这条从"内核 → 落盘"端到端验它。
+    res.write('data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":111,"completion_tokens":22,"total_tokens":133,"prompt_tokens_details":{"cached_tokens":7}}}\n\n');
     res.write("data: [DONE]\n\n");
     res.end();
   }, 60);
@@ -139,6 +142,20 @@ try {
   ok(modelText, "时间线出现 mock 模型的流式回复(真模型路径,非 echo)");
   const noEcho = await page.evaluate(() => ![...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("[minimal echo]")));
   ok(noEcho, "无 echo 兜底(确实走了真模型)");
+
+  // ── 用量端到端：内核拿到的 usage 真的落进了 minimal 会话文件 ──
+  // 判据在**盘上**（内核是写穿先于发事件的），拿圆心 messageUsageOf 解析——不在测试里另写一份期望形状。
+  const sessionsRoot = join(home, ".minimal", "agent", "sessions");
+  const files = [];
+  const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) { const full = join(d, e.name); if (e.isDirectory()) walk(full); else if (e.name.endsWith(".jsonl")) files.push(full); } };
+  walk(sessionsRoot);
+  const assistant = files.flatMap((f) => readFileSync(f, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)))
+    .map((e) => e.message).filter((m) => m && m.role === "assistant");
+  const withUsage = assistant.find((m) => m.usage);
+  ok(!!withUsage, "minimal 会话文件里的 assistant 消息带 usage（文档 §3.3.3 的形状要求，内核此前整帧丢弃）");
+  ok(withUsage?.usage?.totalTokens === 133 && withUsage?.usage?.input === 111 && withUsage?.usage?.cacheRead === 7,
+    `usage 数字与 mock 发的帧一致（实际 ${JSON.stringify(withUsage?.usage)}）`);
+  ok(withUsage?.stopReason === "stop", `finish_reason 落成 stopReason（实际 ${withUsage?.stopReason}）`);
 
   ok(consoleTail.length === 0, `页面零报错(实际 ${consoleTail.length} 条)`);
 

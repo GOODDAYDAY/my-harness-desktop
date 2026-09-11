@@ -259,6 +259,9 @@ async function handleSend(cmd) {
   let full = "";
   let failed = false;
   let hitMaxRounds = false;
+  /** 本轮的用量与停止原因（模型流里拿到的最后一个）。拿不到就保持 undefined。 */
+  let lastUsage;
+  let lastStopReason;
   const toolCallsAll = [];
   /** 已经在分片阶段发过 toolCallStart 的 index（避免 Start 发两次：分片一次、执行前又一次）。 */
   const seenToolCallStart = new Set();
@@ -275,7 +278,7 @@ async function handleSend(cmd) {
       const messages = [{ role: "user", content: cmd.text }];
       const tools = activeToolSchemas();
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        const { toolCalls } = await streamModel(config, cfg.agentDir, providerId, modelId, messages, tools, {
+        const { toolCalls, usage: turnUsage, stopReason: turnStopReason } = await streamModel(config, cfg.agentDir, providerId, modelId, messages, tools, {
           onDelta,
           // 工具参数分片 → toolCallUpdate（§4.2.3 三态里的中间那一态）。
           // 此前这一种事件**从没发过**：模型客户端把分片攒到 [DONE] 才一次交出，
@@ -290,6 +293,9 @@ async function handleSend(cmd) {
           },
           signal: controller.signal,
         });
+        // 工具回环时用量按**最后一轮**记（与"上下文占用取末条锚点"同口径，不累加多轮）。
+        if (turnUsage) lastUsage = turnUsage;
+        if (turnStopReason) lastStopReason = turnStopReason;
         if (toolCalls.length === 0) break; // 最终文本已流式发出
         // 达上限强制收尾(§5.10.1):最后一轮仍调工具 = 未收敛,标 maxToolRounds。
         if (round === MAX_TOOL_ROUNDS - 1) { hitMaxRounds = true; break; }
@@ -329,6 +335,10 @@ async function handleSend(cmd) {
     content,
     timestamp: now, startedAt: now,
     model: { provider: model.provider, modelId: model.modelId, kernel: "minimal" },
+    // 用量与停止原因（§3.3.3 的 message 形状要求）。拿不到就不写这两个键——
+    // 壳侧的 messageUsageOf 对缺失 usage 返回 null（诚实留空，不编造）。
+    ...(lastUsage ? { usage: lastUsage } : {}),
+    ...(lastStopReason ? { stopReason: lastStopReason } : {}),
     ...(controller.signal.aborted ? { stopped: true } : {}),
     ...(failed ? { error: true } : {}),
   };
