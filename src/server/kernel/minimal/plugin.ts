@@ -16,6 +16,9 @@ import type { KernelPluginFactory, KernelVersionApi, KernelStatusView } from "@m
 /** minimal 版本 API:内置内核(随壳分发,不装不升不降)的诚实桩(§7.9.2)。 */
 function minimalVersionApi(): KernelVersionApi {
   return {
+    // 内置内核：不装不升不降、不可指定目录 —— 能力旗标显式说"没有这两面"，
+    // 设置页据此隐藏对应区块（而不是画出两个点了没用的控件）。
+    capabilities: () => Promise.resolve({ install: false, customDir: false }),
     status: (): Promise<KernelStatusView> =>
       Promise.resolve({ currentVersion: "built-in", installedVersion: "built-in", available: true, source: "installed", customCliDir: "", error: null }),
     setCustomCliDir: (): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }> =>

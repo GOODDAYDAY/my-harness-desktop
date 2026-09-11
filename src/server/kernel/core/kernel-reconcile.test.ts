@@ -17,6 +17,7 @@ function makeVersionApi(opts: {
 } = {}): VersionApiStub {
   const installCalls: string[] = [];
   const versionApi = {
+    capabilities: async () => ({ install: true, customDir: true }),
     status: async () => ({
       currentVersion: opts.available ? "1.0.0" : null,
       installedVersion: null,

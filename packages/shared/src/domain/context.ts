@@ -276,6 +276,20 @@ export interface KernelStatusView {
 /** 内核版本管理的中性功能面(pi/dsh 同构;settings 三 TAB 的「内核版本」TAB 消费)。
  *  pi/dsh 各交一个实例,壳经 kernels[KernelId] 访问——不再有 kernel/dshKernel 两个面。 */
 export interface KernelVersionApi {
+  /**
+   * 这个内核的版本面**支持什么**（数据，UI 据以显式降级；不按内核身份分支）。
+   *
+   * 为什么需要它：随壳分发的内置内核（minimal）**没有**安装/切换版本这回事，
+   * 也没有"自定义内核目录"。缺了旗标，设置页只能把两个用不了的控件照样画出来让人点，
+   * 或者让每个内核的对接面各写一份条件渲染（= 按内核分支，§1.4 禁止）。
+   * 有旗标之后是**同一份 UI + 数据驱动的隐藏**：加第四个内核只填它自己的旗标。
+   */
+  capabilities(): Promise<{
+    /** 支持安装/切换版本（内置内核为 false）。 */
+    install: boolean;
+    /** 支持指定自定义内核目录（内置内核为 false）。 */
+    customDir: boolean;
+  }>;
   status(): Promise<KernelStatusView>;
   setCustomCliDir(dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>;
   listVersions(forceRefresh?: boolean): Promise<{ versions: string[]; latest: string | null }>;

@@ -93,6 +93,7 @@ export const IPC = {
   },
   // 内核版本管理中性端点(带 kernel 参数,替代原 kernel 与 dshKernel 两套独立端点)。
   kernelVersion: {
+    capabilities: "kernel-version:capabilities",
     status: "kernel-version:status",
     setCustomCliDir: "kernel-version:setCustomCliDir",
     listVersions: "kernel-version:listVersions",

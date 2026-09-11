@@ -24,6 +24,9 @@ export interface WrapVersionApiOptions {
 /** 把 KernelManager 包装成中性 KernelVersionApi(§kernel-plugin)。 */
 export function wrapVersionApi(manager: KernelManager, opts: WrapVersionApiOptions): KernelVersionApi {
   return {
+    // KernelManager 走的是"装/切版本"这条路 —— 用它包装的内核天然支持这两面。
+    // 内置内核（minimal）不经过本包装，自己交 { install: false, customDir: false }。
+    capabilities: () => Promise.resolve({ install: true, customDir: true }),
     status: () => Promise.resolve(manager.status(opts.prefs.get<string>(opts.customCliPrefsKey) ?? "")),
     setCustomCliDir: (dir) => {
       const trimmed = (dir ?? "").trim();

@@ -62,6 +62,31 @@ try {
   const hasMinimal = await page.evaluate(() => document.body.innerText.includes("minimal") || document.body.innerText.includes("built-in"));
   ok(hasMinimal, "设置页渲染 minimal 内核(版本桩 built-in,不崩溃)");
 
+  // 点开「Minimal」设置入口（用稳定锚点，不按文案猜）。
+  await page.evaluate(() => {
+    const nav = document.querySelector('[data-settings-id="minimal"]');
+    (nav?.closest("button") ?? nav)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await waitForDomIdle(page, { quietMs: 800, timeoutMs: 8000 }).catch(() => {});
+  // ── 能力驱动的显式降级（§7.6 第三档）──
+  // 内置内核没有"安装/切换版本"这回事：**不该画出用不了的控件**，而该给一句说明。
+  // 判据是数据（capabilities.install=false），不是内核身份分支——加第四个内核只填它自己的旗标。
+  const pageText = await page.evaluate(() => document.body.innerText);
+  ok(!pageText.includes("安装/切换版本"), "内置内核没有安装区（不画点了没用的控件）");
+  ok(!pageText.includes("检查更新"), "没有版本源就不显示「检查更新」");
+  ok(pageText.includes("随壳分发"), "给出「为什么没有安装区」的说明（显式降级，不留空白让人猜）");
+  ok(pageText.includes("自定义内核目录") === false, "内置内核不显示「自定义内核目录」区");
+
+  // ── 反向：pi 的版本页**照常**有安装区（降级不能误伤有版本源的内核）──
+  await page.evaluate(() => {
+    const nav = document.querySelector('[data-settings-id="pi"]');
+    (nav?.closest("button") ?? nav)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await waitForDomIdle(page, { quietMs: 800, timeoutMs: 8000 }).catch(() => {});
+  const piText = await page.evaluate(() => document.body.innerText);
+  ok(piText.includes("安装/切换版本"), "pi 的版本页照常有安装区（能力旗标不是把面板一起关掉）");
+  ok(piText.includes("自定义底座"), "pi 支持自定义内核目录（同一份数据驱动的隐藏，各归各的文案）");
+
   ok(consoleTail.length === 0, `页面零报错(实际 ${consoleTail.length} 条)`);
 
   await killApp(app);

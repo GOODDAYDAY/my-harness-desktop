@@ -103,9 +103,13 @@ src/plugins/kernels/minimal/
 
 对，看不见。`enabled: false` 让壳在**装载前**就跳过整个插件（内核面与对接面一起），所以设置页里没有 Minimal 入口，模型下拉里也没有 minimal 的条目——这与「默认不装载」是同一件事的两面。用 `MHD_ENABLE_KERNELS=minimal` 启动后，内核与它的设置页一起出现。
 
-**Q：为什么 minimal 的版本页还渲染一个用不了的安装区，而不是整个隐藏？**
+**Q：minimal 的版本页现在长什么样？**
 
-`KernelVersionPage` 是 pi/dsh/minimal 共用的共享 base，它不知道谁会不支持安装。可以给 `KernelVersionApi` 加能力旗标让 base 隐藏该区块（那样更干净），但那要动圆心契约；当前选择的折中是：**保留区块 + 文案说明不可用**（显式降级，不静默），且 API 层的错误信息是明确的（不是空实现）。这一条记为演进项：加 `KernelVersionApi.capabilities` 后即可隐藏。
+**不画用不了的控件**。共享 base `KernelVersionPage` 先问 `api.capabilities()`，只在**明确支持**时才渲染安装区/「最新版本+检查更新」行/「自定义内核目录」区；minimal 交的是 `{ install: false, customDir: false }`，于是这三块都不出现，只留一行说明为什么没有（`minimal.noInstallHint`：「minimal 随壳分发：不安装、不升级、不降级，也没有需要指定的目录。」）。状态一栏读的是 `minimal.upToDate`（「内置内核，无版本概念」），而不是 `common.unknown`——「未知」读起来像"查不到"，真相是"没有这回事"。
+
+判据是**数据**不是内核身份分支（§1.4）：加第四个内核只填它自己的旗标，共享 base 零改动。守卫：`packages/react/src/manager/kernel-version-page.test.tsx`（4 条：不支持→区块不渲染 + 说明在；支持→照常渲染；能力未到→先不画，不闪一个点不动的按钮；状态文案不落 `common.unknown`）与 `minimal-settings.e2e.mjs`（9 断言，真 app 里同时验 minimal 隐藏与 pi 照常——降级不能误伤有版本源的内核）。
+
+> 演进记录：此前这里写着「保留区块 + 文案说明不可用」，并把它列为"加 `KernelVersionApi.capabilities` 后即可隐藏"的演进项。**已落地**。
 
 **Q：minimal 的拓展页现在什么都不能装，为什么还要有？**
 

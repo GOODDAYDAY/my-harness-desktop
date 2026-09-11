@@ -27,6 +27,8 @@ export function KernelVersionPage({ api, i18nPrefix }: KernelVersionPageProps): 
   const { t } = useTranslation();
   const k = (suffix: string, vars?: Record<string, unknown>): string => t(`${i18nPrefix}.${suffix}`, vars);
   const [status, setStatus] = useState<KernelStatusView | null>(null);
+  /** 该内核的版本面能力（数据驱动显式降级；缺省 null = 还没问到，按"不支持"渲染以免闪出用不了的控件）。 */
+  const [caps, setCaps] = useState<{ install: boolean; customDir: boolean } | null>(null);
   const [registry, setRegistry] = useState<{ versions: string[]; latest: string | null } | null>(null);
   const [regFailed, setRegFailed] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -38,6 +40,7 @@ export function KernelVersionPage({ api, i18nPrefix }: KernelVersionPageProps): 
 
   useEffect(() => {
     setRegFailed(false);
+    void api.capabilities().then(setCaps);
     void api.status().then(setStatus);
     void api.listVersions().then((r) => {
       setRegistry(r);
@@ -103,6 +106,9 @@ export function KernelVersionPage({ api, i18nPrefix }: KernelVersionPageProps): 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "var(--spacing-xl)", alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
           <InfoRow label={k("installedVersion")} value={current ?? (status?.available ? t("common.unknown") : t("common.notInstalled"))} />
+          {/* "最新版本 + 检查更新"只在支持安装的内核上有意义：内置内核没有版本源，
+              画出这一行只会让人以为"没查到"（其实是"没有这回事"）。 */}
+          {caps?.install === true && (
           <div style={{ display: "flex", gap: "var(--spacing-md)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>
             <span style={{ color: "var(--color-muted)", minWidth: "80px" }}>{k("latestVersion")}</span>
             <span style={{ color: (latest && current && current !== latest) ? "var(--color-accent-warning)" : "var(--color-fg)", fontFamily: "var(--font-family-mono)" }}>
@@ -112,16 +118,21 @@ export function KernelVersionPage({ api, i18nPrefix }: KernelVersionPageProps): 
               {checking ? t("common.checking") : k("checkUpdate")}
             </Button>
           </div>
+          )}
           <InfoRow
             label={k("status")}
             value={
-              !status?.available
-                ? `${t("common.notInstalled")}${status?.error ? `:${status.error}` : ""}`
-                : latest && current === latest
-                  ? k("upToDate")
-                  : latest && current && current !== latest
-                    ? k("newAvailable")
-                    : t("common.unknown")
+              // 不支持安装的内核：状态就是"内置"（该内核自己的文案），不落到 common.unknown——
+              // "未知"读起来像"查不到"，而真相是"没有版本这回事"。
+              caps?.install === false
+                ? k("upToDate")
+                : !status?.available
+                  ? `${t("common.notInstalled")}${status?.error ? `:${status.error}` : ""}`
+                  : latest && current === latest
+                    ? k("upToDate")
+                    : latest && current && current !== latest
+                      ? k("newAvailable")
+                      : t("common.unknown")
             }
           />
           <InfoRow
@@ -137,6 +148,19 @@ export function KernelVersionPage({ api, i18nPrefix }: KernelVersionPageProps): 
           />
         </div>
 
+        {caps?.install !== true ? (
+          // 只在内核**明确支持**安装时才画安装区（caps 未到 = 按不支持，先不画）。
+          // 内置内核（随壳分发、不装不升不降）：**不画**用不了的安装控件。
+          // 这是 §7.6 三分法的第三档「显式降级」——隐藏入口，而不是画一个点了没用的按钮。
+          // 判据是**数据**（capabilities.install），不是内核身份分支：加第四个内核只填它自己的旗标。
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderLeft: "1px solid var(--color-border)", paddingLeft: "var(--spacing-xl)" }}>
+            <div>
+              {/* 一句话说清"为什么没有安装区"，而不是留一片空白让人猜。文案由该内核自己的
+                  语言包给（内容归插件）；只有不支持安装的内核会渲染到它。 */}
+              <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "var(--font-size-sm)" }}>{k("noInstallHint")}</p>
+            </div>
+          </div>
+        ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)", borderLeft: "1px solid var(--color-border)", paddingLeft: "var(--spacing-xl)" }}>
           <div>
             <h3 style={{ margin: 0, fontSize: "var(--font-size-base)", fontWeight: 600 }}>{k("installSwitch")}</h3>
@@ -180,9 +204,12 @@ export function KernelVersionPage({ api, i18nPrefix }: KernelVersionPageProps): 
             </div>
           )}
         </div>
+        )}
       </div>
 
-      <CustomCliSection api={api} i18nPrefix={i18nPrefix} status={status} onStatus={setStatus} />
+      {caps?.customDir === true && (
+        <CustomCliSection api={api} i18nPrefix={i18nPrefix} status={status} onStatus={setStatus} />
+      )}
     </div>
   );
 }

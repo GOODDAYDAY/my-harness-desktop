@@ -17,6 +17,7 @@ export function registerKernel(gateway: Gateway, ctx: MainContext): void {
 
   // ---- IPC:内核版本管理(中性,带 kernel 参数)——版本管理逻辑已收进插件工厂的 wrapVersionApi,
   // 这里只委托给 kernelVersionApis[kernel]。install 的进度/完成事件按 kernel 过滤广播。
+  gateway.register(IPC.kernelVersion.capabilities, (_e, kernel: KernelId) => kernelVersionApis[kernel].capabilities());
   gateway.register(IPC.kernelVersion.status, (_e, kernel: KernelId) => kernelVersionApis[kernel].status());
   gateway.register(IPC.kernelVersion.setCustomCliDir, (_e, kernel: KernelId, dir: string) => kernelVersionApis[kernel].setCustomCliDir(dir));
   gateway.register(IPC.kernelVersion.listVersions, (_e, kernel: KernelId, forceRefresh: boolean) => kernelVersionApis[kernel].listVersions(forceRefresh));

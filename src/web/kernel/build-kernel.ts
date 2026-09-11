@@ -42,6 +42,7 @@ function kernelConfigFor(kernel: KernelId) {
  *  install 的进度/完成事件带 kernel 首参,按 kernel 过滤(避免多内核并发安装串扰)。 */
 function kernelVersionFor(kernel: KernelId): KernelVersionApi {
   return {
+    capabilities: () => transport.invoke(IPC.kernelVersion.capabilities, kernel),
     status: (): Promise<KernelStatusView> => transport.invoke(IPC.kernelVersion.status, kernel),
     setCustomCliDir: (dir: string) => transport.invoke(IPC.kernelVersion.setCustomCliDir, kernel, dir),
     listVersions: (forceRefresh = false) => transport.invoke(IPC.kernelVersion.listVersions, kernel, forceRefresh),
