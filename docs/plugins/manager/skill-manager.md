@@ -38,7 +38,9 @@
 **`SkillProvider` 是技能域的中立契约接口，和 `BaseBackend` 同构。** 它只有五样东西：
 
 - `readonly capabilities: SkillCapabilities` —— 本内核支持哪几根开关轴。
-- `listSkills(cwd: string): Promise<SkillInfo[]>` —— 读完整技能列表（含禁用），供管理页展示。
+- `listSkills(cwd: string): Promise<ManagedSkill[]>` —— 读完整技能列表（含禁用），供管理页展示。
+  `ManagedSkill = SkillInfo & { capabilities: SkillCapabilities }`：**每行带上它自己来源内核**
+  的能力标志（见下「按行渲染与来源路由」）。
 - `setEnabled(skill: SkillInfo, enabled: boolean): Promise<void>` —— 加载/卸载（对应 `enabled` 轴）。
 - `setModelInvocable(skill: SkillInfo, value: boolean): Promise<void>` —— 模型可自动调用（对应 `modelInvocable` 轴）。
 - `watch(cwd: string, onChanged: () => void): () => void` —— 订阅技能变化，内核回报，壳重拉列表；返回清理函数。
@@ -154,6 +156,30 @@
 ### 7.1 `index.tsx`：设置页的状态机
 
 `SkillManagerPage`（`SettingsComponentProps` 形参解构出 `refreshSignal`）是 `settings` 槽 `skills` 项的组件。它的状态有九块：`skills`（列表）、`capabilities`（能力标志）、`loading`、`filter`（all/enabled/disabled）、`search`、`toast`、`error`、`excludedPaths`（被排除的路径集合）、`pathOpen`（路径筛选器展开状态）。
+
+### 按行渲染与来源路由（多内核下的一处真缺陷，已修）
+
+聚合器合并多个内核的 `SkillProvider`。**每个内核支持的开关轴可以不同**，而此前聚合器把这件事
+处理错了两次（同一个根因的两个面）：
+
+1. **开关路由取「第一个支持该轴的 provider」**。当时的注释写明了它的前提：
+   「当前 dsh 降级为空列表，只有 pi 有数据，所以路由到'支持该轴'的 provider 是安全的」。
+   dsh 补上 `DshSkillProvider` 之后这个前提就不成立了 —— 点一条 **dsh** 技能行的开关会路由到
+   **pi**，把 `+/<dsh 技能路径>` 写进 **pi 的 `~/.pi/agent/settings.json`**：改错了内核的配置，
+   而且 dsh 那条技能根本没被切换（不报错、面板看起来"切了"）。
+2. **能力标志取全局 OR**，面板据此给**每一行**画开关：dsh 的行按 pi 的能力渲染，反之亦然。
+
+修法（契约不变，不往 `SkillInfo` 里塞内核身份）：
+- 聚合时按**稳定标识**（`filePath`，缺省 `name:scope`）记下每一行的来源 provider；
+  开关按来源路由。**不能用对象身份记账** —— 开关是从 renderer 经 IPC 发回来的**反序列化新对象**，
+  引用对不上，面板所有开关会变成静默 no-op（守卫里有一条 `structuredClone` 过的用例专门钉这件事）。
+- `listSkills` 返回 `ManagedSkill[]`，每行带**它自己来源**的 `capabilities`；面板按行渲染。
+  全局 `capabilities`（OR）只留给"有没有任何来源支持"这类整表判断（空态文案用它区分
+  「暂无 skills」与「当前装载的内核都不提供技能清单」——后者是 §7.6 的显式降级）。
+- 来源不支持该轴、或来源未知时**显式跳过并留痕**，绝不回退到别的 provider。
+
+守卫：`src/server/application/skills/skill-aggregator.test.ts`（6 条，含 `structuredClone` 那条）。
+红绿证明：把路由退回「第一个支持该轴的 provider」→「开关落到了**另一个内核**身上」当场红。
 
 **数据获取是「list + capabilities 并行拉取」。** `refresh` 回调里 `Promise.all([ctx.skills.list(cwd), ctx.skills.getCapabilities()])`，`cwd` 取 `useUiStore((s) => s.currentCwd) || ""`。两个 `useEffect` 驱动刷新：一个 `[refresh, refreshSignal]` 依赖（`refreshSignal` 是框架传的刷新信号，外部触发重拉），一个 `[ctx, currentCwd, refresh]` 依赖里调 `ctx.skills.watch(currentCwd, refresh)` 并返回清理函数（`unwatch`）。所以列表刷新有两条路：框架的 `refreshSignal`（如 settings 页被重新打开、或 `skills:changed` 广播触发）和 `watch` 回调（内核侧文件变化触发）。
 

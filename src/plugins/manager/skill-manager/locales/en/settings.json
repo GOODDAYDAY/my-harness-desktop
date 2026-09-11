@@ -20,5 +20,6 @@
   "settings.skillToggleEnable": "Enable / disable (writes +/- entries to settings.json, takes effect next session)",
   "settings.skillToggleForce": "Pin to context: when pinned, the skill enters the system prompt and the model can invoke it; when unpinned, it can only be triggered manually via /skill",
   "settings.skillOpenFolder": "Open containing folder",
-  "skill-blocks.skillRef": "Skill referenced: {{name}}"
+  "skill-blocks.skillRef": "Skill referenced: {{name}}",
+  "settings.skillUnsupported": "None of the loaded kernels provides a skill list"
 }

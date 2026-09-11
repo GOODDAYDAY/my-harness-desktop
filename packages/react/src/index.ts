@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import type {
-  Theme, PluginListItem, KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution,
+  Theme, PluginListItem, KernelExtensionInfo, SkillInfo, ManagedSkill, SkillCapabilities, SettingsItem, SettingsGroupContribution,
   SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo, SessionRawFilePaths, PendingQuestionRecord, SessionHeaderChangedEvent,
   NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage, ConnectionInfo,
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
@@ -254,7 +254,7 @@ export interface KernelApi {
     onMaximizedChanged: (cb: (maximized: boolean) => void) => () => void;
   };
   skills: {
-    list: (cwd: string) => Promise<SkillInfo[]>;
+    list: (cwd: string) => Promise<ManagedSkill[]>;
     getCapabilities: () => Promise<SkillCapabilities>;
     setEnabled: (skill: SkillInfo, enabled: boolean) => Promise<void>;
     setModelInvocable: (skill: SkillInfo, value: boolean) => Promise<void>;
@@ -305,7 +305,7 @@ export type {
   SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, QuestionRequestEvent, Question, QuestionAnswer, ProcessExitEvent, RpcErrorEvent,
   PluginListItem, PluginState, PluginTier,
-  KernelExtensionInfo, SkillInfo, SkillCapabilities, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
+  KernelExtensionInfo, SkillInfo, ManagedSkill, SkillCapabilities, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
   MessageRendererContribution, FileActionContribution, MessageActionContribution,
   AuxBlock, AuxBlockParser,
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,

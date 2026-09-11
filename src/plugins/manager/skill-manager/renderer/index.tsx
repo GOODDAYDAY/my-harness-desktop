@@ -7,7 +7,7 @@ import {
   EmptyState,
   Toast,
   type SettingsComponentProps,
-  type SkillInfo,
+  type ManagedSkill,
   type SkillCapabilities,
   usePluginContext,
   Pagination,
@@ -37,7 +37,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const ctx = usePluginContext();
   const currentCwd = useUiStore((s) => s.currentCwd);
 
-  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [skills, setSkills] = useState<ManagedSkill[]>([]);
   const [capabilities, setCapabilities] = useState<SkillCapabilities>({ toggleEnabled: false, toggleModelInvocable: false });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "enabled" | "disabled">("all");
@@ -58,7 +58,9 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
         ctx.skills.list(cwd),
         ctx.skills.getCapabilities(),
       ]);
-      setSkills(list as SkillInfo[]);
+      // 每行带它**自己来源内核**的能力标志：面板按行渲染，不是拿全局 OR 出来的标志画所有行
+      // （全局 OR 会让 pi 的轴能力被画到 dsh 的行上，点下去路由到错的内核）。
+      setSkills(list as ManagedSkill[]);
       setCapabilities(caps as SkillCapabilities);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -100,7 +102,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   }, [sourcePaths]);
 
   // 第一层:路径过滤(排除集合为空 = 全部路径)。
-  const pathFiltered = useMemo<SkillInfo[]>(() => {
+  const pathFiltered = useMemo<ManagedSkill[]>(() => {
     if (excludedPaths.size === 0) return skills;
     return skills.filter((s) => !excludedPaths.has(s.sourceDir || `__${s.scope}__`));
   }, [skills, excludedPaths]);
@@ -108,7 +110,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
   const enabledCount = pathFiltered.filter((s) => s.enabled).length;
 
   // 第二层:启用/禁用筛选 + 搜索(name/description/路径)。
-  const visibleSkills = useMemo<SkillInfo[]>(() => {
+  const visibleSkills = useMemo<ManagedSkill[]>(() => {
     let list = pathFiltered;
     if (filter === "enabled") list = list.filter((s) => s.enabled);
     else if (filter === "disabled") list = list.filter((s) => !s.enabled);
@@ -142,11 +144,11 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
 
   const selectAllPaths = () => setExcludedPaths(new Set());
 
-  const mutate = (filePath: string | undefined, patch: Partial<SkillInfo>) => {
+  const mutate = (filePath: string | undefined, patch: Partial<ManagedSkill>) => {
     setSkills((prev) => prev.map((s) => (s.filePath === filePath ? { ...s, ...patch } : s)));
   };
 
-  const handleSetEnabled = async (skill: SkillInfo) => {
+  const handleSetEnabled = async (skill: ManagedSkill) => {
     const next = !skill.enabled;
     mutate(skill.filePath, { enabled: next });
     try {
@@ -158,7 +160,7 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
     }
   };
 
-  const handleSetModelInvocable = async (skill: SkillInfo) => {
+  const handleSetModelInvocable = async (skill: ManagedSkill) => {
     const next = !skill.modelInvocable;
     mutate(skill.filePath, { modelInvocable: next });
     try {
@@ -212,11 +214,22 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
         />
 
         {visibleSkills.length === 0 ? (
-          <EmptyState title={search || excludedPaths.size > 0 || filter !== "all" ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" }) : t("settings.skillEmpty", { defaultValue: "暂无 skills" })} />
+          <EmptyState
+            title={
+              search || excludedPaths.size > 0 || filter !== "all"
+                ? t("settings.skillNoResults", { defaultValue: "没有匹配的 skill" })
+                : // 「一个都没有」有两种成因，别混：**筛选筛没了** vs **没有任何内核提供技能**。
+                  // 后者是显式降级（§7.6 第三档）——例如只装载了不提供技能面的内核时，
+                  // 说"暂无 skills"会让人以为"该有的没加载出来"。全局 capabilities 在这里
+                  // 恰好是正确判据（它问的是"有没有任何一个来源支持这些轴"）。
+                  capabilities.toggleEnabled || capabilities.toggleModelInvocable
+                  ? t("settings.skillEmpty", { defaultValue: "暂无 skills" })
+                  : t("settings.skillUnsupported", { defaultValue: "当前装载的内核都不提供技能清单" })
+            }
+          />
         ) : (
           <SkillList
             skills={visibleSkills}
-            capabilities={capabilities}
             onSetEnabled={handleSetEnabled}
             onSetModelInvocable={handleSetModelInvocable}
             onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
@@ -279,12 +292,11 @@ function PathFilter({ paths, excluded, open, onToggleOpen, onToggleExclude, onSe
   );
 }
 
-function SkillList({ skills, capabilities, onSetEnabled, onSetModelInvocable, onOpenFolder, t }: {
-  skills: SkillInfo[];
-  capabilities: SkillCapabilities;
-  onSetEnabled: (s: SkillInfo) => void;
-  onSetModelInvocable: (s: SkillInfo) => void;
-  onOpenFolder: (s: SkillInfo) => void;
+function SkillList({ skills, onSetEnabled, onSetModelInvocable, onOpenFolder, t }: {
+  skills: ManagedSkill[];
+  onSetEnabled: (s: ManagedSkill) => void;
+  onSetModelInvocable: (s: ManagedSkill) => void;
+  onOpenFolder: (s: ManagedSkill) => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }): React.ReactNode {
   const page = usePagination(skills, PAGE_SIZE);
@@ -292,7 +304,7 @@ function SkillList({ skills, capabilities, onSetEnabled, onSetModelInvocable, on
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)" }}>
         {page.pageItems.map((skill) => (
-          <SkillRow key={skill.filePath ?? skill.name} skill={skill} capabilities={capabilities} onSetEnabled={() => onSetEnabled(skill)} onSetModelInvocable={() => onSetModelInvocable(skill)} onOpenFolder={() => onOpenFolder(skill)} t={t} />
+          <SkillRow key={skill.filePath ?? skill.name} skill={skill} onSetEnabled={() => onSetEnabled(skill)} onSetModelInvocable={() => onSetModelInvocable(skill)} onOpenFolder={() => onOpenFolder(skill)} t={t} />
         ))}
       </div>
       {page.totalPages > 1 && <Pagination currentPage={page.currentPage} totalPages={page.totalPages} onPageChange={page.setCurrentPage} />}
@@ -300,9 +312,8 @@ function SkillList({ skills, capabilities, onSetEnabled, onSetModelInvocable, on
   );
 }
 
-function SkillRow({ skill, capabilities, onSetEnabled, onSetModelInvocable, onOpenFolder, t }: {
-  skill: SkillInfo;
-  capabilities: SkillCapabilities;
+function SkillRow({ skill, onSetEnabled, onSetModelInvocable, onOpenFolder, t }: {
+  skill: ManagedSkill;
   onSetEnabled: () => void;
   onSetModelInvocable: () => void;
   onOpenFolder: () => void;
@@ -325,8 +336,8 @@ function SkillRow({ skill, capabilities, onSetEnabled, onSetModelInvocable, onOp
             {skill.description}
           </div>
         </div>
-        {capabilities.toggleEnabled && <Toggle on={skill.enabled} onClick={onSetEnabled} title={t("settings.skillToggleEnable", { defaultValue: "启用 / 禁用(下次会话生效)" })} />}
-        {capabilities.toggleModelInvocable && <PinBox pinned={skill.modelInvocable} onClick={onSetModelInvocable} title={t("settings.skillToggleForce", { defaultValue: "固定到上下文:模型可自动调用" })} />}
+        {skill.capabilities.toggleEnabled && <Toggle on={skill.enabled} onClick={onSetEnabled} title={t("settings.skillToggleEnable", { defaultValue: "启用 / 禁用(下次会话生效)" })} />}
+        {skill.capabilities.toggleModelInvocable && <PinBox pinned={skill.modelInvocable} onClick={onSetModelInvocable} title={t("settings.skillToggleForce", { defaultValue: "固定到上下文:模型可自动调用" })} />}
         <button onClick={(e) => { e.stopPropagation(); onOpenFolder(); }} title={t("settings.skillOpenFolder", { defaultValue: "打开所在文件夹" })} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer", flexShrink: 0 }}>
           <FolderOpen size={14} />
         </button>

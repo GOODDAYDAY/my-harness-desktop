@@ -34,6 +34,16 @@ export interface SkillInfo {
 }
 
 /** 技能域的中立契约:壳和内核之间的统一接口(和 BaseBackend 同构)。 */
+/**
+ * 聚合视图里的一行技能：中性 `SkillInfo` + **它自己来源内核**的能力标志。
+ *
+ * 为什么能力标志要**按行**带：聚合器合并多个内核的技能，而各内核支持的开关轴不同。
+ * 若给整份列表一个 OR 出来的全局标志，面板会拿 pi 的能力给 dsh 的行画开关——
+ * 点下去要么没反应、要么路由到错误的内核（后者会写坏别的内核的配置）。
+ * 带在行上是"能力探测"而不是"内核身份判断"（§1.5）：壳不认内核名，只认这一行支持什么。
+ */
+export type ManagedSkill = SkillInfo & { capabilities: SkillCapabilities };
+
 export interface SkillProvider {
   /** 本内核支持哪几根开关轴。 */
   readonly capabilities: SkillCapabilities;
