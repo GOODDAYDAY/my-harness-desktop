@@ -11,6 +11,7 @@ import { mkdirSync, writeFileSync, createWriteStream } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
+import { quietEnv } from "./demo/lib/quiet-env.mjs";
 
 const require = createRequire(import.meta.url);
 // --dev:走用户 `npm run dev` 同款链路(electron-vite dev + Vite renderer + /rpc 反代 8420)。
@@ -72,8 +73,10 @@ log(`产物目录: ${OUT}`);
 
 // ---------- 1. 拉起应用(真实 HOME = 真实 dev profile) ----------
 // dev 态走 electron-vite dev(用户 `npm run dev` 同款);构建态走 electron .(out/ 产物)。
+// env 过 quietEnv:默认 MHD_WINDOW=hidden ⇒ 窗口永不 show,不抢焦点(§5.6)。要看窗口:
+// MHD_WINDOW=shown npm run verify:e2e。
 const electronLogStream = createWriteStream(join(OUT, "electron.log"));
-const env = { ...process.env };
+const env = quietEnv(process.env);
 delete env.ELECTRON_RUN_AS_NODE;
 const child = DEV
   ? spawn(process.execPath, [

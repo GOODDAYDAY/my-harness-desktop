@@ -34,6 +34,15 @@
 | `new-plugin.md` | 如何新建一个插件 | ~4.2w |
 | `glossary.md` | 术语表 | — |
 
+### 测试与验证（docs/ 根目录）
+
+| 文档 | 主题 |
+|---|---|
+| `e2e-verify.md` | 一键验收口径（起服务→元素齐全→插件全 load→DOM 交互→发 ping）；**测试静默：跑测试不抢你的窗口与焦点**；`verify:classes` / `audit:quiet` 静态守卫 |
+| `minimal-kernel-acceptance.md` | 第三内核（minimal）的交付与验收报告范式（每个 bug 带守卫、6 表面验证） |
+
+三级测试纪律（unittest / DOM 交互 test / e2etest）与"测试静默"硬纪律写在 `CLAUDE.md` §5.6；设计原则 38「测试静默」与反模式 18 在 `docs/design/design-principles.md`；交互测试实操手册（含静默开拉、隔离 HOME、CDP 探针配方）在内置 skill `.claude/skills/interaction-testing/SKILL.md`。
+
 ### 插件文档（docs/plugins/<域>/）
 
 按六域组织，每个插件一篇：

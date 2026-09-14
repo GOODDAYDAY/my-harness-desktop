@@ -498,7 +498,7 @@ src/plugins/{domain}/{feature}/
 
 - **`.claude/skills/`**：内置 skills 源（仓库顶级职业技能目录，随壳分发）。当前两个技能：`my-harness-desktop-guide`（本项目的开发指南，`SKILL.md` + `.meta.json`）、`write-plugin`（写插件技能）。每个技能一个目录，`SKILL.md` 是 frontmatter + 正文，`.meta.json` 是元数据。
 - **`assets/`**：外层资产。`icons/`（应用图标 icns/icns/icon.png + deepseek.svg）、`stickers/`（贴纸图 + stickers.json）、`banner.svg`、`scripts/`（`patch-electron.cjs` 和 `patch-pi-rpc.cjs` 两个构建期补丁，被 `postinstall` 调用）。
-- **`scripts/`**：开发环境引导脚本。`setup.sh`/`setup.ps1`（环境引导）、`run.cjs`（dev/preview/start 的运行时包装）、`verify-e2e.mjs`/`e2e-inmem.mjs`/`pixel-check.mjs`/`class-coverage.mjs`（验证脚本）、`demo/`（demo 与 e2e 脚本：record.mjs、dsh-multiturn.e2e.mjs、goal-command.e2e.mjs、parallel-record.mjs、speed-up.mjs）。
+- **`scripts/`**：开发环境引导脚本与验证脚本。`setup.sh`/`setup.ps1`（环境引导）、`run.cjs`（dev/preview/start 的运行时包装）、`verify-e2e.mjs`/`e2e-inmem.mjs`/`pixel-check.mjs`/`class-coverage.mjs`（验证脚本）、`quiet-launch-audit.mjs`（**测试静默守卫**：凡拉起 electron 的脚本必须过 `demo/lib/quiet-env.mjs`，开窗不得回到无条件 `win.show()`）、`demo/`（demo 与 e2e 脚本：record.mjs、dsh-multiturn.e2e.mjs、goal-command.e2e.mjs、parallel-record.mjs、speed-up.mjs；`demo/lib/` 是机制件——`app.mjs` 拉起、`quiet-env.mjs` 静默开关、`png-ink.mjs` 截图非黑判据、`home.mjs` 隔离 HOME、`util.mjs`/`interact.mjs`/`locate.mjs` 探针原语）。
 
 ## 10. 设计风格提炼
 

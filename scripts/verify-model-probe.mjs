@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync, createWriteStream } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
+import { quietEnv } from "./demo/lib/quiet-env.mjs";
 
 const require = createRequire(import.meta.url);
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -65,7 +66,8 @@ const CDP_PORT = 9222, SVC_PORT = 8420;
 const cdpAlive = async () => { try { const r = await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`, { signal: AbortSignal.timeout(1200) }); return r.ok; } catch { return false; } };
 if (await cdpAlive()) { log("9222 被占用,退出"); process.exit(1); }
 
-const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
+// quietEnv:默认 MHD_WINDOW=hidden ⇒ 窗口永不 show,不抢焦点(§5.6)。
+const env = quietEnv(process.env); delete env.ELECTRON_RUN_AS_NODE;
 const electronLog = createWriteStream(join(OUT, "electron.log"));
 const child = spawn(require("electron"), [ROOT, `--remote-debugging-port=${CDP_PORT}`, "--no-sandbox"], { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
 child.stdout?.pipe(electronLog); child.stderr?.pipe(electronLog);

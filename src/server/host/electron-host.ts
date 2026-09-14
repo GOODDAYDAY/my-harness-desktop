@@ -17,8 +17,14 @@ const IMAGE_MIME: Record<string, string> = {
   ".gif": "image/gif", ".webp": "image/webp",
 };
 
-/** 组装 Electron 宿主。getWindow 返回主窗口(阶段 1 单窗口),remote 连接改用缺省降级 host。 */
-export function createElectronHost(getWindow: () => BrowserWindow | null): Host {
+/** 组装 Electron 宿主。getWindow 返回主窗口(阶段 1 单窗口),remote 连接改用缺省降级 host。
+ *  opts.nativeAlerts=false(静默态 MHD_WINDOW=hidden):不弹 OS 级通知横幅 —— 系统级弹窗同样是
+ *  对用户的抢占式打扰,而测试不需要它(§5.6 测试静默纪律)。 */
+export function createElectronHost(
+  getWindow: () => BrowserWindow | null,
+  opts: { nativeAlerts?: boolean } = {},
+): Host {
+  const nativeAlerts = opts.nativeAlerts ?? true;
   return {
     lifecycle: {
       onReady(cb) {
@@ -167,6 +173,8 @@ export function createElectronHost(getWindow: () => BrowserWindow | null): Host 
     },
     notify: {
       async show(opts) {
+        // 静默态直接不弹(不是"缺能力降级",是测试模式:通知横幅会在用户屏幕右上角冒出来)。
+        if (!nativeAlerts) return;
         if (!Notification.isSupported()) return;
         const n = new Notification({ title: opts.title, body: opts.body, silent: opts.silent ?? false });
         n.on("click", () => { getWindow()?.show(); getWindow()?.focus(); });

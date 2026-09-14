@@ -34,13 +34,15 @@
     "audit:docs": "node scripts/doc-drift-audit.mjs",
     "audit:refs": "node scripts/ref-audit.mjs",
     "audit:symbols": "node scripts/doc-symbol-audit.mjs",
+    "audit:quiet": "node scripts/quiet-launch-audit.mjs",
     "test:captured": "bash scripts/run-tests.sh",
     "e2e:dsh:attach": "node scripts/demo/dsh-multiturn.e2e.mjs",
     "e2e:pi": "node scripts/demo/pi-smoke.e2e.mjs",
     "e2e:minimal": "node scripts/demo/minimal-smoke.e2e.mjs",
     "e2e:minimal:uninstall": "node scripts/demo/kernel-plugin-uninstall.e2e.mjs",
     "e2e:session-list": "node scripts/demo/session-list-orphan-kernel.e2e.mjs",
-    "e2e:dispatch": "node scripts/demo/kernel-dispatch.e2e.mjs"
+    "e2e:dispatch": "node scripts/demo/kernel-dispatch.e2e.mjs",
+    "e2e:quiet": "node scripts/demo/quiet-launch.e2e.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

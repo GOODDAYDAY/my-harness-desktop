@@ -339,6 +339,23 @@ pi 专属能力（`refreshThinkingLevels`/`abortRetry`）在非 pi 内核下要�
 
 - **反模式**：框架已有现成机制还自己重写一份；两个内核的模型设置/管理页「功能等效但 UI 不等效」。
 
+### 原则 38 · 测试静默：跑测试不得抢用户窗口与焦点
+
+用户坐在同一台机器上工作，测试是**在别人桌面上跑的程序**。任何一次 e2e/验收拉起 app，都不得弹窗、
+不得激活应用、不得夺走键盘焦点或鼠标，也不得弹 OS 级通知横幅。要"看画面"必须是**显式**请求
+（`MHD_WINDOW=shown`），不是默认。
+
+判据（可当场判）：跑测试时用户正在打字的窗口会不会失焦？桌面会不会凭空多一个窗口？
+会，就是违规——不管它"只是几秒"。
+
+- **反模式**：开窗代码无条件 `win.show()`（macOS 上 show() 即激活应用，用户窗口失焦、鼠标被夺走）；
+  为"看着方便"给每个测试脚本各写一行 `showInactive()`；测试期间弹系统通知横幅；把"窗口可见"当成
+  e2e 的前提（其实 CDP 求值 / `Input.dispatchKeyEvent` / `Page.captureScreenshot` 都不需要窗口可见）。
+- **正确做法**：窗口可见性收成**策略**（`src/server/bootstrap/window-visibility.ts`：hidden ⇒ 不 show、
+  focusable=false、skipTaskbar、不设 dock 图标、不弹通知、关后台节流），测试侧默认静默
+  （`scripts/demo/lib/quiet-env.mjs` 注入 `MHD_WINDOW=hidden`），由静态守卫（`npm run audit:quiet`）、
+  单测（`window-visibility.test.ts`）与真 app e2e（`scripts/demo/quiet-launch.e2e.mjs`）三层钉住。
+
 ---
 
 ## 四、高频反模式清单（按根因归类）
@@ -395,6 +412,11 @@ pi 专属能力（`refreshThinkingLevels`/`abortRetry`）在非 pi 内核下要�
 
 17. **发现机制不通用 / 各内核各写一套**：skills/tools/i18n 的发现机制应由壳统一搞一层，而非 pi、dsh 各写一套。
     正确：壳统一发现层（递归扫描 + manifest 声明），内核侧缺的用插件补。
+
+18. **测试抢用户焦点 / 静默弹窗**：开窗代码无条件 `win.show()`，e2e 一跑就把用户正在用的窗口顶掉
+    （失焦 + 鼠标被夺 + 桌面多一个窗口），或在测试期间弹系统通知。
+    正确：窗口可见性走策略（`window-visibility.ts`），测试侧默认 `MHD_WINDOW=hidden`（`quiet-env.mjs`），
+    三层守卫 + `npm run audit:quiet`；只有显式 `MHD_WINDOW=shown` 才给窗口（原则 38）。
 
 ---
 

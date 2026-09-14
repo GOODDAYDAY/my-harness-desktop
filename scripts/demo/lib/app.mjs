@@ -2,11 +2,15 @@
 //
 // 入口契约与 npm start 同款:electron . --remote-debugging-port=9222(跑 out/ 构建产物,
 // app.isPackaged=false → dev 数据根)。连接用 puppeteer-core(已在 devDependencies,零新增依赖)。
+//
+// **默认静默开窗**(MHD_WINDOW=hidden,见 lib/quiet-env.mjs):窗口永不 show,不抢焦点/鼠标、
+// 不弹系统通知;CDP 求值 + Input 事件 + 截图都不依赖窗口可见。要看窗口:MHD_WINDOW=shown。
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { platform } from "node:os";
 import { join } from "node:path";
 import puppeteer from "puppeteer-core";
+import { quietEnv } from "./quiet-env.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -39,7 +43,8 @@ export async function launchApp({ appDir, port = 9222, timeoutMs = 40000, env: e
   await assertPortFree(port);
   // node 语境下 require("electron") 返回 electron 可执行文件路径(字符串)
   const electronPath = require("electron");
-  const env = { ...process.env, ...extraEnv };
+  // quietEnv:MHD_WINDOW=hidden(默认)——窗口永不 show,不抢用户焦点/鼠标(§5.6)。
+  const env = quietEnv({ ...process.env, ...extraEnv });
   delete env.ELECTRON_RUN_AS_NODE;
   // Windows:os.homedir() 读 USERPROFILE(非 HOME)——隔离只覆盖 HOME 时 Node 侧数据根
   // 落回真实 profile(会话/扩展/路径泄漏进录制,剧本状态也不匹配)。同设两变量。

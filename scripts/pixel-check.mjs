@@ -7,6 +7,7 @@ import { mkdirSync, copyFileSync, rmSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
+import { quietEnv } from "./demo/lib/quiet-env.mjs";
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -19,7 +20,8 @@ const files = ["01-ui-ready.png", "02-after-interact.png", "03-ping-typed.png", 
 mkdirSync(staging, { recursive: true });
 for (const f of files) copyFileSync(`${DIR}/${f}`, `${staging}/${f}`);
 
-const child = spawn(require("electron"), [ROOT, "--remote-debugging-port=9222"], { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
+// env 过 quietEnv:默认 MHD_WINDOW=hidden ⇒ 窗口永不 show,不抢焦点(§5.6)。
+const child = spawn(require("electron"), [ROOT, "--remote-debugging-port=9222"], { cwd: ROOT, env: quietEnv(process.env), stdio: ["ignore", "pipe", "pipe"] });
 child.stdout.resume(); child.stderr.resume();
 
 try {

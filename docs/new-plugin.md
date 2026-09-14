@@ -860,6 +860,10 @@ export function apply(ctx) {
 
 ## 12 QA
 
+**Q：写完了怎么验？跑 e2e 会不会弹窗抢我焦点？**
+
+三级测试按 CLAUDE.md §5.6：纯逻辑补 unittest（`npx vitest run <file>`）、UI 行为补 DOM 交互 test（`// @vitest-environment jsdom`）、跨进程全链路补 e2e（`scripts/demo/*.e2e.mjs`，puppeteer + CDP 驱动 `out/` 构建产物）。**e2e 默认静默开窗**——`launchApp` 走 `scripts/demo/lib/quiet-env.mjs` 注入 `MHD_WINDOW=hidden`，窗口永不 show、不抢你的焦点与鼠标、不弹系统通知；隐藏窗口照样能测（CDP 求值 / 键鼠注入 / 截图都不依赖窗口可见）。真想看着窗口跑才显式 `MHD_WINDOW=shown node scripts/demo/<剧本>.e2e.mjs`。改了 `src/server` 的插件机制代码记得先 `npm run build`（e2e 跑的是构建产物）。别在自己的脚本里写 `win.show()` / `showInactive()` 去"方便观察"——`npm run audit:quiet` 会拦。
+
 **Q：plugin.json 的 `id` 和目录名、renderer 上级目录名不一致会怎样？**
 
 内置插件会出问题。`plugins-host.ts:23` 用正则 `plugins\/(?:[^/]+\/)*([^/]+)\/renderer` 抓 renderer 的直接上级目录名当插件 id，与 `manifest.id` 比对。不一致时 `builtinPathById` 的 key 和 manifest.id 对不上，加载找不到 chunk。三者保持一致：目录名 = `plugin.json` 的 `id` = renderer 的上级目录名。

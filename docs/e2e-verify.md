@@ -14,6 +14,8 @@
 npm run build                  # 确保 out/ 是最新(构建产物时间晚于源码即可跳过)
 npm run verify:e2e             # 验收构建产物(electron .,renderer 由 8420 静态服务)
 node scripts/verify-e2e.mjs --dev   # 验收 dev 态(npm run dev 同款链路:Vite renderer + /rpc 反代)
+npm run e2e:quiet              # 静默纪律自身的守卫:前台 App 不被抢 + 隐藏窗口照样渲染/收输入
+npm run audit:quiet            # 静态守卫:凡拉起 app 的脚本都必须过 quiet-env
 ```
 
 产物在 `/tmp/mhd-verify-<时间戳>/`:
@@ -25,6 +27,35 @@ node scripts/verify-e2e.mjs --dev   # 验收 dev 态(npm run dev 同款链路:Vi
 | `01-ui-ready.png` … `05-ping-done.png` | 各阶段截屏 |
 
 退出码 0 = 全部通过。
+
+## 测试静默:跑测试不抢你的窗口与焦点
+
+**默认行为**:上面这些脚本拉起 app 时**窗口永不出现**——不激活应用、不夺键盘焦点或鼠标、不进任务栏、
+不弹系统通知。用户在自己机器上工作时,跑测试不该有任何感知(CLAUDE.md §5.6「测试静默」,设计原则 38)。
+
+机制:
+
+| 层 | 位置 | 作用 |
+|---|---|---|
+| 策略(纯逻辑) | `src/server/bootstrap/window-visibility.ts` | `MHD_WINDOW` → `{ show, focusable, skipTaskbar, backgroundThrottling, nativeAlerts, dockIcon }` |
+| 应用侧 | `src/server/bootstrap/electron.ts` | `hidden` 时不 `win.show()`、窗口不可聚焦、关后台节流;`src/server/host/electron-host.ts` 不发系统通知 |
+| 测试侧 | `scripts/demo/lib/quiet-env.mjs` | 所有拉 electron 的脚本默认注入 `MHD_WINDOW=hidden` |
+| 守卫 | `npm run audit:quiet` / `window-visibility.test.ts` / `scripts/demo/quiet-launch.e2e.mjs` | 静态 + 单测 + 真 app 三层 |
+
+隐藏窗口照样能测,因为 e2e 要的是 CDP——JS 求值、`Input.dispatchKeyEvent`(键入/点击)、
+`Page.captureScreenshot`(截图)全都不依赖窗口可见。唯一要防的失败模式是"隐藏窗口不渲染/截图全黑",
+所以静默态强制 `backgroundThrottling: false`,并由 `scripts/demo/quiet-launch.e2e.mjs` 实测钉住
+(前台 App 不变 + 隐藏窗口里的 DOM/截图/键入都活着,截图内容用自解 PNG 判非黑)。
+
+**想看着窗口跑**(人工观察、录 GIF 需要肉眼看流程):
+
+```bash
+MHD_WINDOW=shown npm run verify:e2e                        # 显式授权,窗口才会出现(会抢焦点)
+MHD_WINDOW=shown node scripts/demo/<某剧本>.e2e.mjs
+```
+
+`MHD_WINDOW` 只接受 `shown` / `hidden`;写错值**启动即报错**(不静默回落 shown——否则你以静默了,
+其实窗口又弹出来了)。
 
 ## 配套静态守卫:候选类覆盖(`verify:classes`)
 
@@ -52,6 +83,7 @@ npm run verify:classes # 全覆盖打 ✅;有缺失列出类名并退出码 1
 ## 注意
 
 - 脚本要求 **8420 / 9222 端口空闲**(有实例在跑会拒绝启动,避免误操作用户窗口);
+- 默认**静默开窗**(见上节):不抢焦点、不露窗口;要看窗口显式 `MHD_WINDOW=shown`;
 - 必须在**沙箱外**跑:服务要监听 127.0.0.1:8420、前端要走 loopback WS、ping 要访问模型网关——
   Codex workspace-write 沙箱禁 bind/connect(含 loopback),沙箱内跑必失败;
 - ping 走兜底模型(`models.getFallbackModel`,清单第一个可用模型,当前 = dsh `us-new/bifrost/tencent/deepseek-v4-pro`),

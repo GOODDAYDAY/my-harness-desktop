@@ -16,7 +16,7 @@
 > - **事件总线**：renderer 侧的插件间事件通道（`packages/react/src/event-bus.ts`）。channel 由代码级 `export const channels` 声明，框架加载 module 后自动注册。插件间通信只走事件，不走共享 store 互读写。
 > - **JSONL**：JSON Lines，每行一个完整 JSON 对象。它是**传输细节**（内核和壳的对话走 JSONL、pi 的会话文件也是 JSONL），不是语义契约——语义契约是 lineage 和中性事件。
 
-> 📌 **设计原则 + 反模式总纲见 `docs/design/design-principles.md`**——从 176 个 session 的用户输入 + 真实代码 + 1300+ 条 commit 交叉提炼的 37 条原则与 17 条反模式清单（每条为「原则陈述 + 判别气味 + 反模式 + 正确做法」四段，可直接作为 lint / code review / 盲审的检查项）。本文（CLAUDE.md）是纪律总纲，那份是「原则 + 反模式」的可对照执行展开。写插件前先读它。
+> 📌 **设计原则 + 反模式总纲见 `docs/design/design-principles.md`**——从 176 个 session 的用户输入 + 真实代码 + 1300+ 条 commit 交叉提炼的 38 条原则与 18 条反模式清单（每条为「原则陈述 + 判别气味 + 反模式 + 正确做法」四段，可直接作为 lint / code review / 盲审的检查项）。本文（CLAUDE.md）是纪律总纲，那份是「原则 + 反模式」的可对照执行展开。写插件前先读它。
 
 ## 1 底线：不可逾越的纪律
 
@@ -294,6 +294,13 @@
    - 测什么：跨进程全链路——真实输入框敲字、真实内核起停、真实事件流、真实 DOM 呈现。jsdom 测不了的（虚拟列表、CDP 时序、真实内核事件）都在这里验。
    - 怎么写：参考 `scripts/demo/goal-command.e2e.mjs`——`launchApp` 拉起 → `page.keyboard.type` 真实键入 → `page.waitForFunction` 轮询断言（**不赌固定 sleep**，事件驱动等 DOM 落位）→ 每步截图留证 → 失败留诊断现场。需要"不花真 token"时覆写 models.json 为空清单（快速失败路径也是真实路径）。
    - 什么时候必须写：涉及内核进程/真实发送/多窗口的改动。跑法：`npm run build && node scripts/demo/<name>.e2e.mjs`。
+
+**测试静默：跑测试不得抢占用户窗口与焦点**（用户坐在同一台机器上，这是硬纪律不是礼貌）：
+
+- **窗口永不 show**：所有拉起 electron 的脚本都过 `scripts/demo/lib/quiet-env.mjs`（默认 `MHD_WINDOW=hidden`）；应用侧由 `src/server/bootstrap/window-visibility.ts` 分岔——hidden 时**不 show、不可聚焦、不进任务栏、不设 dock 图标、不弹系统通知**。要看窗口人工观察：`MHD_WINDOW=shown node scripts/demo/<某剧本>.e2e.mjs`。
+- **为什么可以隐藏着测**：e2e 要的是 CDP（JS 求值 / `Input.dispatchKeyEvent` / `Page.captureScreenshot`），**都不依赖窗口可见**；`launchApp` 的 `page.keyboard.type`、`page.click` 走 CDP 注入，不需要窗口持有系统焦点。唯一要小心的失败模式是"隐藏窗口不渲染/截图全黑"，所以静默态强制 `backgroundThrottling: false`，并由 `scripts/demo/quiet-launch.e2e.mjs` 当真 app 级守卫（前台 App 不变 + 隐藏窗口照样渲染、照样收输入）。
+- **守卫**：`npm run audit:quiet`（静态：凡 spawn electron 的脚本必须过 quiet-env；开窗代码不得回到无条件 `win.show()`）＋ `window-visibility.test.ts`（unittest：hidden 策略与非法值抛错）＋ `scripts/demo/quiet-launch.e2e.mjs`（e2e：真实前台 App 不被抢）。
+- **反面**：为了"看着方便"在测试里 `win.show()` / `showInactive()` / 弹系统通知——用户正在打字的窗口失焦、鼠标被夺走，是每次验证都在打扰用户。人工要看画面时走 `MHD_WINDOW=shown` 显式授权，不写成默认。
 
 **纪律收口**：修复一个 bug = 定位根因 + 修复 + **补一条能复现该 bug 的守卫测试**（§3.7）。三级里没有"这层没法测"——纯逻辑补 unittest，UI 行为补 DOM 交互，全链路补 e2e。提交信息里写清跑了哪几级（§5.4 第四要素）。
 
@@ -779,6 +786,7 @@ VSCode 的扩展 API 是为代码编辑器设计的，my-harness-desktop 是 AI 
 - [ ] 方案视角：解决根本问题，而非打补丁
 - [ ] 洋葱架构：依赖只向内，会变的细节推外层，放错层即技术债（§1.1、§4）
 - [ ] 测试同行：纯逻辑有 unittest、UI 行为有真实 DOM 交互 test、全链路有 e2etest，该覆盖的层已覆盖且全绿（§5.6）
+- [ ] 测试静默：本轮验证没弹窗、没抢用户焦点（拉起 app 的脚本都过 `quiet-env` / `MHD_WINDOW=hidden`）且 `npm run audit:quiet` 通过（§5.6）
 
 ### 修改文件清单
 本次改动涉及的全部文件的树形清单，按目录分组。目的是让读者一眼看清改动的物理范围和落点——不用翻 diff 就能知道这次动了哪些文件；每个文件后可附一行说明改了什么。

@@ -138,6 +138,8 @@
 
 record.mjs 按 `--scenario <name>` import `./scenarios/<name>/index.mjs`（场景 = 目录 bundle：seed + steps），GIF 产物名 = `demo-<name>-<locale>.gif`，speed-up 的 SCENARIO_ORDER、README 表格、清理清单都引用这个名字（parallel-record 自动发现场景目录，不维护清单）。11 个板块的映射如下（大部分复用既有场景名，降低改名成本）：
 
+**录制默认静默开窗**（CLAUDE.md §5.6 测试静默）：录制帧来自 `page.screenshot`（CDP），不依赖窗口可见，所以 `record.mjs` / `parallel-record.mjs` 拉起的应用默认 `MHD_WINDOW=hidden`——录 GIF 时不会在你屏幕上弹窗口、抢焦点（批量并发录制尤其明显）；GIF 内容与是否显示窗口无关。要**肉眼看**流程才用 `MHD_WINDOW=shown node scripts/demo/record.mjs …`。
+
 | 板块 | scenario name | bundle 目录 | 说明 |
 |---|---|---|---|
 | 会话流渲染 | `timeline-flow` | `scenarios/timeline-flow/` | 新写 |

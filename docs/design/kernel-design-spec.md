@@ -1136,6 +1136,8 @@ export abstract class AbstractBackend<C extends BackendContext = BackendContext>
 
 **测试纪律**：dsh 集成测试若无法起真进程（无网络/无 key），用 mock transport（`JsonRpcTransport` 假实现）验证 seed/resume 的调用参数，不依赖真模型。不 sleep 等就绪，就绪用实证探测。
 
+**测试静默纪律**（用户与测试同机，测试不得打扰用户）：任何拉起 app 的验证都不弹窗、不抢焦点与鼠标、不弹系统通知。测试脚本默认 `MHD_WINDOW=hidden`（`scripts/demo/lib/quiet-env.mjs`），应用侧由 `src/server/bootstrap/window-visibility.ts` 分岔。隐藏窗口照样能测——CDP 的求值 / `Input.dispatchKeyEvent` / `Page.captureScreenshot` 都不依赖窗口可见。三层守卫：`npm run audit:quiet` + `window-visibility.test.ts` + `scripts/demo/quiet-launch.e2e.mjs`（前台 App 不被抢）。详见 CLAUDE.md §5.6「测试静默」与 `design-principles.md` 原则 38。
+
 ## §26B 安全与凭证
 
 - **凭证不进圆心契约明文往返**：圆心/application 只声明「需要读/写内核的 llm 配置」接口，apiKey 的脱敏、加密、不回显在协议翻译层 / IPC 边界处理。renderer 拿到的 apiKey 是「可写、不回显明文」（或只显示「已设置」态），与 pi 的 apiKey 处理对齐。

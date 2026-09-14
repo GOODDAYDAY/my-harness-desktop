@@ -5,11 +5,16 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { assemble } from "./assemble";
 import { createElectronHost } from "../host/electron-host";
+import { windowVisibilityPolicy } from "./window-visibility";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// 窗口可见性(§5.6 测试静默纪律):MHD_WINDOW=hidden ⇒ 永不 show、不抢焦点、不弹系统通知。
+// 测试脚本(scripts/demo/lib/quiet-env.mjs)默认注入 hidden;人工观察时 MHD_WINDOW=shown。
+const visibility = windowVisibilityPolicy(process.env);
+
 let mainWindow: BrowserWindow | null = null;
-const host = createElectronHost(() => mainWindow);
+const host = createElectronHost(() => mainWindow, { nativeAlerts: visibility.nativeAlerts });
 // rendererDir 在入口算(而非 assemble 内):__dirname 恒为 out/main(入口非 chunk),
 // ../renderer 在 dev/打包态都指向 out/renderer;打包态在 app.asar 内,fs 透明读。
 const assembled = assemble(host, { isPackaged: app.isPackaged, rendererDir: resolve(__dirname, "../renderer") });
@@ -19,6 +24,8 @@ function createWindow(): void {
     width: 1280,
     height: 840,
     show: false,
+    // 静默态:窗口不可聚焦 + 不进任务栏 —— 即便将来被 show 也不夺键盘焦点。
+    ...(visibility.show ? {} : { focusable: false, skipTaskbar: true }),
     // 无边框窗口(renderer 顶栏 -webkit-app-region: drag):mac 红绿灯内嵌自定义标题栏;
     // win/linux 无原生按钮,标题栏自绘 min/max/close(经 window:* channel)。
     ...(process.platform === "darwin"
@@ -31,6 +38,9 @@ function createWindow(): void {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      // 静默态必须关后台节流:窗口不可见时 Chromium 把定时器/rAF 降频到 ~1Hz,
+      // 长回合 e2e 会等不到该收敛的 DOM,表现成"产品坏了"的假红。
+      backgroundThrottling: visibility.backgroundThrottling,
       // 拖拽/粘贴文件的绝对路径解析(webUtils.getPathForFile),见 preload.ts。
       preload: resolve(__dirname, "preload.js"),
     },
@@ -62,7 +72,10 @@ function createWindow(): void {
   const base = process.env["ELECTRON_RENDERER_URL"] ?? `http://127.0.0.1:${assembled.port}/`;
   void win.loadURL(`${base}${base.includes("?") ? "&" : "?"}lt=${assembled.localToken}`);
 
-  win.on("ready-to-show", () => win.show());
+  // **静默态永不 show —— 根因修复,勿删**。原实现无条件 `win.show()`:macOS 上 show() 会激活
+  // 应用,把用户正在用的窗口焦点和鼠标一起夺走(每跑一次 e2e 打扰一次)。而 e2e 要的是 CDP
+  // (求值 / Input 事件 / Page.captureScreenshot),不依赖窗口可见——隐藏窗口照样渲染、照样截图。
+  if (visibility.show) win.on("ready-to-show", () => win.show());
 }
 
 app.setName("My Harness Desktop");
@@ -75,7 +88,9 @@ app.whenReady().then(() => {
   // (LaunchServices 缓存陈旧),此处晚于 createWindow 会闪现默认图标。
   // bundle 修复见 assets/scripts/patch-electron.cjs(改 icns 后 touch + lsregister)。
   if (process.platform === "darwin" && app.dock) {
-    app.dock.setIcon(resolve(__dirname, "../../assets/icons/icon.png"));
+    // 静默态:不设图标并 hide dock —— 应用不参与激活,用户不会被"抢到前台"。
+    if (visibility.dockIcon) app.dock.setIcon(resolve(__dirname, "../../assets/icons/icon.png"));
+    else void app.dock.hide();
   }
 
   createWindow();

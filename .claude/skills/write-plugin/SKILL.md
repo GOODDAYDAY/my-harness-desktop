@@ -172,8 +172,12 @@ t("my-plugin.title");
 ```bash
 npm run typecheck   # tsc 全量
 npm run lint        # eslint src/plugins/ 零 warning 门槛
+npm run test        # vitest(node 纯逻辑 + jsdom DOM 交互)
 npm run build       # electron-vite build
+npm run audit:quiet # 测试静默守卫:拉起 app 的脚本不得抢用户焦点
 ```
+
+写 UI 要真 app 验时,按 `.claude/skills/interaction-testing` 的三级口径走(DOM 交互 test → `scripts/demo/*.e2e.mjs`)。**跑 e2e 默认不弹窗**:`launchApp` 走 `quiet-env.mjs` 注入 `MHD_WINDOW=hidden`,窗口永不 show、不抢你的焦点与鼠标;真想看着窗口跑才用 `MHD_WINDOW=shown npm run …`(CLAUDE.md §5.6)。
 
 照着抄最快（按需求类型选参考）：
 

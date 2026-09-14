@@ -9,7 +9,7 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 
 ## 0 索引(按主题速查;条目按轮号 rXXX 编号)
 
-**基础设施与拉起**:§1 基础设施(lastCwd/端口/dsh 三件/seed)| 官方 e2e 矩阵(r326)
+**基础设施与拉起**:§1 基础设施(lastCwd/端口/dsh 三件/seed/**静默开拉·不抢用户焦点**)| 官方 e2e 矩阵(r326)
 **探针通用纪律**:数据/渲染分层断言 | 写穿感知等待 | settle 清缓冲 | 官方 e2e 矩阵
 **会话回合生命周期**:多行输入(r339)排队(r331)流式中切换(r321/r322)中断×续跑(r354)重试(r307/r363)回退(r313)
 **分叉×收藏(goal §7)**:fork=新会话(r305)入口三分叉+位置两态(r307/r308/r340)收藏 CRUD(r310)删源自包含(r316)跨内核发起(r311)收藏→分叉全链(r340)rewind(r313)resume(r306)
@@ -20,7 +20,7 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 **行操作/列表**:搜索(r343)重命名(r346)置顶×归档(r347)列表损坏韧性(r368-r370)
 **壳机制**:设置双臂(r323/r324)工具限制(r328/r329)语言切换(r344/r345)快捷键(r356)titlebar(r357)右面板(r352/r353)斜杠命令(r365)数据 tab(r366)统计槽(r351)
 **韧性与损坏域**:损坏模型域(r367)文件损坏(r368)灾难隔离(r370/r371)姊妹口纪律(r371)
-**架构守卫**:依赖方向审计(r342,audit:deps)| 测试文件 tsc 债(r335)
+**架构守卫**:依赖方向审计(r342,audit:deps)| **测试静默守卫(audit:quiet,§1)** | 测试文件 tsc 债(r335)
 **套件稳定性**:ws-server 闪红根治(r355)瞬态重跑分类(r359/r372)刷新/重开渲染竞态(两个根因已修:① syncNonce 初始基线 null→ns 误重挂 Virtuoso;② sessionStart 只带 sessionFile 缺 neutralSessionId→renderer 回落 sessionInfos 反查落空清镜像。回点行重开用可信点击,别 dispatchEvent)思考块渲染瞬态(r380:kernel-thinking-matrix 幕A / pi-openai-thinking 偶发「文件有思考块但 DOM 无按钮」,数据已落中立层,模型裁量/时序相关,重跑分类)
 **大回归节奏**:r332/r348/r359/r364/r372(每批修复后官方矩阵全跑)
 **能力面×思考域(2026-09-07 轮)**:思考矩阵四幕 e2e(kernel-thinking-matrix)|能力面推送流水插桩(__capsLog)|模型项双禁用态(menuitem aria-disabled/inert div)|空思考帧 wire 级实证|dsh 思考档位补面验证(幕D)|新会话跨内核解锁(幕C)
@@ -34,10 +34,19 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 
 | 件 | 位置 | 用途 |
 |---|---|---|
-| `launchApp` / `killApp` / `assertPortFree` | `scripts/demo/lib/app.mjs` | 拉起 electron(`--remote-debugging-port`)+ puppeteer 连 renderer 页;`assertPortFree` 防撞用户实例 |
+| `launchApp` / `killApp` / `assertPortFree` | `scripts/demo/lib/app.mjs` | 拉起 electron(`--remote-debugging-port`)+ puppeteer 连 renderer 页;`assertPortFree` 防撞用户实例;**默认静默开拉**(见下) |
+| `quietEnv` | `scripts/demo/lib/quiet-env.mjs` | 测试环境静默开关:默认 `MHD_WINDOW=hidden`(窗口永不 show、不抢用户焦点/鼠标、不弹系统通知);要看窗口显式 `MHD_WINDOW=shown` |
+| `pngStats` | `scripts/demo/lib/png-ink.mjs` | 零依赖 PNG 解码 + "有没有内容"统计(不同颜色数 / 非背景像素占比)——判"隐藏窗口截图非黑"的尺子 |
 | `makeRunRoot` / `setupBaseline` | `scripts/demo/lib/home.mjs` | 一次性隔离 HOME(/tmp/pi-demo-\<uuid\>);pi 内核符号链接借真实 HOME,models.json/settings.json 拷贝防写回 |
 | `waitForDomIdle` | `scripts/demo/lib/util.mjs` | DOM 静默等待(事件驱动,不赌固定 sleep) |
 | 场景种子 | `scripts/demo/scenarios/*` | seed.json + index.mjs,`applySeed(ctx, ...)` 组装演示状态 |
+
+**静默开拉(默认,别绕过)**:`launchApp` 默认注入 `MHD_WINDOW=hidden`。根因:应用开窗代码曾无条件 `win.show()`,macOS 上 `show()` 即激活应用——**用户正在打字的窗口失焦、鼠标被夺走**,每跑一次 e2e 就打扰用户一次(CLAUDE.md §5.6「测试静默」,设计原则 38)。静默态 = 不 show、`focusable:false`、`skipTaskbar:true`、不设 dock 图标、不发系统通知(`src/server/bootstrap/window-visibility.ts` 是策略单源)。
+
+- **隐藏着照样能测**:e2e 要的是 CDP——JS 求值、`Input.dispatchKeyEvent`(`page.keyboard.type` / `page.mouse.click`)、`Page.captureScreenshot` 都不依赖窗口可见。静默态强制 `backgroundThrottling: false`;不关的话,窗口不可见时 Chromium 把定时器/rAF 降频到 ~1Hz,长回合会等不到收敛,表现成"产品坏了"的假红。
+- **要看窗口必须显式授权**:`MHD_WINDOW=shown node scripts/demo/<剧本>.e2e.mjs`(人工观察、现场录屏)。别再往脚本里写 `show()` / `showInactive()` ——那是把"打扰用户"变成默认。`MHD_WINDOW` 写错值**启动即报错**(不静默回落 shown)。
+- **守卫三层**:`npm run audit:quiet`(静态:凡 spawn electron 的脚本必须过 quiet-env;开窗代码不得回到无条件 `win.show()`)＋ `src/server/bootstrap/window-visibility.test.ts`(unittest)＋ `scripts/demo/quiet-launch.e2e.mjs`(真 app)。
+- **写"有没有抢焦点"类断言的现成配方**(照抄 `quiet-launch.e2e.mjs`):① `lsappinfo front` 读前台 App 名(macOS,纯读、不弹权限),断言**不是**被测应用;② `window.kernel.window.isFocused() === false`(走产品自己的 Host 链路,不是脚本自说自话);③ "隐藏窗口真在渲染"用 `pngStats` 判——**空帧标尺:2560×1680 的纯色帧只有 1 种颜色、非背景像素 0%;真 UI 是数百种颜色、>50%**。别拿"PNG 文件挺大"当判据。
 
 **拉起前必种 `lastCwd`**,否则应用停在无项目空态、composer 不渲染:
 
