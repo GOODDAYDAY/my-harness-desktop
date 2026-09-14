@@ -94,15 +94,22 @@ function readIndex() {
   }
 }
 
-/** index.json 增量记账。`isRequest` 决定请求数是否 +1 —— 与 pi 侧同一口径：
- *  只数 request 行。此前这里无条件 +1（把 response 行也当成一次请求），
- *  dsh 会话的「请求总数」因此恒为真实值的两倍（读侧是同一个 index.json，
- *  两个写侧口径必须一致——守卫 dsh-extension-flow.test.ts）。 */
-function bumpIndex(sid, bytes, isRequest) {
+/** index.json 增量记账。两条口径必须与 pi 侧一致（读侧是同一个 index.json）：
+ *
+ *  1. `isRequest` 决定请求数是否 +1 —— 只数 request 行。此前无条件 +1（把 response 行也
+ *     当成一次请求），dsh 会话的「请求总数」恒为真实值的两倍。
+ *  2. **键 = 该会话首片的文件名**（`<会话标识>.jsonl`），不是裸会话标识。pi 侧用的就是
+ *     会话文件名（`path.basename(sessionFile)`，自带 `.jsonl`），而这边曾传裸 sid ——
+ *     同一份 index.json 里于是出现两套键空间：`{"4ee4534f….jsonl":…, "72890372…":…}`。
+ *     统计页只做聚合求和，所以肉眼看不出来；但只要有人拿 index 的键去 join 会话/文件
+ *     （"这个会话多大"这类），两套键立刻对不上。
+ *     这条漂移是多内核 e2e 的**对账断言**抓出来的（scripts/demo/multi-kernel-round.e2e.mjs
+ *     "index.json 的 requests 与实际行数一致"），守卫 dsh-extension-flow.test.ts。 */
+function bumpIndex(key, bytes, isRequest) {
   try {
     const idx = readIndex();
-    const cur = idx.sessions[sid] ?? { bytes: 0, requests: 0, updatedAt: 0 };
-    idx.sessions[sid] = {
+    const cur = idx.sessions[key] ?? { bytes: 0, requests: 0, updatedAt: 0 };
+    idx.sessions[key] = {
       bytes: cur.bytes + bytes,
       requests: (cur.requests ?? 0) + (isRequest ? 1 : 0),
       updatedAt: Date.now(),
@@ -160,7 +167,8 @@ function appendLine(sid, row) {
   fs.appendFileSync(shardPath(dir, fileName, st.shard), line, "utf8");
   const lineBytes = Buffer.byteLength(line);
   st.size += lineBytes;
-  bumpIndex(sid, lineBytes, row.kind === "request");
+  // 键恒取**首片文件名**（fileName 就是 `<会话标识>.jsonl`），与 pi 侧同约定、也与磁盘同名。
+  bumpIndex(fileName, lineBytes, row.kind === "request");
 }
 
 /** 分配该会话的下一个 seq（**先与磁盘对账再分配**，见 syncFromDisk 的警告）。 */

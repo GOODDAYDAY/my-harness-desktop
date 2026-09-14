@@ -242,7 +242,10 @@ describe("llm-recorder dsh 写面：执行面数据", () => {
     dshRecorder.apply(dsh as never);
     await dsh.fireStream(FULL_OPTIONS(), CHUNKS);
     await dsh.fireStream(FULL_OPTIONS(), CHUNKS);
-    expect(indexOf().sessions[SID].requests).toBe(2);
+    // 键 = 首片文件名（<会话标识>.jsonl），与 pi 侧同约定——不是裸会话标识。
+    // 这条断言是 e2e 对账抓出的第二处漂移的守卫（见 dsh-extension/index.mjs bumpIndex 注释）。
+    expect(Object.keys(indexOf().sessions), "index 的键必须是首片文件名").toEqual([`${SID}.jsonl`]);
+    expect(indexOf().sessions[`${SID}.jsonl`].requests).toBe(2);
     expect(lines().filter((l) => l.kind === "request")).toHaveLength(2);
     expect(lines().filter((l) => l.kind === "response")).toHaveLength(2);
   });

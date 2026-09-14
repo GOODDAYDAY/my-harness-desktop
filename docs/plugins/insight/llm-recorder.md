@@ -308,6 +308,7 @@ llm/stream(options, next) ──┴─→ ① 写 request 行（payload = option
 |---|---|---|---|
 | `seq` 会话内单调、重启续号 | `ensureSeqBaseline`（分配前对账） | `allocateSeq`（**先 `syncFromDisk` 再分配**） | 两侧各一条"新进程接手同一会话"用例；dsh 侧用 `vi.resetModules()` 造**真**的新模块实例（旧的"重启"用例复用同一份模块状态，其实没走到磁盘续号） |
 | `requests` 计数口径 | 只数 request 行 | 只数 request 行 | dsh 侧用例断言 1 次调用 → `requests === 1`（曾无条件 +1，dsh 会话的请求总数恒为两倍） |
+| `index.json` 的键 | 首片文件名 `<会话标识>.jsonl` | 同（曾传裸会话标识） | dsh 侧用例断言键就是 `${sid}.jsonl`；e2e 对账断言"桶里的 requests == 该会话实际 request 行数"（**这条漂移就是被它对出来的**） |
 | 行形状 | `{seq,ts,kind,turnIndex?,payload}` / `{seq,ts,kind,status?,durationMs?,message?,error?}` | 同 | `core/log-model.ts` 是唯一类型源；两侧流程测试都按它断言 |
 | 512KB 分片、`index.json` | 各自实现 | 各自实现 | `core/log-model.ts` 的 `shardNumber` 用单一形状词典认两侧的命名 |
 

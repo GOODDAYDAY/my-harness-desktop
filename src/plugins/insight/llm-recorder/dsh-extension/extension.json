@@ -1,4 +1,4 @@
 {
   "displayName": "LLM Recorder (dsh)",
-  "description": "把 dsh 的 agent/request 等 hook 投成与 pi 侧同一个 llm-log 行契约（seq/ts/kind），供右面板「请求记录」读取；dsh 的 hook 只给 LlmCallConfig，故原样记配置、不伪造请求体"
+  "description": "在执行面（llm/stream waterfall）记录每次 LLM 调用的完整请求（messages/system/tools/采样参数）与被包的 chunk 流组装出的响应，投成与 pi 侧同一个 llm-log 行契约（seq/ts/kind），供右面板「请求记录」读取；不改写请求、不伪造内核没给的东西"
 }

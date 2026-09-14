@@ -82,6 +82,7 @@ llm/stream(options, next) ──┴─→ ① 写 request 行（payload = option
 //                              error?  ← 新增：失败事实（DSH 的 agent 级失败、或流的 error/aborted finish）
 ```
 
+- **`index.json` 的键 = 该会话首片的文件名**（`<会话标识>.jsonl`），不是裸会话标识。pi 侧本来就是这个键（`path.basename(sessionFile)`）；dsh 侧曾传裸 sid，于是同一份 index 里出现两套键空间（`{"xxx.jsonl":…, "yyy":…}`）。统计页只做聚合求和，肉眼看不出来；但任何"拿 index 的键 join 会话/文件"的读法都会对不上。**这条漂移是多内核 e2e 的对账断言抓出来的**（`multi-kernel-round.e2e.mjs` 的「index.json 的 requests 与实际行数一致」），守卫在 `dsh-extension-flow.test.ts`。
 - `turnIndex` 缺省 = 回合外内部调用（两内核同语义：PI 的 compaction、DSH 的 `purpose` 调用）。
 - `message` 缺省 = 该次调用没有可展示的组装消息（失败、中止）。**读侧必须显式降级，不许把"内核没给"渲染成"形状未识别"。**
 - `error` 存在 = 这次调用失败（DSH 不伪造 status）。**读侧必须据此标失败，不许因为 status 缺省而渲染成成功。**
@@ -124,6 +125,7 @@ llm/stream(options, next) ──┴─→ ① 写 request 行（payload = option
 |---|---|
 | unittest | `chunks.test.ts`（块组装：block-end 优先、delta-only、提前结束、error finish）；`project.test.ts`（投影丢 signal、turn 标记消费/不消费、purpose 内部调用）；`log-model.test.ts` 补 `error`；`payload-model.test.ts` 补形状词典两套词汇 |
 | DOM | 面板渲染 DSH 形状行：System / 工具定义 / 消息历史 / 用量 / 失败行标红 / 无 message 显式降级 |
+| 对账（e2e，两内核同场） | `multi-kernel-round.e2e.mjs`：两内核都留下记录、每行都带 messages、index 计数与行数一致、请求响应成对、分片命名合法、dsh 日志文件名 ↔ dsh 会话 id 对应、**同一面板对两内核渲染出同一套六分区** |
 | e2e | 真 DSH 内核 + 真模型一轮对话 → 盘上字节数（>10KB，不再 147B）、DOM 三段齐全、截图留证；同一套断言跑 PI 侧作对照 |
 
 **验收判据（写死，免得自证）**：同一轮对话，DSH 的 request 行 `payload.messages` 非空、`system`/`tools` 与 PI 侧同量级；面板上 DSH 与 PI 的折叠结构一致（System / 工具定义 / 消息历史 / 原始 JSON）。
