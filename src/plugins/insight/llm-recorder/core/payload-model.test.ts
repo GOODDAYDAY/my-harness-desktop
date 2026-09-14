@@ -181,6 +181,15 @@ describe("describeResponse", () => {
     expect(v.parts[2].title).toBe("bash");
   });
 
+  it("★ dsh 请求体:provider 单独成行,不再在 params 里重复出现", () => {
+    const v = describeRequest({
+      provider: "us-new", model: "deepseek-v4-pro", messages: [],
+      system: "s", tools: [], temperature: 0.3, sessionId: "sid-1",
+    });
+    expect(v.provider).toBe("us-new");
+    expect(v.params.map((p) => p.key), "provider/model/messages/system/tools 各有各的位置").toEqual(["temperature", "sessionId"]);
+  });
+
   it("★ dsh 组装态消息:同形状词典一把认下,usage 键名并列 + 派生总量", () => {
     const v = describeResponse({
       role: "assistant",

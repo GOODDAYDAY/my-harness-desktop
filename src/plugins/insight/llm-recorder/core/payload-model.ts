@@ -273,7 +273,9 @@ export function toolParams(schema: unknown): ToolParamView[] {
   }));
 }
 
-const KNOWN_REQUEST_KEYS = new Set(["model", "messages", "system", "tools"]);
+// 已单独成行渲染的字段：`model` / `provider` 走概览栏，其余三个走各自折叠区——
+// 它们在 params 里再出现一次就是同一件事画两遍（DOM 守卫抓出来的重复）。
+const KNOWN_REQUEST_KEYS = new Set(["model", "provider", "messages", "system", "tools"]);
 
 /** 请求体拆解：认不出（非对象或无 messages 数组）时 recognized=false，视图退回原始 JSON。 */
 export function describeRequest(payload: unknown): RequestView {
