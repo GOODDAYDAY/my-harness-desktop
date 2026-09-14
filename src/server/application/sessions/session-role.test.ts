@@ -16,6 +16,7 @@ import { PiBackend } from "../../kernel/pi/backend/pi-backend";
 import { piDerivedSessionPath } from "../../kernel/pi/backend/pi-catalog";
 import type { SessionCatalogFactory } from "@my-harness-desktop/shared";
 import { SessionBus } from "./session-bus";
+import { NeutralSessionStore } from "./neutral-session-store";
 import { cwdToBucketName, roleToPrompt, type SessionRole } from "@my-harness-desktop/shared";
 import type { RpcAdapter } from "../../kernel/pi/backend/rpc-adapter";
 import type { RpcCommand } from "../../kernel/pi/protocol/rpc-types";
@@ -147,7 +148,15 @@ beforeEach(() => {
       return new PiBackend(a as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir });
     },
   };
-  store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, () => [globalPrompt]);
+  // 带中立层(与生产同构):**内核归属存在中立头里**,总线"子会话继承父会话内核"靠的就是它。
+  // 此前这个 fixture 没有中立层,靠"注册表首个当默认内核"混过去——那条兜底已按设计原则 22 删除
+  // (内核是模型的派生量,缺了就报错),所以 fixture 必须像生产一样真的把归属记下来。
+  store = new SessionStore(
+    factory, catalogFactory,
+    { sessionRoots: [join(dir, "sessions")], ids: ["pi"] },
+    () => [globalPrompt],
+    new NeutralSessionStore(join(dir, "neutral")),
+  );
 });
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -156,7 +165,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("会话级身份(role = system prompt)注入", () => {
   it("role 文本内联作 --append-system-prompt 的值,不落文件、不碰头行", async () => {
-    const { sessionPath, key } = await store.spawnSession(CWD, { role: ORCHESTRATOR_ROLE });
+    const { sessionPath, key } = await store.spawnSession(CWD, { kernel: "pi", role: ORCHESTRATOR_ROLE });
     const adapter = adapters.find((a) => a.args.includes(sessionPath));
     expect(adapter).toBeTruthy();
     // argv 里直接含 roleToPrompt 的文本(非文件路径)
@@ -244,8 +253,8 @@ function adapterOf(sessionPath: string): FakeAdapter {
 describe("场景 1:海龟汤(主持人 + 玩家,房间问答多轮)", () => {
   it("玩家提问 → 主持人只答是/否 → 再问再答,轮轮闭环", async () => {
     const bus = makeBus();
-    const host = await store.spawnSession(CWD, { role: HOST_ROLE });
-    const player = await store.spawnSession(CWD, { role: PLAYER_ROLE });
+    const host = await store.spawnSession(CWD, { kernel: "pi", role: HOST_ROLE });
+    const player = await store.spawnSession(CWD, { kernel: "pi", role: PLAYER_ROLE });
     expect(adapterOf(host.sessionPath).args).toContain(roleToPrompt(HOST_ROLE));
     expect(adapterOf(player.sessionPath).args).toContain(roleToPrompt(PLAYER_ROLE));
     // 进同一房间(说话即传输)
@@ -273,9 +282,9 @@ describe("场景 1:海龟汤(主持人 + 玩家,房间问答多轮)", () => {
 describe("场景 2:狼人杀(多角色房间,多轮次逐个发言)", () => {
   it("三轮讨论,每轮狼人/村民/预言家逐个发言,互相听见", async () => {
     const bus = makeBus();
-    const wolf = await store.spawnSession(CWD, { role: WOLF_ROLE });
-    const villager = await store.spawnSession(CWD, { role: VILLAGER_ROLE });
-    const seer = await store.spawnSession(CWD, { role: SEER_ROLE });
+    const wolf = await store.spawnSession(CWD, { kernel: "pi", role: WOLF_ROLE });
+    const villager = await store.spawnSession(CWD, { kernel: "pi", role: VILLAGER_ROLE });
+    const seer = await store.spawnSession(CWD, { kernel: "pi", role: SEER_ROLE });
     bus.opChannelJoin("village", `session:${wolf.key}`);
     bus.opChannelJoin("village", `session:${villager.key}`);
     bus.opChannelJoin("village", `session:${seer.key}`);
@@ -309,13 +318,13 @@ describe("场景 2:狼人杀(多角色房间,多轮次逐个发言)", () => {
 describe("场景 4:一次性执行(执行器完成后 reopen 续聊)", () => {
   it("执行器跑完 → reopen 续聊带角色 → 继续对话", async () => {
     makeBus();
-    const exec = await store.spawnSession(CWD, { role: EXECUTOR_ROLE });
+    const exec = await store.spawnSession(CWD, { kernel: "pi", role: EXECUTOR_ROLE });
     expect(adapterOf(exec.sessionPath).args).toContain(roleToPrompt(EXECUTOR_ROLE));
     // 干活完成
     adapterOf(exec.sessionPath).emitSettled();
     await sleep(10);
     // reopen 续聊(带角色)→ 新进程注入同一 role
-    const reopened = await store.reopenSession(CWD, exec.sessionPath, EXECUTOR_ROLE);
+    const reopened = await store.reopenSession(CWD, exec.sessionPath, EXECUTOR_ROLE, "pi");
     const reopenedAdapter = adapters[adapters.length - 1]; // reopen 新建的进程
     expect(reopenedAdapter.args).toContain(roleToPrompt(EXECUTOR_ROLE));
     // 继续对话:发消息 → 收到(多轮不是一次性)

@@ -95,7 +95,10 @@ describe("第四个内核：不碰核心代码，能被每一面自动接上", (
 
     const s = buildKernelSurfaces(r);
     expect(s.ids).toEqual(["pi", "dsh", "minimal", "kimi"]);
-    expect(s.defaultId, "默认内核 = 注册顺序第一个，不由代码里的字符串决定").toBe("pi");
+    // **没有任何"默认内核"**（设计原则 22：内核是模型的派生量，缺内核处显式报错，不挑一个顶上）。
+    // 这条守卫是**反向**的：它钉住"注册顺序 ≠ 默认内核"——曾经这里有 `defaultId: ids[0]`，
+    // 任何缺内核的缝隙都被静默填成"注册顺序第一个"（历史上是 pi）。加回这个字段就红。
+    expect(Object.keys(s), "壳的内核面里不许出现默认内核").not.toContain("defaultId");
     // 逐面检查：任何一面漏了自动纳入，这里就红
     expect(s.modelCatalog.listModels().filter((m) => m.kernel === "kimi")).toHaveLength(1);
     expect(Object.keys(s.modelsApis)).toContain("kimi");

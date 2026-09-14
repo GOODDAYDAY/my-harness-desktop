@@ -24,6 +24,7 @@
   "shell.newChat": "新對話",
   "shell.openFolderFirst": "從左欄開啟一個資料夾開始",
   "shell.kernelRequired": "未安裝 pi 底座，請先在「設定 → Pi」頁安裝",
+  "shell.sessionKernelNotLoaded": "本會話屬於「{{kernel}}」內核，該內核目前未裝載：內容可讀，發送不可用。啟用該內核後重開即可繼續，或新建一個會話。",
   "shell.renderFailed": "渲染失敗",
   "shell.collapse": "收起",
   "shell.expand": "展開",

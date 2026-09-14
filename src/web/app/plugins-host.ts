@@ -1,7 +1,17 @@
 import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, registerAuxParsers, unregisterAuxParsers, registerComposerCommands, unregisterComposerCommands, type PluginListItem } from "@my-harness-desktop/react";
 import type { ChannelMeta, ComposerCommand } from "@my-harness-desktop/shared";
 
-const builtinModules = import.meta.glob("../../plugins/*/*/renderer/index.{ts,tsx}");
+// 构建期打进 bundle 的插件 renderer 表。两个根:
+//   · src/plugins/**          —— 随壳分发的内置壳插件(含 pi/dsh 内核的对接面)
+//   · test-plugins/**         —— **测试专用插件**(如 minimal 内核:它的 plugin.json 不在 src/plugins 下,
+//                               生产扫描发现不到它,只有测试把它种进隔离 HOME 的插件目录才会装载)。
+// 为什么测试专用插件也要进这张表:它的内核面(plugin.js)按构建根约定加载,与插件目录无关;但**它的
+// 设置页组件**只有在这里被打成 chunk 才存在——否则测试里种上插件后,设置页会因"renderer chunk 未找到"
+// 而失败。把两件事分开:发现(哪些插件在场)走扫描根,渲染代码(组件从哪来)走构建期 chunk 表。
+const builtinModules = import.meta.glob([
+  "../../plugins/*/*/renderer/index.{ts,tsx}",
+  "../../../test-plugins/*/*/renderer/index.{ts,tsx}",
+]);
 if (Object.keys(builtinModules).length === 0) {
   throw new Error(
     "[plugins-host] glob 匹配 0 个内置插件 renderer,路径可能写错(应在 src/plugins/<组>/<插件>/renderer/index.tsx)",
@@ -19,8 +29,9 @@ const pluginComposerCommandNames = new Map<string, string[]>();
 const failedBuiltin = new Set<string>();
 const builtinPathById = new Map<string, string>();
 for (const path of Object.keys(builtinModules)) {
-  // 插件 id = renderer 的直接上级目录(分组层[^/]+不计),须与 manifest.id 一致
-  const match = path.match(/plugins\/(?:[^/]+\/)*([^/]+)\/renderer/);
+  // 插件 id = renderer 的直接上级目录(分组层[^/]+不计),须与 manifest.id 一致。
+  // 两个根都匹配(`/(?:src/)?plugins/` 与 `/test-plugins/`)——显式列出而不是靠正则碰巧命中。
+  const match = path.match(/(?:\/|^)(?:test-)?plugins\/(?:[^/]+\/)*([^/]+)\/renderer/);
   if (match) builtinPathById.set(match[1], path);
 }
 
@@ -85,7 +96,11 @@ async function bootstrap(): Promise<void> {
   const disabled = (await window.kernel.config.get<string[]>("plugin-manager", "disabledPlugins")) ?? [];
   const list = await window.kernel.plugins.list() as PluginListItem[];
   const builtinIds = [...builtinPathById.keys()].filter((id) => !disabled.includes(id) && !failedBuiltin.has(id));
-  const thirdParty = list.filter((p) => p.path && p.renderer && !disabled.includes(p.id) && p.state !== "error");
+  // `!builtinPathById.has(p.id)`:同一个 id 不能既走构建期 chunk 又走磁盘 import。
+  // chunk 是构建期固化的那份(随壳分发 + 测试专用插件),优先;否则一个"renderer 已打进 bundle、
+  // 磁盘上却没有编译产物"的插件(如测试专用的 minimal 内核插件)会在 file:// import 上失败,
+  // 把插件记成 error、app 进错误态(实测:composer 起不来)。
+  const thirdParty = list.filter((p) => p.path && p.renderer && !builtinPathById.has(p.id) && !disabled.includes(p.id) && p.state !== "error");
 
   const promises: Promise<void>[] = [];
   for (const id of builtinIds) {
@@ -155,7 +170,7 @@ window.kernel.plugins.onPluginsChanged(async () => {
   }
   // state!==error 防死循环:加载失败已上报→主进程记 error 态→仍随列表返回,
   // 不过滤会在每次 pluginsChanged 事件里无限重试
-  const toLoad = list.filter((p) => p.path && p.renderer && p.state !== "error" && !disabled.includes(p.id) && !loadedThirdParty.has(p.id));
+  const toLoad = list.filter((p) => p.path && p.renderer && !builtinPathById.has(p.id) && p.state !== "error" && !disabled.includes(p.id) && !loadedThirdParty.has(p.id));
   for (const p of toLoad) {
     loads.push(loadThirdParty(p.id, p.path!, p.renderer!, p).catch((e) => {
       console.error(`[plugins-host] 热加载第三方插件失败: ${p.id}`, e);

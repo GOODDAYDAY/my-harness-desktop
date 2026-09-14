@@ -8,7 +8,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 // 内核 manifest 不再需要单独复制：内核插件与壳插件**共用同一份 plugin.json**，
-// 它住在 src/plugins/kernels/<id>/，随内置插件目录一起分发（dev 直接读源码树，
+// 它住在 src/plugins/kernels/<id>/（测试专用内核插件住 test-plugins/kernels/<id>/，**不随壳分发**），随内置插件目录一起分发（dev 直接读源码树，
 // 打包由 electron-builder 的 extraResources 拷进 resources/my-harness-desktop-builtin/）。
 // 这里只需保证各内核的**工厂产物**被编译到约定的构建根 out/main/server/kernel/<id>/plugin.js。
 

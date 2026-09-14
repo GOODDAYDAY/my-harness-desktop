@@ -24,6 +24,7 @@
   "shell.newChat": "Neuer Chat",
   "shell.openFolderFirst": "Öffne einen Ordner aus der linken Leiste",
   "shell.kernelRequired": "pi-Basis nicht installiert — installiere sie zuerst auf der Seite Einstellungen → Pi",
+  "shell.sessionKernelNotLoaded": "Diese Sitzung gehört zum Kernel \"{{kernel}}\", der derzeit nicht geladen ist: Lesen möglich, Senden nicht. Aktiviere den Kernel und öffne die Sitzung erneut — oder starte eine neue Sitzung.",
   "shell.renderFailed": "Rendering fehlgeschlagen",
   "shell.collapse": "Einklappen",
   "shell.expand": "Ausklappen",

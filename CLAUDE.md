@@ -332,7 +332,7 @@ src/
     bootstrap/       #   组装根：assemble.ts（共享组装）+ electron.ts / server.ts（双入口）
   web/               # 前端 renderer（原 api/renderer/）：app/、components/、kernel/、stores/、transport/、ui/
   plugins/           # 内容层：内置壳插件；按域分组（themes/sessions/project/insight/manager/system/**kernels**）
-                     #   kernels/<id> = 内核插件（一个内核一个插件：kernel 块 + renderer/ + locales/）
+                     #   kernels/<id> = 随壳分发的内核插件（一个内核一个插件：kernel 块 + renderer/ + locales/）
 packages/
   shared/            # 圆心发布面（原 packages/contract/ + core/domain/ 合并）：src/domain/（纯类型+纯函数零依赖）+ channel/ + contract/ + wire/
   react/             # 发布面（有 package.json）：React 组件/hooks/事件总线 + PluginContext
@@ -340,6 +340,8 @@ packages/
 .claude/skills/    # 内置 skills 源（仓库顶级职业技能目录，随壳分发）
 assets/            # 外层资产：随壳分发/使用的一切非代码文件
 scripts/           # 开发环境引导脚本
+test-plugins/      # 测试专用插件（如 kernels/minimal）：**不在任何生产扫描根里**，只有测试把它种进
+                   #   隔离 HOME 的用户插件目录才会装载（结构性杜绝"测试内核在真实项目留下幽灵会话"）
 ```
 
 这不是逻辑约定，是物理隔离。`packages/shared/src/domain/` 目录下没有 `node_modules` 里任何包的 import——物理上做不到。`src/server/application/` 里没有对 `kernel/{pi,dsh}` 具体实现的**非 type-only** import。`src/server/kernel/` 里没有 React 组件。目录结构本身就是第一道防线。

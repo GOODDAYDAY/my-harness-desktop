@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { launchApp, killApp, assertPortFree } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline, setupDshKernel } from "./lib/home.mjs";
+import { seedTestPlugins } from "./lib/test-plugins.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
 import { clickPointUntil } from "./lib/interact.mjs";
 
@@ -70,7 +71,9 @@ const mockPort = typeof addr === "object" && addr ? addr.port : 0;
 const runRoot = makeRunRoot();
 const home = join(runRoot, "zh-CN");
 mkdirSync(home, { recursive: true });
-setupBaseline({ home, realHome: homedir(), locale: "zh-CN" });
+const ctx = setupBaseline({ home, realHome: homedir(), locale: "zh-CN" });
+// minimal 是**测试专用内核插件**(不再随壳分发):种进隔离 HOME 的用户插件目录才会装载。
+seedTestPlugins(ctx.dataRoot);
 const dsh = setupDshKernel(home, homedir());
 const projectDir = join(home, "project");
 mkdirSync(projectDir, { recursive: true });
@@ -119,7 +122,7 @@ const app = await launchApp({
   appDir: ROOT,
   port: PORT,
   // 三个内核同场：pi/dsh 默认装载，minimal 需强制启用（§目标 16：默认不装载）。
-  env: { HOME: home, MHD_PORT: String(APP_PORT), MHD_ENABLE_KERNELS: "minimal", MHD_MOCK_KEY: "sk-mock" },
+  env: { HOME: home, MHD_PORT: String(APP_PORT), MHD_MOCK_KEY: "sk-mock" },
   timeoutMs: 120000,
 });
 const page = app.page;

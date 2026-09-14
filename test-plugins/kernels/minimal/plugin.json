@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "tier": "official",
   "displayName": "Minimal Manager",
-  "description": "minimal 内核的 desktop 对接面：内核版本 + 配置 + 拓展 + 模型（一个入口三个 TAB，与 pi/dsh 同级）",
+  "description": "minimal 内核的 desktop 对接面：内核版本 + 配置 + 拓展 + 模型（一个入口三个 TAB，与 pi/dsh 同级）。测试专用插件：只随测试装载，不在生产内核清单里。",
   "kernel": {
     "order": 3,
-    "enabled": false
+    "enabled": true
   },
   "contributes": {
     "settings": [

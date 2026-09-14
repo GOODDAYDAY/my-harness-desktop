@@ -37,6 +37,14 @@ export interface SessionInfo {
   /** 中立会话主键(§kernel-forkless-branch §32):跨内核稳定。path 是当前内核的投影地址,
    *  neutralSessionId 是壳自有主键。阶段 A 先加字段(缺省=尚未迁移),阶段 D 切为主键。 */
   neutralSessionId?: string;
+  /** 会话所属内核(中立层 header.kernel 的读出映射;旧数据缺省)。 */
+  kernel?: KernelId;
+  /** 该内核**这次装载了没有**。false = 会话记录的内核当前不在内核清单里(默认关闭的内核、
+   *  被卸载的第三方内核、这次没启用的内核)。此时这一行**仍然可读**——内容在中立层,与内核无关——
+   *  但内核侧投影地址不存在(退回中立 id)、起进程/派生/写内核投影都不成立。列表行与输入框据此
+   *  **显式降级**(§7.6:置灰 + 说明),而不是看起来正常、点下去才在 console 里抛「未注册的内核」。
+   *  缺省 = true(不误报):只有壳明确知道"这个内核这次没装载"时才给 false。 */
+  kernelLoaded?: boolean;
   /** 会话名(单轨存储:真相源=最后一条 session_info 条目;无条目时缺省,展示层经 deriveSessionTitle 回退) */
   name?: string;
   created: string;

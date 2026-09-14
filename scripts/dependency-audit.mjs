@@ -81,10 +81,12 @@ for (const f of walk(join(ROOT, "src/server/kernel/core"))) {
   if (/from\s+["']react["']/.test(imps)) violations.push(`③ core→react ${f.replace(ROOT, "")}`);
 }
 
-// ④ plugins 只认 shared + react
-for (const f of walk(join(ROOT, "src/plugins"))) {
-  const imps = importsOf(f);
-  if (/@\/(server|core|client)\//.test(imps)) violations.push(`④ plugins→壳内部 ${f.replace(ROOT, "")}`);
+// ④ plugins 只认 shared + react（两个插件根：随壳分发的 + 测试专用的）
+for (const root of ["src/plugins", "test-plugins"]) {
+  for (const f of walk(join(ROOT, root))) {
+    const imps = importsOf(f);
+    if (/@\/(server|core|client)\//.test(imps)) violations.push(`④ plugins→壳内部 ${f.replace(ROOT, "")}`);
+  }
 }
 
 // ⑤ KernelId 字面量单源(全仓 "pi" | "dsh" 联合只许 domain/kernel.ts)
@@ -228,6 +230,7 @@ const walked = [
   "src/server/application",
   "src/server/kernel/core",
   "src/plugins",
+  "test-plugins",
 ];
 const scope = walked.reduce((n, d) => n + walk(join(ROOT, d)).length, 0);
 console.log(`依赖方向审计(十检验): ${violations.length} 处违规`);

@@ -20,15 +20,21 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
  *  把两者混在一起数会得到 138,那不是"插件数"。 */
 function shellPluginNames(): string[] {
   const names: string[] = [];
-  for (const domain of readdirSync(join(ROOT, "src/plugins"))) {
-    const domainDir = join(ROOT, "src/plugins", domain);
-    if (!statSync(domainDir).isDirectory()) continue;
-    for (const name of readdirSync(domainDir)) {
-      const manifest = join(domainDir, name, "plugin.json");
-      try {
-        if (statSync(manifest).isFile()) names.push(name);
-      } catch {
-        // 没有 manifest 的目录(如 locales/、共享工具目录)不参与比较
+  // 两个插件根:src/plugins(随壳分发)与 test-plugins(测试专用插件,如 minimal 内核插件)。
+  // 测试专用插件同样要"有插件必有文档"——它的读者正是加第四个内核的人,反而更该有文档。
+  for (const root of ["src/plugins", "test-plugins"]) {
+    const rootDir = join(ROOT, root);
+    if (!statSync(rootDir).isDirectory()) continue;
+    for (const domain of readdirSync(rootDir)) {
+      const domainDir = join(rootDir, domain);
+      if (!statSync(domainDir).isDirectory()) continue;
+      for (const name of readdirSync(domainDir)) {
+        const manifest = join(domainDir, name, "plugin.json");
+        try {
+          if (statSync(manifest).isFile()) names.push(name);
+        } catch {
+          // 没有 manifest 的目录(如 locales/、共享工具目录)不参与比较
+        }
       }
     }
   }

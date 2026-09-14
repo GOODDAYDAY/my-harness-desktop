@@ -76,7 +76,7 @@
 ## 5 圆心契约消费清单
 
 - 本插件从 `@my-harness-desktop/shared` 与 `@my-harness-desktop/react` 消费的圆心契约，逐条列清如下，每个类型/函数都落在一份圆心文件里，插件侧绝不重写。
-  - `SessionInfo`（`packages/shared/src/domain/sessions.ts` 第 33-60 行）：列表行的数据结构。字段 `path`（投影地址）、`id`（根 lineage id）、`cwd`、`neutralSessionId?`（中立主键）、`name?`、`created`、`modified`、`lastMessage?`、`lastEntryId?`、`pinned?`、`archived?`、`custom?`（desktop 私有域）。`renderer/index.tsx` 第 17 行从 `@my-harness-desktop/react` re-export 处 import 了 `type SessionInfo`。
+  - `SessionInfo`（`packages/shared/src/domain/sessions.ts` 第 33-60 行）：列表行的数据结构。字段 `path`（投影地址）、`id`（根 lineage id）、`cwd`、`neutralSessionId?`（中立主键）、`kernel?`（会话所属内核）、`kernelLoaded?`（该内核这次装载了没有；`false` = 本行显式降级）、`name?`、`created`、`modified`、`lastMessage?`、`lastEntryId?`、`pinned?`、`archived?`、`custom?`（desktop 私有域）。`renderer/index.tsx` 第 17 行从 `@my-harness-desktop/react` re-export 处 import 了 `type SessionInfo`。
   - `deriveSessionTitle(session)`（sessions.ts 第 83-88 行）：展示层唯一来源，兜底链为"自定义名 → `lastMessage` 预览（经 `truncateSessionName` 截断）→ `id.slice(0, 8)`"。本插件行标题（第 726 行）与面包屑标题（第 162 行）都调它，杜绝了历史上一会话多种显示名的漂移。
   - `SessionRawFilePaths`（sessions.ts 第 93-98 行）：`{ desktop: string | null; kernel: string | null }`，是 `ctx.sessions.rawFilePaths` 的返回类型，`null` = 磁盘上无对应文件，调用方显式降级。
   - `WorkingPhase` + `advancePhase(prev, event)`（`packages/shared/src/domain/working-phase.ts`）：7 值工作阶段与增量状态机，本插件用它给行图标打"此刻在干嘛"的形态（请求/思考/工具/输出/重试/压缩/idle）。
@@ -230,7 +230,7 @@
   - 随后 `useSessionStore.getState().openSession(s.neutralSessionId ?? s.path)`——这是**权威层**，main 侧会 dispatch synthetic `sessionStart` 权威水合同一字段；失败时回滚三个乐观字段。
   - 打开成功且 `s.lastEntryId` 存在时补一次 `markRead`（第 282 行）——历史会话打开后无新事件，位标推进需要这个入口（另一入口是活跃会话的 `entryAppended` 事件）。
 
-## 7 三个状态标识：执行中 / 未读 / 乐观移除
+## 7 四个状态标识：执行中 / 未读 / 内核未装载 / 乐观移除
 
 - 执行中标识（`phaseByPath`）是 7 值工作阶段，不是布尔忙标志，且覆盖后台会话。
   - 数据来源是 `onKernelEvent` 全量事件流，`advancePhase` 增量推进；注释明确"替代旧的 busyByPath 二元忙标志"（设计 `docs/design/session-working-phase.md §2.3`）。
@@ -241,6 +241,10 @@
   - `lastEntryByPath` 由 `entryAppended`（权威）与 `messageEnd`（兜底）增量推进，推进发生在消息到达时刻，不等列表重拉。
   - `readState` 位标推进有两个入口：打开会话瞬间（`select` 内 `markRead`）与活跃会话收到 `entryAppended`（第 215 行）。
   - `readLoadedRef` 闸保证位标从盘上读回前不推进，防止"基于空 ref 写回整对象冲掉盘上其他会话 key"（第 82-83 行注释）。
+
+- 内核未装载角标（`data-session-kernel-unloaded`）是**显式降级**，不是"读不到"：行下发的 `kernelLoaded === false` 表示这个会话记录的内核这次没进内核清单（默认关闭的内核、被卸载的第三方内核）。角标 + tooltip 说明"可查看、不能发送"，配合 timeline 的只读条一起把这一态说清楚。
+  - 为什么必须有它：这种行以前和正常行长得一模一样，点下去服务端抛「未注册的内核」、renderer 只把异常写进 `console.error` —— 用户看到的是"点了没反应"（实弹：一行 minimal 会话，`path` 退回中立 id，点开无反应）。
+  - **读这一行不需要内核**：内容在中立层，改名/归档/置顶/删除全都照做（纯中立写；删除的内核侧文件删除是 best-effort）。只有真需要内核在场的动作（发送、派生到该内核）被挡住并说明原因——不静默、不假装成功（CLAUDE.md §7.6）。
 
 - 乐观移除（`removing`）是纯渲染投影，权威数据源（`sessionInfos`）不动。
   - `markRemoving` 把 path 加入 `Set`，渲染时 `.filter((s) => !removing.has(s.path))` 摘除（第 490-491 行），`AnimatePresence mode="popLayout"` 让 exit 动画立即播。
@@ -341,6 +345,10 @@
 **Q：为什么 `sessionInfos` 是双键 map，渲染时要去重？**
 
 框架 `loadSessionInfos` 处于"主键迁移过渡期"（`§kernel-forkless §32`）：为了让事件流既能按 `path`（运维流 sessionKey）也能按 `neutralSessionId`（中立主键）回查会话，把每个会话同时以两个键存进 map。渲染 `Object.values` 就会把每条会话画两遍（React duplicate key），所以 `SessionsSection` 用 `Set` 按 `neutralSessionId ?? path` 去重。
+
+**Q：会话记录的内核没装载时，这一行会怎样？**
+
+仍在列表里（不蒸发），但**显式降级**：带 `data-session-kernel-unloaded` 角标 + tooltip（"可查看，不能发送"），点开照常读到中立层内容（内容与内核装不装无关），输入框换成只读条并给出内核名与恢复方式。改名/归档/删除全部照旧（纯中立写 + 删除的 best-effort 语义），所以它不会变成"删不掉的死行"。这一态在服务端由 `SessionStore.catalogOrNull` 单点承接：**中立面的读写不因为某个内核没装载而失败**，装配点的 fail-fast 只留给真正要起内核进程的地方。
 
 **Q：未读圆点为什么不直接用"有没有新 entry"布尔，而是做位标比较？**
 

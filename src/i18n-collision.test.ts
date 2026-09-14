@@ -85,17 +85,21 @@ function expandedKeys(): Map<string, { pluginId: string; value: string }[]> {
   return map;
 }
 
-/** 内核插件 id：目录形状 src/plugins/kernels/<id>/ 且带 kernel 面（这里按目录判定，与布局同源）。 */
+/** 内核插件 id：目录形状 `<插件根>/kernels/<id>/` 且带 kernel 面（这里按目录判定，与布局同源）。
+ *  **两个根**:src/plugins(随壳分发)与 test-plugins(测试专用插件,如 minimal)——测试专用插件的
+ *  文案同样要进碰撞检查,否则它拿到与别人同名的 key 时没人会红。 */
 function kernelPluginIds(): Set<string> {
   const out = new Set<string>();
-  const dir = join(ROOT, "src/plugins/kernels");
-  if (!existsSync(dir)) return out;
-  for (const name of readdirSync(dir)) {
-    const manifestPath = join(dir, name, "plugin.json");
-    if (!existsSync(manifestPath)) continue;
-    try {
-      out.add((JSON.parse(readFileSync(manifestPath, "utf-8")) as { id?: string }).id ?? name);
-    } catch { /* 损坏 manifest 由别的守卫管 */ }
+  for (const root of ["src/plugins/kernels", "test-plugins/kernels"]) {
+    const dir = join(ROOT, root);
+    if (!existsSync(dir)) continue;
+    for (const name of readdirSync(dir)) {
+      const manifestPath = join(dir, name, "plugin.json");
+      if (!existsSync(manifestPath)) continue;
+      try {
+        out.add((JSON.parse(readFileSync(manifestPath, "utf-8")) as { id?: string }).id ?? name);
+      } catch { /* 损坏 manifest 由别的守卫管 */ }
+    }
   }
   return out;
 }

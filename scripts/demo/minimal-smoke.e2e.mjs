@@ -10,6 +10,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
+import { seedTestPlugins } from "./lib/test-plugins.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
 import { clickPointUntil } from "./lib/interact.mjs";
 
@@ -27,13 +28,15 @@ function ok(cond, label) {
 const runRoot = makeRunRoot();
 const home = join(runRoot, "zh-CN");
 mkdirSync(home, { recursive: true });
-setupBaseline({ home, realHome: homedir(), locale: "zh-CN" });
+const ctx = setupBaseline({ home, realHome: homedir(), locale: "zh-CN" });
+// minimal 是**测试专用内核插件**(不再随壳分发):种进隔离 HOME 的用户插件目录才会装载。
+seedTestPlugins(ctx.dataRoot);
 const projectDir = join(home, "project");
 mkdirSync(projectDir, { recursive: true });
 const prefsFile = join(home, ".my-harness-desktop-dev", "config", "config.json");
 writeFileSync(prefsFile, JSON.stringify({ ...JSON.parse(readFileSync(prefsFile, "utf-8")), lastCwd: projectDir }, null, 2));
 
-const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18459", MHD_ENABLE_KERNELS: "minimal" }, timeoutMs: 90000 });
+const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18459" }, timeoutMs: 90000 });
 const page = app.page;
 const consoleTail = [];
 page.on("pageerror", (e) => consoleTail.push(e.message));

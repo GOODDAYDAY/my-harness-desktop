@@ -20,7 +20,7 @@ import { ModelCatalog } from "../models/model-catalog";
 import { PiModelSource } from "../../kernel/pi/model/pi-model-source";
 import { ModelsStore } from "../../kernel/pi/model/models-store";
 import { NeutralSessionStore } from "./neutral-session-store";
-import { emptyNeutralSession } from "@my-harness-desktop/shared";
+import { emptyNeutralSession, appendNeutralEntry } from "@my-harness-desktop/shared";
 
 /** 目录/CRUD 工厂:真实 PiSessionCatalog(读测试 agentDir 的 JSONL)。openSession 等测试依赖真实目录读。 */
 const catalogFactory: SessionCatalogFactory = {
@@ -1870,6 +1870,16 @@ describe("列表行的内核投影必须逐行隔离(一行坏数据不许拖垮
     return { s, neutralStore };
   }
 
+  /** 带内容的孤儿会话:验"打开/读"这类**内容路径**不该因为内核没装载而失败。 */
+  function ghostWithContent(): { s: SessionStore; neutralStore: NeutralSessionStore } {
+    const { s, neutralStore } = storeWithRows();
+    let ghost = emptyNeutralSession("ns-body", { kernel: "minimal", cwd: CWD, createdAt: "2026-09-09T00:00:00.000Z", name: "有内容的孤儿" });
+    ghost = appendNeutralEntry(ghost, "ns-body", { neutralEntryId: "", message: { role: "user", content: "ping" } });
+    ghost = appendNeutralEntry(ghost, "ns-body", { neutralEntryId: "", message: { role: "assistant", content: "pong" } });
+    neutralStore.put(ghost);
+    return { s, neutralStore };
+  }
+
   it("一行内核未装载:其余行照常返回(此前整个 list() reject,列表永久为空)", async () => {
     const { s } = storeWithRows();
     const rows = await s.list(CWD);
@@ -1888,5 +1898,96 @@ describe("列表行的内核投影必须逐行隔离(一行坏数据不许拖垮
     const { s } = storeWithRows();
     const ghost = (await s.list(CWD)).find((r) => r.neutralSessionId === "ns-ghost");
     expect(ghost).toMatchObject({ name: "孤儿内核会话", cwd: CWD, created: "2026-09-09T00:00:00.000Z" });
+  });
+
+  // ── 第二阶段(实弹复查):上一版只修了 list() 的投影地址,于是同一根因的其它入口照旧抛,
+  // 症状从"整份列表挂掉"变成"点不开、改不动、删不掉的死行"。以下每条守卫钉一个入口:
+  // **中立面的读写不许因为"内核没装载"而失败**;真正要起内核进程的地方才允许失败,且文案要可行动。
+  it("行带内核装载状态:renderer 据此显式降级(不用去猜 path 是不是中立 id)", async () => {
+    const { s } = storeWithRows();
+    const rows = await s.list(CWD);
+    expect(rows.find((r) => r.neutralSessionId === "ns-ghost")).toMatchObject({ kernel: "minimal", kernelLoaded: false });
+    expect(rows.find((r) => r.neutralSessionId === "ns-pi")).toMatchObject({ kernel: "pi", kernelLoaded: true });
+  });
+
+  it("openSession:内容在中立层,内核没装载照样打得开(此前抛「未注册的内核」,UI 只写 console = 点了没反应)", async () => {
+    const { s } = ghostWithContent();
+    const detail = await s.openSession("ns-body");
+    expect(detail?.messages.map((m) => m.content)).toEqual(["ping", "pong"]);
+    expect(detail?.info).toMatchObject({ kernel: "minimal", kernelLoaded: false, path: "ns-body" });
+  });
+
+  it("updateHeader/renameSession:归档/置顶/改名是纯中立写,内核没装载也必定成功", async () => {
+    const { s, neutralStore } = ghostWithContent();
+    await expect(s.updateHeader("ns-body", { archived: true, pinned: true })).resolves.toBeUndefined();
+    await expect(s.renameSession("ns-body", "改个名")).resolves.toBeUndefined();
+    expect(neutralStore.getHeader("ns-body")?.header).toMatchObject({ archived: true, pinned: true, name: "改个名" });
+  });
+
+  it("deleteSessions:删得掉(此前内核侧删除先抛,中立级联删根本没执行 = 用户拿这一行没办法)", async () => {
+    const { s, neutralStore } = ghostWithContent();
+    await expect(s.deleteSessions(["ns-body"])).resolves.toBeUndefined();
+    expect(neutralStore.getHeader("ns-body")).toBeNull();
+  });
+
+  it("readToolConfig / rawFilePaths:降级成 null,不抛(工具面板与「打开原始文件」不该整块炸)", async () => {
+    const { s } = ghostWithContent();
+    await expect(s.readToolConfig("ns-body")).resolves.toBeNull();
+    await expect(s.rawFilePaths("ns-body")).resolves.toMatchObject({ kernel: null });
+  });
+
+  it("copySession:写内核文件确实做不到 → 显式报错且文案可行动(不是内部措辞「未注册的内核」)", async () => {
+    const { s } = ghostWithContent();
+    await expect(s.copySession("ns-body", join(dir, "copy.jsonl"))).rejects.toThrow(/未装载/);
+  });
+});
+
+describe("没有「默认内核」:缺内核一律显式报错或显式降级(设计原则 22)", () => {
+  // 根因:曾经 `KernelSurfaces.defaultId = ids[0]` + `SessionStore.defaultKernelId`,任何缺内核的
+  // 缝隙都被静默填成"注册顺序第一个内核"(历史上 = pi)。于是"内核身份 = 模型的派生量"这条根被
+  // 一条注册顺序暗中架空:用户看到的是"默认走 pi"、内核漂移(重开 dsh 会话变 pi)、以及
+  // "选了个不存在的模型却起了一个 pi 进程"这类报错错位。守卫分三层:
+  //   ① 壳的内核面里不许有 defaultId(kernel-surfaces.test.ts);
+  //   ② 起进程/续聊这类"必须要内核"的动作,缺内核 → 抛;
+  //   ③ 中立面读这类"内核不在场也能做"的动作,缺内核 → 降级(null/跳过),不抛也不猜。
+  const strictFactory: SessionCatalogFactory = {
+    create: (kernel) => {
+      if (kernel !== "pi") throw new Error(`未注册的内核: ${kernel}`);
+      return new PiSessionCatalog(dir);
+    },
+  };
+
+  /** 一条**没记录内核归属**的中立会话(旧文件/中立层损坏才会出现)。 */
+  function storeWithKernellessSession(): { s: SessionStore; neutralStore: NeutralSessionStore } {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "no-default-kernel-")));
+    const noKernel = emptyNeutralSession("ns-nokernel", { cwd: CWD, createdAt: "2026-09-01T00:00:00.000Z", name: "无归属会话" } as never);
+    neutralStore.put(noKernel);
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, strictFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    return { s, neutralStore };
+  }
+
+  it("spawnSession 不给内核 → 抛(此前静默落注册表首个 = 「默认内核」)", async () => {
+    const { s } = storeWithKernellessSession();
+    // 类型上 kernel 已必填;这里模拟**绕过类型**的调用方(JS / 反射 / 老代码),运行期兜底必须响亮。
+    await expect(s.spawnSession(CWD, { role: undefined } as never)).rejects.toThrow(/必须显式指定内核/);
+  });
+
+  it("reopenSession:归属查不出来 → 抛(此前静默落默认内核,续一个 dsh 会话会在 pi 上重开)", async () => {
+    const { s } = storeWithKernellessSession();
+    await expect(s.reopenSession(CWD, "ns-nokernel")).rejects.toThrow(/无法确定会话 .* 的内核归属/);
+  });
+
+  it("中立面读不因缺归属而失败:getTree 照读、readToolConfig 降级 null", async () => {
+    const { s } = storeWithKernellessSession();
+    await expect(s.getTree("ns-nokernel")).resolves.toMatchObject({ rootId: "ns-nokernel" });
+    await expect(s.readToolConfig("ns-nokernel")).resolves.toBeNull();
+  });
+
+  it("纯中立写照做(归档/置顶/改名不依赖内核);要内核侧文件的操作显式报错", async () => {
+    const { s, neutralStore } = storeWithKernellessSession();
+    await expect(s.updateHeader("ns-nokernel", { archived: true })).resolves.toBeUndefined();
+    expect(neutralStore.getHeader("ns-nokernel")?.header.archived).toBe(true);
+    await expect(s.copySession("ns-nokernel", join(dir, "copy.jsonl"))).rejects.toThrow(/无法确定会话 .* 的内核归属/);
   });
 });

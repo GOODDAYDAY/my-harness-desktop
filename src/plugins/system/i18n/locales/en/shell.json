@@ -24,6 +24,7 @@
   "shell.newChat": "New chat",
   "shell.openFolderFirst": "Open a folder from the left panel to start",
   "shell.kernelRequired": "pi base is not installed — install it on the Settings → Pi page first",
+  "shell.sessionKernelNotLoaded": "This session belongs to the \"{{kernel}}\" kernel, which is not loaded: you can read it, but sending is unavailable. Enable that kernel and reopen the session to continue, or start a new session.",
   "shell.renderFailed": "Render failed",
   "shell.collapse": "Collapse",
   "shell.expand": "Expand",

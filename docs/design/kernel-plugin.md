@@ -222,6 +222,33 @@ src/plugins/kernels/<id>/
 - **卸载** = 删这一个目录 → 内核**与它的设置页一起消失**，其余内核照常。
 - **默认不装载** = `kernel.enabled: false` → 两面一起不装载（没有内核却显示它的设置页，只会得到一堆报错）。
 
+#### 扫描根：随壳分发的内核 vs 测试专用内核
+
+内核插件的扫描根与**壳插件**完全同源（同一份 `plugin.json`，同一套发现规则）：
+
+| 根 | 位置 | 谁在这里 |
+|---|---|---|
+| 内置 | dev `src/plugins`；打包 `resources/my-harness-desktop-builtin` | pi、dsh（随壳分发，日常都在场） |
+| 用户装 | `<数据根>/plugins` | 第三方内核插件；**测试用它种测试专用插件** |
+| 装过的包 / 项目级 | `<数据根>/installed`、`<cwd>/.my-harness-desktop/plugins` | 第三方内核插件 |
+
+**minimal 不在这张表的第一行**：它是**测试专用内核插件**，插件目录在 `test-plugins/kernels/minimal/`
+（仓库根的新目录，**不在任何生产扫描根里**）。生产任何路径都发现不到它，所以日常使用里这个内核
+**根本不存在** —— 这是"幽灵会话"的结构性根治：
+
+> 历史事故：minimal 曾随壳分发 + `MHD_ENABLE_KERNELS=minimal` 运行时强制启用。任何人都能在**真实项目
+> 里**起一个 minimal 会话（它自带 echo 桩模型，回一句就完事），那条会话的中立头记着 `kernel: minimal`；
+> 之后 normal 启动（minimal 不装载）来列这个项目，这行就变成"内核不存在"的孤儿行。修完孤儿行的降级
+> 行为之后，"造不出孤儿行"这一半靠**把插件移出生产面**完成。
+
+怎么测它（不再是环境变量开关，而是**装上去**）：
+`scripts/demo/lib/test-plugins.mjs` 的 `seedTestPlugins(dataRoot)` 把 `test-plugins/kernels/<id>/`
+拷进隔离 HOME 的**用户插件目录**（第三方内核插件被装载的真实路径）。它的两个面各有来路：
+内核面按**构建根约定**加载 `out/main/server/kernel/<id>/plugin.js`（与插件目录位置无关）；
+设置页组件走 `src/web/app/plugins-host.ts` 里**构建期 chunk 表**（那张表的 glob 显式含 `test-plugins/**`）。
+换句话说：**发现**（哪些插件在场）走扫描根，**渲染代码**（组件从哪来）走构建期打包——两件事分开，
+测试专用插件才可能"只随测试在场、但两 face 都在"。
+
 > **变更记录（勿按旧形状读）**：此前内核 manifest 单住在
 > `src/server/kernel/<id>/plugin.json`，而 desktop 对接面是**另一个壳插件**
 > （`src/plugins/manager/<id>-manager/`）。两份 manifest、两个目录、两次生命周期：
@@ -230,12 +257,27 @@ src/plugins/kernels/<id>/
 
 ### 契约 + 加载器
 
-- `KernelPluginManifest`（圆心）：`id` + `factory`（相对插件目录的工厂入口）+ `order`（注册顺序，越小越先 = 默认内核）。
+- `KernelPluginManifest`（圆心）：`id` + `factory`（相对插件目录的工厂入口）+ `order`（注册顺序，越小越先；**只决定清单/展示次序，不是「默认内核」**——内核是模型的派生量，缺内核处显式报错，设计原则 22）。
 - `KernelPluginModule`：`default` 导出工厂（回落 `${id}KernelPlugin` 命名导出）。
 - `scanKernelPlugins(pluginRootDir)`：扫描有 `plugin.json` 的子目录，按 `order` 排序（纯函数，可单测）。
 - `loadKernelPlugin(registry, dir, manifest, ctx)`：cjs 同步 `require` 工厂 → register。
 
 ### 构建接线
+
+**两个面各有来路，别混**（这是"测试专用插件也能有设置页"的关键）：
+
+| 面 | 来路 | 与插件目录的关系 |
+|---|---|---|
+| 内核面 | 构建根约定 `out/main/server/kernel/<id>/plugin.js`（rollup 独立入口） | **无关**——插件目录在哪都能加载 |
+| 对接面（设置页组件） | `src/web/app/plugins-host.ts` 的**构建期 glob 表**（`src/plugins/**` + `test-plugins/**`） | 由**构建**决定，与运行时发现根无关 |
+
+推论一：**没有编译产物的插件要按"没有 renderer"处理**。main 侧 `plugins:list` 只在
+`<plugin>/renderer/index.js` **真的存在**时才交缺省 renderer 入口（`rendererEntryFor`，`controllers/plugins.ts`）——
+否则 renderer 侧会去 `import(file://不存在)` 失败，把插件记成 error 并**把 app 拖进错误态**
+（实测：种上 renderer 只在 chunk 里的内核插件后，composer 直接起不来）。显式声明 `manifest.renderer` 的照旧原样交
+（缺文件是作者的错，要响亮失败）。
+推论二：同一 id **不能既走 chunk 又走磁盘 import** —— `plugins-host` 的第三方分支带 `!builtinPathById.has(id)`，
+构建期固化那份优先。
 
 - rollup `main.input` 加三个 `plugin.ts` 额外入口 → 独立打包 `out/main/server/kernel/*/plugin.js`。
 - `scripts/copy-kernel-manifests.mjs` + build 脚本：把 `plugin.json` 补齐到 out/。
@@ -243,7 +285,7 @@ src/plugins/kernels/<id>/
 
 ### 卸载验收（第 13 点）
 
-`kernel-plugin-uninstall.e2e.mjs`（17 断言）：默认（`enabled:false`）内核清单不含 minimal **且设置页没有 Minimal 入口** → 强制启用后**两面一起出现**（内核清单 + 设置页导航锚点 `[data-settings-id]`，DOM 面复核）→ 删这一个插件的 `plugin.json` 后**两面一起消失**、pi/dsh 照常、app 不崩。
+`kernel-plugin-uninstall.e2e.mjs`（18 断言）：**不种插件**（= 生产日常态）内核清单不含 minimal **且设置页没有 Minimal 入口** → **种进隔离 HOME 的用户插件目录**后**两面一起出现**（内核清单 + 设置页导航锚点 `[data-settings-id]`，DOM 面复核）→ 删这一个插件的 `plugin.json` 后**两面一起消失**、pi/dsh 照常、app 不崩。全程只动隔离 HOME 里的副本，**不碰仓库源码树**（旧版改的是 `src/plugins` 下的 manifest 再恢复）。
 加载器单测（`kernel-plugin-loader.test.ts`）覆盖扫描/普通壳插件不误收/id 单源/卸载/坏 JSON/根目录不存在/工厂路径约定；N 内核注册矩阵（`kernel-registry-n.test.ts`）覆盖单内核 ×3、双内核 ×3、三内核、卸载 ×3，全部跑在**真实插件目录 + 真实编译产物**上。
 
 ### 内核之间零 import（可卸载性的物理前提）

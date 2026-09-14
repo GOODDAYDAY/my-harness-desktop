@@ -1,4 +1,6 @@
 // IPC:插件生命周期管理(plugins.*)—— 注册/启停/卸载/安装/加载失败上报。
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { Gateway } from "../routing/gateway";
 import { discoverPlugins } from "../application/loader/discover";
 import {
@@ -56,6 +58,22 @@ export function registerPlugins(gateway: Gateway, ctx: MainContext): void {
     return undefined;
   }
 
+  /** 插件 renderer 入口(磁盘形态)。
+   *
+   *  - 显式声明了 `manifest.renderer`:原样交出——文件缺失由 renderer 侧响亮失败,那是作者的错;
+   *  - 缺省形状 `./renderer/index.js`:**只在文件真的存在时**才交。
+   *
+   *  为什么(根因,勿退回成无条件交缺省值):不存在的路径会被 renderer 侧当第三方插件去
+   *  `import(file://…)`,失败后把插件记成 error 并**把 app 拖进错误态**(实测:一个 renderer
+   *  只在构建期 chunk 里、磁盘上没有编译产物的内核插件,种上后 composer 直接起不来)。
+   *  而"磁盘上没有 renderer"本身是**合法状态**:插件的界面可以来自构建期 chunk
+   *  (`src/web/app/plugins-host.ts` 的 glob 表,随壳分发/测试专用插件都走这条),
+   *  没有 renderer 的插件按"只有后端面/设置面来自 chunk"处理,不报错。 */
+  function rendererEntryFor(pluginPath: string, manifest: PluginManifest): string | null {
+    if (manifest.renderer) return manifest.renderer;
+    return existsSync(join(pluginPath, "renderer", "index.js")) ? "./renderer/index.js" : null;
+  }
+
   function inferTier(manifest: PluginManifest, _source: string): "official" | "verified" | "community" {
     // 无特权差异(§1.4):tier 由 manifest 声明,不按 source 自动赋级(避免"内置=official"特权)。
     // 未声明 tier 的插件统一 community(中性兜底),需特权的插件在 plugin.json 声明 "tier"。
@@ -77,7 +95,7 @@ export function registerPlugins(gateway: Gateway, ctx: MainContext): void {
         state: getPluginState(id, disabled),
         protected: !!plugin.manifest.protected,
         path: isBuiltin ? null : plugin.path,
-        renderer: isBuiltin ? null : (plugin.manifest.renderer ?? "./renderer/index.js"),
+        renderer: isBuiltin ? null : rendererEntryFor(plugin.path, plugin.manifest),
         contributes: plugin.manifest.contributes,
         tags: resolvePluginTags(plugin.manifest),
       });
@@ -99,7 +117,7 @@ export function registerPlugins(gateway: Gateway, ctx: MainContext): void {
             state: getPluginState(id, disabled),
             protected: !!discovered.manifest.protected,
             path: isBuiltin ? null : discovered.path,
-            renderer: isBuiltin ? null : (discovered.manifest.renderer ?? "./renderer/index.js"),
+            renderer: isBuiltin ? null : rendererEntryFor(discovered.path, discovered.manifest),
             contributes: discovered.manifest.contributes,
             tags: resolvePluginTags(discovered.manifest),
           });

@@ -33,5 +33,6 @@
   "sessions.deleteConfirm": "Delete this session? This cannot be undone.",
   "sessions.deleteConfirmYes": "Confirm delete",
   "sessions.deleteConfirmNo": "Cancel",
-  "sessions.unread": "Unread messages"
+  "sessions.unread": "Unread messages",
+  "sessions.kernelNotLoaded": "This session's kernel \"{{kernel}}\" is not loaded — readable, but cannot send"
 }

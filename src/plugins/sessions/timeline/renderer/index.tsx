@@ -103,7 +103,8 @@ const PHASE_META: Record<string, { key: string; color: string; pulse: boolean }>
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   // 已注册内核的注册表顺序(模型下拉 TAB 条排序用):从 PluginContext.kernels 的键序派生
-  // (kernels = Object.fromEntries(kernelIds.map(...)),键序 = 注册表序 = 默认内核在前)。
+  // (kernels = Object.fromEntries(kernelIds.map(...)),键序 = 注册表序)。**纯展示次序**——
+  // 谁排第一都不是「默认内核」(模型决定内核,缺内核处显式降级,见设计原则 22)。
   // 经 props 传给纯 UI 的 Composer,避免 Composer 叶子直接读 window.kernel 全局(依赖倒置)。
   const kernelOrder = useMemo(() => Object.keys(ctx.kernels) as KernelId[], [ctx.kernels]);
   const { t } = useTranslation();
@@ -237,8 +238,18 @@ export function TimelineView(): React.ReactNode {
   const currentKernelRef = useRef<KernelId | null>(null);
   // 内核可用性探测:返回可用性供发送门判(读取失败按可用放行——状态通道故障不该误伤
   // 发送,真实失败由 RPC 错误链兜底)。不传内核 = 探当前模型归属内核。
+  //
+  // **内核不在清单里 ≠ 通道故障**(根因,勿合并成同一个 catch):`ctx.kernels` 的键 = 这次
+  // **已装载**的内核,未装载的内核没有键。此前 `ctx.kernels[k].status()` 对缺键会 TypeError,
+  // 被下面的 catch 吞成"可用"——正是这条 fail-open 让"会话属于未装载内核"这一态在输入框上
+  // 完全没有降级(实弹:minimal 会话的模型回落到 pi,探到 pi 可用 → 输入框放行 → 发送才炸)。
+  // 缺键是**确定不可用**,不是"读不到":显式置 false 走只读条。
   const refreshKernelStatus = useCallback(async (kernel?: KernelId): Promise<boolean> => {
     const k = kernel ?? currentKernelRef.current ?? (Object.keys(ctx.kernels)[0] as KernelId);
+    if (!k || !(k in ctx.kernels)) {
+      setKernelAvailable(false);
+      return false;
+    }
     try {
       const s = await ctx.kernels[k].status();
       setKernelAvailable(s.available);
@@ -466,6 +477,14 @@ export function TimelineView(): React.ReactNode {
         return v !== undefined && v !== null;
       })
     : undefined;
+
+  // 会话记录的内核**没装载**(§7.6 显式降级):这一行仍可读(内容在中立层),但发不出去。
+  // 判据必须用**会话自己的 kernelLoaded**(shell 的注册表快照,经列表行下发),不能用
+  // `currentModel.kernel`:模型链只在"已装载内核的模型清单"里解析,孤儿会话的模型必然回落到
+  // 默认内核的模型,按模型判会得出"内核可用"——用户看到的输入框是正常的,点发送才在服务端炸。
+  const sessionKernel = currentNeutralSessionId ? sessionInfos?.[currentNeutralSessionId]?.kernel : undefined;
+  const sessionKernelLoaded = currentNeutralSessionId ? sessionInfos?.[currentNeutralSessionId]?.kernelLoaded : undefined;
+  const sessionKernelBlocked = sessionKernelLoaded === false;
 
   const collapseDefault = generalConfig["timelineCollapseDefault"] !== false;
 
@@ -968,6 +987,15 @@ export function TimelineView(): React.ReactNode {
     const hasImage = !!(image ?? composerImageRef.current);
     if ((!trimmed && !hasAttachments && files.length === 0 && !hasImage) || sendingRef.current) return false;
     if (!currentCwd) { showToast(t("shell.openFolderFirst")); return false; }
+    // 会话所属内核未装载 = 硬门(不是"复查可自愈"那一类):它要用户去启用内核或换会话,
+    // 不是等一会就好。这一态**只在这里拦**(服务端不做同一道判断,理由见 session-store 的
+    // `start()` 注释:调用方传的 kernel 是模型的派生量,服务端分不清"用户显式换内核"和
+    // "模型链静默回落",拦在服务端会连合法的显式换模型一起拦掉);真发出去时服务端的
+    // 装配点仍会给一条可行动的显式错误。
+    if (sessionKernelBlocked) {
+      showToast(t("shell.sessionKernelNotLoaded", { kernel: sessionKernel ?? "" }));
+      return false;
+    }
     if (kernelAvailable === false) {
       // 复查自愈:用户可能刚在设置页装完内核,装好了就直接放行,不弹过期提示。
       // 复查按当前模型归属内核(选 dsh 查 dsh,选 pi 查 pi)。
@@ -1061,11 +1089,14 @@ export function TimelineView(): React.ReactNode {
 
   const composer = matchedPolicy
     ? readonlyBar(matchedPolicy.readonlyMessageKey ? t(matchedPolicy.readonlyMessageKey) : t("shell.composerReadonly"))
-    : kernelAvailable === false
-      ? readonlyBar(t("shell.kernelRequired"))
-      : !currentCwd
-        ? readonlyBar(t("shell.openFolderFirst"))
-        : (
+    : sessionKernelBlocked
+      // 内核未装载:说明白"能读不能发 + 怎么恢复",不静默、也不假装成功(§7.6 显式降级)。
+      ? readonlyBar(t("shell.sessionKernelNotLoaded", { kernel: sessionKernel ?? "" }))
+      : kernelAvailable === false
+        ? readonlyBar(t("shell.kernelRequired"))
+        : !currentCwd
+          ? readonlyBar(t("shell.openFolderFirst"))
+          : (
       <Composer
         value={input}
         onValueChange={setInput}

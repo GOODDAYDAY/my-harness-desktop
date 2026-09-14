@@ -30,8 +30,10 @@ function makeStore(opts: { sessionRoots?: string[]; lastText?: string; sessionPa
       spawnOpts.push({ cwd, opts: o });
       return Promise.resolve({ key: "spawned1", sessionPath: `${cwd}/spawned1.jsonl` });
     },
-    // 会话的内核归属（中立层 header.kernel）——总线据此让子会话继承父会话的内核
-    kernelOfSessionKey: (key: string) => opts.kernelByKey?.[key] ?? null,
+    // 会话的内核归属（中立层 header.kernel）——总线据此让子会话继承父会话的内核。
+    // 默认给运行中的两个会话各一个归属（真实世界里"运行中的会话"必然有归属）；测继承规则时
+    // 用例自带 kernelByKey 覆盖；要验"无归属"就显式传 kernelByKey: {} 或让 key 不在其中。
+    kernelOfSessionKey: (key: string) => ({ s1: "pi", s2: "pi", ...(opts.kernelByKey ?? {}) })[key] ?? null,
     reopenSession: (cwd: string, sessionPath: string) => Promise.resolve({ key: "reopened1", sessionPath }),
     getAdapter: () => null,
     getBackend: () => null,
@@ -357,10 +359,12 @@ describe("SessionBus:op 语义与清理", () => {
     await bus.opSessionCreate(sessionAddress("s2"), { cwd: "/p" });
     expect(spawnOpts[1].opts?.kernel).toBe("pi");
 
-    // 父是**插件**（没有会话，也就没有可继承的内核）→ 不传，交会话存储的缺省
-    await bus.pluginSessionCreate("p1", { cwd: "/p" });
-    expect(spawnOpts[2].opts?.kernel, "插件发起时不该瞎猜一个内核").toBeUndefined();
-    expect(spawnOpts[2].opts, "role 缺省也不该塞进空对象（保持入参干净）").toEqual({});
+    // 父是**插件**（没有会话，也就没有可继承的内核，且没有模型信息可派生内核）
+    // → **显式报错，不 spawn**（设计原则 22「不兜底、立即报错」）。
+    // 旧断言是"不传 kernel，交会话存储的缺省"——那个"缺省"就是被删掉的默认内核
+    // （`defaultId = ids[0]`，历史上静默落 pi）。现在没有缺省可交，猜这一步被删了。
+    await expect(bus.pluginSessionCreate("p1", { cwd: "/p" })).rejects.toThrow(/无法确定内核/);
+    expect(spawnOpts.length, "报错路径不许已经 spawn 出去").toBe(2);
   });
 
   it("session_abort：目标必须是 session 地址（否则显式抛，不静默）", async () => {

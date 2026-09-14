@@ -38,6 +38,8 @@ function ok(cond, label) {
 const NAME_PI = "正常会话-PI";
 const NAME_GHOST = "孤儿内核会话-MINIMAL";
 const MARK_PI = "PI-SESSION-MARKER";
+/** 孤儿行正文标记:点开它必须能看到正文(内容在中立层,读它不需要内核)。 */
+const GHOST_BODY_MARK = "GHOST-BODY-MARKER";
 
 const runRoot = makeRunRoot();
 const home = join(runRoot, "zh-CN");
@@ -78,7 +80,7 @@ seedNeutral(NS_PI, "pi", NAME_PI, [
 ]);
 // 关键：内核 minimal 默认**不装载**（plugin.json enabled:false）。这一行就是实弹里的孤儿行。
 seedNeutral(NS_GHOST, "minimal", NAME_GHOST, [
-  { neutralEntryId: `${NS_GHOST}:0`, message: { role: "user", content: "ghost-session" } },
+  { neutralEntryId: `${NS_GHOST}:0`, message: { role: "user", content: GHOST_BODY_MARK } },
 ]);
 console.log(`  种子中立会话: pi=${NS_PI} / minimal(未装载)=${NS_GHOST} @ ${proj}`);
 
@@ -139,8 +141,8 @@ try {
     ok(pi && pi.path !== NS_PI, "已装载内核的行仍用内核投影地址（兜底不污染正常行）");
   }
   console.log(`  （诊断）控制台 error 数=${consoleErrors.length}${consoleErrors.length ? " 首条: " + consoleErrors[0].slice(0, 160) : ""}`);
-  // 后端那条"内核未装载"的 console.error 是**有意保留**的可观测性（不静默），所以这里只断言
-  // 没有"未捕获异常"这类真故障，不断言控制台零 error。
+  // 后端那条"内核未装载"的日志是**有意保留**的可观测性（不静默，级别已降到 warn——这是预期内的
+  // 降级态而不是故障），所以这里只断言没有"未捕获异常"这类真故障，不断言控制台零 error。
   ok(errors.length === 0, `无未捕获 pageerror（实际 ${errors.length}）`);
 
   // ── D) 点「+」新建会话：列表可用性是新会话能用的前提 ──
@@ -161,8 +163,70 @@ try {
     console.log("  ⚠ 未找到「+」按钮锚点，跳过 D 段（不伪造通过）");
   }
 
+  // ── E) 点这一行：内容**(中立层)读得开**、输入框显式降级、侧栏有角标 ──
+  // 上一版只修了 list()：行列得出来但**点不开**(openSession 经 neutralToSessionInfo 无守卫调
+  // catalogFor → 抛「未注册的内核」→ renderer 只写 console → 用户看到"点了没反应")，
+  // 而且当时还删不掉。这一段落钉住"可读 + 显式降级 + 可清理"三件事。
+  const ghostRowClicked = await page.evaluate((name) => {
+    const el = [...document.querySelectorAll("[data-session-path]")].find((e) => (e.textContent || "").includes(name));
+    if (!el) return false;
+    el.scrollIntoView({ block: "nearest" });
+    return true;
+  }, NAME_GHOST);
+  ok(ghostRowClicked, "找到孤儿行的 DOM 锚点");
+  const ghostRect = await page.evaluate((name) => {
+    const el = [...document.querySelectorAll("[data-session-path]")].find((e) => (e.textContent || "").includes(name));
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }, NAME_GHOST);
+  await page.mouse.click(ghostRect.x, ghostRect.y);
+  await waitForDomIdle(page, { quietMs: 1000, timeoutMs: 15000 });
+  const bodyText = await page.evaluate(() => document.body.innerText || "");
+  ok(bodyText.includes(GHOST_BODY_MARK), "点开孤儿行：正文出现会话内容（内容在中立层，读它不需要内核）");
+  ok(!consoleErrors.some((t) => t.includes("打开会话失败")), "点开孤儿行不再抛「打开会话失败」（此前只进 console，用户看到的是点了没反应）");
+  ok(bodyText.includes("未装载"), "输入框换成只读条并说明原因（显式降级，不静默、不假装可用）");
+  const composerGone = await page.evaluate(() => document.querySelectorAll("[data-timeline-composer]").length === 0);
+  ok(composerGone, "只读条态下没有可发送的输入框（避免「看得见的历史不参与上下文」的静默换内核续跑）");
+  const badge = await page.evaluate(() => document.querySelectorAll('[data-session-kernel-unloaded="true"]').length);
+  ok(badge >= 1, `侧栏给这一行内核未装载角标（found ${badge}）`);
+  await shot(page, "ghost-opened");
+
+  // ── F) 归档 / 改名：纯中立写，内核没装载也要成功（此前 catalogFor 在 try 之外，全抛） ──
+  const writes = await page.evaluate(async ({ ns, cwd }) => {
+    const out = {};
+    try { await window.kernel.sessions.updateHeader(ns, { archived: true }); out.header = "ok"; } catch (e) { out.header = "throw:" + (e?.message ?? e); }
+    try { await window.kernel.sessions.renameSession(ns, "改名后的孤儿"); out.rename = "ok"; } catch (e) { out.rename = "throw:" + (e?.message ?? e); }
+    try { const rows = await window.kernel.sessions.list(cwd); out.row = rows.find((r) => r.neutralSessionId === ns) ?? null; } catch (e) { out.row = "throw:" + (e?.message ?? e); }
+    return out;
+  }, { ns: NS_GHOST, cwd: proj });
+  console.log(`  （诊断）updateHeader → ${writes.header}；rename → ${writes.rename}`);
+  ok(writes.header === "ok", "归档孤儿行成功（纯中立写）");
+  ok(writes.rename === "ok", "给孤儿行改名成功（纯中立写）");
+  ok(writes.row && writes.row.archived === true && writes.row.name === "改名后的孤儿", "两条写都落到了中立层（列表行读到 archived/name）");
+
+  // ── G) 删除：用户拿这一行有办法（此前内核侧删除先抛，中立级联删根本没执行） ──
+  // 先切到 pi 行再删：活跃会话禁止删除是既有的机制兜底（UI 侧 deletable 过滤同一条语义——
+  // 进程 append 会让文件复活），不是本段要验的东西；不切走会读到"删了但还在"的假红。
+  const piRect = await page.evaluate((name) => {
+    const el = [...document.querySelectorAll("[data-session-path]")].find((e) => (e.textContent || "").includes(name));
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }, NAME_PI);
+  await page.mouse.click(piRect.x, piRect.y);
+  await waitForDomIdle(page, { quietMs: 800, timeoutMs: 12000 });
+  const del = await page.evaluate(async ({ ns, cwd }) => {
+    const out = {};
+    try { await window.kernel.sessions.deleteSessions([ns]); out.del = "ok"; } catch (e) { out.del = "throw:" + (e?.message ?? e); }
+    try { const rows = await window.kernel.sessions.list(cwd); out.after = rows.map((r) => r.neutralSessionId); } catch (e) { out.after = "throw:" + (e?.message ?? e); }
+    return out;
+  }, { ns: NS_GHOST, cwd: proj });
+  console.log(`  （诊断）deleteSessions → ${del.del}；删除后 list → ${JSON.stringify(del.after)}`);
+  ok(del.del === "ok", "删除孤儿行成功（内核侧删除 best-effort，中立级联删必执行）");
+  ok(Array.isArray(del.after) && !del.after.includes(NS_GHOST), "删完它就从列表里消失了（不留删不掉的死行）");
+  ok(Array.isArray(del.after) && del.after.includes(NS_PI), "正常 pi 行不受影响");
+
   await killApp(app);
-  console.log(`\n✅ PASS: ${passed} 项断言（会话列表韧性：一行未装载内核不许拖垮整份列表，零 token）`);
+  console.log(`\n✅ PASS: ${passed} 项断言（会话列表韧性：一行未装载内核不许拖垮整份列表，且这一行可读/可改/可删，零 token）`);
   console.log(`   截图: ${shotsDir}`);
   if (!args.keep) rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   process.exit(0);

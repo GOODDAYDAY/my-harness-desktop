@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
+import { seedTestPlugins } from "./lib/test-plugins.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
 import { clickPointUntil } from "./lib/interact.mjs";
 
@@ -46,7 +47,9 @@ const baseURL = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port
 const runRoot = makeRunRoot();
 const home = join(runRoot, "zh-CN");
 mkdirSync(home, { recursive: true });
-setupBaseline({ home, realHome: homedir(), locale: "zh-CN" });
+const ctx = setupBaseline({ home, realHome: homedir(), locale: "zh-CN" });
+// minimal 是**测试专用内核插件**(不再随壳分发):种进隔离 HOME 的用户插件目录才会装载。
+seedTestPlugins(ctx.dataRoot);
 const projectDir = join(home, "project");
 mkdirSync(projectDir, { recursive: true });
 const prefsFile = join(home, ".my-harness-desktop-dev", "config", "config.json");
@@ -61,7 +64,7 @@ writeFileSync(join(minimalAgentDir, "models.json"), JSON.stringify({
 }));
 writeFileSync(join(minimalAgentDir, ".credentials.json"), JSON.stringify({ mock: "sk-test" }));
 
-const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18461", MHD_ENABLE_KERNELS: "minimal" }, timeoutMs: 90000 });
+const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18461" }, timeoutMs: 90000 });
 const page = app.page;
 const consoleTail = [];
 page.on("pageerror", (e) => consoleTail.push(e.message));

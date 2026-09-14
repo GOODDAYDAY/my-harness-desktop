@@ -33,5 +33,6 @@
   "sessions.deleteConfirm": "Diese Sitzung löschen? Dies kann nicht rückgängig gemacht werden.",
   "sessions.deleteConfirmYes": "Löschen bestätigen",
   "sessions.deleteConfirmNo": "Abbrechen",
-  "sessions.unread": "Ungelesene Nachrichten"
+  "sessions.unread": "Ungelesene Nachrichten",
+  "sessions.kernelNotLoaded": "Der Kernel \"{{kernel}}\" dieser Sitzung ist nicht geladen — lesbar, Senden nicht möglich"
 }

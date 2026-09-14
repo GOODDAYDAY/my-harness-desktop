@@ -2,7 +2,7 @@
 
 ## 1 这个插件是什么
 
-`src/plugins/kernels/minimal/` 是 **minimal 内核的插件目录**——把「内核本体」与「desktop 对接面」放在同一个插件里：
+`test-plugins/kernels/minimal/` 是 **minimal 内核的插件目录**——把「内核本体」与「desktop 对接面」放在同一个插件里。位置在**仓库根的 `test-plugins/`**（不是 `src/plugins/`），因为它是**测试专用插件**：生产扫描根里没有它，日常使用中这个内核根本不存在（见 §4）：
 
 | 面 | 内容 | 现状 |
 |---|---|---|
@@ -17,7 +17,7 @@
 ## 2 目录与文件
 
 ```
-src/plugins/kernels/minimal/
+test-plugins/kernels/minimal/
   plugin.json                      # id=minimal + kernel 块 + contributes(settings/languages)
   renderer/
     index.tsx                      # MinimalManagerPage（TAB 1：内核 + 配置）
@@ -65,13 +65,21 @@ src/plugins/kernels/minimal/
 ## 4 `kernel` 块与「一个内核 = 一个插件」
 
 ```json
-"kernel": { "order": 3, "enabled": false }
+"kernel": { "order": 3, "enabled": true }
 ```
 
-- `order`：注册顺序（越小越先；`registry.ids()[0]` 即默认内核）。
-- `enabled: false`：**默认不装载**。这是用户明确要求的一条：minimal 对正式使用没有意义，不该在默认内核清单里占位。运行时用 `MHD_ENABLE_KERNELS=minimal` 强制启用（测试/演示）。
+- `order`：注册顺序（越小越先；**只决定清单/展示次序，不是「默认内核」**——内核是模型的派生量，缺内核处显式报错，设计原则 22）。
+- `enabled: true`：插件在场即启用。**这个目录只在测试里在场**：`test-plugins/**` 不在任何生产扫描根里，
+  只有 `scripts/demo/lib/test-plugins.mjs` 的 `seedTestPlugins()` 把它拷进**隔离 HOME 的用户插件目录**
+  （第三方内核插件被装载的真实路径）才会装载。
 
-**同生共死**：`enabled: false` 同时意味着这个插件的**对接面也不加载**（没有内核却显示它的设置页，只会得到一堆报错）。所以「禁用/卸载这个插件」= 内核 + 设置页一起消失，其余内核照常——这正是「卸载验收」要的那个形态。
+**为什么移出内置目录**（历史事故，别按旧形状读）：minimal 曾随壳分发 + `MHD_ENABLE_KERNELS=minimal`
+运行时强制启用。那个开关能在**真实项目里**起一个 minimal 会话（自带 echo 桩模型，回一句就完事），
+会话的中立头记下 `kernel: minimal`；之后正常启动（minimal 不装载）来列这个项目，这行就成了"内核不存在"
+的孤儿行（打不开、当时还删不掉）。把插件移出生产扫描面之后，"造出这种行"在结构上不可能了。
+
+**同生共死**：内核面与对接面**共用一个 plugin.json**——删掉这个目录（或它的 manifest）⇒ 内核与它的设置页
+一起消失，其余内核照常。这正是「卸载验收」要的那个形态（`kernel-plugin-uninstall.e2e.mjs`，19 断言）。
 
 ## 5 通用文案为什么不放在本插件里（根因记录）
 
@@ -101,7 +109,7 @@ src/plugins/kernels/minimal/
 
 **Q：minimal 默认不装载，那这个设置页平时是看不见的？**
 
-对，看不见。`enabled: false` 让壳在**装载前**就跳过整个插件（内核面与对接面一起），所以设置页里没有 Minimal 入口，模型下拉里也没有 minimal 的条目——这与「默认不装载」是同一件事的两面。用 `MHD_ENABLE_KERNELS=minimal` 启动后，内核与它的设置页一起出现。
+对，看不见——而且**日常使用里它压根不在场**：插件目录在 `test-plugins/`（仓库根），不在任何生产扫描根里，所以设置页里没有 Minimal 入口，模型下拉里也没有 minimal 的条目。测试里由 `seedTestPlugins(隔离 HOME 的数据根)` 把它种进用户插件目录，内核与它的设置页就一起出现（`kernel-plugin-uninstall.e2e.mjs` 三段验收：不在场 / 种上 / 卸载）。
 
 **Q：minimal 的版本页现在长什么样？**
 

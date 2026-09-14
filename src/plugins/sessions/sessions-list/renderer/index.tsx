@@ -14,7 +14,7 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown } from "lucide-react";
+import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, TriangleAlert } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@my-harness-desktop/react";
 import { deriveSessionTitle, applyCustomOrder, advancePhase, type WorkingPhase, type SessionRawFilePaths } from "@my-harness-desktop/shared";
 import { filterSessions } from "../core/search";
@@ -852,6 +852,20 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
           {/* 搜索平铺时,归档项给个 Archive 角标提示 */}
           {flat && session.archived && (
             <Archive className="size-3.5 shrink-0 text-[var(--color-muted)]" />
+          )}
+          {/* 内核未装载角标(§7.6 显式降级):这一行仍可读(内容在中立层),但发不出去、派不生。
+              此前这种行在侧栏和正常行长得一模一样,点下去只往 console 写一条「未注册的内核」——
+              用户看到的是"点了没反应",而且它当时还删不掉(服务端删内核文件那步抛错)。
+              角标 + tooltip 说明能做什么、要怎么恢复;可读性由 timeline 的只读条承接。 */}
+          {session.kernelLoaded === false && (
+            <span
+              data-session-kernel-unloaded="true"
+              title={t("sessions.kernelNotLoaded", { kernel: session.kernel ?? "" })}
+              aria-label={t("sessions.kernelNotLoaded", { kernel: session.kernel ?? "" })}
+              className="shrink-0 flex items-center justify-center text-[var(--color-muted)]"
+            >
+              <TriangleAlert className="size-3.5" />
+            </span>
           )}
           {/* 未读圆点:hover 时让位给操作区(行宽有限,操作语义优先于状态提示) */}
           {unread && !hovered && !childSessions?.length && (

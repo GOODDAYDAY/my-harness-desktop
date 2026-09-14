@@ -37,12 +37,16 @@ export type KernelOneshot = (prompt: string, cwd?: string) => Promise<string>;
 
 /** 壳从注册表投影出来的全部内核面。字段名按"壳拿它干什么"取，不按内核取。 */
 export interface KernelSurfaces {
-  /** 内核插件本身（顺序 = 注册顺序；`ids[0]` 即默认内核）。 */
+  /** 内核插件本身（顺序 = 注册顺序 = 设置页/清单里的展示顺序）。**不是"默认内核"**：
+   *  注册顺序只决定展示次序，壳不拿它当任何兜底（见下面 `ids` 的注释）。 */
   plugins: KernelPlugin[];
-  /** 已注册内核 id 清单（替代曾经的 KERNEL_IDS 字面量数组）。 */
+  /** 已注册内核 id 清单（替代曾经的 KERNEL_IDS 字面量数组）。顺序 = 注册顺序。
+   *
+   *  **这里没有、也不会有"默认内核"**（设计原则 22 / `docs/design/kernel-follows-model.md`）：
+   *  内核身份是**模型的派生量**——用户选哪个模型就进哪个内核，选的时候内核即已知；
+   *  "谁排第一谁当默认"这种兜底会让"信息缺失的缝隙"被静默填成某个内核（历史上是 pi）。
+   *  缺内核的地方一律**显式报错或显式降级**，绝不从这里挑一个顶上。 */
   ids: KernelId[];
-  /** 默认内核（无模型/无会话头时兜底）；空注册表为 null。 */
-  defaultId: KernelId | null;
   /** 模型清单合流（ModelCatalog 只依赖 KernelModelSource 接口）。 */
   modelCatalog: ModelCatalog;
   /** 模型配置中性 API（设置页模型 TAB）。 */
@@ -87,7 +91,6 @@ export function buildKernelSurfaces(registry: KernelRegistry): KernelSurfaces {
   return {
     plugins,
     ids,
-    defaultId: ids[0] ?? null,
     modelCatalog: new ModelCatalog(plugins.map((p) => p.createModelSource())),
     modelsApis: byId((p) => p.createModelsApi()) as KernelModelsRegistry,
     configApis: byId((p) => p.createConfigApi()),

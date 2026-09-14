@@ -234,12 +234,17 @@ export class SessionStore implements
     /**
      * 注册表派生的**内核事实**（壳的机制面，来自 KernelRegistry，不是中性契约）：
      *   · `sessionRoots`：各内核会话文件根（总线路径圈禁用）；
-     *   · `ids`：已注册内核清单（旧会话内核回读兜底 + 跨内核项目统计遍历它）；
-     *   · `defaultId`：默认内核（无模型/无会话头时兜底）；缺省 = `ids[0]`。
-     * 打成一个包而不是散成三个位置参数：它们是**同一个来源**（注册表快照）的三面，
+     *   · `ids`：已注册内核清单（旧会话内核回读兜底 + 跨内核项目统计遍历它）。
+     * 打成一个包而不是散成两个位置参数：它们是**同一个来源**（注册表快照）的两面，
      * 拆开后每加一个用法就要再往后塞一个参数，调用点全是被 `undefined` 填出来的空洞。
+     *
+     * **这里没有"默认内核"，也不许再塞回来**（设计原则 22「不兜底、立即报错」）：内核是
+     * 模型的派生量——选模型时内核即已知；"没有内核"意味着"No 模型信息"，那时的正确动作是
+     * **显式报错或显式降级**，而不是从注册表里挑一个顶上。历史上这里曾有
+     * `defaultId = ids[0]`，它就是"默认走 pi"这个印象的机械来源：任何缺内核的缝隙都被
+     * 静默填成注册顺序第一个内核。
      */
-    kernelFacts: { sessionRoots: string[]; ids: KernelId[]; defaultId?: KernelId },
+    kernelFacts: { sessionRoots: string[]; ids: KernelId[] },
     getSystemPromptPaths?: () => string[],
     neutralStore?: NeutralSessionStore,
     modelCatalog?: ModelCatalog,
@@ -260,16 +265,11 @@ export class SessionStore implements
     this.bookmarkDir = bookmarkDir ?? null;
     this.questionStore = questionStore ?? null;
     this.knownKernelIds = kernelFacts.ids;
-    // 默认内核：显式传入者优先，否则注册表第一个。**这里没有字面量内核名**（勿加回 `?? "pi"`）：
-    // "谁先注册谁当默认"该由插件的 order 决定（§1.4 内核无特权差异）。
-    this.defaultKernelId = kernelFacts.defaultId ?? kernelFacts.ids[0] ?? "";
   }
 
   /** 目录/CRUD 按内核懒缓存(§1.5 多内核默认):统一经 Map<KernelId, SessionCatalog> 查,
    *  不在调用方写 kernel === "pi" 二选一。pi/dsh 别名保留给已有文件类方法。 */
   private catalogCache = new Map<KernelId, SessionCatalog>();
-  /** 默认内核：显式传入者优先，否则注册表第一个（空注册表 = 空串，调用方会显式报错）。 */
-  private readonly defaultKernelId: KernelId;
   /** 已注册内核清单（注册表快照；bootstrap 注入）。 */
   private readonly knownKernelIds: readonly KernelId[];
   private catalogFor(kernel: KernelId): SessionCatalog {
@@ -281,17 +281,55 @@ export class SessionStore implements
     return c;
   }
 
-  /** 会话路径 → 内核目录(文件操作按会话归属路由,非写死 pi):读中立头 kernel,
-   *  无归属回落默认内核(§剩余演进:此前恒取 pi,minimal 会话的复制/删除/工具配置会错走 pi 目录)。 */
-  private catalogForPath(sessionPath: string): SessionCatalog {
-    return this.catalogFor(this.kernelForPath(sessionPath));
+  /** 该内核这次装载了没有(注册表快照是唯一源;不猜、不回落默认内核)。
+   *  会话归属内核可能**没装载**——默认关闭的内核(minimal)、被卸载的第三方内核插件——
+   *  这不是异常状态,是一个要显式降级的状态(§7.6)。 */
+  private isKernelLoaded(kernel: KernelId): boolean {
+    return this.knownKernelIds.includes(kernel);
   }
 
-  /** 会话路径 → 内核归属（中立层 header.kernel）；无记录回落默认内核。
-   *  与 catalogForPath 同源：路由到哪个内核的目录，就返回哪个内核。 */
-  private kernelForPath(sessionPath: string): KernelId {
+  /** 内核目录,**未装载时返回 null 而不是抛**(不缓存 null)。
+   *
+   *  根因(勿退回"直接调 catalogFor"):装配点的 `sessionCatalogFactory.create` 对未注册内核
+   *  是 fail-fast 抛错——那条语义是对的(装配错就该响)。但它此前被当成"任何地方都能调"的
+   *  普通 getter,于是**中立读路径**(读列表行/打开会话/读原始文件/读工具配置)只要碰到一行
+   *  header.kernel 指向当前没装载的内核,就整条链抛「未注册的内核」。
+   *  修过一次(只包住 list() 的投影地址),同一根因在 openSession/updateHeader/deleteSessions/
+   *  rawFilePaths/readToolConfig 原样复发——症状从"整份列表挂掉"变成"点不开、改不动、删不掉的
+   *  死行"。所以收口在这里:**中立面的读写一律经本方法拿目录,拿到 null 就走显式降级**;
+   *  fail-fast 只保留在真正要起内核进程的地方(`createProc` → factory.create)。 */
+  private catalogOrNull(kernel: KernelId): SessionCatalog | null {
+    try {
+      return this.catalogFor(kernel);
+    } catch {
+      return null;
+    }
+  }
+
+  /** 「会话所属内核未装载」的统一文案:只出现在**确实需要内核侧文件/能力**的操作上
+   *  (复制内核会话文件)。中立面的读/写不走这里——它们显式降级,不报错。 */
+  private kernelNotLoadedError(kernel: KernelId): Error {
+    return new Error(`会话所属内核 "${kernel}" 当前未装载:该操作需要这个内核的会话文件,启用该内核后重试`);
+  }
+
+  /** 会话路径 → 内核目录(文件操作按会话归属路由,非写死 pi):读中立头 kernel。
+   *  归属未知(没有中立层/头里没记)时返回 null——**不猜、不回落默认内核**;
+   *  调用方按操作性质二选一:中立面读 → 降级(null / 跳过);需要内核在场 → 显式报错。 */
+  private catalogForPath(sessionPath: string): SessionCatalog | null {
+    const kernel = this.kernelForPath(sessionPath);
+    return kernel ? this.catalogOrNull(kernel) : null;
+  }
+
+  /** 会话路径 → 内核归属（中立层 header.kernel）。未记录 → null（**没有兜底内核**：
+   *  设计原则 22——内核是模型的派生量，"查无实据"时报错/降级，不从注册表里挑一个顶上）。 */
+  private kernelForPath(sessionPath: string): KernelId | null {
     const ns = this.neutralSessionIdFromPath(sessionPath);
-    return (ns ? this.neutralStore?.getHeader(ns)?.header.kernel : undefined) ?? this.defaultKernelId;
+    return (ns ? this.neutralStore?.getHeader(ns)?.header.kernel : undefined) ?? null;
+  }
+
+  /** 「这个会话没记录内核归属」的统一文案（旧文件/外部路径/中立层缺失时才可能出现）。 */
+  private kernelUnknownError(sessionPath: string): Error {
+    return new Error(`无法确定会话 "${sessionPath}" 的内核归属（中立层没有这一条或头里未记录 kernel）:先选择模型再继续`);
   }
 
   /** 某个**运行中会话**的内核归属；未记录/无中立层返回 null。
@@ -447,6 +485,20 @@ export class SessionStore implements
     // skipResolve(resume 新会话)不读回,调用方必须显式传 kernel(目标内核由发起方定)。
     if (skipResolve && !kernel) throw new Error("无法确定会话内核：内部调用必须显式指定内核");
     const resolvedKernel = kernel ?? await this.resolveSessionKernel(sessionPath, ns);
+    // 已知边界(本批**有意不拦**,留待专门设计):会话记录的内核没装载时,这里**不**拒绝起进程。
+    // 原因:调用方传的 kernel 是"模型的派生量"(§kernel-follows-model),而渲染层解析模型时只在
+    // **已装载内核的模型清单**里找——一个 minimal 会话的模型不在清单里,链路会落到默认内核的模型,
+    // 于是这一句 start 会把会话换到另一个内核上跑。渲染层已就这一态**显式降级**(会话行角标 +
+    // 输入框只读条,判据是列表行下发的 kernelLoaded),所以正常 UI 路径走不到这里。
+    // 在服务端再拦一道会把"用户显式换模型换内核"这条合法路径也一起拦掉(既有用例覆盖:
+    // 三会话 pi/dsh 来回切、fork dsh→切 pi),那是另一个决策,不该顺手做。
+    // ⚠ 残留风险(make 一个会话"看得见的历史不参与上下文"的已知口子):目标内核是 fileBacked(pi)
+    // 时,createProc 的 materializedLineageId 只看 `capabilities.fileBacked`,**不看内核侧投影
+    // 文件是否存在**——文件不在(会话原本跑在别的内核上/文件被删)却标"已物化",pi 会以
+    // `--session <不存在的路径>` 起一个空会话:中立层历史照旧在时间线上、模型看不到。
+    // 设计上该走"失效回退:拿中性树重新投影"(docs/design/kernel-switch-projection.md §8),
+    // 即把判据改成"文件确实存在才算已物化"——那是一条独立改动(动的是 spawn/物化主路径),
+    // 需要自己的守卫与 e2e,不塞进本批。
     // 起进程即隐含「要用这个内核」:activeKernel 未定时设它(warmup 走 warmupKernel 不经此,不设)。
     if (this.activeKernel == null) this.activeKernel = resolvedKernel;
     if (this.isAlive(key, resolvedKernel)) return; // 该内核已活,不重复起
@@ -482,24 +534,38 @@ export class SessionStore implements
     return this.neutralSessionIdFromPath(sessionId) ?? sessionId;
   }
 
+  /** 旧会话(中立层没有归属)的内核**反查**:遍历已注册内核,问"这个会话是不是你的"
+   *  (catalog.readCustom 认得即认领)。返回认领的内核 + 它读出的头域 custom。
+   *
+   *  这是**查询**,不是**默认**(设计原则 22:允许"显式读回",禁止"信息缺失时挑一个顶上")——
+   *  证据是"这个内核的目录里真的有这个会话文件"。谁都不认 → null,调用方显式报错。
+   *  收敛成一处:此前 resolveSessionKernel 与 getTree/copy 各写一份"遍历问一遍"的循环。 */
+  private async detectKernelAndCustom(
+    sessionPath: string,
+  ): Promise<{ kernel: KernelId; custom: Awaited<ReturnType<SessionCatalog["readCustom"]>> } | null> {
+    for (const kernel of this.knownKernelIds) {
+      const catalog = this.catalogOrNull(kernel);
+      if (!catalog) continue;
+      const custom = await catalog.readCustom(sessionPath).catch(() => null);
+      if (custom) return { kernel, custom };
+    }
+    return null;
+  }
+
   /** 读回会话内核(§2.4):中立 header.kernel > model 域 kernel > 会话头 custom.kernel。
    *  目标是「重开历史 dsh 会话不起成 pi」,不建完整的会话内核恢复系统。
    *  ns 由调用方 resolve 后传入(避免重复读);skipResolve 场景(resume 新会话)ns 为 undefined。
-   *  读不到即报错——内核 = 模型的派生量,查无实据时不静默落 pi(§kernel-follows-model)。 */
+   *  读不到即报错——内核 = 模型的派生量,查无实据时不静默落某个内核(§kernel-follows-model)。 */
   private async resolveSessionKernel(sessionPath: string | null | undefined, ns?: string): Promise<KernelId> {
     if (ns) {
       const neutral = this.neutralStore?.getHeader(ns);
       if (neutral?.header?.kernel) return neutral.header.kernel;
     }
     if (!sessionPath) throw new Error("无法确定会话内核：新会话需先选择模型");
-    // 旧会话(无中立头)的内核回读兜底：**遍历已注册内核**各问一次（谁认得这个会话就是谁的），
-    // 而不是写死 pi。写死时读回一个非 pi 的历史会话会被误判成"未记录内核归属"而拒绝打开；
-    // 逐内核问之后，加第四个内核自动纳入这条兜底。
-    let custom: Awaited<ReturnType<ReturnType<SessionCatalogFactory["create"]>["readCustom"]>> = null;
-    for (const kernel of this.knownKernelIds) {
-      custom = await this.catalogFor(kernel).readCustom(sessionPath).catch(() => null);
-      if (custom) break;
-    }
+    // 旧会话(无中立头)的内核回读:**遍历已注册内核**各问一次(谁认得这个会话就是谁的),
+    // 而不是写死 pi。写死时读回一个非 pi 的历史会话会被误判成"未记录内核归属"而拒绝打开;
+    // 逐内核问之后,加第四个内核自动纳入这条回读。
+    const custom = (await this.detectKernelAndCustom(sessionPath))?.custom ?? null;
     const prefs = parseSessionModelPrefs(custom ?? undefined);
     if (prefs?.kernel) return prefs.kernel;
     // 旧头行 custom.kernel 兜底:经 isKernelId 单源谓词识别(minimal-kernel §7.8.2——
@@ -705,7 +771,7 @@ export class SessionStore implements
     //    定模点,重建零代价。惰性判据复用 catalog.newSessionId==null(文件型内核
     //    预生成路径返非 null,惰性内核返 null)。
     const lazyKernel = existing != null
-      && this.catalogFor(kernel).newSessionId(this.activeCwd) == null;
+      && this.catalogOrNull(kernel)?.newSessionId(this.activeCwd) == null;
     const needsRestart = modelMismatch && !!existing && (
       !existing.backend.supportsRuntimeSetModel
       || (!existing.touched && lazyKernel)
@@ -753,8 +819,13 @@ export class SessionStore implements
     // 列表行字段全在 header(遗留文件迁移时已 heal),不再需要整树。
     const summaries = this.neutralStore?.listByCwd(cwd) ?? [];
     return summaries.map((s) => {
+      // 内核装载状态逐行取(注册表快照,零 IO):renderer 据此把"内核没装载"的行显式降级,
+      // 与下面的投影地址兜底同源——**同一行不许一处说可用、一处说不可用**。
+      const kernelLoaded = this.isKernelLoaded(s.header.kernel);
       return {
         neutralSessionId: s.neutralSessionId,
+        kernel: s.header.kernel,
+        kernelLoaded,
         // 投影地址逐行解析,**失败不许拖垮整份列表**(根因,勿回退成整段 map 内直调):
         // catalogFor 对「未注册的内核」是 fail-fast 抛错(装配点语义,不变),但它此前被
         // 直接放在 map 回调里 —— 中立层只要有一行 header.kernel 指向一个**当前没装载的内核**
@@ -791,14 +862,25 @@ export class SessionStore implements
    * 退回中立 id 而不是跳过该行:中立层是会话的真相源,一行真实存在的会话不该因为
    * 「当前没装载它所属的内核」而从列表里蒸发——那正是用户看到的「会话不见了」。
    * 内核投影是可重建的(seed 就是重建动作),中立坐标不会。
+   *
+   * 走 `catalogOrNull` 而不是 try 包 catalogFor:内核未装载是**已知状态**(注册表说了算),
+   * 不该靠抛异常来表达。保住 try 是给「注册表说装载了、但工厂仍建不出来」这类真异常兜底。
    */
   private projectionPathForRow(cwd: string, kernel: KernelId, rootLineageId: string, neutralSessionId: string): string {
+    const catalog = this.catalogOrNull(kernel);
+    if (!catalog || !this.isKernelLoaded(kernel)) {
+      // 不静默但不是错误级:这是**预期内的降级**(内核没装载),不是故障。
+      console.warn(
+        `[session-store] 会话 ${neutralSessionId} 的内核 "${kernel}" 未装载:该行退回中立 id 作投影地址`
+        + `(会话内容仍可读;发送/派生到该内核不可用,启用该内核后重开即可)`,
+      );
+      return neutralSessionId;
+    }
     try {
-      return this.catalogFor(kernel).projectionPath(cwd, rootLineageId);
+      return catalog.projectionPath(cwd, rootLineageId);
     } catch (e) {
-      // 不静默:日志留痕,排障时能一眼看出「这一行的内核没装载」而不是「会话丢了」。
-      console.error(
-        `[session-store] 会话 ${neutralSessionId} 的内核 "${kernel}" 未装载,列表行退回中立 id 作为投影地址:`,
+      console.warn(
+        `[session-store] 会话 ${neutralSessionId} 的内核 "${kernel}" 投影地址解析失败,退回中立 id:`,
         e instanceof Error ? e.message : e,
       );
       return neutralSessionId;
@@ -809,23 +891,28 @@ export class SessionStore implements
    *  SessionCatalog.rawFilePath 解析,不让调用方拿 SessionInfo.path 投影地址硬猜)。
    *  - desktop = 中立层会话文件(壳自己的存储,<数据根>/sessions/<ns>.json);
    *  - kernel = 内核原始文件(投影文件存在才返回;临时会话/迁移前旧文件 → null)。
-   *  会话不存在 / 无中立层时两项皆 null,调用方显式降级,不静默。 */
+   *  会话不存在 / 无中立层时两项皆 null,调用方显式降级,不静默。
+   *  内核未装载同样落 `kernel: null`——"这个内核没有原始文件"本就是 null 的合法表达
+   *  (此前这里直接抛,于是"打开原始文件"菜单在孤儿行上整条失败)。 */
   async rawFilePaths(sessionId: string): Promise<SessionRawFilePaths> {
     const summary = this.neutralStore?.getHeader(this.resolveNs(sessionId));
     if (!summary) return { desktop: null, kernel: null };
     const ns = summary.neutralSessionId;
     const desktop = this.neutralStore!.filePathOf(ns);
     const rootLineageId = summary.rootLineageId;
-    const catalog = this.catalogFor(summary.header.kernel);
-    const kernel = catalog.rawFilePath(summary.header.cwd, rootLineageId);
+    const kernel = this.catalogOrNull(summary.header.kernel)?.rawFilePath(summary.header.cwd, rootLineageId) ?? null;
     return { desktop: existsSync(desktop) ? desktop : null, kernel };
   }
 
   /** 中立会话 → SessionInfo(§kernel-forkless §32):neutralSessionId 是主键,
-   *  path 是投影地址(投影线索)。列表行字段全来自中立 header。 */
+   *  path 是投影地址(投影线索)。列表行字段全来自中立 header。
+   *
+   *  投影地址与列表行**同一个入口**(`projectionPathForRow`):这里是 openSession 的路径,
+   *  它此前单独调 `catalogFor` 且未守卫——于是"列表已修好、点开却抛"的形态成立了很久
+   *  (实弹:一行 minimal 会话点下去抛「未注册的内核」,UI 只把异常写进 console,
+   *  用户看到的是"点了没反应")。读会话内容全在中立层,本来零内核交互。 */
   private neutralToSessionInfo(s: NeutralSession, cwd: string): SessionInfo {
     const rootLineageId = s.lineages.find((l) => l.fork === null)?.lineageId ?? s.neutralSessionId;
-    const catalog = this.catalogFor(s.header.kernel);
     // 读时兜底回填(问题 B 收尾):历史会话的中立 header 缺 lastMessage/lastEntryId/updatedAt
     // (阶段 D 之前写入的旧数据),从现有 entries 现算——不依赖内核存储,列表即刻自愈。
     const derived = (s.header.lastMessage === undefined || s.header.lastEntryId === undefined || s.header.updatedAt === undefined)
@@ -833,7 +920,9 @@ export class SessionStore implements
       : {};
     return {
       neutralSessionId: s.neutralSessionId,
-      path: catalog.projectionPath(cwd, rootLineageId),
+      kernel: s.header.kernel,
+      kernelLoaded: this.isKernelLoaded(s.header.kernel),
+      path: this.projectionPathForRow(cwd, s.header.kernel, rootLineageId, s.neutralSessionId),
       id: rootLineageId,
       cwd: s.header.cwd,
       name: s.header.name,
@@ -912,20 +1001,35 @@ export class SessionStore implements
    *  name 照投(pi session_info 条目有内核侧消费者);toolConfig/custom 照投
    *  (tool-gate 内核扩展进程内读头行)。 */
   private async projectHeaderToKernel(sessionPath: string, patch: HeaderPatch): Promise<void> {
+    // ① 纯中立补丁(pinned/archived)**先于任何内核调用**返回:它们的真相源只在中立层,
+    //    查证过内核头行零读者(见上面注释)。此前这道判定在 try 里、catalogFor 之后,
+    //    于是"归档/置顶"这个纯中立操作在**内核没装载**的会话上照样抛——把 catch 架空了
+    //    (守卫写对了、守卫的位置写错了)。
+    const rest = { ...patch };
+    const restKeys = Object.keys(rest).filter((k) => k !== "name");
+    if (patch.name == null && restKeys.every((k) => k === "pinned" || k === "archived")) return;
+    // ② 内核未装载 / 归属未知:没有投影目的地。中立层照写(调用方),投影跳过——不抛。
+    //    "归属未知"也不许猜一个内核顶上(设计原则 22):没有内核就**没有内核侧头行**可投影。
     const ns = this.neutralSessionIdFromPath(sessionPath);
-    const kernel: KernelId = (ns && this.neutralStore?.getHeader(ns)?.header.kernel) || this.defaultKernelId;
-    const catalog = this.catalogFor(kernel);
+    const kernel = this.kernelForPath(sessionPath);
+    const catalog = kernel ? this.catalogOrNull(kernel) : null;
+    if (!catalog) {
+      console.warn(
+        `[session-store] 会话 ${ns ?? sessionPath} 的内核 ${kernel ? `"${kernel}" 未装载` : "归属未知(中立头未记录)"},`
+        + `内核头行投影跳过(中立层已写,真相源不受影响)`,
+      );
+      return;
+    }
     try {
       // 名字下沉:dsh 的 updateHeader 面不含 name,走 session/rename;pi 的 rename 就是
       // updateHeader({name}) 的 append session_info,统一走 rename 保持一处写。
       if (patch.name != null) await catalog.rename(sessionPath, patch.name);
-      const rest = { ...patch };
-      delete rest.name;
-      const keys = Object.keys(rest);
-      if (keys.length > 0 && keys.every((k) => k === "pinned" || k === "archived")) return;
-      if (keys.length > 0) await catalog.updateHeader(sessionPath, rest);
-    } catch {
-      // 投影失败不阻断——中立层才是真相源(§7.5 不变量 #1)。
+      const restPatch = { ...patch };
+      delete restPatch.name;
+      if (Object.keys(restPatch).length > 0) await catalog.updateHeader(sessionPath, restPatch);
+    } catch (e) {
+      // 投影失败不阻断——中立层才是真相源(§7.5 不变量 #1)。留痕:投影失败本身是可观测事实。
+      console.warn(`[session-store] 内核头行投影失败(中立层已写,不阻断):`, e instanceof Error ? e.message : e);
     }
   }
 
@@ -996,7 +1100,13 @@ export class SessionStore implements
     });
   }
   async copySession(srcPath: string, targetPath: string): Promise<void> {
-    this.catalogForPath(srcPath).copy(srcPath, targetPath);
+    // 复制产物是**内核侧文件**(收藏快照/fork 素材),内核不在场就没有可复制的源文件——
+    // 显式报错并说清原因,不落回装配点的「未注册的内核」原始异常(那是内部措辞)。
+    const kernel = this.kernelForPath(srcPath);
+    if (!kernel) throw this.kernelUnknownError(srcPath);
+    const catalog = this.catalogOrNull(kernel);
+    if (!catalog) throw this.kernelNotLoadedError(kernel);
+    catalog.copy(srcPath, targetPath);
   }
 
   /** 中立层会话注解(设计 docs/design/goal.md §8.3):只写中立层、不写内核会话文件——
@@ -1038,14 +1148,36 @@ export class SessionStore implements
     // 活跃会话禁止删除:进程 append 会让文件复活,删了也白删(机制兜底,UI 侧另有 deletable 过滤)
     const targets = paths.filter((p) => p !== this.activeSessionPath);
     // 按会话内核归属分组删除(非写死 pi):minimal 会话走 minimal 目录的删除,pi/dsh 各走各的。
+    // 归属未知(中立头没记 kernel)的行不强塞给任何内核:它们的**中立层照删**,内核侧文件无从定位
+    // (没有"默认内核"可以拿来猜——设计原则 22)。
     const byKernel = new Map<KernelId, string[]>();
+    const unknownKernel: string[] = [];
     for (const p of targets) {
       const ns = this.neutralSessionIdFromPath(p);
-      const kernel = (ns ? this.neutralStore?.getHeader(ns)?.header.kernel : undefined) ?? this.defaultKernelId;
+      const kernel = ns ? this.neutralStore?.getHeader(ns)?.header.kernel : undefined;
+      if (!kernel) { unknownKernel.push(p); continue; }
       const list = byKernel.get(kernel);
       if (list) list.push(p); else byKernel.set(kernel, [p]);
     }
-    await Promise.all([...byKernel.entries()].map(([kernel, ids]) => this.catalogFor(kernel).deleteSessions(ids)));
+    if (unknownKernel.length > 0) {
+      console.warn(`[session-store] ${unknownKernel.length} 个会话的中立头未记录内核归属:跳过内核侧文件删除(中立层照删)`);
+    }
+    // 内核侧投影删除 **best-effort**:内核没装载/缺面/文件已不在,都不许阻断删中立真相。
+    // 根因(勿退回成直接 await catalogFor(...)):此前这一行抛「未注册的内核」时,下面那段
+    // 中立级联删**根本没执行**——而用户点删除的心智是"这条不要了"。后果是最难接受的一种:
+    // 会话记录的内核没装载 ⇒ 这一行**删不掉**,用户拿它没办法,它每次列项目还刷一条报错。
+    // 语义依据:内核侧文件是投影(可重建),中立层是真相源(§7.5 不变量 #1)——
+    // 投影删失败顶多留个孤儿文件,真相删失败是用户意图被吞。
+    await Promise.all([...byKernel.entries()].map(async ([kernel, ids]) => {
+      const catalog = this.catalogOrNull(kernel);
+      if (!catalog) {
+        console.warn(`[session-store] 内核 "${kernel}" 未装载:跳过内核侧文件删除(中立层照删,这 ${ids.length} 个会话不再出现在列表里)`);
+        return;
+      }
+      await catalog.deleteSessions(ids).catch((e) => {
+        console.warn(`[session-store] 内核 "${kernel}" 会话文件删除失败(中立层照删,残留文件可重建):`, e instanceof Error ? e.message : e);
+      });
+    }));
     // 级联删中立层(§27 阶段 D):中立层是唯一真相源,删会话也删中立树。
     for (const p of targets) {
       const ns = this.neutralSessionIdFromPath(p);
@@ -1054,8 +1186,12 @@ export class SessionStore implements
       if (ns) this.questionStore?.deleteBySession(ns);
     }
   }
+  /** 读会话的工具配置。内核未装载 / 归属未知 ⇒ 返回 null(= 没有内核侧配置,展示层回落组默认),
+   *  不抛:工具配置是内核专属文件的内容,内核不在场时"读不到"就是 null 的合法语义,
+   *  而抛错会让工具管理面板在孤儿行上整块炸掉。 */
   async readToolConfig(sessionPath: string): Promise<SessionToolConfig | null> {
-    return this.catalogForPath(sessionPath).readToolConfig(sessionPath);
+    const kernel = this.kernelForPath(sessionPath);
+    return (kernel ? this.catalogOrNull(kernel)?.readToolConfig(sessionPath) : null) ?? null;
   }
   async projectStats(cwd: string): Promise<ProjectStats> {
     // 跨**所有已注册内核**聚合项目统计（此前只问 pi：别的内核的会话完全不计入，
@@ -1093,7 +1229,14 @@ export class SessionStore implements
         })),
       };
     }
-    return this.catalogForPath(sessionId).getTree(sessionId);
+    // 兜底(中立层没有这一条:迁移前的旧文件/外部路径):归属必须**查出来**——遍历已注册内核各问
+    // 一次"这个会话是不是你的"(与 resolveSessionKernel 的旧会话回读同一条规则),而不是回落
+    // 某个默认内核。谁都不认 → 显式报错(设计原则 22:缺了就报错,不静默挑一个)。
+    const kernel = (await this.detectKernelAndCustom(sessionId))?.kernel ?? null;
+    if (!kernel) throw this.kernelUnknownError(sessionId);
+    const catalog = this.catalogOrNull(kernel);
+    if (!catalog) throw this.kernelNotLoadedError(kernel);
+    return catalog.getTree(sessionId);
   }
 
   /** 按 cwd 懒取收藏快照存储;未启用(bookmarkDir 未注入)返回 null。 */
@@ -1580,7 +1723,9 @@ export class SessionStore implements
     if (this.activeSessionPath) {
       const fromState = this.modelPrefsFromState(snapshot.state);
       if (fromState) {
-        const fromHeader = parseSessionModelPrefs((await this.catalogForPath(this.activeSessionPath).readCustom(this.activeSessionPath)) ?? undefined);
+        // 头行读回:目录可能取不到(内核未装载 / 归属未知)→ fromHeader 为 undefined,
+        // 此时按"不一致"处理照写(下面是幂等写;不能因为读不到就跳过回写=丢内核侧偏好)。
+        const fromHeader = parseSessionModelPrefs((await this.catalogForPath(this.activeSessionPath)?.readCustom(this.activeSessionPath)) ?? undefined);
         const same = fromHeader
           && fromHeader.provider === fromState.provider
           && fromHeader.modelId === fromState.modelId
@@ -1993,9 +2138,17 @@ export class SessionStore implements
       if (proc) proc.pendingModelPrefs = prefs;
       return;
     }
+    // 内核目录取不到(内核未装载 / 中立头未记录归属)与"文件未落盘"同性质:内核侧头行这次写不了,
+    // 记 pending 待补写、其余交 sync 收敛——**不猜一个内核顶上**(设计原则 22)。
+    const catalog = this.catalogForPath(sessionPath);
+    if (!catalog) {
+      const proc0 = this.allProcs().find((p) => p.boundSessionPath === sessionPath);
+      if (proc0) proc0.pendingModelPrefs = prefs;
+      return;
+    }
     try {
       // 写三字段 + kernel(kernel 是模型的派生量,与模型同域原子落盘——重开据此无歧义读回内核)。
-      await this.catalogForPath(sessionPath).updateHeader(sessionPath, {
+      await catalog.updateHeader(sessionPath, {
         custom: { [SESSION_MODEL_PREFS_KEY]: { provider: prefs.provider, modelId: prefs.modelId, thinkingLevel: prefs.thinkingLevel, ...(prefs.kernel ? { kernel: prefs.kernel } : {}) } },
       });
     } catch (e) {
@@ -2411,10 +2564,12 @@ export class SessionStore implements
 
   /** 派生后的激活切换 + 即时基线(§6.1「派生 → 跳转」):切激活到新会话(投影地址按
    *  会话内核归属派生),基线直接从中立层出并广播——派生是零内核交互(惰性),无活进程,
-   *  renderer 即时看到派生内容,不等到首发。返回新会话的投影地址。 */
+   *  renderer 即时看到派生内容,不等到首发。返回新会话的投影地址。
+   *
+   *  源会话的内核**没装载**时退回中立 id 作投影地址:派生本身是纯中立操作(整树复制),
+   *  不该因为"源会话记的是一个当前没启用的内核"就整条失败——和列表行同一个降级语义。 */
   private activateDerived(newNs: string, kernel: KernelId): string {
-    const catalog = this.catalogFor(kernel);
-    const newPath = catalog.projectionPath(this.activeCwd!, newNs);
+    const newPath = this.catalogOrNull(kernel)?.projectionPath(this.activeCwd!, newNs) ?? newNs;
     this.setContext(this.activeCwd!, newPath);
     const derived = this.neutralStore?.get(newNs);
     if (derived) this.broadcastDerivedBaseline(derived, newPath);
@@ -2514,10 +2669,10 @@ export class SessionStore implements
     // 首发强制物化(否则 pi 标 ns=已物化,空文件起进程,克隆内容永不进内核)。
     const clonedWithSeedMark: NeutralSession = { ...cloned, header: { ...cloned.header, pendingSeed: true } };
     this.putNeutral(clonedWithSeedMark, { ns: newNs, kind: "session", session: clonedWithSeedMark });
-    // 切激活到克隆会话:投影地址按源会话内核归属派生(内容型内核=派生路径,惰性内核=裸 id)。
-    const catalog = this.catalogFor(cur.header.kernel);
+    // 切激活到克隆会话:投影地址按源会话内核归属派生(内容型内核=派生路径,惰性内核=裸 id);
+    // 源会话的内核没装载 ⇒ 退回中立 id(同列表行/派生的降级语义:克隆是纯中立操作)。
     const rootLineageId = clonedWithSeedMark.lineages.find((l) => l.fork === null)?.lineageId ?? newNs;
-    const newPath = catalog.projectionPath(this.activeCwd, rootLineageId);
+    const newPath = this.catalogOrNull(cur.header.kernel)?.projectionPath(this.activeCwd, rootLineageId) ?? rootLineageId;
     this.setContext(this.activeCwd, newPath);
     // 克隆后无活进程(惰性 seed 等下次发送)——基线直接从中立层出并广播,
     // renderer 即时看到克隆内容(内容单源:基线不需要活进程)。
@@ -2950,6 +3105,18 @@ export class SessionStore implements
     return { cwd: proc.cwd, sessionPath: proc.boundSessionPath };
   }
 
+  /** 会话 key → 该会话的**唯一**进程槽位(总线会话专用)。
+   *
+   *  总线会话的 key(spawnSession/reopenSession 建的 `bus:<uuid8>`)恒只有一个内核槽位——"取那一个"
+   *  因此是精确的;主会话可能并存多个内核槽位(多槽位并存),那时没有唯一解,返回 undefined 让调用方
+   *  显式处理。此前这四处写的是 `procs.get(key).get(defaultKernelId)`:把"注册顺序第一个内核"当成
+   *  总线槽位的身份——那正是"默认内核"的残留(它的注释也据此写成"bus 会话恒为 pi 槽位")。 */
+  private soleProc(sessionKey: string): SessionProc | undefined {
+    const kernels = this.procs.get(sessionKey);
+    if (!kernels || kernels.size !== 1) return undefined;
+    return [...kernels.values()][0];
+  }
+
   // ============ Session Bus 支撑(路由器经此面驱动任意会话,不涉及激活语义) ============
 
   /** 全会话事件订阅(带来源 key;keyedListeners 的通用暴露——总线路由器的进线)。 */
@@ -2964,15 +3131,15 @@ export class SessionStore implements
     return () => { this.busFrameListeners.delete(cb); };
   }
 
-  /** 按 key 取 pi 扩展面(进程不在或非 pi 内核返回 undefined)。 */
+  /** 按 key 取 pi 扩展面(进程不在 / 非唯一槽位 / 非 pi 内核返回 undefined)。 */
   getAdapter(sessionKey: string): BackendExtensions | undefined {
-    return this.procs.get(sessionKey)?.get(this.defaultKernelId)?.backend.capabilities.extensions as BackendExtensions | undefined;
+    return this.soleProc(sessionKey)?.backend.capabilities.extensions as BackendExtensions | undefined;
   }
 
-  /** 按 key 取中性后端(bus 会话恒为 pi 槽位——spawnSession/reopenSession 显式以 pi 建;
-   *  不读全局 activeKernel,避免主会话是 dsh 时 bus 落空)。进程不在返回 undefined。 */
+  /** 按 key 取中性后端(bus 会话只有一个槽位,`soleProc` 精确取它;
+   *  不读全局 activeKernel,避免主会话是 dsh 时 bus 落空)。进程不在/槽位不唯一返回 undefined。 */
   getBackend(sessionKey: string): BaseBackend | undefined {
-    return this.procs.get(sessionKey)?.get(this.defaultKernelId)?.backend;
+    return this.soleProc(sessionKey)?.backend;
   }
 
   /** 当前激活会话后端的扩展能力面 + 内核归属(renderer 据以显式降级)。
@@ -3046,10 +3213,14 @@ export class SessionStore implements
 
   /** 总线 spawn:起一个不抢激活语义的会话进程(key=bus:<uuid8>,全新会话文件)。
    *  opts.role:会话级角色卡——role 文本内联进 argv(--append-system-prompt),createProc 注入。
-   *  opts.kernel:这个工人会话跑在哪个内核上。**调用方给**（总线传父会话的内核，见
-   *  `kernelOfSessionKey` 的继承规则）；缺省 = 注册表首个。本层不写死任何内核名。 */
-  async spawnSession(cwd: string, opts?: { role?: SessionRole; kernel?: KernelId }): Promise<{ key: string; sessionPath: string }> {
-    const kernel = opts?.kernel ?? this.defaultKernelId;
+   *  opts.kernel:这个工人会话跑在哪个内核上。**调用方必须给**（总线传父会话的内核，见
+   *  `kernelOfSessionKey` 的继承规则）；给不出就显式报错——**没有"注册表首个"这种兜底**
+   *  （设计原则 22：内核是模型的派生量，缺了就报错，不替调用方挑一个）。 */
+  async spawnSession(cwd: string, opts: { kernel: KernelId; role?: SessionRole }): Promise<{ key: string; sessionPath: string }> {
+    // kernel 是**必填**(类型上就要求):没有默认内核可回退(设计原则 22)。运行期再兜一道,
+    // 挡住绕过类型(JS 调用方/反射)传来的空值——错误要出现在发起处,不在这里猜。
+    if (!opts?.kernel) throw new Error("派生工人会话必须显式指定内核:调用方传不出内核时应先失败，而不是挑一个默认内核");
+    const kernel = opts.kernel;
     const key = `bus:${randomUUID().slice(0, 8)}`;
     const sessionPath = this.newSessionFilePath(kernel, cwd);
     // 新会话路径文件名即 ns(§12.2),反查主键传给 createProc,避免 ns 与路径文件名不一致。
@@ -3072,13 +3243,17 @@ export class SessionStore implements
    *  role 是进程参数(不持久化在会话文件里)——谁 reopen 谁负责带角色;会话历史已含角色
    *  影响,即使不重传也不会完全失忆。
    *  消费方:对话面板对已完成/离线的子 agent "继续对话"(reopen 后 tap 流式回复)。 */
-  async reopenSession(cwd: string, sessionPath: string, role?: SessionRole): Promise<{ key: string; sessionPath: string }> {
+  async reopenSession(cwd: string, sessionPath: string, role?: SessionRole, kernel?: KernelId): Promise<{ key: string; sessionPath: string }> {
     const key = `bus:${randomUUID().slice(0, 8)}`;
     const ns = this.neutralSessionIdFromPath(sessionPath);
-    // 续在**这个会话自己的内核**上（从路径查中立头；无记录回落默认内核）——
-    // 此前写死 pi：续一个非 pi 的历史子会话会在错误的内核上重新起进程。
-    const kernel = this.kernelForPath(sessionPath);
-    const proc = this.createProc(key, cwd, sessionPath, false, kernel, role, ns);
+    // 续在**这个会话自己的内核**上——此前写死 pi：续一个非 pi 的历史子会话会在错误的内核上重新起
+    // 进程。归属取三级:**调用方显式给的** > 中立头记录的 > **反查**(遍历已注册内核,谁认得这个
+    // 文件就是谁的)。三级都落空就**显式报错**——没有"默认内核"可以拿来顶上(设计原则 22);
+    // 其中"反查"是查询不是默认:证据是这个内核的目录里真的有这个文件。
+    const resolved = kernel ?? this.kernelForPath(sessionPath) ?? (await this.detectKernelAndCustom(sessionPath))?.kernel ?? null;
+    if (!resolved) throw this.kernelUnknownError(sessionPath);
+    if (!this.isKernelLoaded(resolved)) throw this.kernelNotLoadedError(resolved);
+    const proc = this.createProc(key, cwd, sessionPath, false, resolved, role, ns);
     let kernels = this.procs.get(key);
     if (!kernels) { kernels = new Map(); this.procs.set(key, kernels); }
     kernels.set(proc.kernel, proc);
@@ -3092,14 +3267,14 @@ export class SessionStore implements
    *  三个消费者,协议帧置位会把「用户从没发过消息的会话」误锁内核(实弹:pi spawn 时
    *  fit-pi-extension 的 bus ping 应答经此路置 touched,新会话模型下拉的 dsh TAB 锁死)。 */
   async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
-    const proc = this.procs.get(sessionKey)?.get(this.defaultKernelId);
+    const proc = this.soleProc(sessionKey);
     if (!proc || !proc.backend.alive) throw new Error(`会话不在线: ${sessionKey}`);
     await this.asPi(proc).sendMessage(text, undefined, streamingBehavior);
   }
 
   /** 按 key 取最后一条 assistant 文本(完成采集主源;进程不在返回空串,调用方回退读文件)。 */
   async getLastAssistantTextFor(sessionKey: string): Promise<string> {
-    const proc = this.procs.get(sessionKey)?.get(this.defaultKernelId);
+    const proc = this.soleProc(sessionKey);
     if (!proc || !proc.backend.alive) return "";
     // 内核命令级失败(backend reject)同样回退空串——本方法是采集主源,读文件兜底在调用方
     return this.asPi(proc).getLastAssistantText().catch(() => "");

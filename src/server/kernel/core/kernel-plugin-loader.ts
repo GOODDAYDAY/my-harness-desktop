@@ -3,6 +3,8 @@
 // 「一个内核 = 一个插件」（§目标 11/13）的落地形态：
 //   内核本体(适配器/协议/spawn) 与 desktop 对接面(renderer/locales) 同属
 //   `src/plugins/kernels/<id>/`，共用**同一份** plugin.json —— 内核面写在它的 `kernel` 块里。
+//   测试专用内核插件放 `test-plugins/kernels/<id>/`（**不在生产扫描根里**，只有测试把它种进
+//   隔离 HOME 的用户插件目录才会装载——见 scripts/demo/lib/test-plugins.mjs）。
 //   所以本加载器不再扫一个专属的"内核插件目录"，而是扫**与壳插件相同的根目录**：
 //   凡 manifest 带 `kernel` 块者，既是一个壳插件，也是一个内核插件。
 //
@@ -72,7 +74,8 @@ export function scanKernelPlugins(pluginRootDir: string): KernelPluginEntry[] {
     }
   };
   walk(pluginRootDir, 0);
-  // 按 order 排序(越小越先注册 = 默认内核;缺省排最后,字母序)。
+  // 按 order 排序(越小越先注册,只决定清单/展示次序;缺省排最后,字母序)。
+  // **这个顺序不是「默认内核」**:壳不拿谁排第一当兜底(设计原则 22)。
   entries.sort((a, b) => (a.manifest.order ?? 99) - (b.manifest.order ?? 99) || a.manifest.id.localeCompare(b.manifest.id));
   return entries;
 }

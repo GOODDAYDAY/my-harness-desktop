@@ -186,7 +186,7 @@ const unloadedKernelPluginIds = new Set(
 // 那一段单独成文件是为了让"加第四个内核零改动"这句可被测试直接证明，而不是靠读代码相信）。
 runKernelStartupMigrations(kernelRegistry);
 const surfaces = buildKernelSurfaces(kernelRegistry);
-const { modelCatalog, ids: kernelIds, defaultId: defaultKernelId } = surfaces;
+const { modelCatalog, ids: kernelIds } = surfaces;
 const bundledSkillsSource = opts.isPackaged
   ? join(process.resourcesPath, "my-harness-desktop-skills")
   : resolve(process.cwd(), ".claude/skills");
@@ -222,7 +222,13 @@ const i18nResources = mergeLanguageContributions(languageContributions);
 const baseBackendFactory: BackendFactory = {
   create: (opts) => {
     const plugin = kernelRegistry.get(opts.kernel);
-    if (!plugin) throw new Error(`未注册的内核: ${opts.kernel}`);
+    // 文案要**可行动**(勿退回成裸的「未注册的内核: X」):这句话会经 RPC 冒到用户面前,
+    // 而用户唯一能做的是"启用这个内核"。怎么启用是 bootstrap 自己知道的事(§1.2 机制与内容分离:
+    // 内核清单由插件声明决定,这里只解释"为什么不在清单里"),不推给 application 去猜。
+    if (!plugin) throw new Error(
+      `内核 "${opts.kernel}" 当前未装载,无法起会话进程(该内核可能默认关闭、未安装,或插件未启用;`
+      + `临时启用可用 MHD_ENABLE_KERNELS=${opts.kernel} 启动)`,
+    );
     return plugin.createBackend(opts);
   },
   // 预 seed(§4.5 生命周期不对称):文件态内核(pi/minimal)= 纯文件写,先 seed 得路径再以该路径
@@ -245,10 +251,10 @@ sessionStore = new SessionStore(
   baseBackendFactory,
   sessionCatalogFactory,
   {
-    // 注册表派生的内核事实（会话根 / 已注册清单 / 默认内核）——三面同源，打成一包。
+    // 注册表派生的内核事实（会话根 / 已注册清单）——同源，打成一包。
+    // **没有"默认内核"**：内核是模型的派生量，缺内核处显式报错（设计原则 22）。
     sessionRoots: surfaces.sessionRoots,
     ids: kernelIds,
-    defaultId: defaultKernelId ?? undefined,
   },
   () => registry.systemPromptPaths(),
   new NeutralSessionStore(join(MY_HARNESS_DESKTOP_DIR, "sessions")),

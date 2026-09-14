@@ -323,12 +323,16 @@ export class SessionBus {
     const cwd = p.cwd ?? (originKey ? this.store.getCwdAndSessionPath(originKey).cwd : "");
     if (!cwd) throw new Error("session_create 缺 cwd(调用方会话无 cwd 记录)");
     // role 先落伴生文件(createProc 拼 argv 时注入),真相源即伴生文件,不写会话头行。
-    // **子会话继承父会话的内核**：父是会话地址就取它的内核；父是插件（无会话）则交缺省
-    // （注册表首个）。路由器由此不需要知道任何内核名——此前写死 pi 是内容层事实漏进了这里。
+    // **子会话继承父会话的内核**：父是会话地址就取它的内核；父是插件（无会话）时**没有内核可继承**
+    // ⇒ 显式报错,不挑一个"注册表首个"顶上(设计原则 22「不兜底、立即报错」)。路由器因此不需要知道
+    // 任何内核名——此前写死 pi 是内容层事实漏进了这里,后来改成"注册表首个"仍是在替调用方猜。
     const inheritedKernel = originKey ? this.store.kernelOfSessionKey(originKey) : null;
+    if (!inheritedKernel) {
+      throw new Error("session_create 无法确定内核:发起方不是会话(没有内核归属可继承),也没有模型信息可派生内核");
+    }
     const { key, sessionPath } = await this.store.spawnSession(cwd, {
       ...(p.role ? { role: p.role } : {}),
-      ...(inheritedKernel ? { kernel: inheritedKernel } : {}),
+      kernel: inheritedKernel,
     });
     this.spawnedBy.set(key, origin);
     const adapter = this.store.getAdapter(key);
