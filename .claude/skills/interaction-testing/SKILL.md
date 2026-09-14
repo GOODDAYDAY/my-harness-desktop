@@ -28,6 +28,7 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 **fork→切内核(r23)**:fork 派生会话 pendingSeed 豁免锁定(pendingSeed=未物化≠历史)——fork pi 后可切 dsh
 **in-mem harness(r19)**:Vite __vitePreload 相对 import 在 Node-ESM 挂起→直测预加载全 chunk 修复(87b072d5)
 **内核插件补面 + 实证纪律(§10)**:行契约不变/hook 不同名(llm-recorder 的 dsh 侧)|插桩改变时序→无插桩复跑定论|守卫要先证明能红|数据层对≠DOM 对(列表跨作用域 key 必带 cwd)
+**双内核「写半/读半」对齐怎么验(§16,r-hw1)**:钩子挂哪个面(构造面 vs 执行面)先自查|三级配方(假ctx驱动真钩子→假盘驱动真组件→真内核+mock模型真回合)|新 DOM 锚点(data-llm-log-row/state/detail)|判据用不变量不用魔法阈值|形状词典两套词汇并列认|`npm run e2e:dsh:recorder`
 **构建产物与测试基建的「假结果」(§11)**:|**三内核同场真回合**(§14)||**用 mock 模型给内核补零 token 真回合**(§13)||**全量 e2e 广扫抓到真 bug**(§12)|**先插桩再猜**(§12.2)改完 server 忘了 build→e2e 读旧代码|e2e 泄漏实例→下次连到旧进程|假守卫两副面孔(同实例 rerender / 行为对但机理不对)|静默 no-op 三例(缺关键帧/未声明变量/文档写的字段不存在)|常年红的门等于没有门|能力驱动渲染用 `=== true`|降级要成对验|断言写错"面"(同一件事两个投递口,11.9)|瞬态闪烁要录**序列**不是比两端(11.10)|重挂缺陷真 app 最短复现=切走再切回(11.11)|测试替身:身份要稳、形状要真(11.12)|运行态动效两条成因链,产物级守卫(11.13)|环境展不出该缺陷时守卫是假的(11.10)
 
 ## 1 基础设施(现成件,别重造)
@@ -1083,3 +1084,145 @@ mock 的回复**回显请求里的 model id**（`答复来自 <model>`），于�
 **e2e 判据**：`dsh-round.e2e.mjs` 增加"时间线里没有「生成失败」"——直接断言**这一轮没被标失败**
 （数据层断言照不出"回合被钩子带崩"，必须打用户看得见的那个面）。
 红绿证明：把 `return next()` 放回去，该断言当场红，正文与用户报的一模一样。
+
+
+## 16 双内核「写半 / 读半」对齐怎么验（llm-recorder 轮，r-hw1）
+
+> 场景：一个壳插件，数据由**内核进程内的扩展**写文件（写半），**桌面插件**读文件渲染（读半）。
+> 两半不共享代码、不共享类型，只共享文件契约；两个内核各有一套写半。这类结构的 bug 有个共同形状：
+> **两半各自单测都绿，拼起来是空的**。本文是这一轮的实操记录，配方可直接照抄到下一个同类插件。
+
+### 16.1 先问「钩子挂在哪个面」，再写一行代码
+
+本轮的真根因不是"字段没取到"，而是**钩子挂在构造面**：dsh 的记录挂在 `agent/request`，它的契约
+`LlmCallConfig` 只有 provider/model/思考档位/采样五项；完整请求（messages/system/tools）在执行面
+——`llm` 服务的 `llm/stream` waterfall，参数 `GenerateOptions`，其类型注释就是
+*A single model request, fully assembled*。用户症状「DSH 一直只有 67B、核心内容全无」= 一条 148 B 的配置行。
+
+**自查三步（任何一个"记录/观测"类插件都适用）**：
+1. **列钩子的契约字段**：打开宿主类型定义，把候选钩子的 payload 类型抄下来，逐个问"我要的东西在不在它的契约里"。不在 = 换面，不是"想办法凑"。
+2. **去实现里核对谁在调它**：`grep -rn 'waterfall(\|dispatch\.\|emit(' ~/.dsh/node_modules/@deepseek-ai/*/lib/*.js`。有别的消费者（本轮：agent-loop / session-title / checkpoint-policy）说明它是**公开扩展点**，不是内部细节。
+3. **对齐 pi 侧站的位置**：两侧在同一层才有同等保真度。pi 的 `before_provider_request` 与 dsh 的 `llm/stream` 是同一层（执行面）——这就是"对齐"的判据，而不是把配置"补全"成请求体（那是影子实现）。
+
+**反面教材（本轮踩过）**：`agent/request` 的返回值是 `await next()` 拿到的 `LlmCallConfig`——它**看起来**像"请求"（有 model、有 provider），实际只是"打算怎么发"。判断方法是看契约类型名与字段清单，不看调用点长得像不像。
+
+### 16.2 三级配方（每级都用**真**钩子/真组件，替身只替环境）
+
+| 级 | 替身替什么 | 被验的东西必须是真的 | 本轮文件 |
+|---|---|---|---|
+| unittest | 假 `ctx`（只实现 `on`）+ 假 chunk 流 | 真扩展模块、真落盘（临时 cwd）、真 seq/分片/index | `dsh-extension-flow.test.ts`（12 条） |
+| DOM | 假 `ctx.fs`（假盘，内容是**真**行）+ mock `usePluginContext`/`react-i18next` | 真组件树、真字典文案、真 data 锚点 | `renderer/dsh-rows.dom.test.tsx`（5 条） |
+| e2e | 本地 mock SSE 模型（真内核 + 真 JSON-RPC + 真落盘） | 真 app、真 dsh 内核、真回合、真 DOM | `scripts/demo/dsh-round.e2e.mjs`（31 条） |
+
+**跑法**：`npx vitest run src/plugins/insight/llm-recorder` → `npm run build` → `npm run e2e:dsh:recorder`
+（零 token：mock 模型；真 app 走 `launchApp` 的静默默认，不抢用户焦点）。
+
+### 16.3 DOM 锚点：按 data 属性查，并且把「状态」做成属性
+
+本轮给记录行加了三个锚点（**壳插件给自己的 DOM 加 data 属性是合规的**，属于内容层）：
+
+| 锚点 | 含义 |
+|---|---|
+| `[data-llm-log-row="<seq>"]` | 记录行本体（点它 = 展开/收起详情） |
+| `[data-llm-log-state="ok\|pending\|failed"]` | 这一行的机器可读状态 |
+| `[data-llm-log-detail="<seq>"]` | 展开后的详情容器（六个分区都在里面） |
+
+**为什么状态要做成属性**：原来"失败"只能从颜色看出来（`--color-danger`），而颜色是主题的事、随主题变。
+判据不能依赖它。状态属性是契约，颜色只是它的一个投影。
+
+**e2e 里怎么点开**（避免"点击打偏"）：
+```js
+await page.evaluate(() => {
+  const row = document.querySelector("[data-llm-log-row]");
+  row?.querySelector("div")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+});
+await page.waitForFunction(() => document.querySelector("[data-llm-log-detail]") !== null, { polling: 200 });
+```
+
+### 16.4 判据：写**不变量**，不写魔法阈值
+
+反面（本轮第一版，跑出来 462 就红了）：
+```js
+expect(row.length).toBeGreaterThan(500);   // 拍脑袋的数，测的是我的想象
+```
+正面（照契约写）：
+```js
+expect(row.length).toBeGreaterThanOrEqual(bytes(messages) + bytes(system) + bytes(tools)); // 行必须装得下内容
+expect(payload.messages).toHaveLength(200);        // 长上下文会话不许退化成配置行
+expect(respText).toContain("mock 回合的回复");       // 响应里要有模型真正答的那句
+```
+另一条：**别自己加码**（§13.4 的老账）。`status` 是可选字段，断言"必须有数字状态码"是我发明的强条件。
+本轮又踩两次，都是同一种形状——**判据分两档，别把"形状定档"写成"契约定档"**：
+- 「System 提示」分区**不是契约保证的**：`system` 在顶层（Anthropic 形状、dsh 的 GenerateOptions）
+  才画得出来；**OpenAI 形状没有顶层 system**（它的 system prompt 是 messages 里 role=system 的一条）。
+  要求两内核都出现它 = 发明条件；正确写法是「契约定档（请求/响应/消息历史/原始 JSON）两内核都要有」＋
+  「形状定档（工具定义看 tools、System 提示看顶层 system）有才画」。**先把判据归类，再写断言。**
+
+### 16.4b 对账断言是这一轮最值钱的东西
+
+本轮新加的「**两内核文件对账**」（在 `multi-kernel-round.e2e.mjs` 里）一口气抓出一条真缺陷：
+`index.json` 的桶键在两个写侧不是一套约定——同一份文件里出现 `{"xxx.jsonl":…}` 与 `{"yyy":…}`
+两种键空间（pi 用 `path.basename(sessionFile)`，dsh 用了裸会话标识）。统计页只做聚合求和，
+**肉眼与既有断言都看不见它**；只有"拿 index 的键去 join 实际文件/行数"才照得出来。
+
+对账断言的形状（可照抄）：
+```js
+// 桶里的 requests 必须等于该会话实际落盘的 request 行数（按首片文件名为键）
+for (const [stem, rec] of perStem) {
+  const bucket = idx.sessions[`${stem}.jsonl`];
+  if (bucket.requests !== rec.reqs) 报红;
+}
+// 文件名 ↔ 会话：dsh 日志文件名必须真的是某个 dsh 会话 id（面板按会话定位，错一个就看不到记录）
+// 分片命名：首片无编号、续片 .N.jsonl 且 N>=2
+// 两内核都要有记录 + 每行都带 messages + 请求响应成对
+```
+**"文件是否对应、格式是否对应"这类用户提问，答案就在这种断言里**——不是读代码读出来的。
+
+### 16.5 「数据层对 ≠ DOM 对」在双内核下是**三处**都要断
+
+本轮把同一件事在三个面上各断一次，缺一层就会漏：
+
+1. **盘上**：request 行 8581 B（旧 147 B）、`messages` 非空、`system` 526 字符、`tools` 11 个、`sessionId` 在、`signal` 已丢。
+2. **DOM 结构**：点开详情 → `请求 / 响应 / System 提示 / 工具定义 / 消息历史 / 原始 JSON` 六个分区齐全、`data-llm-log-state="ok"`。
+3. **用户可见的负面面**：面板里没有「未返回」、时间线里没有「生成失败」、页面零报错。
+
+**本轮三处各抓到一个真问题**：盘上全量但 DOM 少一段（provider 重复渲染被 DOM 守卫抓出）、
+失败行被判成成功（`error` 字段读侧不认）、空 message 被报成"形状未识别"（把读侧缺口说成数据畸形）。
+
+### 16.6 读侧形状词典：按**形状**认两套词汇，不按内核身份分支
+
+同一个概念，两个内核的原生词汇不同（`reasoning`/`thinking`、`tool-call`/`tool_use`/`toolCall`、
+`parameters`/`input_schema`、`inputTokens`/`input`、`stopReason:{kind}`/字符串）。
+做法是一张**形状词典**放在纯模型层（`core/payload-model.ts`），读侧不出现任何 `if (kernel === …)`——
+换第三个内核只要它吐这两套里的任一套，面板就能画（§7.5 三条不变量的落地形态）。
+
+断言这类适配的写法：**两套词汇各喂一遍，断言归到同一个中性结果**（`blockToPart` 的词典用例）。
+
+### 16.7 本轮踩到的坑（都不是产品 bug，是"测试/工具自己的假象"）
+
+1. **`--port 9363` 让端口变成 1**：`dsh-round.e2e.mjs` 用 `--port=9363` 形式解析；传空格分隔时
+   `args.port === true` → `Number(true) === 1` → 等 CDP 端口 1 超时。**报错信息里那个数字要读**。
+2. **build 之后才加 DOM 锚点**：先跑了一次 build 才发现锚点是后加的 → e2e 找不到锚点。
+   顺序固定为 **改代码 → build → e2e**；`out/` 是产物，插件代码变了必须重打（§11.1 同源）。
+3. **模块级状态的"假重启"用例**：旧的"进程重启续号"用例新建了假 ctx，却复用同一份模块级 `Map`
+   ——那条路径根本没被走到（守卫是假的）。用 `vi.resetModules()` + 重新 `import()` 造真新实例，
+   才照出"分配 seq 前必须先与磁盘对账"这个真缺陷。
+4. **`git commit -m "…"` 里的反引号会被 shell 执行**：commit message 里写
+   `` `node scripts/demo/…` `` → 命令替换**真的跑了那两个 e2e**（几分钟）+ 消息被污染 + commit 失败。
+   **多行/含反引号的消息一律走 `git commit -F -` + heredoc**，别用 `-m "…"`。
+5. **守卫自己的解析器也会错，而且假红比没守卫更坏**：`dsh-hook-contract.test.ts` 数形参用
+   `pattern.split(",").length`，把解构模式 `({ agent, messages, step, signal }, next)` 数成 5 个；
+   又用"非 waterfall 不许有第二个形参"的启发式，把 `session/event (session, event)` 判红
+   ——**emit 钩子的参数是事件自己的参数，`session/event` 就是 2 个**。
+   两条都会逼着人把正确的代码改错。修的是**守卫的模型**（表里加 `args: 真实参数个数`，
+   判据改成"形参个数 ≤ args 且非 waterfall 不许调 next()"），不是改代码迎合错误规则。
+   教训：**守卫报红先问"守卫的模型对不对"**，尤其在它刚被你引入新场景（新钩子/新形状）的时候。
+6. **改动收尾要"扫一遍自己"**：本轮最后把 diff 当外来代码读了一遍，抓出
+   `dsh-extension/extension.json` 的描述还写着旧行为（"dsh 只给 LlmCallConfig，故原样记配置"）
+   ——这是扩展管理页要展示的文案，属于"文档与代码同批同步"的一部分，很容易漏。
+
+### 16.8 交付清单（同类任务的完成定义）
+
+写半改造 + 读侧对齐 + i18n 四语 + 设计文档（根因与终态）+ 插件技术文档（§13）+ 三级测试全绿
++ e2e 真回合 PASS + 截图留证 + 文档与代码同批提交（CLAUDE.md §5.5）。
+**没有"应该没问题"**：每一处结论后面都要跟一个能复现它的命令。

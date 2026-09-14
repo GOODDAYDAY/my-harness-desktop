@@ -14,10 +14,16 @@ export interface ResponseLine {
   seq: number;
   ts: number;
   kind: "response";
-  /** 连接级失败无 status(after_provider_response 未触发)。 */
+  /** 连接级失败无 status(after_provider_response 未触发);dsh 侧不给 HTTP status。 */
   status?: number;
   durationMs?: number;
-  message: unknown;
+  /** 组装态响应消息。**可缺失**:内核这次没回传(连接级失败/中止/未产出)——
+   *  读侧必须显式降级,不许把"内核没给"渲染成"形状未识别"(见 payload-model 的
+   *  describeResponse.unrecognizedReason)。 */
+  message?: unknown;
+  /** 失败事实(dsh 不伪造 status,用这个表态)。存在即失败——读侧失败判定必须认它,
+   *  否则 dsh 的失败行会被着成成功色(设计 docs/design/llm-recorder-dsh-parity.md §3)。 */
+  error?: unknown;
 }
 
 export type LogLine = RequestLine | ResponseLine;

@@ -7,6 +7,8 @@
   "panel.notReturned": "未返回",
   "panel.request": "请求",
   "panel.response": "响应",
+  "panel.provider": "provider",
+  "panel.noResponseMessage": "这次调用没有回传响应消息（内核只报告了调用结束，未给出消息内容）",
   "panel.system": "System 提示",
   "panel.tools": "工具定义",
   "panel.messages": "消息历史",

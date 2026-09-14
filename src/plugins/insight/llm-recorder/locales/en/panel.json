@@ -7,6 +7,8 @@
   "panel.notReturned": "no response",
   "panel.request": "Request",
   "panel.response": "Response",
+  "panel.provider": "provider",
+  "panel.noResponseMessage": "This call returned no response message (the kernel reported only that the call ended, with no message content)",
   "panel.system": "System prompt",
   "panel.tools": "Tool definitions",
   "panel.messages": "Message history",

@@ -244,6 +244,149 @@ try {
   ok(minimalFiles.length >= 1, `minimal 会话文件落在 .minimal/agent/sessions（${minimalFiles.length} 个）`);
   const piFiles = (() => { try { return readdirSync(join(home, ".pi", "agent", "sessions"), { recursive: true }).filter((f) => String(f).endsWith(".jsonl")); } catch { return []; } })();
   ok(piFiles.length >= 1, `pi 会话文件落在 .pi/agent/sessions（${piFiles.length} 个）—— 三个内核各写各的根，没有互相覆盖`);
+  // ── 请求记录：**两内核的日志文件对账**（文件 ↔ 会话 ↔ 行 ↔ index）────────────────
+  // 用户的原话是「文件是否对应，格式是否对应」——所以这里不验"有没有记录"（dsh-round 已验），
+  // 而是验**两份写半产出的东西能不能对上账**：文件名是不是那个会话、行数是不是与 index 一致、
+  // 两内核的请求行是不是都装得下核心内容（messages）。这是"对齐"的机器判据。
+  const logDir = join(projectDir, ".my-harness-desktop", "llm-logs");
+  const allLogFiles = (() => { try { return readdirSync(logDir).filter((f) => f.endsWith(".jsonl") && f !== "index.json"); } catch { return []; } })();
+  ok(allLogFiles.length > 0, `请求记录有日志文件（${allLogFiles.length} 个：${allLogFiles.slice(0, 3).join(", ")}${allLogFiles.length > 3 ? " …" : ""}）`);
+
+  // 分片命名：首片 <stem>.jsonl，续片 <stem>.N.jsonl 且 N>=2（约定里没有 .1）
+  let shardOk = true;
+  for (const f of allLogFiles) {
+    const m = /^(.*?)(?:\.(\d+))?\.jsonl$/.exec(f);
+    if (!m) { shardOk = false; break; }
+    if (m[2] !== undefined && Number(m[2]) < 2) { shardOk = false; break; }
+  }
+  ok(shardOk, "分片命名合法：首片无编号、续片从 .2.jsonl 起（没有 .1）");
+
+  // 逐文件解析 + 按**行形状**归类（不靠内核身份）：dsh 的 GenerateOptions 带 sessionId，pi 的 provider 原生体不带。
+  const perStem = new Map();
+  for (const f of allLogFiles) {
+    let rows = [];
+    try { rows = readFileSync(join(logDir, f), "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l)); } catch { /* 读失败按空算 */ }
+    const stem = f.replace(/(?:\.\d+)?\.jsonl$/, "");
+    const rec = perStem.get(stem) ?? { kernel: new Set(), reqs: 0, resps: 0, paired: 0, files: [] };
+    rec.files.push(f);
+    const reqSeq = new Set();
+    for (const row of rows) {
+      if (row.kind === "request") {
+        rec.reqs += 1;
+        reqSeq.add(row.seq);
+        rec.kernel.add(row.payload && typeof row.payload.sessionId === "string" ? "dsh" : "pi");
+      } else if (row.kind === "response") {
+        rec.resps += 1;
+        if (reqSeq.has(row.seq)) rec.paired += 1;
+      }
+    }
+    perStem.set(stem, rec);
+  }
+  const kernelsSeen = new Set();
+  for (const rec of perStem.values()) for (const k of rec.kernel) kernelsSeen.add(k);
+  ok(kernelsSeen.has("pi") && kernelsSeen.has("dsh"),
+     `两个内核都留下了记录（实测 ${[...kernelsSeen].join(" + ")}）—— 这正是"对齐"的最外层判据`);
+
+  // ① 内容对齐：**两内核**的每次请求都必须装得下对话历史（messages 非空）。
+  //    旧实现下 dsh 侧会在这里红（payload 只有 provider/model 五个字段）。
+  const badReqs = [];
+  for (const [stem, rec] of perStem) {
+    for (const f of rec.files) {
+      for (const row of readFileSync(join(logDir, f), "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l))) {
+        if (row.kind !== "request") continue;
+        const msgs = row.payload?.messages;
+        if (!Array.isArray(msgs) || msgs.length === 0) badReqs.push(`${f}#${row.seq}(${[...(row.payload ? Object.keys(row.payload) : [])].slice(0, 4).join("/")})`);
+      }
+    }
+  }
+  ok(badReqs.length === 0, `每个请求行都带着完整对话历史（messages 非空）；不合规 ${badReqs.length} 条 ${badReqs.slice(0, 3).join(", ")}`);
+
+  // ② 计数口径：index.json 的 requests 必须等于该会话实际落盘的 request 行数（两内核同一口径）。
+  const idx = JSON.parse(readFileSync(join(logDir, "index.json"), "utf-8"));
+  const countMismatch = [];
+  for (const [stem, rec] of perStem) {
+    const bucket = idx.sessions?.[`${stem}.jsonl`];
+    if (!bucket) { countMismatch.push(`${stem}(无桶)`); continue; }
+    if (bucket.requests !== rec.reqs) countMismatch.push(`${stem}(桶 ${bucket.requests} ≠ 行 ${rec.reqs})`);
+  }
+  ok(countMismatch.length === 0, `index.json 的 requests 与实际行数一致（不一致 ${countMismatch.length} 条 ${countMismatch.slice(0, 3).join(", ")}）`);
+
+  // ③ 配对完整：每个 request 都有同 seq 的 response（本轮三个内核都跑完了回合，不该有孤儿）。
+  const unpaired = [...perStem.entries()].filter(([, r]) => r.paired !== r.reqs).map(([s2, r]) => `${s2}(${r.paired}/${r.reqs})`);
+  ok(unpaired.length === 0, `请求与响应成对（未配对 ${unpaired.length} 个 ${unpaired.slice(0, 3).join(", ")}）`);
+
+  // ④ 文件名 ↔ 会话对应：dsh 的日志文件名必须真的是某个 dsh 会话 id（面板按会话文件名定位，错一个就看不到记录）。
+  const dshSids = new Set();
+  const dshRoot = join(home, ".my-harness-desktop-dev", "dsh", "sessions");
+  for (const rel of readdirSync(dshRoot, { recursive: true }).map(String)) {
+    const m = /([0-9a-f-]{36})\/session\.jsonl$/.exec(rel);
+    if (m) dshSids.add(m[1]);
+  }
+  const dshStems = [...perStem.entries()].filter(([, r]) => r.kernel.has("dsh")).map(([s2]) => s2);
+  const orphanNames = dshStems.filter((s2) => !dshSids.has(s2));
+  ok(dshStems.length > 0 && orphanNames.length === 0,
+     `dsh 日志文件名 ↔ dsh 会话 id 一一对应（${dshStems.length} 个文件，会话根下 ${dshSids.size} 个 id，孤儿 ${orphanNames.length} 个）`);
+
+  // ⑤ 同一面板对两内核的行都画得出来（DOM 层面对齐，不是只有数据层）
+  await page.keyboard.down("Meta"); await page.keyboard.press("j"); await page.keyboard.up("Meta");
+  await page.waitForFunction(
+    () => [...document.querySelectorAll("[data-sidepanel-style] button[aria-label]")].some((b) => (b.getAttribute("aria-label") || "").includes("请求记录")),
+    { timeout: 15000, polling: 300 },
+  ).catch(() => {});
+  // **等 tab 出现 ≠ tab 已激活**：不点它，面板里根本不会渲染记录行（第一版就栽在这，
+  // 断言直接红成"0 个会话有记录行"——看着像产品坏了，其实是测试少点了一下）。
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll("[data-sidepanel-style] button[aria-label]")].find((x) => (x.getAttribute("aria-label") || "").includes("请求记录"));
+    b?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await waitForDomIdle(page, { quietMs: 600, timeoutMs: 8000 }).catch(() => {});
+  const tabStates = [];
+  // 逐条点开左栏会话行（切会话 → 面板重读），记录每行日志的状态属性
+  const sessionPaths = await page.evaluate(() => [...document.querySelectorAll("[data-session-path]")].map((el) => el.getAttribute("data-session-path")));
+  for (const sp of sessionPaths.slice(0, 4)) {
+    await page.evaluate((sel) => {
+      const el = [...document.querySelectorAll("[data-session-path]")].find((x) => x.getAttribute("data-session-path") === sel);
+      el?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }, sp);
+    await waitForDomIdle(page, { quietMs: 400, timeoutMs: 5000 }).catch(() => {});
+    const st = await page.evaluate(() => [...document.querySelectorAll("[data-llm-log-row]")].map((r) => r.getAttribute("data-llm-log-state")));
+    if (st.length === 0) continue;
+    // 点开第一条 → 该内核的记录在 DOM 上摊开成哪些分区（两内核必须一样，这是"渲染层对齐"）
+    await page.evaluate(() => {
+      const row = document.querySelector("[data-llm-log-row]");
+      row?.querySelector("div")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await page.waitForFunction(() => document.querySelector("[data-llm-log-detail]") !== null, { timeout: 8000, polling: 200 }).catch(() => {});
+    const detail = await page.evaluate(() => document.querySelector("[data-llm-log-detail]")?.innerText ?? "");
+    const stem = String(sp).split("/").pop().replace(/\.jsonl$/, "");
+    tabStates.push({ session: String(sp).split("/").pop(), kernel: dshStems.includes(stem) ? "dsh" : "pi", states: st, detail });
+  }
+  ok(tabStates.length > 0, `面板能对会话行展示记录（${tabStates.length} 个会话有记录行）`);
+  ok(tabStates.every((t) => t.states.every((x) => x === "ok")), `面板里每条记录行状态都是 ok（${JSON.stringify(tabStates.slice(0, 3).map((t) => ({ k: t.kernel, s: t.states })))}）`);
+  // 两内核在**同一个面板**里渲染出同一套分区（数据层对齐 ≠ DOM 对齐，这条断的是后者）。
+  //
+  // ⚠ 判据分两档，别加码（这一条第一版就栽了，红在 pi 上）：
+  //   · **契约定档**（任何被识别的请求都必须有）：请求 / 响应 / 消息历史 / 原始 JSON；
+  //   · **形状定档**（有才画）：`工具定义` 看 payload.tools 有没有；**`System 提示` 看顶层有没有
+  //     `system` 字段**——Anthropic 形状与 dsh 的 GenerateOptions 都有，**OpenAI 形状没有**
+  //     （它的 system prompt 是 messages 里的一条 role=system，落在「消息历史」里）。
+  //   要求两内核都出现「System 提示」= 我发明的强条件，系统从没承诺过。
+  const ALWAYS = ["请求", "响应", "消息历史", "原始 JSON"];
+  const byK = {};
+  for (const t of tabStates) (byK[t.kernel] ??= []).push(t);
+  const shapes = { pi: new Set(), dsh: new Set() };
+  for (const k of ["pi", "dsh"]) {
+    const ts = byK[k] ?? [];
+    ok(ts.length > 0, `[${k}] 面板里能看到它的记录行（${ts.length} 个会话）`);
+    ok(ts.every((t) => ALWAYS.every((sec) => t.detail.includes(sec))),
+       `[${k}] 记录详情摊开成契约保证的分区（${ALWAYS.join("/")}）—— 与另一内核同构`);
+    for (const t of ts) for (const sec of ["工具定义", "System 提示"]) if (t.detail.includes(sec)) shapes[k].add(sec);
+  }
+  ok(shapes.dsh.has("System 提示") && shapes.dsh.has("工具定义"),
+     "[dsh] 有顶层 system 与 tools → 「System 提示」「工具定义」两区都画出来了");
+  ok(shapes.pi.has("工具定义"),
+     "[pi] 有 tools → 「工具定义」画出来了（OpenAI 形状无顶层 system，System 提示不画是**对的**）");
+
   ok(consoleTail.length === 0, `页面零报错（实际 ${consoleTail.length} 条）`);
 
   await killApp(app);

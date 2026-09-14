@@ -1,70 +1,78 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-// dsh 侧扩展是**纯 .mjs**（它被原样同步进 ~/.dsh/.my-harness-desktop-plugins/，不经 TS 构建，
-// 与 pi 侧被 esbuild 打包成 .js 的路径不同），因此没有类型声明。用 ts-expect-error 精确收口
-// 这一条，而不是给全仓放宽 allowJs —— 只此一处 import .mjs。
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// dsh 侧扩展是**纯 .mjs**（原样同步进 ~/.dsh/.my-harness-desktop-plugins/，不经 TS 构建），
+// 因此没有类型声明。用 ts-expect-error 精确收口这一条，不给全仓放宽 allowJs。
 // @ts-expect-error 无类型声明的内核侧插件模块（见上）
 import dshRecorderUntyped from "./dsh-extension/index.mjs";
-const dshRecorder = dshRecorderUntyped as { apply: (ctx: unknown) => void };
 import { pairRecords, parseLogText } from "./core/log-model";
 
+const dshRecorder = dshRecorderUntyped as {
+  apply: (ctx: unknown) => void;
+};
+
 /**
- * llm-recorder 的 **dsh 侧** 扩展流程测试 —— 与 pi 侧 extension-flow.test.ts 对称。
+ * llm-recorder 的 **dsh 侧** 写面流程测试 —— 与 pi 侧 extension-flow.test.ts 对称。
  *
- * 为什么必须补这条：dsh 写侧此前**根本不存在**（插件只有 piExtension，没有 dshExtension），
- * 症状是「dsh 内核执行时右侧请求记录恒空」。补了 dshExtension 之后，写侧只有**零测试**的
- * 实现支撑——读侧一行没改、配对契约靠肉眼对齐，一旦 hook 名或配对语义漂了，
- * 面板只会安静地空着，没有任何守卫能发现。本文件把 dsh 侧的数据面钉住。
+ * 钉住的是「钩子挂在执行面」这条根因（设计 docs/design/llm-recorder-dsh-parity.md）：
+ *   · 请求行必须来自 `llm/stream` 的 GenerateOptions（messages/system/tools 全量），
+ *     不是 `agent/request` 的 LlmCallConfig（provider/model 五项）。
+ *   · 响应行必须来自被包的 chunk 流（组装态 message），不是回合边界的一条空结算行。
+ *   · 记录不得改变流：逐块按序原样交出、异常照样抛给下游、下游 break 也要结算。
  *
- * 同时钉住一条**与 pi 不同的时序不变量**（也是「记录停在未返回」的根因）：
- * dsh 的 response 行不在一次调用结束的瞬间写，而是等到**回合边界**
- * (`agent/turn-stopping`) 或下一次 `agent/request` 的 (turn,step) 变化才结算。
- * 读侧因此必须把增量刷新挂到**回合边界**（agentSettled）上，只挂 messageEnd 会永远读到
- * 「请求已发、响应未回」。
- *
- * 放插件根目录而非 dsh-extension/ 内：该目录整体同步到
- * ~/.dsh/.my-harness-desktop-plugins/llm-recorder/，测试文件不能混进去。
+ * 放插件根目录而非 dsh-extension/ 内：该目录整体同步到内核插件目录，测试文件不能混进去。
  */
 
-type Handler = (payload: unknown, next?: () => unknown) => unknown;
+/** 假 ctx 的 handler 存宽签名：waterfall 钩子第二参是 next()，serial 事件钩子第二参是事件体
+ *  （内核的派发方式不同，替身必须两副面孔都容得下——见 skill §11.12「替身比现实多给参数」）。 */
+type Handler = (payload: unknown, ...rest: unknown[]) => unknown;
 
-/** 假 dsh ctx：只实现扩展真正用到的 `on(hook, handler)`（与其他内核扩展同款最小面）。 */
 interface FakeDsh {
-  on: (hook: string, handler: Handler) => void;
-  /** 扩展的 handler 是 async(waterfall 里 await next()),所以 fire 必须 await —— 
-   *  否则断言跑在写入之前,测试变成"永远看不到落盘"的假红，而不是真的验证了时序。 */
-  fire: (hook: string, payload: unknown) => Promise<void>;
+  on: (hook: string, handler: Handler, opts?: unknown) => void;
+  /** llm/stream 是 waterfall：触发即得「被包的流」——返回值就是下游会消费的那一条。 */
+  fireStream: (options: unknown, chunks: unknown[] | (() => unknown[])) => Promise<unknown[]>;
+  /** 与 fireStream 同路，但把「被包的流」原样交出（测 break / 抛错这类消费侧行为）。 */
+  streamOf: (options: unknown, chunks: () => unknown) => AsyncIterable<unknown>;
+  fireSessionEvent: (session: { id: string }, event: unknown) => void;
+  /** 原始 handler（测 next() 抛、测「不改写 options」用）。 */
+  callStream: (options: unknown, next: () => unknown) => unknown;
 }
 
 function makeFakeDsh(): FakeDsh {
   const handlers = new Map<string, Handler>();
+  const on = (hook: string, handler: Handler): void => {
+    handlers.set(hook, handler);
+  };
+  const callStream = (options: unknown, next: () => unknown): unknown => {
+    const h = handlers.get("llm/stream");
+    if (!h) throw new Error("llm/stream 未注册 —— 写面挂在错误的钩子上");
+    return h(options, next);
+  };
   return {
-    on(hook, handler) {
-      handlers.set(hook, handler);
+    on,
+    callStream,
+    fireSessionEvent(session, event) {
+      const h = handlers.get("session/event");
+      if (h) h(session, event);
     },
-    async fire(hook, payload) {
-      // ⚠ **按 dsh 真实的派发方式**决定给不给 next（这是本文件曾经漏掉一条真 bug 的地方）：
-      // dsh 的钩子分两类 —— `dispatch.waterfall`（有 next：要 await 它拿/改配置）与
-      // `dispatch.serial`（纯事件，**没有 next**）。此前这里给**每个**钩子都塞了一个 next，
-      // 于是 `agent/turn-stopping` 里那句 `return next()` 在测试里一路绿，
-      // 真机上每次都抛 `next is not a function` → 回合被标失败（用户看到「生成失败」）。
-      // 替身比现实多给一个参数，就会把这种 bug 挡在门外（skills §11.12）。
-      // 证据：`@deepseek-ai/dsh-agent-loop/lib/index.js:565`
-      //   `await this.dispatch.serial("agent/turn-stopping", …)`
-      const WATERFALL_HOOKS = new Set(["agent/request", "agent/request-error", "agent/pre-step"]);
-      const next = WATERFALL_HOOKS.has(hook) ? () => (payload as { config?: unknown })?.config : undefined;
-      await handlers.get(hook)?.(payload, next);
+    streamOf(options, chunks) {
+      return callStream(options, chunks) as AsyncIterable<unknown>;
+    },
+    async fireStream(options, chunks) {
+      const produce = typeof chunks === "function" ? (chunks as () => unknown) : () => chunks;
+      const stream = callStream(options, () => produce()) as AsyncIterable<unknown>;
+      const got: unknown[] = [];
+      for await (const c of stream) got.push(c);
+      return got;
     },
   };
 }
 
 const origCwd = process.cwd();
 let tmp: string;
-/** 每个用例一个独立会话 id：扩展的 `sessions` Map 是模块级状态，同一 id 会把上一个用例的
- *  seq/shard 缓存带过来（实测：第二个用例读到 seq 5、6 而不是 1、2）。换 id 等价于
- *  "另一个会话/另一个 dsh 进程"，与真实场景一致，且不必引入模块重载这种脆弱手法。 */
+/** 每个用例一个独立会话 id：扩展的 `sessions` Map 是模块级状态，同一 id 会把上一个用例
+ *  seq/分片缓存带过来。换 id 等价于「另一个会话/另一个 dsh 进程」，与真实场景一致。 */
 let SID: string;
 let sidSeq = 0;
 
@@ -76,89 +84,223 @@ beforeEach(() => {
 
 afterEach(() => {
   process.chdir(origCwd);
-  if (tmp) rmSync(tmp, { recursive: true, force: true });
+  rmSync(tmp, { recursive: true, force: true });
 });
 
 const logFilePath = (): string => join(tmp, ".my-harness-desktop", "llm-logs", `${SID}.jsonl`);
-
 const lines = (): ReturnType<typeof parseLogText> => parseLogText(readFileSync(logFilePath(), "utf8"));
+const indexOf = (): { sessions: Record<string, { bytes: number; requests: number }> } =>
+  JSON.parse(readFileSync(join(tmp, ".my-harness-desktop", "llm-logs", "index.json"), "utf8"));
 
-/** 一次 agent/request：dsh 给的 LlmCallConfig(provider/model/参数),原样记。 */
-function fireRequest(dsh: FakeDsh, turn = 0, step = 0): Promise<void> {
-  return dsh.fire("agent/request", {
-    agent: { id: SID },
-    turn,
-    step,
-    config: { provider: "bifrost", model: "deepseek-v4-pro", temperature: 0.3 },
-  });
-}
+/** 一轮完整的模型调用：GenerateOptions（执行面全量）+ 三段 chunk。 */
+const FULL_OPTIONS = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+  provider: "us-new",
+  model: "deepseek-v4-pro",
+  messages: [
+    { id: "m1", role: "user", content: [{ type: "text", text: "你好，介绍一下你自己" }], source: { kind: "user" } },
+  ],
+  system: "你是 Acme 的助手。",
+  tools: [{ name: "bash", description: "Run a command", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } }],
+  temperature: 0.3,
+  maxTokens: 8192,
+  sessionId: SID,
+  signal: { aborted: false, fake: "AbortSignal" },
+  ...over,
+});
 
-describe("llm-recorder dsh 侧数据面", () => {
-  it("agent/request 落一条 request 行(seq 从 1 起,带 turn/step 与原始 config)", async () => {
+const CHUNKS = [
+  { type: "block-start", index: 0, blockType: "reasoning" },
+  { type: "reasoning-delta", index: 0, text: "先想" },
+  { type: "reasoning-delta", index: 0, text: "一下" },
+  { type: "block-end", index: 0, block: { type: "reasoning", text: "先想一下" } },
+  { type: "text-delta", index: 1, text: "你好！" },
+  { type: "tool-call-delta", index: 2, id: "call_1", name: "bash", argumentsDelta: '{"command":' },
+  { type: "tool-call-delta", index: 2, argumentsDelta: '"ls"}' },
+  { type: "usage", usage: { inputTokens: 1200, outputTokens: 34, cacheReadTokens: 900 } },
+  { type: "finish", reason: { kind: "tool-calls" } },
+];
+
+describe("llm-recorder dsh 写面：执行面数据", () => {
+  it("请求行来自 llm/stream 的 GenerateOptions —— messages/system/tools 全量，而非 LlmCallConfig", async () => {
     const dsh = makeFakeDsh();
     dshRecorder.apply(dsh as never);
-    await fireRequest(dsh);
-    const l = lines();
-    expect(l).toHaveLength(1);
-    expect(l[0]).toMatchObject({ kind: "request", seq: 1, turnIndex: 0, step: 0 });
-    expect((l[0] as { payload?: unknown }).payload).toMatchObject({ provider: "bifrost", model: "deepseek-v4-pro" });
+    dsh.fireSessionEvent({ id: SID }, { type: "step/start", turn: 3, step: 1 });
+    await dsh.fireStream(FULL_OPTIONS(), CHUNKS);
+
+    const req = lines().find((l) => l.kind === "request") as { payload?: Record<string, unknown>; turnIndex?: number } | undefined;
+    expect(req, "必须落一条 request 行").toBeTruthy();
+    expect(req!.turnIndex).toBe(3); // 回合身份来自 session/event 的 step/start
+    const payload = req!.payload!;
+    expect(payload.provider).toBe("us-new");
+    expect(payload.model).toBe("deepseek-v4-pro");
+    expect((payload.messages as unknown[]).length).toBe(1);
+    expect(payload.system).toBe("你是 Acme 的助手。");
+    expect((payload.tools as unknown[]).length).toBe(1);
+    expect(payload.signal, "AbortSignal 是运行时句柄，不可序列化，必须丢掉").toBeUndefined();
+
+    // 「一直只有 67B」的回归守卫：**行的大小必须随请求内容增长**（配置-only 的行不会）。
+    // 不写魔法阈值——用不变量：行 ≥ messages+system+tools 的序列化字节。
+    const contentBytes =
+      JSON.stringify(payload.messages).length + JSON.stringify(payload.system).length + JSON.stringify(payload.tools).length;
+    expect(readFileSync(logFilePath(), "utf8").split("\n")[0].length).toBeGreaterThanOrEqual(contentBytes);
   });
 
-  it("回合边界(agent/turn-stopping)才补 response 行 —— 这正是「记录停在未返回」的根源时序", async () => {
+  it("请求行的体量随对话历史增长 —— 长上下文会话不会退化成一条配置行", async () => {
     const dsh = makeFakeDsh();
     dshRecorder.apply(dsh as never);
-    await fireRequest(dsh);
-    // 一次调用「结束」的那一刻（对 pi 就是 messageEnd 那一刻）——dsh 侧**还没有** response 行
-    expect(lines().filter((x) => x.kind === "response")).toHaveLength(0);
-    // 回合边界到了才结算
-    await dsh.fire("agent/turn-stopping", { agent: { id: SID } });
-    const responses = lines().filter((x) => x.kind === "response");
-    expect(responses).toHaveLength(1);
-    expect(responses[0]).toMatchObject({ kind: "response", seq: 1 });
-    // 配对可用（读侧 pairRecords 拿到的是一条"已返回"的记录，不是恒 pending）
-    expect(pairRecords(lines())[0]).toMatchObject({ seq: 1 });
+    const big = Array.from({ length: 200 }, (_, i) => ({
+      id: `m${i}`, role: i % 2 === 0 ? "user" : "assistant",
+      content: [{ type: "text", text: `第 ${i} 条消息，`.repeat(20) }], source: { kind: "user" },
+    }));
+    await dsh.fireStream(FULL_OPTIONS({ messages: big }), [{ type: "finish", reason: { kind: "stop" } }]);
+    const first = readFileSync(logFilePath(), "utf8").split("\n")[0];
+    const payload = (JSON.parse(first) as { payload: { messages: unknown[] } }).payload;
+    expect(payload.messages).toHaveLength(200);
+    // 200 条消息的真实体量：远超旧实现的 148B（正好是"核心内容全无"的对照）
+    expect(Buffer.byteLength(first)).toBeGreaterThan(20_000);
   });
 
-  it("(turn,step) 变化即结算上一次成功(中途没有回合边界时的兜底)", async () => {
+  it("回合外内部调用（purpose）不带 turnIndex —— 与 pi 的 compaction 同语义", async () => {
     const dsh = makeFakeDsh();
     dshRecorder.apply(dsh as never);
-    await fireRequest(dsh, 0, 0);
-    await fireRequest(dsh, 0, 1); // 下一步 → 上一步结算
-    const responses = lines().filter((x) => x.kind === "response");
-    expect(responses.map((r) => r.seq)).toEqual([1]);
-    expect(lines().filter((r) => r.kind === "request").map((r) => r.seq)).toEqual([1, 2]);
+    dsh.fireSessionEvent({ id: SID }, { type: "step/start", turn: 3, step: 1 });
+    await dsh.fireStream(FULL_OPTIONS({ purpose: "compaction" }), [{ type: "finish", reason: { kind: "stop" } }]);
+    const req = lines().find((l) => l.kind === "request") as { turnIndex?: number; payload?: Record<string, unknown> } | undefined;
+    expect(req!.turnIndex).toBeUndefined();
+    expect(req!.payload!.purpose).toBe("compaction");
   });
 
-  it("agent/request-error 结算为失败行(带 error,不伪造 status)", async () => {
+  it("响应行是被包的 chunk 流组装出来的组装态消息（不是回合边界的一条空结算行）", async () => {
     const dsh = makeFakeDsh();
     dshRecorder.apply(dsh as never);
-    await fireRequest(dsh);
-    await dsh.fire("agent/request-error", { agent: { id: SID }, failure: { message: "boom" } });
-    const r = lines().filter((x) => x.kind === "response");
-    expect(r).toHaveLength(1);
-    expect(r[0]).toMatchObject({ kind: "response", seq: 1 });
-    expect((r[0] as { error?: unknown }).error).toBeTruthy();
-    expect((r[0] as { status?: unknown }).status).toBeUndefined(); // 不编造状态码
+    await dsh.fireStream(FULL_OPTIONS(), CHUNKS);
+
+    const res = lines().find((l) => l.kind === "response") as
+      | { status?: number; message?: { content?: { type: string; text?: string; arguments?: string }[]; usage?: Record<string, number>; stopReason?: string } }
+      | undefined;
+    expect(res, "必须落一条 response 行").toBeTruthy();
+    expect(res!.status, "dsh 不给 HTTP status：不伪造").toBeUndefined();
+    const content = res!.message!.content!;
+    expect(content.map((b) => b.type)).toEqual(["reasoning", "text", "tool-call"]);
+    expect(content[0].text).toBe("先想一下");
+    expect(content[1].text).toBe("你好！");
+    expect(content[2].arguments, "tool-call-delta 攒出的 JSON 字符串").toBe('{"command":"ls"}');
+    expect(res!.message!.usage).toMatchObject({ inputTokens: 1200, outputTokens: 34 });
+    expect(res!.message!.stopReason).toBe("tool-calls");
+    // 配对可用：读侧拿到的是「已返回且有内容」的一条记录
+    const pair = pairRecords(lines())[0];
+    expect(pair.response, "配对成功，面板不再停在「未返回」").toBeTruthy();
   });
 
-  it("进程重启(新扩展实例)后 seq 从磁盘续号,不归零碰撞", async () => {
-    const d1 = makeFakeDsh();
-    dshRecorder.apply(d1 as never);
-    await fireRequest(d1, 0, 0);
-    await d1.fire("agent/turn-stopping", { agent: { id: SID } });
-    await fireRequest(d1, 0, 1);
-    await d1.fire("agent/turn-stopping", { agent: { id: SID } });
-
-    const d2 = makeFakeDsh();
-    dshRecorder.apply(d2 as never);
-    await fireRequest(d2, 0, 0);
-    expect(lines().filter((x) => x.kind === "request").map((x) => x.seq)).toEqual([1, 2, 3]);
-  });
-
-  it("无 agent.id 的载荷不写(不产出无主孤儿文件)", async () => {
+  it("透传不干扰：chunk 逐块、按序、原样交给下游", async () => {
     const dsh = makeFakeDsh();
     dshRecorder.apply(dsh as never);
-    await dsh.fire("agent/request", { turn: 0, step: 0, config: {} });
+    const got = await dsh.fireStream(FULL_OPTIONS(), CHUNKS);
+    expect(got).toEqual(CHUNKS);
+  });
+
+  it("下游抛错照样抛出，且失败事实落盘（error 行）", async () => {
+    const dsh = makeFakeDsh();
+    dshRecorder.apply(dsh as never);
+    const boom = new Error("provider exploded");
+    await expect(
+      (async () => {
+        const stream = dsh.streamOf(FULL_OPTIONS(), () => ({
+          [Symbol.asyncIterator]: () => ({
+            next: () => Promise.reject(boom),
+          }),
+        }));
+        for await (const _ of stream) { /* 消费到抛 */ }
+      })(),
+    ).rejects.toThrow("provider exploded");
+    const res = lines().find((l) => l.kind === "response") as { error?: { kind: string; message?: string } } | undefined;
+    expect(res?.error?.kind).toBe("error");
+    expect(res!.error!.message).toContain("provider exploded");
+  });
+
+  it("下游提前 break：已流出的片段照样结算（不留孤儿请求）", async () => {
+    const dsh = makeFakeDsh();
+    dshRecorder.apply(dsh as never);
+    const stream = dsh.streamOf(FULL_OPTIONS(), () => ({
+      [Symbol.asyncIterator]: () => {
+        let i = 0;
+        return { next: () => Promise.resolve(i < CHUNKS.length ? { value: CHUNKS[i++], done: false } : { value: undefined, done: true }) };
+      },
+    }));
+    let seen = 0;
+    for await (const _ of stream) {
+      seen += 1;
+      if (seen === 2) break;
+    }
+    const res = lines().find((l) => l.kind === "response") as { message?: { content?: unknown[] } } | undefined;
+    expect(res, "break 之后必须结算，否则面板永远显示「未返回」").toBeTruthy();
+    expect(res!.message!.content!.length).toBe(1); // 只有 reasoning 那一块流出过
+  });
+
+  it("index.json 的 requests 只数 request 行 —— 与 pi 侧同口径（不再两倍）", async () => {
+    const dsh = makeFakeDsh();
+    dshRecorder.apply(dsh as never);
+    await dsh.fireStream(FULL_OPTIONS(), CHUNKS);
+    await dsh.fireStream(FULL_OPTIONS(), CHUNKS);
+    // 键 = 首片文件名（<会话标识>.jsonl），与 pi 侧同约定——不是裸会话标识。
+    // 这条断言是 e2e 对账抓出的第二处漂移的守卫（见 dsh-extension/index.mjs bumpIndex 注释）。
+    expect(Object.keys(indexOf().sessions), "index 的键必须是首片文件名").toEqual([`${SID}.jsonl`]);
+    expect(indexOf().sessions[`${SID}.jsonl`].requests).toBe(2);
+    expect(lines().filter((l) => l.kind === "request")).toHaveLength(2);
+    expect(lines().filter((l) => l.kind === "response")).toHaveLength(2);
+  });
+
+  it("开关关闭：纯透传，不落任何行", async () => {
+    const dsh = makeFakeDsh();
+    dshRecorder.apply(dsh as never);
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    mkdirSync(join(tmp, ".my-harness-desktop", "config"), { recursive: true });
+    writeFileSync(join(tmp, ".my-harness-desktop", "config", "llm-recorder.json"), JSON.stringify({ recordEnabled: false }));
+    const got = await dsh.fireStream(FULL_OPTIONS(), CHUNKS);
+    expect(got).toEqual(CHUNKS);
     expect(() => readFileSync(logFilePath(), "utf8")).toThrow();
+  });
+
+  it("无 sessionId 的载荷不写（不产出无主孤儿文件）", async () => {
+    const dsh = makeFakeDsh();
+    dshRecorder.apply(dsh as never);
+    await dsh.fireStream(FULL_OPTIONS({ sessionId: undefined }), CHUNKS);
+    expect(() => readFileSync(logFilePath(), "utf8")).toThrow();
+  });
+
+  it("不改写内核交给我们的 options（只读）", async () => {
+    const dsh = makeFakeDsh();
+    dshRecorder.apply(dsh as never);
+    const options = FULL_OPTIONS();
+    const snapshot = JSON.stringify(options, (k, v) => (k === "signal" ? undefined : v));
+    await dsh.fireStream(options, CHUNKS);
+    expect(JSON.stringify(options, (k, v) => (k === "signal" ? undefined : v))).toBe(snapshot);
+  });
+});
+
+describe("llm-recorder dsh 写面：seq 续号（真·进程重启 = 新模块实例）", () => {
+  it("新进程接手同一会话：从磁盘最大 seq 续号，第一条就不撞号", async () => {
+    // 第一代进程：真模块（模块级 sessions 状态从零开始）
+    // @ts-expect-error 无类型声明的内核侧插件模块（见文件头）
+    const m1 = (await import("./dsh-extension/index.mjs")) as { default: { apply: (c: unknown) => void } };
+    const d1 = makeFakeDsh();
+    m1.default.apply(d1 as never);
+    await d1.fireStream(FULL_OPTIONS(), CHUNKS);
+    await d1.fireStream(FULL_OPTIONS(), CHUNKS);
+    expect(lines().filter((l) => l.kind === "request").map((l) => l.seq)).toEqual([1, 2]);
+
+    // 第二代进程：vi.resetModules + 重新 import = 模块级 Map 真的从零开始（此前那个"重启"用例
+    // 复用同一份模块状态，实际上没走到磁盘续号这条路——守卫是假的，这里补真）。
+    vi.resetModules();
+    // @ts-expect-error 无类型声明的内核侧插件模块（见文件头）
+    const m2 = (await import("./dsh-extension/index.mjs")) as { default: { apply: (c: unknown) => void } };
+    const d2 = makeFakeDsh();
+    m2.default.apply(d2 as never);
+    await d2.fireStream(FULL_OPTIONS(), CHUNKS);
+
+    expect(lines().filter((l) => l.kind === "request").map((l) => l.seq), "重启后首条必须是 3，不是 1").toEqual([1, 2, 3]);
+    const pairs = pairRecords(lines());
+    expect(pairs.map((p) => p.seq)).toEqual([3, 2, 1]);
+    expect(pairs.every((p) => p.response !== null), "三条请求都必须配上响应").toBe(true);
   });
 });

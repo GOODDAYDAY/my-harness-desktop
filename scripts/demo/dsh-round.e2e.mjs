@@ -265,6 +265,116 @@ try {
   ok(rowShown, "面板里出现 seq #1 的记录行（用户能看到这条记录）");
   ok(!panelText.includes("未返回"), "该记录不是「未返回」（状态已流转 —— #20 的用户症状正是它恒为未返回）");
 
+  // ── 核心内容判据（用户症状：「DSH 的一直都是 67B，核心内容完全没有」）────────────────
+  // 上面几条只验了"有没有记录"。用户不满的是**记录里有没有东西**：旧实现挂在构造面
+  // `agent/request`，payload 只有 LlmCallConfig（provider/model/采样五项）——盘上实测 147B。
+  // 现在挂在执行面 `llm/stream`，落的是 GenerateOptions 全量。判据必须照着**内容**写：
+  const mainReq = reqs.find(
+    (r) => r.payload && Array.isArray(r.payload.messages) && r.payload.messages.length > 0 && r.payload.purpose === undefined,
+  );
+  if (!mainReq) console.error("  诊断(request 行):", JSON.stringify(reqs.map((r) => ({ seq: r.seq, keys: Object.keys(r.payload ?? {}) }))));
+  ok(!!mainReq, "主调用的 request 行落的是**执行面全量请求**（payload.messages 是非空数组）");
+  ok(mainReq.payload.sessionId === dshHeader?.sessionId || typeof mainReq.payload.sessionId === "string",
+     `请求行带会话身份 sessionId（实际 ${String(mainReq.payload.sessionId)}）`);
+  ok(mainReq.payload.provider === "mock", `provider 原样落盘（实际 ${String(mainReq.payload.provider)}）`);
+  ok(typeof mainReq.payload.system === "string" && mainReq.payload.system.length > 0,
+     `system prompt 落盘（${String(mainReq.payload.system ?? "").length} 字符）`);
+  ok(Array.isArray(mainReq.payload.tools), `工具 schema 落盘（${(mainReq.payload.tools ?? []).length} 个工具）`);
+  ok(!("signal" in mainReq.payload), "AbortSignal 运行时句柄已丢弃（不可序列化，且无记录价值）");
+  const reqBytes = Buffer.byteLength(JSON.stringify(mainReq));
+  console.log(`  · request 行体量：${reqBytes} B（旧实现实测 147 B）`);
+  ok(reqBytes > 1000, `request 行体量远超旧的配置行（${reqBytes} B > 1000 B）`);
+
+  // 响应内容：mock 吐的两段 delta 必须**从 chunk 流组装进记录**（不是只有耗时）。
+  const resp = resps.find((r) => r.seq === mainReq.seq);
+  const respText = JSON.stringify(resp?.message ?? "");
+  ok(respText.includes("mock 回合的回复"),
+     "响应行里有模型真正答的内容（从 llm/stream 的 chunk 流组装）—— dsh 此前连 message 都没有");
+
+  // ── DOM：这是"核心内容"的用户可见判据（盘上有 ≠ 面板看得见）──────────────────────
+  const detailReady = await page.evaluate(() => {
+    const row = document.querySelector("[data-llm-log-row]");
+    if (!row) return false;
+    const head = row.querySelector("div");
+    head?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return true;
+  });
+  const detailShown = await page.waitForFunction(
+    () => document.querySelector("[data-llm-log-detail]") !== null,
+    { timeout: 10000, polling: 200 },
+  ).then(() => true).catch(() => false);
+  ok(detailReady && detailShown, "面板里点开记录行 → 详情展开");
+  const detail = await page.evaluate(() => {
+    const el = document.querySelector("[data-llm-log-detail]");
+    const row = document.querySelector("[data-llm-log-row]");
+    return { text: el?.innerText ?? "", state: row?.getAttribute("data-llm-log-state") ?? "" };
+  });
+  for (const label of ["请求", "响应", "System 提示", "工具定义", "消息历史", "原始 JSON"]) {
+    ok(detail.text.includes(label), `详情里出现「${label}」分区（DSH 的完整请求在 DOM 上摊开）`);
+  }
+  ok(detail.state === "ok", `记录行状态属性为 ok（实际 ${detail.state}）`);
+  await page.screenshot({ path: join(ROOT, ".qa-shots", "llm-recorder-dsh-full-request.png") }).catch(() => {});
+
+  // ── 设置页的记录开关：跨进程契约（UI → config 文件 → 内核进程读）──────────────────
+  // 这条链路是插件里唯一"UI 写、内核读"的跨进程配置，也是用户唯一能随时按的开关：
+  // 设置页 `ctx.config.set('recordEnabled', false)` 写 `<cwd>/.my-harness-desktop/config/llm-recorder.json`，
+  // 内核扩展每次请求前读它（带 mtime 缓存）。三段任何一段没接上，症状都是"关了还在记 / 开了不记"，
+  // 而**盘上断不出来**（都得跑一轮才知道）——所以只能这样验。
+  const cfgPath = join(projectDir, ".my-harness-desktop", "config", "llm-recorder.json");
+  const beforeToggle = lines.length;
+  // 打开设置页（⇧⌘S，与 minimal-settings.e2e.mjs 同一快捷键）→ 点本插件设置入口（稳定锚点
+  // `[data-settings-id="llm-recorder"]`，不按文案猜）→ 点记录开关。
+  await page.keyboard.down("Shift"); await page.keyboard.down("Meta"); await page.keyboard.press("s");
+  await page.keyboard.up("Meta"); await page.keyboard.up("Shift");
+  await waitForDomIdle(page, { quietMs: 800, timeoutMs: 10000 }).catch(() => {});
+  const navClicked = await page.evaluate(() => {
+    const nav = document.querySelector('[data-settings-id="llm-recorder"]');
+    if (!nav) return false;
+    (nav.closest("button") ?? nav).dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return true;
+  });
+  await waitForDomIdle(page, { quietMs: 600, timeoutMs: 8000 }).catch(() => {});
+  ok(navClicked, "设置页里找到本插件的设置入口（data-settings-id=llm-recorder）");
+  // 开关是自绘的 div（轨道）+ 文案，按文案定位它的兄弟轨道节点——本插件自己的 DOM，
+  // 锚点由插件自己定；找不到就报出页面文本，别只说一句 false。
+  const toggleBtn = () => `(() => {
+    const label = [...document.querySelectorAll("span")].find((el) => (el.textContent || "").trim() === "记录 LLM 请求");
+    const track = label?.parentElement?.querySelector("div");
+    if (!track) return false;
+    track.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return true;
+  })()`;
+  const toggled = await page.evaluate(toggleBtn());
+  if (!toggled) {
+    const diag = await page.evaluate(() => document.body.innerText.replace(/\s+/g, " ").slice(0, 300));
+    console.error("  诊断(设置页):", diag);
+  }
+  ok(toggled, "设置页里找到并点击了记录开关");
+  await waitForDomIdle(page, { quietMs: 600, timeoutMs: 6000 }).catch(() => {});
+  const cfgOff = await page.waitForFunction(() => true, { timeout: 1000 }).then(() => {
+    try { return JSON.parse(readFileSync(cfgPath, "utf-8")).recordEnabled; } catch { return undefined; }
+  });
+  ok(cfgOff === false, `开关状态写进了内核要读的那个配置文件（实际 ${String(cfgOff)}）`);
+
+  // 关着再发一轮：盘上不该多出任何行（这一轮也验了"扩展每次请求前重读配置"）
+  await page.keyboard.press("Escape").catch(() => {});
+  await waitForDomIdle(page, { quietMs: 500, timeoutMs: 8000 }).catch(() => {});
+  await page.click("[data-timeline-composer]");
+  await page.keyboard.type("这轮不该被记录");
+  await page.mouse.click(sendRect.x, sendRect.y);
+  await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 60000, polling: 500 }).catch(() => {});
+  await waitForDomIdle(page, { quietMs: 1200, timeoutMs: 15000 }).catch(() => {});
+  const afterOff = readLogs().length;
+  ok(afterOff === beforeToggle, `关掉之后这一轮没有新增记录（${beforeToggle} → ${afterOff}）`);
+
+  // 开关还原（别把隔离 HOME 的现场搞脏，后续断言还要用）——设置页还开着，直接再点一次。
+  await page.evaluate(toggleBtn());
+  await waitForDomIdle(page, { quietMs: 600, timeoutMs: 6000 }).catch(() => {});
+  await page.keyboard.press("Escape").catch(() => {});
+  const cfgOn = (() => { try { return JSON.parse(readFileSync(cfgPath, "utf-8")).recordEnabled; } catch { return undefined; } })();
+  ok(cfgOn === true, `开关能再打开（实际 ${String(cfgOn)}）`);
+
   // ── **回合不许被标成失败**：用户报的「生成失败: next is not a function」就在这里现形 ──
   // 根因：llm-recorder 的 dsh 扩展在 `agent/turn-stopping`（dsh 用 **serial** 派发、**没有 next**）
   // 上写了 `return next()` → 每次回合边界抛 TypeError → 回合被标失败。

@@ -8,25 +8,28 @@
 
 - **架构是「写半 + 读半 + 文件契约」三段，两半互不知晓对方存在**：写半是插件自带的 pi 内核扩展 `src/plugins/insight/llm-recorder/pi-extension/index.ts`，运行在每个 pi 进程内（每会话一进程），挂内核 hook 拿数据、追加写 JSONL；读半是 renderer `src/plugins/insight/llm-recorder/renderer/index.tsx`，经 `fs:project` 声明能力读文件、按 `seq` 配对渲染。两半只共享文件契约（`docs/design/llm-recorder-design.md §3.2` 的行格式），不共享任何类型、任何通道、任何运行时对象。
 
-- **这是「插件携带内核扩展」通用机制的首个内容落点**：`docs/design/llm-recorder-design.md §5` 把这个诉求的通用形态抽象为「桌面插件需要一份只有内核进程内才有的数据」——解法不是给 RPC 协议加事件（那是改内核，且 payload 上事件流是性能炸弹），而是让插件自带一个内核 extension，在内核进程内挂 hook 写侧车文件，桌面插件读文件。先例是 toolgate 扩展把 `pi.getAllTools()` 清单播报进 `~/.pi/agent/desktop-known-tools.json`；本插件把它从 toolgate 的 bootstrap 私货升格为任何插件可用的 `manifest.piExtension` 声明式通道。
+- **这是「插件携带内核扩展」通用机制的首个内容落点**：`docs/design/llm-recorder-design.md §5` 把这个诉求的通用形态抽象为「桌面插件需要一份只有内核进程内才有的数据」——解法不是给 RPC 协议加事件（那是改内核，且 payload 上事件流是性能炸弹），而是让插件自带一个内核 extension，在内核进程内挂 hook 写侧车文件，桌面插件读文件。先例是 toolgate 扩展把 `pi.getAllTools()` 清单播报进 `~/.pi/agent/desktop-known-tools.json`；本插件把它从 toolgate 的 bootstrap 私货升格为任何插件可用的声明式通道——字段现名 `manifest.extensions: Record<KernelId, string>`（本插件声明 pi 与 dsh 两项），历史上叫 `piExtension`（单内核时代的形状，已中性化，见 §10.1）。
+
+- **两个内核各交一个写半，文件契约只有一份**：pi 走 `pi-extension/`（provider 原生 hook），dsh 走 `dsh-extension/`（`llm/stream` waterfall）。两侧运行时不共用代码（各跑在各的内核进程里），所以**契约对齐靠读侧与守卫**，不靠共享类型——这是本插件最容易漂移的地方，§13 专门交代。
 
 ## 2 目录结构与四件套
 
 - **物理布局**（`src/plugins/insight/llm-recorder/`）：
-  - `plugin.json`：manifest，声明 `renderer`、`piExtension`、`permissions: ["fs:project"]`、三个槽位贡献（§8）。
-  - `renderer/`：桌面壳插件（UI 组件 + 槽位贡献 + 事件订阅）。三个文件：`index.tsx`（面板与设置页两个入口组件）、`payload-views.tsx`（结构化视图）、`record-modal.tsx`（详情弹窗）。
+  - `plugin.json`：manifest，声明 `renderer`、`extensions: { pi, dsh }`、`permissions: ["fs:project"]`、三个槽位贡献（§8）。
+  - `renderer/`：桌面壳插件（UI 组件 + 槽位贡献 + 事件订阅）。四个文件：`index.tsx`（面板与设置页两个入口组件）、`payload-views.tsx`（结构化视图）、`record-modal.tsx`（详情弹窗），以及两个 DOM 测试（`index.dom.test.tsx` 钉增量刷新时机、`dsh-rows.dom.test.tsx` 钉 DSH 形状的渲染）。
   - `pi-extension/`：pi 内核插件（给 pi 补「记录能力」的 TS 扩展），只有一个 `index.ts`。
+  - `dsh-extension/`：dsh 内核插件（Cordis 插件）：`index.mjs`（钩子接线 + 落盘）+ `chunks.mjs`（chunk 流 → 组装态）+ `project.mjs`（GenerateOptions → 可落盘投影 + 回合标记）。三个都是**纯 .mjs**，整目录原样同步进内核插件目录（不经 TS 构建），其中两个纯函数模块被 unittest 直接 import。
   - `core/`：纯 TS 逻辑层，`log-model.ts`（JSONL 解析/配对/游标/分片）与 `payload-model.ts`（请求/响应体拆解），各带一个 `.test.ts`。文件头自注「不 import react/ctx，可裸单测」。
   - `locales/`：四个 locale（`zh-CN`/`zh-TW`/`en`/`de`）× 三个 namespace（`panel.json`/`settings.json`/`plugin.json`）。
   - `extension-flow.test.ts`：放在插件根目录而非 `pi-extension/` 内——文件自注「该目录整体同步到 `~/.pi/agent/extensions/`，测试文件不能混进去」。
 
-- **四件套内聚与「非必要不修改内核」的对照**：这个插件只带 `renderer/` + `pi-extension/` + `core/` + `locales/`，没有 `dsh-extension/`——因为「记录每次 LLM 请求」这个能力在 dsh 侧没有对称的 hook 面，dsh 内核不暴露 provider 请求体，本插件对 dsh 显式缺席（§9 展开）。这正是四件套的语义：按需带件，不是每件必填。
+- **四件套内聚与「非必要不修改内核」的对照**：这个插件带满四件——`renderer/` + `core/` + `locales/` + **两个内核的写半**（`pi-extension/`、`dsh-extension/`）。dsh 侧曾经缺席，当时的判断是「dsh 不暴露 provider 请求体、没有对称 hook 面」；**这个判断后来被证伪**：dsh 的完整请求在执行面（`llm` 服务的 `llm/stream` waterfall，参数类型 `GenerateOptions`，其类型注释就是 *A single model request, fully assembled*），而记录当时挂在构造面的 `agent/request`（契约 `LlmCallConfig` 只有 provider/model/思考档位/采样标量五项）上——于是 dsh 的记录恒为一条 148 B 的配置行、核心内容全无（用户症状：「DSH 的一直都是 67B」）。补面按 §7.6 走「内核插件补面」：**写插件，不改内核**。根因与终态见 `docs/design/llm-recorder-dsh-parity.md` 与本文 §13。
 
 - **`core/` 与 `renderer/`、`pi-extension/` 的边界**：`core/` 是纯函数，不 import react、不 import ctx、不 import 内核类型包；`renderer/` 只 import `@my-harness-desktop/react` 和 `@my-harness-desktop/shared`（壳插件依赖纪律），并从 `../core/log-model`、`../core/payload-model` 引纯函数；`pi-extension/` 只 import `node:fs`/`node:path`，不 import 官方 `@earendil-works/pi-coding-agent`（文件头自注：内核 node_modules 里的类型仓库 tsconfig 够不到，手写用到的窄结构，与 toolgate 同纪律）。三条依赖各不越界。
 
 ## 3 数据流总览
 
-- **完整链路**（`docs/design/llm-recorder-design.md §5.4` 的 mermaid 图，落成文字）：pi 进程内的 hook（`before_provider_request`/`after_provider_response`/`message_end`/`turn_start`/`compaction_start`/`compaction_end`）驱动 `llmRecorder(pi)` 扩展 → 扩展追加写 `<cwd>/.my-harness-desktop/llm-logs/<会话文件名>.jsonl`（含 `.N.jsonl` 分片）+ 读-改-写 `index.json`；扩展每次请求前读 `<cwd>/.my-harness-desktop/config/llm-recorder.json`（开关）；renderer 面板经 `fs:project` 读日志、设置页读 `index.json` 出统计、`removePath` 整目录清理、`ctx.config` 写开关。
+- **两条写半、一份文件契约**：pi 进程内的 hook（`before_provider_request`/`after_provider_response`/`message_end`/`turn_start`/`compaction_start`/`compaction_end`）驱动 `llmRecorder(pi)` 扩展 → 扩展追加写 `<cwd>/.my-harness-desktop/llm-logs/<会话文件名>.jsonl`（含 `.N.jsonl` 分片）+ 读-改-写 `index.json`；扩展每次请求前读 `<cwd>/.my-harness-desktop/config/llm-recorder.json`（开关）；renderer 面板经 `fs:project` 读日志、设置页读 `index.json` 出统计、`removePath` 整目录清理、`ctx.config` 写开关。**dsh 侧同构但钩子不同名**：`llm/stream`（一次流式调用的完整请求 + chunk 流）+ `session/event` 的 `step/start`（回合身份），见 §13。
 
 - **三个项目级落点，各司其职**：
   - `llm-logs/<会话名>.jsonl`：日志本体，追加写、按 `seq` 配对。会话文件名 = 会话 JSONL 的 basename（形如 `2026-07-28T05-21-56-699Z_019fa72c-....jsonl`，时间戳 + uuid 天然唯一）。
@@ -202,7 +205,7 @@
 
 ### 10.1 manifest 声明 + 生命周期挂摘
 
-- **`manifest.piExtension` 字段（`contributions.ts:507-511`）**：`PluginManifest.piExtension?: string`，插件目录内相对路径（本插件声明 `"./pi-extension"`）。声明后框架在 activate 时把它同步到 `~/.pi/agent/extensions/<pluginId>/`，deactivate/uninstall 时摘除——这是「内容插件私货的生命周期通道」，区别于 toolgate 等内核基础设施的 bootstrap 常驻同步（`contributions.ts:507-511` 注释明说）。
+- **`manifest.extensions` 字段**：`PluginManifest.extensions?: Record<KernelId, string>`，值是插件目录内的相对路径（本插件声明 `{ pi: "./pi-extension", dsh: "./dsh-extension" }`）。声明后框架在 activate 时把对应目录同步到该内核的插件根（pi：`~/.pi/agent/extensions/<pluginId>/`；dsh：`~/.dsh/.my-harness-desktop-plugins/<pluginId>/` 并挂 cordis.yml 块），deactivate/uninstall 时摘除——这是「内容插件私货的生命周期通道」，区别于 toolgate 等内核基础设施的 bootstrap 常驻同步。**字段历史名 `piExtension`**，按内核 id 分键后加内核不需要动壳（§目标 11 的收口项之一）。
 
 - **生命周期接线（`src/server/application/lifecycle/index.ts:102-104/126-128`）**：`activate()` 在 `registry.registerOne` + `loader.load` 之后，`if (deps.piExtensionEnsure && manifest.piExtension)` 调 `piExtensionEnsure.onActivate(manifest.id, pluginPath, manifest.piExtension)`；`deactivate()` 对称调 `onDeactivate(pluginId)`。`PluginLifecycleDeps.piExtensionEnsure` 是接口（`:80-83`），实现在 `client/pi`（写内核目录是流出适配），此处只持接口——依赖倒置，与 `skillsEnsure`/`dshExtensionEnsure` 同一形状。
 
@@ -264,4 +267,59 @@
 
 **Q：这个插件的记录对 dsh 内核生效吗？**
 
-不生效，且是显式缺席而非静默失败。llm-recorder 的四件套只有 `pi-extension/` 没有 `dsh-extension/`——「记录每次 LLM 请求体」依赖内核进程内的 provider hook（`before_provider_request` 等），dsh 内核（Cordis 插件树）不暴露等价的请求体 hook 面，本插件对 dsh 无贡献。多内核默认纪律下，这是「适配器翻译/内核补面/显式降级」三分法里的显式降级：能力入口只对 pi 有意义，不伪造、不静默。将来若 dsh 提供请求体观测 hook，可加 `dsh-extension/` 对称补面。
+生效，且与 pi 同形（此前**不**生效——本文档曾写「dsh 显式缺席、本插件对 dsh 无贡献」，那是错的：dsh 有可用的执行面钩子，只是记录挂错了面，见 §13）。
+
+**Q：为什么 dsh 的记录以前只有一百多字节？**
+
+因为钩子挂在了**构造面**。旧实现挂 `agent/request`，它的契约是 `LlmCallConfig`——provider / model / 思考档位 / 采样标量，五项，没有 messages / system / tools。完整请求只存在于**执行面**：`llm` 服务的 `llm/stream` waterfall，参数是 `GenerateOptions`（"A single model request, fully assembled"）。pi 侧之所以一直是全量，正因为它的 `before_provider_request` 就站在执行面。这是 CLAUDE.md §3.2「构造与执行分开」的原样复现：构造面给"打算怎么发"，执行面给"实际发了什么"，而记录工具的价值全在后半句。现在的实测（真 dsh 内核 + 本地 mock 模型跑一整轮）：请求行 **8581 B**，含 messages、526 字符的 system、11 个工具 schema、sessionId；响应行含模型真正答的内容。
+
+
+## 13 双内核数据面：dsh 侧写在执行面（`llm/stream`）
+
+> 根因与取舍的完整推导在 `docs/design/llm-recorder-dsh-parity.md`；本节是**落地形态**。
+
+### 13.1 数据面
+
+```
+session/event(step/start) ──┐                     ← 回合身份（内核自己宣布 turn/step）
+                            ├─→ turns.note(sid, turn, step)
+llm/stream(options, next) ──┴─→ ① 写 request 行（payload = options 的可序列化投影）
+                                ② return recordStream(next())   ← 原样透传 chunk
+                                        └─ 流终结 / 提前结束 → 写 response 行（组装态 message）
+```
+
+- **为什么是 `llm/stream`**：它是内核每次流式模型调用的必经之处（`LlmRuntime.streamWithRegistration` 里 `ctx.waterfall(this, "llm/stream", options, …)`），上游已有 dsh-agent-loop / dsh-session-title / dsh-session-checkpoint-policy 三个消费者，是**公开的扩展点**，不是内部实现细节。用 `{ global: true, prepend: true }` 注册：global 让子代理作用域里的调用同样可见，prepend 让我们包住下游所有消费者看到的那条流。
+- **请求行落什么**：`GenerateOptions` 的**全量投影**——`provider` / `model` / `reasoningEffort` / `temperature` / `maxTokens` / `stop` / `messages`（完整对话历史）/ `system` / `tools`（工具 schema 全量）/ `sessionId` / `purpose`。投影只做两件事：抄下所有 own key、丢掉 `signal`（AbortSignal 是活的取消通道句柄，不可序列化也无记录价值）。抄全量 key 而不是白名单，是为了内核将来给 `GenerateOptions` 加字段时记录**自动跟上**（消费而非翻译，字段粒度版）。
+- **响应行落什么**：包住 `next()` 返回的 chunk 流，原样透传给下游的同时攒一份，流终结时组装成 `{role:"assistant", content:[…], model, provider, usage, stopReason}`——与 pi 侧 `message_end` 的组装消息同形状，读侧不需要知道它来自哪个内核。组装算法在 `dsh-extension/chunks.mjs`（纯函数，`block-end` 用内核给的成品块、delta-only 协议按 index 惰性攒）。
+- **回合身份**：`session/event` 的 `step/start` 带 `{turn, step}`——内核自己宣布的回合身份，记录只做"记住最近一次、写在请求行上"。`purpose` 非空的调用（`compaction` / `session-title`）是回合外内部调用，**不带 turnIndex**，与 pi 侧"compaction 调用无 turnIndex 字段"同一语义。
+
+### 13.2 四条不变量（都有守卫）
+
+1. **透传不干扰**：wrap 出的 async iterable 逐块按序原样交出；不缓冲整轮再吐（会破坏流式体验）、不改写 chunk、不吞异常。下游提前 `break` 时在 `finally` 里照样结算——否则面板会永远显示「未返回」。守卫：`dsh-extension-flow.test.ts` 的「透传不干扰」「抛错照样抛」「提前 break 照样结算」三条。
+2. **只读不写内核对象**：`options` 被 loop `deepFreeze`（内核 invariant 会断言冻结），记录只读。守卫：用例断言跑完 options 的序列化快照不变。
+3. **开关前置**：`recordEnabled === false` 时 `return next()`——零包装零开销。守卫：开关用例断言纯透传且不落行。
+4. **异常静默**：任何记录侧异常吞掉，记录扩展炸了不带走会话（与 pi 侧同纪律；`agent/turn-stopping` 那次「`next` is not a function」就是这条纪律的反面教材，见 §10.3 与 `b349f41d`）。
+
+### 13.3 与 pi 侧的契约对齐点（漂移最容易发生的地方）
+
+两侧运行时不共用代码，`seq` / 分片 / `index.json` / 行格式是**各自的实现**，靠下面这些点对齐：
+
+| 契约 | pi 侧 | dsh 侧 | 守卫 |
+|---|---|---|---|
+| `seq` 会话内单调、重启续号 | `ensureSeqBaseline`（分配前对账） | `allocateSeq`（**先 `syncFromDisk` 再分配**） | 两侧各一条"新进程接手同一会话"用例；dsh 侧用 `vi.resetModules()` 造**真**的新模块实例（旧的"重启"用例复用同一份模块状态，其实没走到磁盘续号） |
+| `requests` 计数口径 | 只数 request 行 | 只数 request 行 | dsh 侧用例断言 1 次调用 → `requests === 1`（曾无条件 +1，dsh 会话的请求总数恒为两倍） |
+| `index.json` 的键 | 首片文件名 `<会话标识>.jsonl` | 同（曾传裸会话标识） | dsh 侧用例断言键就是 `${sid}.jsonl`；e2e 对账断言"桶里的 requests == 该会话实际 request 行数"（**这条漂移就是被它对出来的**） |
+| 行形状 | `{seq,ts,kind,turnIndex?,payload}` / `{seq,ts,kind,status?,durationMs?,message?,error?}` | 同 | `core/log-model.ts` 是唯一类型源；两侧流程测试都按它断言 |
+| 512KB 分片、`index.json` | 各自实现 | 各自实现 | `core/log-model.ts` 的 `shardNumber` 用单一形状词典认两侧的命名 |
+
+**读侧不认识内核身份**（§7.5 三条不变量）：面板只按**形状**认两套词汇——块类型（`reasoning`/`thinking`、`tool-call`/`tool_use`/`toolCall`、`tool-result`/`tool_result`）、工具 schema 键（`parameters`/`input_schema`）、usage 键（`inputTokens`/`input`）、`stopReason`（`{kind}`/字符串）。这张形状词典在 `core/payload-model.ts`，两侧的守卫是 `payload-model.test.ts` 与 `renderer/dsh-rows.dom.test.tsx`。
+
+### 13.4 三级验证
+
+| 级 | 文件 | 覆盖 |
+|---|---|---|
+| unittest | `dsh-extension-flow.test.ts`（12）、`core/payload-model.test.ts`、`core/log-model.test.ts` | 数据面形状、透传/异常/break 结算、seq 续号、index 口径、形状词典 |
+| DOM | `renderer/index.dom.test.tsx`（5，增量刷新时机）、`renderer/dsh-rows.dom.test.tsx`（5，DSH 形状渲染、失败行、无消息降级） | 盘上数据 → DOM 结构 |
+| e2e | `scripts/demo/dsh-round.e2e.mjs`（真 dsh 内核 + 本地 mock SSE 模型，**零 token**；`npm run e2e:dsh:recorder`） | 端到端：真回合 → 盘上 8581 B 全量 → 面板六个分区 |
+
+**判据的写法**（值得照抄的经验）：e2e 里对"核心内容"的断言按**不变量**写，不写魔法阈值——"行 ≥ messages+system+tools 的序列化字节"、"体量 > 1KB"、"响应里含模型真正答的那句 mock 文案"。第一版我写了"行长度 > 500"这种拍脑袋的数，跑出来 462 就红了——那种断言测的是我的想象，不是契约。
