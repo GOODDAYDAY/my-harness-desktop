@@ -1152,6 +1152,31 @@ expect(payload.messages).toHaveLength(200);        // 长上下文会话不许�
 expect(respText).toContain("mock 回合的回复");       // 响应里要有模型真正答的那句
 ```
 另一条：**别自己加码**（§13.4 的老账）。`status` 是可选字段，断言"必须有数字状态码"是我发明的强条件。
+本轮又踩两次，都是同一种形状——**判据分两档，别把"形状定档"写成"契约定档"**：
+- 「System 提示」分区**不是契约保证的**：`system` 在顶层（Anthropic 形状、dsh 的 GenerateOptions）
+  才画得出来；**OpenAI 形状没有顶层 system**（它的 system prompt 是 messages 里 role=system 的一条）。
+  要求两内核都出现它 = 发明条件；正确写法是「契约定档（请求/响应/消息历史/原始 JSON）两内核都要有」＋
+  「形状定档（工具定义看 tools、System 提示看顶层 system）有才画」。**先把判据归类，再写断言。**
+
+### 16.4b 对账断言是这一轮最值钱的东西
+
+本轮新加的「**两内核文件对账**」（在 `multi-kernel-round.e2e.mjs` 里）一口气抓出一条真缺陷：
+`index.json` 的桶键在两个写侧不是一套约定——同一份文件里出现 `{"xxx.jsonl":…}` 与 `{"yyy":…}`
+两种键空间（pi 用 `path.basename(sessionFile)`，dsh 用了裸会话标识）。统计页只做聚合求和，
+**肉眼与既有断言都看不见它**；只有"拿 index 的键去 join 实际文件/行数"才照得出来。
+
+对账断言的形状（可照抄）：
+```js
+// 桶里的 requests 必须等于该会话实际落盘的 request 行数（按首片文件名为键）
+for (const [stem, rec] of perStem) {
+  const bucket = idx.sessions[`${stem}.jsonl`];
+  if (bucket.requests !== rec.reqs) 报红;
+}
+// 文件名 ↔ 会话：dsh 日志文件名必须真的是某个 dsh 会话 id（面板按会话定位，错一个就看不到记录）
+// 分片命名：首片无编号、续片 .N.jsonl 且 N>=2
+// 两内核都要有记录 + 每行都带 messages + 请求响应成对
+```
+**"文件是否对应、格式是否对应"这类用户提问，答案就在这种断言里**——不是读代码读出来的。
 
 ### 16.5 「数据层对 ≠ DOM 对」在双内核下是**三处**都要断
 
@@ -1173,7 +1198,7 @@ expect(respText).toContain("mock 回合的回复");       // 响应里要有模�
 
 断言这类适配的写法：**两套词汇各喂一遍，断言归到同一个中性结果**（`blockToPart` 的词典用例）。
 
-### 16.7 本轮踩到的三个坑（都不是产品 bug，是"测试自己的假象"）
+### 16.7 本轮踩到的坑（都不是产品 bug，是"测试/工具自己的假象"）
 
 1. **`--port 9363` 让端口变成 1**：`dsh-round.e2e.mjs` 用 `--port=9363` 形式解析；传空格分隔时
    `args.port === true` → `Number(true) === 1` → 等 CDP 端口 1 超时。**报错信息里那个数字要读**。
@@ -1182,6 +1207,19 @@ expect(respText).toContain("mock 回合的回复");       // 响应里要有模�
 3. **模块级状态的"假重启"用例**：旧的"进程重启续号"用例新建了假 ctx，却复用同一份模块级 `Map`
    ——那条路径根本没被走到（守卫是假的）。用 `vi.resetModules()` + 重新 `import()` 造真新实例，
    才照出"分配 seq 前必须先与磁盘对账"这个真缺陷。
+4. **`git commit -m "…"` 里的反引号会被 shell 执行**：commit message 里写
+   `` `node scripts/demo/…` `` → 命令替换**真的跑了那两个 e2e**（几分钟）+ 消息被污染 + commit 失败。
+   **多行/含反引号的消息一律走 `git commit -F -` + heredoc**，别用 `-m "…"`。
+5. **守卫自己的解析器也会错，而且假红比没守卫更坏**：`dsh-hook-contract.test.ts` 数形参用
+   `pattern.split(",").length`，把解构模式 `({ agent, messages, step, signal }, next)` 数成 5 个；
+   又用"非 waterfall 不许有第二个形参"的启发式，把 `session/event (session, event)` 判红
+   ——**emit 钩子的参数是事件自己的参数，`session/event` 就是 2 个**。
+   两条都会逼着人把正确的代码改错。修的是**守卫的模型**（表里加 `args: 真实参数个数`，
+   判据改成"形参个数 ≤ args 且非 waterfall 不许调 next()"），不是改代码迎合错误规则。
+   教训：**守卫报红先问"守卫的模型对不对"**，尤其在它刚被你引入新场景（新钩子/新形状）的时候。
+6. **改动收尾要"扫一遍自己"**：本轮最后把 diff 当外来代码读了一遍，抓出
+   `dsh-extension/extension.json` 的描述还写着旧行为（"dsh 只给 LlmCallConfig，故原样记配置"）
+   ——这是扩展管理页要展示的文案，属于"文档与代码同批同步"的一部分，很容易漏。
 
 ### 16.8 交付清单（同类任务的完成定义）
 
