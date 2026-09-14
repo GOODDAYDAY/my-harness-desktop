@@ -1,4 +1,4 @@
 {
   "displayName": "桌面适配",
-  "description": "桌面壳对 dsh 内核的统一适配：ask_user_question 提问、goal 三工具、全局 CLAUDE.md 注入、技能启用/禁用轴、运行时切模型/思考深度热切（合并原 ask/goal/read-claude-md/skill-manager 四个 dsh 扩展）。"
+  "description": "桌面壳对 dsh 内核的统一适配：SDK server 方法面补全（seed/getTree/getEntries/bookmark/resume/rename/get/list/delete/projectStats/abort 等 16 个 session/* 方法，不依赖上游发版）、ask_user_question 提问、goal 三工具、全局 CLAUDE.md 注入、技能启用/禁用轴、运行时切模型/思考深度热切（合并原 ask/goal/read-claude-md/skill-manager 四个 dsh 扩展）。"
 }

@@ -35,7 +35,15 @@ SDK server（`packages/sdk/server` + `jsonrpc-demo`，后者就是 `dsh-jsonrpc-
 
 缺面的时序先说死，否则"入口置灰"和"惰性发现"会打架。没有 eager 能力图（纯 lazy）时：入口一开始不灰，用户第一次点 fork → 发 `session/fork` → 收到 unknown-method → 转成一条清晰报错（"该 dsh 内核版本不支持 fork"）→ 记缺面 → 该入口从此置灰。第一次点击会先吃一次清晰报错，之后才灰。有 eager 能力图时：启动即知，入口一开始就灰，用户根本点不到。两种形态的差别只在于"第一次点击之前知不知道"，降级结果一致。
 
-`seed` 缺面的后果要写死。pi→dsh 且有真实历史时缺 `session/seed` = 无法跨内核迁移，显式报错"dsh 内核版本过旧，缺 session/seed，无法跨内核迁移历史"。没有"先把历史导出、再换别的机制灌进 dsh"的兜底——唯一出路是装一个带 `session/seed` 的新版 dsh。空会话不受影响，因为它根本不会走到 seed（§5）。这是显式接受的边界，不是遗漏。
+`seed` 缺面的后果要写死。pi→dsh 且有真实历史时缺 `session/seed` = 无法跨内核迁移，显式报错。没有"先把历史导出、再换别的机制灌进 dsh"的兜底。空会话不受影响，因为它根本不会走到 seed（§5）。
+
+> ⚠ **本节结论已被后续工作推翻（2026-09-14，`dsh-sdk-method-supplement.md`）**：原文写
+> "唯一出路是装一个带 `session/seed` 的新版 dsh"，实测证明这条路是**死的**——npm 发布版
+> 从 0.1.1-rc.2 到 0.1.5-rc.2（distTag `next` 最新）一直只有 3 个 request 方法，升级装到的
+> 还是同一套缺面；而且版本号根本不可信（同一版本号曾对应 3 方法与 20 方法两套产物）。
+> **正解不是等上游发版，是我们自己补**：`sdk-methods.mjs` 用 dsh 自己的公开 core API
+> 实现全部 16 个方法，落在本仓的 cordis 插件里。缺面因此退化成"适配插件没生效"的异常兜底
+> （报错文案已据此改写，不再建议升级）。
 
 `session/setModel`（JSON-RPC 的运行时切模型方法）的静默吞要收口。现在的 catch（`dsh-backend.ts:135`）把 "unknown ... method" 当 no-op，模型没切成功但桌面当成功，用户零感知——这违反"不静默、不伪造成功"。改成记 warn 加上报 kernel 事件，UI 有机会提示"该 dsh 版本不支持运行时切模型"。顺带说明：dsh 的模型是 `initialize` 握手时定的，惰性创建的会话自然用握手时的 provider/model，所以运行时 `session/setModel` 缺面时，模型停在握手定的值，不算崩，只是"选中的模型没生效"这件事必须让用户看见。
 
@@ -54,7 +62,7 @@ SDK server（`packages/sdk/server` + `jsonrpc-demo`，后者就是 `dsh-jsonrpc-
 ## 6. QA
 
 **Q：seed 缺面时，pi 的历史就彻底迁不过去了吗？**
-A：对。没有"导出→再灌"的兜底，唯一出路是装一个带 `session/seed` 的新版 dsh。桌面侧把这件事显式报出来，不假装能迁。这是显式接受，不是遗漏。
+A：**已推翻**。原来写"唯一出路是装一个带 `session/seed` 的新版 dsh"，实测这条路不存在——npm 发布版（0.1.1-rc.2 → 0.1.5-rc.2）一直只有 3 个 request 方法。真正的出路是本仓的 cordis 适配插件补面（`sdk-methods.mjs`），见 `dsh-sdk-method-supplement.md`。缺面报错因此只剩一种含义：适配插件没生效。
 
 **Q：惰性发现下，用户第一次点 fork 会先报错吗？**
 A：会。纯 lazy 阶段，第一次点击先吃一条清晰报错（"该 dsh 内核版本不支持 fork"），该入口随后置灰。这是 lazy 的固有代价；eager 能力图落地后变成启动即灰。

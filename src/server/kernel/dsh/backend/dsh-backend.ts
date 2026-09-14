@@ -202,9 +202,20 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     return msg.includes(UNKNOWN_METHOD_PREFIX);
   }
 
-  /** 缺面的清晰错误(替代裸 unknown-method 泄漏)。 */
+  /** 缺面的诚实错误(替代裸 unknown-method 泄漏)。
+   *
+   *  措辞纪律(dsh-sdk-method-supplement.md §4.5):不得写「版本过旧/请升级内核」。
+   *  实测证据：npm 发布的 0.1.1-rc.2 与 0.1.5-rc.2(distTag next 最新)都只有 3 个 request
+   *  方法，升级装到的还是同一套缺面；而且版本号根本不是可靠指标——同一版本号曾对应
+   *  3 方法与 20 方法两套产物(上游本地构建 vs npm 发布)。旧文案把用户往死路上引。
+   *  方法面由本仓的 cordis 适配插件保证(sdk-methods.mjs)，所以走到这里意味着
+   *  **适配插件没生效**(同步失败 / cordis.yml 被改 / 双副本 patch 落空)，文案要指向这个。 */
   private missingMethodError(method: string): Error {
-    return new Error(`dsh 内核版本过旧,缺少 ${method} 方法(请升级 dsh 内核)`);
+    return new Error(
+      `dsh 运行时不提供 ${method} 方法：桌面适配插件(my-harness-fit-dsh-extension)未生效。`
+      + `换内核版本号解决不了(npm 发布版的方法面长期缺这些方法)，`
+      + `请检查内核插件是否已同步、cordis.yml 是否挂着该插件块。`,
+    );
   }
 
   /** 懒探测发一个 session/* 方法:已知缺面直接抛清晰错误;未知则调用,

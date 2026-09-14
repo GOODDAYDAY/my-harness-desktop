@@ -30,9 +30,10 @@ function resolveApiKey(): string | undefined {
   return undefined;
 }
 
-// 缺三者(二进制/cordis/key)或未显式开启时跳过——当前安装的 dsh 运行时(0.1.1-rc.2)尚无
-// session/setModel 等新方法,本集成测试会失败;待运行时追平 deepseek-harness 源码后再
-// 用 DSH_RUNTIME_E2E=1 开启。
+// 缺三者(二进制/cordis/key)或未显式开启时跳过。
+// ⚠ 跳过条件里**不再包含「运行时无 session/seed」**：那是旧写法（`if (missing) return`），
+// 补面落地后它是漏洞——补面没装上（插件同步失败 / cordis.yml 被改 / 双副本 patch 落空）
+// 时测试会静默跳过，回归测不出来。现在缺面 = 测试失败（见 dsh-sdk-method-supplement.md §5）。
 const skippable = process.env.DSH_RUNTIME_E2E !== "1"
   || !existsSync(CLI) || !existsSync(CORDIS) || resolveApiKey() === undefined;
 
@@ -102,22 +103,13 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
 
     try {
       await backend.start();
-      // 先探 session/seed 是否可用(旧运行时 0.1.1-rc.2 无此方法 → 懒探测记缺面,本用例显式跳过)。
-      // 用「能力门槛」而非版本号判:缺面即跳过,不伪造成功(docs/design/dsh-capability-gate.md)。
       const header: NeutralSessionHeader = { kernel: "pi", cwd: process.cwd(), createdAt: new Date().toISOString() };
       const lineage: NeutralEntry[] = [
         { neutralEntryId: "root:0", message: { role: "user", content: "你好" } },
         { neutralEntryId: "root:1", message: { role: "assistant", content: [{ type: "text", text: "你好!" }] } },
       ];
-      let seededId: string | null = null;
-      let missing = false;
-      try {
-        seededId = await backend.seed(lineage, { neutralSessionId: "seed-integration", lineageId: "seed-integration", header });
-      } catch (e) {
-        if (e instanceof Error && /缺少 session\/seed/.test(e.message)) missing = true;
-        else throw e;
-      }
-      if (missing) return; // 旧运行时无 session/seed:显式跳过,不伪造成功
+      // 补面由本仓的 cordis 插件保证（sdk-methods.mjs），缺面即真 bug，不再静默跳过。
+      const seededId = await backend.seed(lineage, { neutralSessionId: "seed-integration", lineageId: "seed-integration", header });
 
       // seed 返回 id 即重绑 backend.sessionId,后续 send/abort 都发到 seeded 会话
       expect(seededId).toBe("seed-integration");

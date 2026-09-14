@@ -45,15 +45,28 @@ describe("DshBackend 能力探测(懒探测 + 显式降级)", () => {
   it("seed 首次 unknown method:记缺面 + 抛清晰错误,不裸炸", async () => {
     const { t, b } = makeBackend();
     t.errors.set("session/seed", unknownMethod("session/seed"));
-    await expect(b.seed([], { neutralSessionId: "ns", lineageId: "root", header: session.header })).rejects.toThrow(/缺少 session\/seed/);
+    await expect(b.seed([], { neutralSessionId: "ns", lineageId: "root", header: session.header })).rejects.toThrow(/不提供 session\/seed 方法/);
     expect(b.capabilities.thinking.missing.has("session/seed")).toBe(true);
+  });
+
+  it("缺面错误不得把用户往死路引(不说「版本过旧/请升级」,指向适配插件未生效)", async () => {
+    // 措辞纪律(dsh-sdk-method-supplement.md §4.5)。实测:npm 的 0.1.1-rc.2 与 0.1.5-rc.2
+    // (distTag next 最新)都只有 3 个 request 方法,「请升级」这条路是死的;
+    // 方法面由本仓 cordis 插件保证,走到缺面说明插件没生效——文案必须指向这个真因。
+    const { t, b } = makeBackend();
+    t.errors.set("session/seed", unknownMethod("session/seed"));
+    const err = await b.seed([], { neutralSessionId: "ns", lineageId: "root", header: session.header }).catch((e: Error) => e);
+    const msg = (err as Error).message;
+    expect(msg).not.toMatch(/版本过旧/);
+    expect(msg).not.toMatch(/请升级|升级 dsh 内核/);
+    expect(msg).toMatch(/适配插件/);
   });
 
   it("已知缺面的方法不再重调,直接抛清晰错误", async () => {
     const { t, b } = makeBackend();
     t.errors.set("session/getTree", unknownMethod("session/getTree"));
-    await expect(b.getTree("s")).rejects.toThrow(/缺少 session\/getTree/);
-    await expect(b.getTree("s")).rejects.toThrow(/缺少 session\/getTree/);
+    await expect(b.getTree("s")).rejects.toThrow(/不提供 session\/getTree 方法/);
+    await expect(b.getTree("s")).rejects.toThrow(/不提供 session\/getTree 方法/);
     // 第二次直接短路,不再发 request
     expect(t.requests.filter((r) => r.method === "session/getTree")).toHaveLength(1);
   });

@@ -7,18 +7,28 @@
  *   2. get_goal / create_goal / update_goal 三工具 —— 文件侧车持久化 + CAS(原 desktop-goal)
  *   3. agent/pre-step 全局 CLAUDE.md 注入(原 claude-context)
  *   4. skill-filesystem 启用/禁用轴 + 完整列表播报(原 desktop-skill)
+ *   5. SDK server 方法面补全(sdk-methods.mjs) —— 桌面所需的全部 session/* JSON-RPC 方法
+ *      由本插件保证,不赌上游发版(docs/design/dsh-sdk-method-supplement.md)
  *
  * 除 skill 轴需 import @deepseek-ai/dsh-skill-filesystem(「关闭」轴唯一可靠落法)外,
  * 其余零 import dsh 内核包,只用 node 内建模块。
+ *
+ * ⚠ 第 5 块的两个教训(实测复现,勿回退):
+ *   · **双副本陷阱**:bare import 到的 dsh 包可能与 CLI 运行时实际用的不是同一份
+ *     (~/.dsh/node_modules 可能是符号链接指向别处)。patch 打在 A 副本、服务请求的是
+ *     B 副本 → 补面全部静默失效,症状却是「dsh 内核版本过旧,缺少 session/seed」。
+ *     所以一切对 dsh 包的取用都经 sdk-methods.mjs 的 resolveRuntimeModule(从
+ *     process.argv[1] 出发解析),且 patch 覆盖**全部副本**。
+ *   · **单一 patch 点**:本仓所有 SDK 方法面(补缺 + 强语义接管)都经
+ *     installSdkMethodSupplement 注册进一张表。不要再加第二个 handleRequest patch ——
+ *     两个 patcher 互相包裹会导致顺序依赖、错误归属难查。
  */
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, watchFile, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { FileSystemSkillProvider } from "@deepseek-ai/dsh-skill-filesystem";
-import { HarnessSdkJsonRpcServer } from "@deepseek-ai/dsh-sdk-jsonrpc-server";
-import { installModelSelection } from "@deepseek-ai/dsh-agent";
-import { KNOWN_SESSION_EVENT_TYPES } from "@deepseek-ai/dsh-session";
+import { installSdkMethodSupplement, supplementKnownSessionEventTypes } from "./sdk-methods.mjs";
 
 export const name = "my-harness-fit-dsh-extension";
 
@@ -27,33 +37,20 @@ export const name = "my-harness-fit-dsh-extension";
 export const inject = ["tools", "skills"];
 
 // ==============================================================================================
-// 6. session/meta 事件类型补面 —— dsh 的 session/rename(session/updateHeader)会写 session/meta
-//    事件,但 deepseek-harness 源码的 KNOWN_SESSION_EVENT_TYPES(known-event-types.ts)漏收了
-//    该类型 → resume 重放时 coordinator.assertEventsSupported 抛「session/meta unknown」,
-//    重开续聊崩。这是 dsh 侧遗漏(壳不能改其源码),按用户方案在桌面适配插件里补面:
-//    运行时把 "session/meta" 加进已知事件类型集(该集合是普通 Set,运行时可 add;插件与
-//    coordinator 共享同一模块实例,补了即对 resume 校验生效)。内核发版补上后此段可删。
-// ==============================================================================================
-
-// 幂等补面:已收录则跳过(内核发版修复后不再重复 add)。
-// 注:本文件是 .mjs(纯 JS,非 TS),KNOWN_SESSION_EVENT_TYPES 运行时是普通 Set,
-// 直接 .add 即可(ReadonlySet 只是 dsh 的 TS 类型标注,运行时不约束)。
-if (!KNOWN_SESSION_EVENT_TYPES.has("session/meta")) {
-  KNOWN_SESSION_EVENT_TYPES.add("session/meta");
-}
-
-// ==============================================================================================
-// 5. session/setModel 原地热切 —— 给全部运行时版本提供「比原生更强」的切模型语义
-//    (docs/model-switching.md §11.1):
-//    - 0.1.1-rc.2 的 sdk-jsonrpc-server 只有 3 个 request 方法,没有 session/setModel;
-//    - 上游 master 已补(commit 5d70fb1883),但实现是 dispose+flush+resume(agent 级重建);
-//    - 本补丁统一升级为 installModelSelection 原地热切——与 dsh-web 的 session.selectModel
-//      同一个 dsh-agent 核心公开机制:不 dispose、不 resume、agent 与进程不动,下一个
-//      step 生效。补丁语义严格强于原生,因此不做「原生存在即跳过」;等原生也长出
-//      in-place 热切再退役(届时把接管判据换成原生实现的特征检测)。
-//    只对已物化会话生效:sessions 表里没有 record = 会话未惰性创建,维持抛
-//    「unknown session」(壳对未物化会话的模型失配走重建,根本不会调到这里)。
-//    纯代码补面,随 cordis.yml 动态装载,不预编译、不落中间产物。
+// 5. SDK server 方法面(sdk-methods.mjs 承载实现,本文件只做「强语义接管」三项的注册)
+//
+//    为什么要接管而不是让位原生(docs/model-switching.md §11.1):
+//    - npm 发布的 sdk-jsonrpc-server 根本没有 session/setModel(只有 3 个方法);
+//    - 上游 master 补了,但实现是 dispose + flush + resume(agent 级重建);
+//    - 本插件统一升级为 installModelSelection 原地热切 —— 与 dsh-web 的 session.selectModel
+//      同一个 dsh-agent 公开机制:不 dispose、不 resume、agent 与进程不动,下一 step 生效。
+//      语义严格强于原生,因此**不设 preferNative**(等原生也长出 in-place 热切再退役)。
+//
+//    思考档位两项(dsh-thinking-level.md):dsh 运行时本无切档面(reasoningEffort 只在配置/握手),
+//    这里经同一热切机制补;清单/校验都经 ctx.llm,模型不支持的档位 resolveCallConfig 抛错,诚实拒绝。
+//
+//    只对已物化会话生效:sessions 表里没有 record = 会话未惰性创建,维持抛「unknown session」
+//    (壳对未物化会话的模型失配走重建,根本不会调到这里)。
 // ==============================================================================================
 
 // agent → ModelSelectionRef(installModelSelection 的持有方)。每 agent 首次 setModel 时
@@ -61,67 +58,96 @@ if (!KNOWN_SESSION_EVENT_TYPES.has("session/meta")) {
 // web host 进程,不在这),WeakMap 即防双安装。
 const modelSelectionRefs = new WeakMap();
 
-const __dshServerHandleRequest = HarnessSdkJsonRpcServer.prototype.handleRequest;
-HarnessSdkJsonRpcServer.prototype.handleRequest = async function (method, params) {
-  // ============================================================================================
-  // 5b. 思考档位补面(docs/design/dsh-thinking-level.md):dsh 运行时本无切档面(reasoningEffort
-  //     只在配置/握手),这里经 installModelSelection 的同一热切机制补——不 dispose、不重启,
-  //     下一 step 的 agent/request 钩子自动应用。清单/校验都经 ctx.llm(与 dsh-web 的
-  //     session.selectModel 同一校验面):模型不支持的档位 resolveCallConfig 抛错,诚实拒绝。
-  // ============================================================================================
-  if (method === "session/getThinkingLevels") {
-    const record = this.sessions.get(params.sessionId);
-    const agent = record?.handle?.agent;
-    // 当前路由:热切选择 ref → agent 握手值 → server 握手默认(会话未物化时首发前查档位是
-    // 合法路径,不能因 unknown session 把档位查询打死)。
-    const sel = agent ? modelSelectionRefs.get(agent)?.current : undefined;
-    const provider = params.provider ?? sel?.provider ?? agent?.options?.provider ?? this.provider;
-    const model = params.model ?? sel?.model ?? agent?.options?.model ?? this.model;
-    const llm = this.ctx.get("llm");
-    if (!llm) throw new Error("llm 服务不可用(无法解析思考档位)");
-    const info = await llm.resolveModelInfo(provider, model);
-    // 无推理元数据的模型:reasoning 缺席 → 空清单(壳据此藏档位控件,显式降级,不伪造可切)。
-    return { levels: (info.reasoning?.efforts ?? []).map((e) => e.id) };
-  }
-  if (method === "session/setThinkingLevel") {
-    const record = this.sessions.get(params.sessionId);
-    if (!record) throw new Error(`unknown session: ${params.sessionId}`);
-    const agent = record.handle.agent;
-    const sel = modelSelectionRefs.get(agent)?.current;
-    const provider = params.provider ?? sel?.provider ?? agent.options.provider;
-    const model = params.model ?? sel?.model ?? agent.options.model;
-    const llm = this.ctx.get("llm");
-    if (!llm) throw new Error("llm 服务不可用(无法设置思考档位)");
-    // 校验先于落选择:不支持的档位抛错(诚实拒绝,下一发不会带着坏档位出去)。
-    const resolved = await llm.resolveCallConfig({ provider, model, reasoningEffort: params.level });
-    let ref = modelSelectionRefs.get(agent);
-    if (!ref) {
-      ref = { current: undefined, assembled: undefined };
-      modelSelectionRefs.set(agent, ref);
-      installModelSelection(agent.ctx, ref);
-    }
-    ref.current = {
-      provider: resolved.provider,
-      model: resolved.model,
-      ...(resolved.reasoningEffort !== undefined ? { reasoningEffort: resolved.reasoningEffort } : {}),
-    };
-    return {};
-  }
-  if (method !== "session/setModel") {
-    return __dshServerHandleRequest.call(this, method, params);
-  }
-  const record = this.sessions.get(params.sessionId);
-  if (!record) throw new Error(`unknown session: ${params.sessionId}`);
-  const agent = record.handle.agent;
+/** 取/装一个 agent 的 ModelSelectionRef(幂等:每 agent 只 installModelSelection 一次)。 */
+function selectionRefFor(agent, installModelSelection) {
   let ref = modelSelectionRefs.get(agent);
   if (!ref) {
     ref = { current: undefined, assembled: undefined };
     modelSelectionRefs.set(agent, ref);
     installModelSelection(agent.ctx, ref);
   }
-  ref.current = { provider: params.provider, model: params.modelId };
-  return {};
+  return ref;
+}
+
+/** 强语义接管表:与 SDK_METHOD_SUPPLEMENT 合成一张表,交单一 patch 点安装。 */
+const TAKEOVER_METHODS = {
+  "session/setModel": {
+    async handler(params, deps) {
+      const record = this.sessions.get(String(params?.sessionId ?? ""));
+      if (!record) throw new Error(`unknown session: ${params?.sessionId}`);
+      const agent = record.handle.agent;
+      const { installModelSelection } = deps.helpers;
+      const ref = selectionRefFor(agent, installModelSelection);
+      ref.current = { provider: params.provider, model: params.modelId };
+      return {};
+    },
+  },
+
+  "session/getThinkingLevels": {
+    async handler(params) {
+      const record = this.sessions.get(String(params?.sessionId ?? ""));
+      const agent = record?.handle?.agent;
+      // 当前路由:热切选择 ref → agent 握手值 → server 握手默认(会话未物化时首发前查档位是
+      // 合法路径,不能因 unknown session 把档位查询打死)。
+      const sel = agent ? modelSelectionRefs.get(agent)?.current : undefined;
+      const provider = params?.provider ?? sel?.provider ?? agent?.options?.provider ?? this.provider;
+      const model = params?.model ?? sel?.model ?? agent?.options?.model ?? this.model;
+      const llm = this.ctx.get("llm");
+      if (!llm) throw new Error("llm 服务不可用(无法解析思考档位)");
+      const info = await llm.resolveModelInfo(provider, model);
+      // 无推理元数据的模型:reasoning 缺席 → 空清单(壳据此藏档位控件,显式降级,不伪造可切)。
+      return { levels: (info?.reasoning?.efforts ?? []).map((e) => e.id) };
+    },
+  },
+
+  "session/setThinkingLevel": {
+    async handler(params, deps) {
+      const record = this.sessions.get(String(params?.sessionId ?? ""));
+      if (!record) throw new Error(`unknown session: ${params?.sessionId}`);
+      const agent = record.handle.agent;
+      const sel = modelSelectionRefs.get(agent)?.current;
+      const provider = params?.provider ?? sel?.provider ?? agent.options.provider;
+      const model = params?.model ?? sel?.model ?? agent.options.model;
+      const llm = this.ctx.get("llm");
+      if (!llm) throw new Error("llm 服务不可用(无法设置思考档位)");
+      // 校验先于落选择:不支持的档位抛错(诚实拒绝,下一发不会带着坏档位出去)。
+      const resolved = await llm.resolveCallConfig({ provider, model, reasoningEffort: params.level });
+      const ref = selectionRefFor(agent, deps.helpers.installModelSelection);
+      ref.current = {
+        provider: resolved.provider,
+        model: resolved.model,
+        ...(resolved.reasoningEffort !== undefined ? { reasoningEffort: resolved.reasoningEffort } : {}),
+      };
+      return {};
+    },
+  },
 };
+
+/**
+ * 安装补面(在 apply 里 await,不在模块顶层裸跑)。
+ *
+ * 为什么必须 await:cordis 的 loader 会等插件 apply 落定才开始服务请求,而 SDK server 的
+ * `initialize` 也会 `await ctx.get("loader")?.await()`。若把安装丢进模块顶层的 IIFE 而不等它,
+ * 就有竞态 —— 首批请求可能在 patch 完成前到达、撞上原生 unknown-method(症状与本次事故一模一样,
+ * 且偶发难查)。放进 apply 并 await,时序就确定了。
+ *
+ * 安装失败只记日志、不抛:补面失败不该拖垮整个插件树(ask/goal/skill 三块能力仍可用),
+ * 缺面会由壳侧懒探测显形(§dsh-fit-extension 落地约束 5)。
+ */
+async function installSupplement() {
+  try {
+    // session/meta 事件类型补面必须用**运行时闭包**那份集合(bare import 那份可能是另一副本,
+    // add 在错的副本上等于没补 → resume 重放抛「session/meta unknown」、重开续聊崩)。
+    const metaOk = await supplementKnownSessionEventTypes();
+    if (!metaOk) console.error("[fit-dsh] session/meta 事件类型补面失败:运行时未提供 KNOWN_SESSION_EVENT_TYPES");
+    const patched = await installSdkMethodSupplement(TAKEOVER_METHODS);
+    if (patched === 0) console.error("[fit-dsh] SDK 方法面补全未生效:找不到 HarnessSdkJsonRpcServer(桌面 session/* 调用会全数缺面)");
+    return patched;
+  } catch (err) {
+    console.error("[fit-dsh] SDK 方法面补全安装失败:", err instanceof Error ? err.stack ?? err.message : String(err));
+    return 0;
+  }
+}
 
 // ==============================================================================================
 // 1. ask —— ask_user_question 工具(文件侧车桥,同轮回填)
@@ -435,7 +461,10 @@ function writeBroadcast(skills) {
 // 统一 apply —— 四块能力挂在同一个插件树上。
 // ==============================================================================================
 
-export function apply(ctx, config = {}) {
+export async function apply(ctx, config = {}) {
+  // 补面先行:先装上 SDK 方法面,再注册工具(时序确定,见 installSupplement 注释)。
+  await installSupplement();
+
   // ---- ask:ask_user_question ----
   ctx.tools.register({
     name: "ask_user_question",
