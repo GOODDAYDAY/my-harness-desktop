@@ -74,8 +74,17 @@ function RecordRow({ pair, expanded, payloadBytes, onToggle, onOpenModal }: {
   const showDuration = pair.response?.durationMs !== undefined && hidden < 2;
   const showTurn = hidden < MAX_HIDDEN;
 
+  // DOM 锚点（e2e / DOM 测试按 data 属性查，不按文案也不按 class）：
+  //   data-llm-log-row=seq   记录行的唯一锚点
+  //   data-llm-log-state     ok | pending（孤儿，未返回）| failed（error 或 status 非 2xx）
+  // 状态做成属性而不是"看颜色"——颜色是主题的事，机器判据不该依赖它。
+  const state = pair.response === null ? "pending" : failed ? "failed" : "ok";
   return (
-    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+    <div
+      data-llm-log-row={pair.seq}
+      data-llm-log-state={state}
+      style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}
+    >
       <div
         ref={headerRef}
         onClick={onToggle}
@@ -133,7 +142,7 @@ function RecordRow({ pair, expanded, payloadBytes, onToggle, onOpenModal }: {
         </span>
       </div>
       {expanded && (
-        <div style={{ borderTop: "1px solid var(--color-border)", padding: "var(--spacing-sm)" }}>
+        <div data-llm-log-detail={pair.seq} style={{ borderTop: "1px solid var(--color-border)", padding: "var(--spacing-sm)" }}>
           <RecordDetail pair={pair} />
         </div>
       )}

@@ -265,6 +265,56 @@ try {
   ok(rowShown, "面板里出现 seq #1 的记录行（用户能看到这条记录）");
   ok(!panelText.includes("未返回"), "该记录不是「未返回」（状态已流转 —— #20 的用户症状正是它恒为未返回）");
 
+  // ── 核心内容判据（用户症状：「DSH 的一直都是 67B，核心内容完全没有」）────────────────
+  // 上面几条只验了"有没有记录"。用户不满的是**记录里有没有东西**：旧实现挂在构造面
+  // `agent/request`，payload 只有 LlmCallConfig（provider/model/采样五项）——盘上实测 147B。
+  // 现在挂在执行面 `llm/stream`，落的是 GenerateOptions 全量。判据必须照着**内容**写：
+  const mainReq = reqs.find(
+    (r) => r.payload && Array.isArray(r.payload.messages) && r.payload.messages.length > 0 && r.payload.purpose === undefined,
+  );
+  if (!mainReq) console.error("  诊断(request 行):", JSON.stringify(reqs.map((r) => ({ seq: r.seq, keys: Object.keys(r.payload ?? {}) }))));
+  ok(!!mainReq, "主调用的 request 行落的是**执行面全量请求**（payload.messages 是非空数组）");
+  ok(mainReq.payload.sessionId === dshHeader?.sessionId || typeof mainReq.payload.sessionId === "string",
+     `请求行带会话身份 sessionId（实际 ${String(mainReq.payload.sessionId)}）`);
+  ok(mainReq.payload.provider === "mock", `provider 原样落盘（实际 ${String(mainReq.payload.provider)}）`);
+  ok(typeof mainReq.payload.system === "string" && mainReq.payload.system.length > 0,
+     `system prompt 落盘（${String(mainReq.payload.system ?? "").length} 字符）`);
+  ok(Array.isArray(mainReq.payload.tools), `工具 schema 落盘（${(mainReq.payload.tools ?? []).length} 个工具）`);
+  ok(!("signal" in mainReq.payload), "AbortSignal 运行时句柄已丢弃（不可序列化，且无记录价值）");
+  const reqBytes = Buffer.byteLength(JSON.stringify(mainReq));
+  console.log(`  · request 行体量：${reqBytes} B（旧实现实测 147 B）`);
+  ok(reqBytes > 1000, `request 行体量远超旧的配置行（${reqBytes} B > 1000 B）`);
+
+  // 响应内容：mock 吐的两段 delta 必须**从 chunk 流组装进记录**（不是只有耗时）。
+  const resp = resps.find((r) => r.seq === mainReq.seq);
+  const respText = JSON.stringify(resp?.message ?? "");
+  ok(respText.includes("mock 回合的回复"),
+     "响应行里有模型真正答的内容（从 llm/stream 的 chunk 流组装）—— dsh 此前连 message 都没有");
+
+  // ── DOM：这是"核心内容"的用户可见判据（盘上有 ≠ 面板看得见）──────────────────────
+  const detailReady = await page.evaluate(() => {
+    const row = document.querySelector("[data-llm-log-row]");
+    if (!row) return false;
+    const head = row.querySelector("div");
+    head?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return true;
+  });
+  const detailShown = await page.waitForFunction(
+    () => document.querySelector("[data-llm-log-detail]") !== null,
+    { timeout: 10000, polling: 200 },
+  ).then(() => true).catch(() => false);
+  ok(detailReady && detailShown, "面板里点开记录行 → 详情展开");
+  const detail = await page.evaluate(() => {
+    const el = document.querySelector("[data-llm-log-detail]");
+    const row = document.querySelector("[data-llm-log-row]");
+    return { text: el?.innerText ?? "", state: row?.getAttribute("data-llm-log-state") ?? "" };
+  });
+  for (const label of ["请求", "响应", "System 提示", "工具定义", "消息历史", "原始 JSON"]) {
+    ok(detail.text.includes(label), `详情里出现「${label}」分区（DSH 的完整请求在 DOM 上摊开）`);
+  }
+  ok(detail.state === "ok", `记录行状态属性为 ok（实际 ${detail.state}）`);
+  await page.screenshot({ path: join(ROOT, ".qa-shots", "llm-recorder-dsh-full-request.png") }).catch(() => {});
+
   // ── **回合不许被标成失败**：用户报的「生成失败: next is not a function」就在这里现形 ──
   // 根因：llm-recorder 的 dsh 扩展在 `agent/turn-stopping`（dsh 用 **serial** 派发、**没有 next**）
   // 上写了 `return next()` → 每次回合边界抛 TypeError → 回合被标失败。
