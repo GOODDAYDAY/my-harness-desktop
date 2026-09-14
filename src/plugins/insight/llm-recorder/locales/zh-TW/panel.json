@@ -7,6 +7,8 @@
   "panel.notReturned": "未返回",
   "panel.request": "請求",
   "panel.response": "回應",
+  "panel.provider": "provider",
+  "panel.noResponseMessage": "這次呼叫沒有回傳回應訊息（內核只回報了呼叫結束，未給出訊息內容）",
   "panel.system": "System 提示",
   "panel.tools": "工具定義",
   "panel.messages": "訊息歷史",

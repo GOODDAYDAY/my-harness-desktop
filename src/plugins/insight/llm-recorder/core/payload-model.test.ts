@@ -22,13 +22,30 @@ describe("previewOf / firstLineOf", () => {
 });
 
 describe("blockToPart", () => {
-  it("text/thinking/tool_use/tool_result/toolCall 各归其类,未知归 other", () => {
+  it("text/thinking/tool_use/tool_result 各归其类,未知归 other", () => {
     expect(blockToPart({ type: "text", text: "hi" }).kind).toBe("text");
     expect(blockToPart("plain").kind).toBe("text");
     expect(blockToPart({ type: "thinking", thinking: "hmm" }).kind).toBe("thinking");
     expect(blockToPart({ type: "tool_use", name: "read", input: {} }).kind).toBe("toolUse");
-    expect(blockToPart({ type: "toolCall", name: "bash", arguments: {} }).kind).toBe("toolCall");
+    expect(blockToPart({ type: "toolCall", name: "bash", arguments: {} }).kind).toBe("toolUse");
     expect(blockToPart({ type: "image_url", image_url: {} }).kind).toBe("other");
+  });
+
+  it("★ 形状词典:dsh 的 reasoning/tool-call/tool-result 与 provider 原生同归一类", () => {
+    // dsh 的思考块：文本在 .text（原生 thinking 放在 .thinking）
+    const think = blockToPart({ type: "reasoning", text: "先看目录结构" });
+    expect(think.kind).toBe("thinking");
+    expect(think.raw).toBe("先看目录结构");
+    // dsh 的工具调用：arguments 是 **JSON 字符串**，预览不该再套一层转义
+    const call = blockToPart({ type: "tool-call", id: "c1", name: "bash", arguments: '{"command":"ls"}' });
+    expect(call.kind).toBe("toolUse");
+    expect(call.title).toBe("bash");
+    expect(call.preview).toBe('{"command":"ls"}');
+    // dsh 的工具结果：连字符 + isError（原生是下划线 + is_error）
+    const res = blockToPart({ type: "tool-result", toolCallId: "c1", content: [{ type: "text", text: "a.txt" }], isError: true });
+    expect(res.kind).toBe("toolResult");
+    expect(res.isError).toBe(true);
+    expect(res.title).toBe("a.txt");
   });
 
   it("tool_result 抽块数组里的文本做预览,is_error 进 isError", () => {
@@ -160,13 +177,42 @@ describe("describeResponse", () => {
     expect(v.recognized).toBe(true);
     expect(v.stopReason).toBe("stop");
     expect(v.usage?.totalTokens).toBe(3);
-    expect(v.parts.map((p) => p.kind)).toEqual(["thinking", "text", "toolCall"]);
+    expect(v.parts.map((p) => p.kind)).toEqual(["thinking", "text", "toolUse"]);
     expect(v.parts[2].title).toBe("bash");
+  });
+
+  it("★ dsh 组装态消息:同形状词典一把认下,usage 键名并列 + 派生总量", () => {
+    const v = describeResponse({
+      role: "assistant",
+      provider: "us-new",
+      model: "deepseek-v4-pro",
+      stopReason: "tool-calls",
+      usage: { inputTokens: 1200, outputTokens: 34, cacheReadTokens: 900 },
+      content: [
+        { type: "reasoning", text: "让我想想" },
+        { type: "tool-call", id: "c1", name: "bash", arguments: '{"command":"ls"}' },
+      ],
+    });
+    expect(v.recognized).toBe(true);
+    expect(v.stopReason).toBe("tool-calls");
+    expect(v.provider).toBe("us-new");
+    expect(v.usage).toMatchObject({ input: 1200, output: 34, cacheRead: 900 });
+    expect(v.usage?.totalTokens, "dsh 分项互斥且不给总量 → 按四项之和派生").toBe(1200 + 34 + 900);
+    expect(v.parts.map((p) => p.kind)).toEqual(["thinking", "toolUse"]);
+  });
+
+  it("★ 没有响应消息 ≠ 形状不认识:absent 与 shape 必须分开", () => {
+    // dsh 失败/中止：行上根本没有 message 字段
+    const absent = describeResponse(undefined);
+    expect(absent.recognized).toBe(false);
+    expect(absent.unrecognizedReason, "内核没给 → 'absent',面板要说「没有回传响应消息」").toBe("absent");
+    // 给了但形状不认识 → 'shape'
+    expect(describeResponse({ role: "assistant" }).unrecognizedReason).toBe("shape");
+    expect(describeResponse(null).unrecognizedReason).toBe("absent");
   });
 
   it("content 不是数组 → recognized=false", () => {
     expect(describeResponse({ role: "assistant" }).recognized).toBe(false);
-    expect(describeResponse(null).recognized).toBe(false);
   });
 });
 

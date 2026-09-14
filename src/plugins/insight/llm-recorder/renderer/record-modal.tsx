@@ -5,7 +5,8 @@ import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { type RecordPair } from "../core/log-model";
-import { RequestPayloadView, ResponseMessageView, fmtBytes } from "./payload-views";
+import { byteSize, errorSummary } from "../core/payload-model";
+import { RequestPayloadView, ResponseMessageView, fmtBytes, fmtTime } from "./payload-views";
 
 const labelStyle: React.CSSProperties = {
   fontSize: "var(--font-size-sm)", color: "var(--color-muted)", marginBottom: 4,
@@ -13,6 +14,7 @@ const labelStyle: React.CSSProperties = {
 
 export function RecordDetail({ pair }: { pair: RecordPair }): ReactNode {
   const { t } = useTranslation();
+  const summary = errorSummary(pair.response?.error);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>
       <div>
@@ -21,18 +23,18 @@ export function RecordDetail({ pair }: { pair: RecordPair }): ReactNode {
       </div>
       <div>
         <div style={labelStyle}>{t("panel.response")}</div>
+        {/* 失败事实必须在内容之上先看到——dsh 的失败行没有 status，只有 error。 */}
+        {summary !== undefined && (
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-danger, #f38ba8)", marginBottom: 4, wordBreak: "break-all" }}>
+            {summary}
+          </div>
+        )}
         {pair.response
           ? <ResponseMessageView message={pair.response.message} />
           : <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)" }}>{t("panel.notReturned")}</div>}
       </div>
     </div>
   );
-}
-
-function fmtTime(ts: number): string {
-  const d = new Date(ts);
-  const pad = (v: number): string => String(v).padStart(2, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 export function RecordModal({ pair, onClose }: { pair: RecordPair; onClose: () => void }): ReactNode {
@@ -67,7 +69,9 @@ export function RecordModal({ pair, onClose }: { pair: RecordPair; onClose: () =
             <span style={{ color: "var(--color-muted)" }}>{(pair.response.durationMs / 1000).toFixed(1)}s</span>
           )}
           <span style={{ marginLeft: "auto", color: "var(--color-muted)", fontSize: "var(--font-size-xs)" }}>
-            {fmtBytes(new TextEncoder().encode(JSON.stringify(pair.request.payload ?? null)).length)}
+            {/* 与行内列表同一个尺子（core 的 byteSize）——旧版这里自己 encode 一遍，
+                对不可序列化的 payload 会得到与列表不同的数。 */}
+            {fmtBytes(byteSize(pair.request.payload))}
           </span>
           <button onClick={onClose} title={t("panel.close")} style={closeBtnStyle}>
             <X size={16} />

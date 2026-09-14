@@ -7,6 +7,8 @@
   "panel.notReturned": "keine Antwort",
   "panel.request": "Anfrage",
   "panel.response": "Antwort",
+  "panel.provider": "provider",
+  "panel.noResponseMessage": "Dieser Aufruf lieferte keine Antwortnachricht (der Kernel meldete nur das Ende des Aufrufs, ohne Nachrichteninhalt)",
   "panel.system": "System-Prompt",
   "panel.tools": "Werkzeugdefinitionen",
   "panel.messages": "Nachrichtenverlauf",

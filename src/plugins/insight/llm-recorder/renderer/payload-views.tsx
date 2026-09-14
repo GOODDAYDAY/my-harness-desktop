@@ -24,6 +24,13 @@ function useMarkdownComponent(): MarkdownComponent | undefined {
   }, [items]);
 }
 
+/** 时刻 → HH:MM:SS（行内与弹窗共用一处定义——此前两个文件各写一份，改一处漏一处）。 */
+export function fmtTime(ts: number): string {
+  const d = new Date(ts);
+  const pad = (v: number): string => String(v).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 export function fmtBytes(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "0 B";
   if (n < 1024) return `${n} B`;
@@ -148,7 +155,6 @@ const KIND_LABEL_KEY: Record<PayloadPart["kind"], string> = {
   thinking: "panel.thinking",
   toolUse: "panel.toolCall",
   toolResult: "panel.toolResult",
-  toolCall: "panel.toolCall",
   other: "panel.other",
 };
 
@@ -156,7 +162,7 @@ function partColor(part: PayloadPart): string {
   if (part.kind === "toolResult") {
     return part.isError === true ? "var(--color-accent-danger)" : "var(--color-accent-success)";
   }
-  if (part.kind === "toolUse" || part.kind === "toolCall") return "var(--color-primary)";
+  if (part.kind === "toolUse") return "var(--color-primary)";
   return "var(--color-muted)";
 }
 
@@ -278,6 +284,12 @@ export function RequestPayloadView({ payload }: { payload: unknown }): ReactNode
         columnGap: "var(--spacing-sm)", rowGap: 2, padding: "2px 0",
         fontSize: "var(--font-size-xs)", fontFamily: "var(--font-family-mono)",
       }}>
+        {view.provider !== undefined && (
+          <Fragment>
+            <span style={{ color: "var(--color-muted)" }}>{t("panel.provider")}</span>
+            <span style={{ color: "var(--color-fg)", wordBreak: "break-all" }}>{view.provider}</span>
+          </Fragment>
+        )}
         {view.model !== undefined && (
           <Fragment>
             <span style={{ color: "var(--color-muted)" }}>model</span>
@@ -407,6 +419,12 @@ export function ResponseMessageView({ message }: { message: unknown }): ReactNod
   const markdown = useMarkdownComponent();
 
   if (!view.recognized) {
+    // 「内核没给响应消息」与「形状不认识」是两件事：前者如实说没有，后者才退回原始 JSON。
+    // 旧版把两者混为一谈——dsh 的每次成功调用都被报成「未识别的响应形状」，
+    // 底下那个 RawJsonFold 还是空的（undefined 的 JSON 就是 undefined）。
+    if (view.unrecognizedReason === "absent") {
+      return <div style={hintStyle}>{t("panel.noResponseMessage")}</div>;
+    }
     return (
       <div>
         <div style={hintStyle}>{t("panel.unrecognizedResponse")}</div>

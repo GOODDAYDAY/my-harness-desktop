@@ -15,17 +15,11 @@ import {
   mergeRecords, nextCursor, pairRecords, parseIndex, parseLogText, shardNumber,
   type RecordPair, type LogLine,
 } from "../core/log-model";
-import { byteSize, peekUsage } from "../core/payload-model";
-import { fmtBytes, fmtCount } from "./payload-views";
+import { byteSize, errorSummary, peekStopReason, peekUsage } from "../core/payload-model";
+import { fmtBytes, fmtCount, fmtTime } from "./payload-views";
 import { RecordDetail, RecordModal } from "./record-modal";
 
 /* ============ 工具 ============ */
-
-function fmtTime(ts: number): string {
-  const d = new Date(ts);
-  const pad = (v: number): string => String(v).padStart(2, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
 
 function logDirOf(cwd: string): string {
   return `${cwd}/.my-harness-desktop/llm-logs`;
@@ -70,7 +64,11 @@ function RecordRow({ pair, expanded, payloadBytes, onToggle, onOpenModal }: {
   }, [hidden, checkTick, pair]);
 
   const status = pair.response?.status;
-  const failed = pair.response === null || (status !== undefined && (status < 200 || status >= 300));
+  const error = pair.response?.error;
+  const stopReason = pair.response ? peekStopReason(pair.response.message) : undefined;
+  // 失败判定三来源，缺一不可：**error 事实**（dsh 不给 HTTP status，失败只能靠它表态）、
+  // status 非 2xx（provider 原生）、以及"根本没返回"（孤儿请求，另按 muted 着色）。
+  const failed = pair.response === null || error !== undefined || (status !== undefined && (status < 200 || status >= 300));
   const usage = pair.response ? peekUsage(pair.response.message) : undefined;
   const showUsage = usage !== undefined && hidden < 1;
   const showDuration = pair.response?.durationMs !== undefined && hidden < 2;
@@ -99,11 +97,16 @@ function RecordRow({ pair, expanded, payloadBytes, onToggle, onOpenModal }: {
         )}
         <span
           style={{
-            flexShrink: 0,
+            flexShrink: 0, display: "inline-flex", alignItems: "center", columnGap: 4,
             color: pair.response === null ? "var(--color-muted)" : failed ? "var(--color-danger, #f38ba8)" : "var(--color-accent-success)",
           }}
         >
-          {pair.response === null ? t("panel.notReturned") : status !== undefined ? String(status) : "—"}
+          {/* 状态列：有 HTTP status 就报它；没有（dsh）就报这次调用怎么结束的（stop / tool-calls /
+              aborted），比一个无意义的 "—" 有用，且不伪造 status。 */}
+          <span>{pair.response === null ? t("panel.notReturned") : status !== undefined ? String(status) : stopReason ?? "—"}</span>
+          {error !== undefined && (
+            <span title={errorSummary(error)} style={{ fontSize: "var(--font-size-xs)" }}>{t("panel.error")}</span>
+          )}
         </span>
         {showDuration && pair.response?.durationMs !== undefined && (
           <span style={{ color: "var(--color-muted)", flexShrink: 0 }}>{(pair.response.durationMs / 1000).toFixed(1)}s</span>
