@@ -64,6 +64,18 @@ llm-recorder 是一个桌面插件：把每次 LLM 调用的完整请求体和�
 
 ### 2.5 dsh 侧数据面：hook 不同名，行契约相同（**已落地**）
 
+> **2026-09 修订（数据面换面，勿照抄下文"已定 1"）**：本文档 §2.5 原结论「请求行 `payload` = `LlmCallConfig` 原样」
+> **已被证伪并废弃**。它假设 dsh 只能给到调用配置——实际 dsh 在执行面暴露完整请求：`llm` 服务的
+> `llm/stream` waterfall 参数是 `GenerateOptions`（provider/model/**messages**/**system**/**tools**/
+> sessionId/purpose），内核类型注释即 "A single model request, fully assembled"。
+> 挂在构造面 `agent/request` 上只能拿到 `LlmCallConfig`（五项），于是 dsh 的记录恒为一条 148 B 的配置行、
+> 核心内容全无（用户症状：「DSH 的一直都是 67B」）。
+> **现数据面**：`llm/stream`（请求全量 + chunk 流）+ `session/event` 的 `step/start`（回合身份），
+> 响应行由 chunk 流组装；"不在扩展内复刻对话投影去凑等效请求体"这条纪律**依然成立且已被遵守**——
+> 现在记的是内核自己交出来的完整请求，不是我们拼的。
+> 完整推导见 `docs/design/llm-recorder-dsh-parity.md`；落地形态见 `docs/plugins/insight/llm-recorder.md §13`。
+
+
 > **实现现状**：本节正文仍是有效设计，标题不再是"待实现"——`plugin.json` 的 `extensions` 里已声明 dsh 项，
 > `dsh-extension/index.mjs` 已实现三 hook + `(turn, step)` 配对，由对应内核的 `createPluginExtensionSync` 随插件启停
 > 同步到 `~/.dsh/.my-harness-desktop-plugins/llm-recorder/`。守卫：`dsh-extension-flow.test.ts`

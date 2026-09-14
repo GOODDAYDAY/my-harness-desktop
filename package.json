@@ -42,6 +42,7 @@
     "e2e:minimal:uninstall": "node scripts/demo/kernel-plugin-uninstall.e2e.mjs",
     "e2e:session-list": "node scripts/demo/session-list-orphan-kernel.e2e.mjs",
     "e2e:dispatch": "node scripts/demo/kernel-dispatch.e2e.mjs",
+    "e2e:dsh:recorder": "node scripts/demo/dsh-round.e2e.mjs",
     "e2e:quiet": "node scripts/demo/quiet-launch.e2e.mjs"
   },
   "dependencies": {
