@@ -35,6 +35,8 @@
     "audit:refs": "node scripts/ref-audit.mjs",
     "audit:symbols": "node scripts/doc-symbol-audit.mjs",
     "audit:quiet": "node scripts/quiet-launch-audit.mjs",
+    "audit:session-scope": "node scripts/audit-session-scope.mjs",
+    "audit": "npm run audit:deps && npm run audit:docs && npm run audit:refs && npm run audit:symbols && npm run audit:quiet && npm run audit:session-scope",
     "test:captured": "bash scripts/run-tests.sh",
     "e2e:dsh:attach": "node scripts/demo/dsh-multiturn.e2e.mjs",
     "e2e:pi": "node scripts/demo/pi-smoke.e2e.mjs",

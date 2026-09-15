@@ -725,7 +725,9 @@ export function TimelineView(): React.ReactNode {
   // 附件匹配是发送使能的一部分:篮非空时正文可空("就这些评论,你改吧"是完整意图,设计 §2.4)。
   // sessionKey 不对齐的 payload 不匹配、不显示、不拼接(切会话瞬间的时序错位防御)。
   const att = attachments;
-  const curKey = currentNeutralSessionId ?? (currentCwd ? `new:${currentCwd}` : "");
+  // curKey = 当前作用域 key(与 review 发来的 payload.sessionKey 同源:review 用
+  // useCurrentScopeKey() 发,这里用同一个 scopeKey 比,身份算法单源在圆心,不再手拼)。
+  const curKey = scopeKey ?? "";
   const matched = att && att.sessionKey === curKey ? att : null;
   const hasAttachments = (matched?.items?.length ?? 0) > 0;
 

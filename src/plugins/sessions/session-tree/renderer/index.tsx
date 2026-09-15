@@ -93,7 +93,9 @@ export function SessionTreeTab(): React.ReactNode {
   useEffect(() => {
     if (!overviewMode || !currentNeutralSessionId) return;
     let cancelled = false;
-    void ctx.sessions.getTree(currentNeutralSessionId ?? currentSessionPath)
+    // 上一行 guard 已保证 currentNeutralSessionId 非空,直接用(此前 `?? currentSessionPath`
+    // 是死兜底,且是手拼身份——审计守卫①要求身份单源,设计 session-scope.md §3.5.1)。
+    void ctx.sessions.getTree(currentNeutralSessionId)
       .then((tree) => { if (!cancelled) setLineageTree(tree); })
       .catch(() => { if (!cancelled) setLineageTree(null); });
     return () => { cancelled = true; };

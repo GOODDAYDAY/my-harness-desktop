@@ -41,7 +41,7 @@ import {
   useSessionScope, useSessionScopeAccess, useCurrentScopeKey,
   hasPendingUserSend,
 } from "@my-harness-desktop/react";
-import { scopeKeyFromSessionKey, type ComposerCommandResult, type NeutralMessage, type SessionInfo } from "@my-harness-desktop/shared";
+import { scopeKeyFromSessionKey, isShellScopeKey, type ComposerCommandResult, type NeutralMessage, type SessionInfo } from "@my-harness-desktop/shared";
 import type { GoalState } from "../core/goal-state";
 import { createGoal, editGoal, GOAL_NOTE_ROLE, parseGoal, parseGoalCommand, pauseGoal, resumeGoal, setGoalMaxRounds, shouldContinue } from "../core/goal-state";
 import { applyGoalEvent, renderContinuationPrompt } from "./goal-reduce";
@@ -352,7 +352,7 @@ export function useGoalController() {
       // proc.key → 作用域 key 的归一走圆心函数(设计 §2.2.2):此前拿 proc.key 直接比投影路径,
       // fork 过的会话(rekeyProc 后 key≠path)会被误判成后台会话 → 视图流与后台各归一次账、round 双跳。
       const evScopeKey = scopeKeyFromSessionKey(rawKey, lookup);
-      if (evScopeKey.startsWith("new:")) return;   // 未物化壳:没有中立层可写
+      if (isShellScopeKey(evScopeKey)) return;   // 未物化壳:没有中立层可写(壳键判别走圆心单源)
 
       // busy:按事件身份写目标域(激活与后台同一处理,因为运维流两边都投)。
       if (ev.type === "agentStart") { busyAccess.setAt(evScopeKey, true); return; }
