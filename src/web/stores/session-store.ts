@@ -14,7 +14,7 @@ import { create } from "zustand";
 import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent, KernelId, ImageInput, DisplayMeta } from "@my-harness-desktop/shared";
 import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/shared";
 import { useUiStore } from "./ui-store";
-import { useSessionScopeStore } from "./session-scope";
+import { useSessionScopeStore, readFrameworkSlot, writeFrameworkSlot, currentScopeKey } from "./session-scope";
 import {
   readModelPending, clearModelPending, clearComposerDraft,
   readPendingToolConfig, writePendingToolConfig,
@@ -23,10 +23,17 @@ import { initNeutralMirror, useNeutralMirror, mirrorMessages } from "./neutral-m
 
 // ============ 内容镜像 + 执行态叠加(session-single-source §2.2/§3.2)============
 
-/** 在飞工具结果登记表(toolCallStart/End 事件驱动,视图层单例):
- *  镜像条目在 messageEnd 定稿时可能尚无工具结果(pi 的 toolCall 块结果在下一事件才齐)——
- *  合并视图按 toolCallId 把结果/状态补到内容块上,与旧 applyEvent 的就地 patch 同语义。 */
-const toolResultLedger = new Map<string, { result?: unknown; isError?: boolean; state?: string }>();
+/** 在飞工具结果登记表 + 在飞工具集合:都从「视图层单例」迁到**会话作用域槽**
+ *  (设计 docs/design/session-scope.md §1.1.3/§2.6.1)。此前是模块级 Map/Set、全仓无
+ *  .clear(),切会话清了一半(overlay 清、登记表不清),跨会话撞 toolCallId 会串工具结果/
+ *  串在飞态(§1.1.3 后果一),且永不回收(后果二)。迁入作用域槽后:每会话各一份、
+ *  撞 id 也不串;删除会话时 drop 调 onLeave(clear)回收。
+ *  读写经 currentToolLedger()/currentInflight() 取当前作用域那份。 */
+type ToolLedger = Map<string, { result?: unknown; isError?: boolean; state?: string }>;
+function currentToolLedger(): ToolLedger {
+  const key = currentScopeKey();
+  return key ? readFrameworkSlot<ToolLedger>("toolResultLedger", key) : new Map();
+}
 
 /** 把登记表里的工具结果/状态补到消息内容块上(合并视图用,纯函数不 mutate)。 */
 function withToolResults(messages: NeutralMessage[], ledger: Map<string, { result?: unknown; isError?: boolean; state?: string }>): NeutralMessage[] {
@@ -95,15 +102,17 @@ export function applyOverlayEvent(overlay: NeutralMessage[], event: SessionEvent
   if (event.type === "toolCallStart") {
     const toolCallId = String((event as { toolCallId?: unknown }).toolCallId ?? "");
     if (!toolCallId) return overlay;
-    inflightToolCalls.add(toolCallId);
-    toolResultLedger.set(toolCallId, { state: "running" });
+    // 写**当前作用域**的登记表/在飞集(视图流只投激活会话,写入时 currentScopeKey 即事件所属会话;
+    // 后台会话的执行态走运维流,批 4 接入——见设计 §2.4.5/§3.1.4)。
+    currentInflight().add(toolCallId);
+    currentToolLedger().set(toolCallId, { state: "running" });
     return overlay;
   }
   if (event.type === "toolCallEnd") {
     const toolCallId = String((event as { toolCallId?: unknown }).toolCallId ?? "");
     if (!toolCallId) return overlay;
-    inflightToolCalls.delete(toolCallId);
-    toolResultLedger.set(toolCallId, { result: (event as { result?: unknown }).result, isError: (event as { isError?: unknown }).isError === true, state: "done" });
+    currentInflight().delete(toolCallId);
+    currentToolLedger().set(toolCallId, { result: (event as { result?: unknown }).result, isError: (event as { isError?: unknown }).isError === true, state: "done" });
     return overlay;
   }
   return overlay;
@@ -119,7 +128,7 @@ function recomputeMessages(): void {
   if (!mirror.session && mirror.ns) return;
   const base = mirror.session ? mirrorMessages(mirror.session, mirror.activeLineageId) : [];
   useSessionStore.setState((s) => ({
-    messages: mergeMirrorWithOverlay(base, s.overlay, toolResultLedger),
+    messages: mergeMirrorWithOverlay(base, s.overlay, currentToolLedger()),
   }));
 }
 
@@ -345,14 +354,19 @@ function withStreamTiming(msg: NeutralMessage): NeutralMessage {
   return { ...rest, startedAt, timestamp: undefined } as unknown as NeutralMessage;
 }
 
-/** 在飞工具调用集合(toolCallStart 标记,toolCallEnd 清除)。
+/** 在飞工具调用集合(toolCallStart 标记,toolCallEnd 清除)——会话作用域槽(设计 §2.6.1)。
  *  根因:toolCall 块的 state 字段在内核消息里从不写入(生产恒 undefined),而「工具正在执行、
  *  结果未回」这个量只能由事件序推导——ask 等交互式工具卡按 state==="running" 挂交互 UI。
- *  集合是视图层单例(每窗口一份),块分解器经参数注入读取(blocks.ts 保持纯函数)。 */
-const inflightToolCalls = new Set<string>();
-/** 读在飞工具集合(timeline 分解消息时传入)。 */
+ *  每会话各一份(撞 id 不串),块分解器经参数注入读取(blocks.ts 保持纯函数)。 */
+const EMPTY_INFLIGHT: ReadonlySet<string> = new Set();
+function currentInflight(): Set<string> {
+  const key = currentScopeKey();
+  return key ? readFrameworkSlot<Set<string>>("inflightToolCalls", key) : new Set();
+}
+/** 读**当前作用域**的在飞工具集合(timeline 分解消息时传入)。导出签名不变——消费方无感。 */
 export function getInflightToolCalls(): ReadonlySet<string> {
-  return inflightToolCalls;
+  const key = currentScopeKey();
+  return key ? readFrameworkSlot<Set<string>>("inflightToolCalls", key) : EMPTY_INFLIGHT;
 }
 
 
@@ -454,9 +468,17 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     const infos = useSessionStore.getState().sessionInfos;
     if (!infos) return;
     const map = { ...infos };
+    const scope = useSessionScopeStore.getState();
     for (const p of paths) {
       const cur = map[p];
-      if (cur?.neutralSessionId) delete map[cur.neutralSessionId];
+      const ns = cur?.neutralSessionId;
+      if (ns) {
+        delete map[ns];
+        // 会话作用域回收(设计 §2.3.2):drop 是**唯一**调用点——单删/批删/外部删除广播
+        // 三条删除路径全部汇聚到本函数(设计 §3.5.4 守卫④盯这条接线)。逐槽调 onLeave
+        // 释放资源(工具登记表 clear)+ 通知 eventBus 清该会话的 scoped channel 回放桶。
+        scope.drop(ns);
+      }
       delete map[p];
     }
     useSessionStore.setState({ sessionInfos: map });

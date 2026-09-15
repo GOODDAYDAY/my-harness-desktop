@@ -262,10 +262,13 @@ describe("unregisterSlots:插件卸载摘槽(设计 §2.4.4)", () => {
   });
 });
 
-describe("框架七个保留槽自注册(设计 §2.6.1)", () => {
-  const FRAMEWORK_SLOTS = ["toolResultLedger", "inflightToolCalls", "overlay", "modelPending", "pendingQueue", "composerDraft", "toolConfig"];
+describe("框架六个保留槽自注册(设计 §2.6.1)", () => {
+  // overlay 不在容器里(实现期修正:它是 session-store 的 state 字段、与 streaming/snapshot
+  // 同一原子 setState、视图流只投激活会话,迁进来会拆原子性且多会话并存能力对它是空的;
+  // 见 session-scope.ts 框架槽注释块与 §4.5.4「存得下≠该存」)。
+  const FRAMEWORK_SLOTS = ["toolResultLedger", "inflightToolCalls", "modelPending", "pendingQueue", "composerDraft", "toolConfig"];
 
-  it("七个槽全部注册在 FRAMEWORK_PLUGIN_ID 下", () => {
+  it("六个槽全部注册在 FRAMEWORK_PLUGIN_ID 下", () => {
     const st = useSessionScopeStore.getState();
     for (const id of FRAMEWORK_SLOTS) {
       expect(st.slots.has(sessionSlotKey(FRAMEWORK_PLUGIN_ID, id))).toBe(true);

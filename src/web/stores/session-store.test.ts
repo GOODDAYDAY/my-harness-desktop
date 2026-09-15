@@ -4,7 +4,7 @@
 // 旧 applyEvent 的内容拼装/id 水合/文本相亲全部退役——锚点身份由中立 entryId 结构保证。
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  applyOverlayEvent, mergeMirrorWithOverlay, applySnapshot, useSessionStore, initSessionStore, hydrateSessionStart, refreshThinkingLevels,
+  applyOverlayEvent, mergeMirrorWithOverlay, applySnapshot, useSessionStore, initSessionStore, hydrateSessionStart, refreshThinkingLevels, getInflightToolCalls,
 } from "./session-store";
 import { useUiStore } from "./ui-store";
 // 会话级待执行意图已迁到会话作用域容器(设计 docs/design/session-scope.md §2.6):
@@ -137,6 +137,44 @@ describe("applyOverlayEvent → 流式占位生命周期(执行态只管视觉)"
     ov = applyOverlayEvent(ov, { type: "toolCallEnd", toolCallId: "c1", result: "out", isError: false } as unknown as SessionEvent);
     // 登记表经 mergeMirrorWithOverlay 合并进内容块(见下方合并视图测试)
     expect(ov).toHaveLength(1);
+  });
+});
+
+// 跨会话工具态隔离(设计 docs/design/session-scope.md §1.1.3 后果一/§5.2 守卫)。
+// 根因:toolResultLedger/inflightToolCalls 此前是模块级单例、全仓无 .clear(),切会话清了
+// overlay 却没清这两个登记表。两会话撞同一 toolCallId(pi/dsh 各自生成 id、bashExecution
+// 还有合成块,撞 id 概率非零)时,B 会话的工具卡会显示 A 的工具结果或永远转圈。
+// 迁入会话作用域槽后:每会话各一份,撞 id 也不串。本守卫直接复现该 bug 场景。
+describe("工具在飞态按会话隔离(撞 id 不串——§1.1.3 后果一的回归守卫)", () => {
+  beforeEach(() => {
+    __resetScopesForTests();
+    useUiStore.setState({ currentNeutralSessionId: "ns-A", currentCwd: "/proj" });
+  });
+
+  it("A 会话的在飞 toolCallId 不出现在 B 会话(即使撞同一 id)", () => {
+    // A 会话:bash 工具开始执行,登进 A 域的在飞集
+    applyOverlayEvent([], { type: "toolCallStart", toolCallId: "c1", toolName: "bash" } as unknown as SessionEvent);
+    expect(getInflightToolCalls().has("c1")).toBe(true);
+
+    // 切到 B:B 域是独立的空集,撞同一 id 也读不到 A 的在飞态
+    useUiStore.setState({ currentNeutralSessionId: "ns-B" });
+    expect(getInflightToolCalls().has("c1")).toBe(false);
+
+    // 切回 A:A 域原样保留(在飞态按会话隔离,不是切走即清)
+    useUiStore.setState({ currentNeutralSessionId: "ns-A" });
+    expect(getInflightToolCalls().has("c1")).toBe(true);
+  });
+
+  it("toolCallEnd 只清当前会话的在飞态,不影响别的会话同名 id", () => {
+    applyOverlayEvent([], { type: "toolCallStart", toolCallId: "c1" } as unknown as SessionEvent);
+    useUiStore.setState({ currentNeutralSessionId: "ns-B" });
+    applyOverlayEvent([], { type: "toolCallStart", toolCallId: "c1" } as unknown as SessionEvent);
+    // B 结束 c1
+    applyOverlayEvent([], { type: "toolCallEnd", toolCallId: "c1", result: "B 的输出" } as unknown as SessionEvent);
+    expect(getInflightToolCalls().has("c1")).toBe(false);   // B 域 c1 已结束
+    // A 域的 c1 仍在飞(B 的结束不串到 A)
+    useUiStore.setState({ currentNeutralSessionId: "ns-A" });
+    expect(getInflightToolCalls().has("c1")).toBe(true);
   });
 });
 

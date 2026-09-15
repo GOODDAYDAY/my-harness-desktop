@@ -2,7 +2,7 @@
 //
 // 设计文档:docs/design/session-scope.md。本文件是 §2.3 的落地:存储形状(§2.3.1)、
 // 四个动作 read/write/carry/drop(§2.3.2)、多会话并存(§2.3.3)、惰性建域与失败形态(§2.3.4)、
-// 框架七个保留槽自注册(§2.6.1)。
+// 框架六个保留槽自注册(§2.6.1)。
 //
 // 为什么需要它(设计 §1.2.2):此前「按会话隔离」在全仓有五处实现、五种做法——ui-store 硬编码
 // 三张 map + carrySessionKey,review 手写第二遍物化迁移,goal 自造 goalBirthPath 假坐标,
@@ -281,19 +281,28 @@ function frameworkSlotOrThrow(slotId: string): SessionSlot {
 }
 
 // ============================================================================
-// 框架七个保留槽自注册(设计 §2.6.1)
+// 框架六个保留槽自注册(设计 §2.6.1)
 // ============================================================================
 //
 // 框架自己的会话态也进容器,否则又是「机制两套」——插件的态有回收钩子,框架的态没有。
-// 七个槽对应现状(设计 §2.6.1 表):
+// 六个槽对应现状(设计 §2.6.1 表):
 //   toolResultLedger / inflightToolCalls —— session-store.ts:24/:345 的两个模块级登记表,
 //     此前全仓无 .clear(),切会话清了一半(overlay 清、登记表不清),跨会话撞 toolCallId 会
 //     串工具结果/串在飞态(设计 §1.1.3)。carry:"drop" 因为它们是在飞瞬态。
-//   overlay —— 流式占位与乐观回显,与 ledger 同理。
 //   modelPending / pendingQueue / composerDraft —— ui-store 三张 Record 的内层值,
 //     外层键由作用域承担,所以迁进来的是内层值(设计 §2.6.1)。
 //   toolConfig —— ui-store.pendingToolConfig 的内层值(单值内嵌 sessionPath 的形态,
 //     key 由作用域承担后内嵌字段删掉;设计 §4.6.5)。
+//
+// overlay **不进容器**(实现期修正设计 §2.6.1 的一处错误,理由见设计 §4.5.4「存得下≠该存」):
+// 它是 session-store 的 state 字段,不是模块级单例——① 它与 streaming/snapshot/messages 在
+// 同一个原子 setState 里更新(session-store.ts:820-834),搬到另一个 store 会拆散原子性、
+// 引入跨 store 渲染竞态;② 它的写入源是视图流,而视图流只投激活会话(main 按 activeProcKey
+// 过滤),后台会话根本不产生 overlay,迁进作用域槽得到的「多会话并存」能力对它是空的;
+// ③ 它本就有正确的生命周期(openSession/startNewChat 置 []),不是 §1.1.3 那个「没人回收」
+// 的病灶。病灶只有 ledger/inflight 两个模块级单例——它们才需要迁。
+// ledger/inflight 相反:需要多会话并存(撞 id 隔离)、本就是模块级单例(有 bug)、
+// 不在那个原子 setState 内(迁移不拆原子性),所以迁进容器。
 //
 // initial 一律用工厂或标量:Map/Set/数组必须是工厂,否则所有会话共享同一实例。
 useSessionScopeStore.getState().registerSlots(FRAMEWORK_PLUGIN_ID, [
@@ -310,7 +319,6 @@ useSessionScopeStore.getState().registerSlots(FRAMEWORK_PLUGIN_ID, [
     carry: "drop",
     onLeave: (s): void => { (s as Set<string>).clear(); },
   },
-  { id: "overlay", initial: () => [], carry: "drop" },
   { id: "modelPending", initial: null, carry: "move" },
   { id: "pendingQueue", initial: () => [], carry: "concat" },
   { id: "composerDraft", initial: "", carry: "move" },
