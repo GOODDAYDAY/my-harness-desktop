@@ -2,7 +2,14 @@
 // goal 续跑引擎 e2e:useGoalController 全链路,证明 goal 能成功完成 + 跨刷新持久化。
 // 模型 set_goal → 回合收敛续跑 → 模型 achieve_goal → 停止;并覆盖用户停止/恢复/编辑/关闭、
 // 挂载恢复(从会话头行 custom.goal 读回)、变更落盘(写回 custom.goal)。
-// mock 框架的 usePluginContext/useUiStore(只提供 onEvent/prompt/updateHeader/openSession 机制面),续跑逻辑全真跑。
+//
+// mock 边界(设计 docs/design/session-scope.md 批 4 迁移后收紧):**只 mock usePluginContext**
+// ——它是 IPC/内核边界(sessions.onEvent/messaging.prompt/updateHeader/openSession/annotate/
+// notify/events),真跑需要起 app。其余全部走真实实现:
+//   · useUiStore / useSessionStore —— 真实 zustand store,测试直接 setState 驱动身份与消息;
+//   · 会话作用域容器(useSessionScope/useSessionScopeAccess/useCurrentScopeKey)—— 真实实现,
+//     隔离/换档/物化搬迁都是真的在跑。**不 mock 作用域**是本文件的关键:mock 掉它就测不出
+//     「A 会话的目标不出现在 B 会话」这个迁移的核心目的(等同地位、等同功能,不做假实现)。
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
@@ -17,14 +24,10 @@ const mocks = vi.hoisted(() => ({
   eventsEmit: vi.fn(),
   onEventCb: null as ((e: SessionEvent) => void) | null,
   onKernelEventCb: null as ((e: { kind: string; sessionKey: string; event: SessionEvent }) => void) | null,
-  pendingQueue: {} as Record<string, { id: string }[]>,
-  generalConfig: {} as Record<string, unknown>,
-  neutralSessionId: null as string | null,
-  messages: [] as unknown[],
 }));
 
-vi.mock("@my-harness-desktop/react", () => {
-  // 稳定 API 对象:若每次 render 返回新对象,useGoalController 的 useEffect 依赖会每帧变化、无限重跑。
+vi.mock("@my-harness-desktop/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@my-harness-desktop/react")>();
   const sessions = {
     onEvent: (cb: (e: SessionEvent) => void) => {
       mocks.onEventCb = cb;
@@ -38,35 +41,33 @@ vi.mock("@my-harness-desktop/react", () => {
     openSession: mocks.openSession,
     annotate: mocks.annotate,
   };
-  const messaging = { prompt: mocks.prompt };
-  const notify = { show: mocks.notify };
-  const events = { emit: mocks.eventsEmit, on: vi.fn(() => () => {}) };
-  const stateOf = (): { currentSessionPath: string; currentNeutralSessionId: string | null; pendingQueue: Record<string, { id: string }[]>; generalConfig: Record<string, unknown> } =>
-    ({ currentSessionPath: "/p/s.jsonl", currentNeutralSessionId: mocks.neutralSessionId, pendingQueue: mocks.pendingQueue, generalConfig: mocks.generalConfig });
-  const useUiStore = Object.assign(
-    (selector?: (s: ReturnType<typeof stateOf>) => unknown) => (selector ? selector(stateOf()) : stateOf()),
-    { getState: stateOf },
-  );
-  // useSessionStore:异常收敛检测读 messages(error/stopped 终结标记)。默认空历史=正常收敛。
-  const useSessionStore = Object.assign(
-    (selector?: (s: { messages: unknown[] }) => unknown) =>
-      (selector ? selector({ messages: mocks.messages }) : { messages: mocks.messages }),
-    { getState: () => ({ messages: mocks.messages }) },
-  );
   return {
-    usePluginContext: () => ({ sessions, messaging, notify, events }),
-    useUiStore,
-    useSessionStore,
-    // goal 的「用户插队让路」判据从读 useUiStore.pendingQueue 改成调 hasPendingUserSend
-    // (会话作用域派生层,设计 docs/design/session-scope.md §2.4.5:只看当前会话的队列)。
-    // 本测试在框架边界 mock @my-harness-desktop/react(续跑逻辑全真跑),所以这里提供
-    // hasPendingUserSend,读测试既有的 mocks.pendingQueue 模拟「有无排队用户消息」——
-    // 与迁移前 userSendPending 读 useUiStore.getState().pendingQueue 同一语义、同一测试 seam。
-    hasPendingUserSend: () => Object.values(mocks.pendingQueue).some((l) => l.length > 0),
+    ...actual,   // 作用域 hook / useUiStore / useSessionStore / hasPendingUserSend 全部真跑
+    usePluginContext: () => ({
+      sessions,
+      messaging: { prompt: mocks.prompt },
+      notify: { show: mocks.notify },
+      events: { emit: mocks.eventsEmit, on: vi.fn(() => () => {}) },
+    }),
   };
 });
 
-import { useGoalController, runGoalCommand, __resetGoalStoreForTests } from "./goal-controller";
+import { useGoalController, runGoalCommand } from "./goal-controller";
+import { useUiStore, useSessionStore, enqueueMessage, clearQueue } from "@my-harness-desktop/react";
+import { __resetScopesForTests } from "../../../../../src/web/stores/session-scope";
+import { ensureGoalSlotsRegistered, GoalPluginWrapper } from "./test-harness";
+
+// 真实注册 goal 的槽声明 + 提供 PluginIdContext(生产由 plugins-host 与槽壳做,测试补齐)。
+// 不 mock 作用域容器:mock 掉就测不出「按会话隔离」这件迁移的核心目的。
+ensureGoalSlotsRegistered();
+
+/** 测试用的会话身份切换(生产路径同款:写 ui-store 的身份字段,scopeKey 随之变)。 */
+const SESSION_A_PATH = "/p/a.jsonl";
+function activateSession(ns: string | null, path: string | null = ns ? `/p/${ns}.jsonl` : null): void {
+  act(() => {
+    useUiStore.setState({ currentNeutralSessionId: ns, currentSessionPath: path, currentCwd: "/p" });
+  });
+}
 
 function emit(e: SessionEvent): void {
   act(() => { mocks.onEventCb?.(e); });
@@ -86,15 +87,16 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.notify.mockResolvedValue(undefined);
     mocks.eventsEmit.mockReset();
     mocks.onEventCb = null;
-    mocks.pendingQueue = {};
-    mocks.generalConfig = {}; // 通用配置默认空(代码兜底 1000)
-    mocks.neutralSessionId = null;
-    mocks.messages = []; // 默认无历史=正常收敛(异常收敛检测)
-    __resetGoalStoreForTests(); // 模块级目标态(抗重挂载单例)测试间隔离
+    mocks.onKernelEventCb = null;
+    // 真实 store 复位:作用域容器清空 + 身份指向 A 会话 + 消息历史清空 + 通用配置清空
+    __resetScopesForTests();
+    useUiStore.setState({ currentNeutralSessionId: "ns-a", currentSessionPath: SESSION_A_PATH, currentCwd: "/p", generalConfig: {} });
+    useSessionStore.setState({ messages: [], sessionInfos: null });
+    clearQueue();
   });
 
   it("set_goal → 续跑 → achieve_goal → 停止(完整闭环)", () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     // 模型调 set_goal → 建立 active 目标
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "写 README" } });
@@ -117,7 +119,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("用户停止(pause)后不再续跑,恢复(resume)后继续", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "x" } });
     act(() => { result.current.pause(); });
@@ -139,7 +141,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("编辑(edit)下次续跑生效,关闭(clear)后不再续跑", () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "旧目标" } });
     act(() => { result.current.edit("新目标"); });
@@ -159,7 +161,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     mocks.openSession.mockResolvedValue({
       info: { custom: { goal: { objective: "持久化目标", phase: "active", round: 2, maxRounds: 8 } } },
     });
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await Promise.resolve(); });
 
     // 恢复:窗口刷新后目标从 custom.goal 读回;active 目标立即装弹续跑(2→3 轮),不因刷新停摆
@@ -172,38 +174,40 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     // updateHeader 落 custom.goal
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "新目标" } });
     expect(mocks.updateHeader).toHaveBeenCalledWith(
-      "/p/s.jsonl",
+      "/p/a.jsonl",
       { custom: { goal: expect.objectContaining({ objective: "新目标", phase: "active", round: 3 }) } },
     );
   });
 
   it("水合经中立 ns 调 openSession,不是投影 sessionPath(根因守卫:投影路径查不到中立层)", async () => {
-    // 生产里 currentSessionPath 是投影文件路径(<cwd>/…/<rootLineageId>.jsonl),openSession 只认中立 ns——
-    // 用 path 调 → neutralStore.get(path) 查不到 → goal 重启/切会话不水合。守卫:ns 在时按 ns 调。
-    mocks.neutralSessionId = "ns-real-uuid";
+    // 根因(commit f20248c1):生产里 currentSessionPath 是投影文件路径,而 openSession 只认中立 ns——
+    // 用 path 调 → neutralStore.get(path) 查不到 → goal 重启/切会话不水合。
+    // 守卫要有效,身份必须设成「ns 与投影路径不同形」,否则传哪个都过(断言无牙)。
+    useUiStore.setState({ currentNeutralSessionId: "ns-real-uuid", currentSessionPath: "/p/完全不同的投影路径.jsonl" });
     mocks.openSession.mockResolvedValue({
       info: { custom: { goal: { objective: "按 ns 恢复", phase: "paused", round: 0, maxRounds: 5 } } },
     });
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await Promise.resolve(); });
     // openSession 必须拿中立 ns,不是投影路径
     expect(mocks.openSession).toHaveBeenCalledWith("ns-real-uuid");
+    expect(mocks.openSession).not.toHaveBeenCalledWith("/p/完全不同的投影路径.jsonl");
     // 且目标从 custom.goal 水合回(paused 不装弹)
     expect(result.current.goal?.objective).toBe("按 ns 恢复");
     expect(result.current.goal?.phase).toBe("paused");
   });
 
   it("关闭(clear)落盘 goal=null 删键", () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "x" } });
     act(() => { result.current.clear(); });
-    expect(mocks.updateHeader).toHaveBeenLastCalledWith("/p/s.jsonl", { custom: { goal: null } });
+    expect(mocks.updateHeader).toHaveBeenLastCalledWith("/p/a.jsonl", { custom: { goal: null } });
   });
 
   // —— 用户 /goal 命令(人敲,与模型 set_goal 互补)——
 
   it("/goal <目标>:所见即所得——目标落状态 + 返回 {send:目标正文} 交 timeline 真发(不吞不改写)", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     let handled: Awaited<ReturnType<typeof runGoalCommand>> | undefined;
     await act(async () => { handled = await runGoalCommand("/goal 把测试全跑绿"); });
@@ -216,7 +220,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     expect(result.current.goal?.round).toBe(0);
     expect(mocks.prompt).toHaveBeenCalledTimes(0);
     expect(mocks.updateHeader).toHaveBeenCalledWith(
-      "/p/s.jsonl",
+      "/p/a.jsonl",
       { custom: { goal: expect.objectContaining({ objective: "把测试全跑绿", round: 0 }) } },
     );
 
@@ -235,7 +239,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("/goal <目标>:忙时(回合在飞)不立即发,由在飞回合的 agentSettled 触发首轮", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     emit({ type: "agentStart" }); // 回合在飞
     await act(async () => { await runGoalCommand("/goal 忙时设置"); });
@@ -249,7 +253,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("/goal stop·resume·edit·clear 子命令走同一状态机", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     await act(async () => { await runGoalCommand("/goal 原目标"); });
     expect(result.current.goal?.phase).toBe("active");
@@ -268,12 +272,12 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
 
     await act(async () => { await runGoalCommand("/goal clear"); });
     expect(result.current.goal).toBeNull();
-    expect(mocks.updateHeader).toHaveBeenLastCalledWith("/p/s.jsonl", { custom: { goal: null } });
+    expect(mocks.updateHeader).toHaveBeenLastCalledWith("/p/a.jsonl", { custom: { goal: null } });
   });
 
   it("/goal limit <n>:只换上限——到顶停摆的目标提高后空闲即装弹续跑", async () => {
-    mocks.generalConfig = {};
-    const { result } = renderHook(() => useGoalController());
+    useUiStore.setState({ generalConfig: {} });
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     // 建一个上限 2 的目标并跑到到顶(round=2,active 但 shouldContinue 不成立)
     await act(async () => { await runGoalCommand("/goal 短上限目标"); });
@@ -297,7 +301,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("/goal limit:畸形参数降级状态提示,不动目标;无目标时提示而非崩溃", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 原目标"); });
     const before = result.current.goal;
     await act(async () => { await runGoalCommand("/goal limit abc"); });
@@ -306,15 +310,15 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("创建目标时读取通用配置 goal.maxRounds 作为默认上限(进行中目标不受后续配置变更影响)", async () => {
-    mocks.generalConfig = { "goal.maxRounds": 500 };
-    const { result } = renderHook(() => useGoalController());
+    useUiStore.setState({ generalConfig: { "goal.maxRounds": 500 } });
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 配置上限目标"); });
     expect(result.current.goal?.maxRounds).toBe(500);
     emit({ type: "agentSettled" });
     expect(mocks.prompt.mock.calls[0][0]).toContain("Round: 1/500");
 
     // 配置后改不动存量目标(固化在状态里,设计 §11 QA)
-    mocks.generalConfig = { "goal.maxRounds": 5000 };
+    useUiStore.setState({ generalConfig: { "goal.maxRounds": 5000 } });
     expect(result.current.goal?.maxRounds).toBe(500);
   });
 
@@ -323,7 +327,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     try {
       mocks.prompt.mockReset();
       mocks.prompt.mockRejectedValue(new Error("会话未启动，请先选择模型"));
-      const { result } = renderHook(() => useGoalController());
+      const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
       await act(async () => { await runGoalCommand("/goal 会失败的目标"); });
       emit({ type: "agentSettled" }); // 第 1 轮触发发送(将失败)
@@ -347,11 +351,11 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("异常收敛不续跑:报错回合转 paused 并显形;人为中断转 paused(§5.2)", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 异常收敛目标"); });
 
     // 报错收敛:最后一条 assistant 消息 error=true(messageEnd 已先于 agentSettled 落 store)
-    mocks.messages = [{ role: "assistant", content: "x", error: true }];
+    useSessionStore.setState({ messages: [{ role: "assistant", content: "x", error: true }] as never });
     emit({ type: "agentSettled" });
     expect(result.current.goal?.phase).toBe("paused");
     expect(result.current.sendError).toBeTruthy();
@@ -365,16 +369,16 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
 
     // 人为中断:stopped=true → 转 paused,不发错误通知(人在场,不是故障)
     mocks.notify.mockClear();
-    mocks.messages = [{ role: "assistant", content: "x", stopped: true }];
+    useSessionStore.setState({ messages: [{ role: "assistant", content: "x", stopped: true }] as never });
     emit({ type: "agentSettled" });
     expect(result.current.goal?.phase).toBe("paused");
     expect(mocks.notify).not.toHaveBeenCalled();
   });
 
   it("正常收敛不受终结检测影响:最后一条 assistant 无标记 → 照常续跑", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 正常目标"); });
-    mocks.messages = [{ role: "assistant", content: "活干完了" }];
+    useSessionStore.setState({ messages: [{ role: "assistant", content: "活干完了" }] as never });
     emit({ type: "agentSettled" });
     expect(result.current.goal?.phase).toBe("active");
     expect(result.current.goal?.round).toBe(1);
@@ -382,7 +386,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("后台归账:后台会话的 set_goal 写那个会话自己的头行,不动当前目标、不续跑(§9.1)", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 前台目标"); });
     const promptCalls = mocks.prompt.mock.calls.length;
 
@@ -408,11 +412,11 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("后台归账忽略激活会话(视图流已捕获,不双写)与未物化键", async () => {
-    renderHook(() => useGoalController());
+    renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => {
       mocks.onKernelEventCb?.({
         kind: "session",
-        sessionKey: "/p/s.jsonl", // 激活会话(mock stateOf 的 currentSessionPath)
+        sessionKey: "ns-a", // 激活会话(归一后 = 当前 scopeKey)
         event: { type: "toolCallStart", toolName: "set_goal", args: { objective: "x" } } as SessionEvent,
       });
       mocks.onKernelEventCb?.({
@@ -426,7 +430,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("控制动作留痕:停/恢复/改/提限/删各出一条 goal_note 注解(中立层,机读 JSON)", async () => {
-    renderHook(() => useGoalController());
+    renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 留痕目标"); });
     await act(async () => { await runGoalCommand("/goal stop"); });
     await act(async () => { await runGoalCommand("/goal resume"); });
@@ -436,22 +440,22 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     const notes = mocks.annotate.mock.calls.map((c) => JSON.parse(c[2] as string).action);
     expect(notes).toEqual(["pause", "resume", "edit", "limit", "clear"]);
     for (const c of mocks.annotate.mock.calls) {
-      expect(c[0]).toBe("/p/s.jsonl"); // 写当前会话
+      expect(c[0]).toBe("/p/a.jsonl"); // 写当前会话
       expect(c[1]).toBe("goal_note");
     }
   });
 
   it("引擎自动迁移也留痕:异常收敛自动暂停出注解卡", async () => {
-    renderHook(() => useGoalController());
+    renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 异常目标"); });
-    mocks.messages = [{ role: "assistant", content: "x", error: true }];
+    useSessionStore.setState({ messages: [{ role: "assistant", content: "x", error: true }] as never });
     emit({ type: "agentSettled" });
     expect(mocks.annotate).toHaveBeenCalledTimes(1);
     expect(JSON.parse(mocks.annotate.mock.calls[0][2] as string).action).toBe("auto_pause_error");
   });
 
   it("裸 /goal 查看状态(通知);无目标时子命令提示而非崩溃(仍吞发送)", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     void result;
 
     let handled: Awaited<ReturnType<typeof runGoalCommand>> | undefined;
@@ -466,7 +470,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("已有目标时裸 /goal 回显当前状态", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 状态回显目标"); });
 
     await act(async () => { await runGoalCommand("/goal"); });
@@ -477,7 +481,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("非 /goal 文本放行(返回 false,照常发送)", async () => {
-    renderHook(() => useGoalController());
+    renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     let handled: Awaited<ReturnType<typeof runGoalCommand>> | undefined;
     await act(async () => { handled = await runGoalCommand("普通消息"); });
@@ -488,7 +492,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("goal:state 状态广播:全量快照(消费方取 phase 着色,paused/achieved/无目标可区分)", async () => {
-    renderHook(() => useGoalController());
+    renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     const phases = (): (string | null)[] =>
       mocks.eventsEmit.mock.calls.map((c) => (c[1] as { goal: { phase: string } | null }).goal?.phase ?? null);
@@ -511,7 +515,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("模型 set_goal / achieve_goal 也广播(工具路径与命令路径同收口)", () => {
-    renderHook(() => useGoalController());
+    renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "工具设的目标" } });
     expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: expect.objectContaining({ phase: "active" }) });
@@ -521,7 +525,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("用户输入插队:收敛时有排队用户消息 → 本次不续跑不进轮次,队列清空后的收敛再续", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 插队测试目标"); });
     expect(mocks.prompt).toHaveBeenCalledTimes(0); // set 不装弹,kickoff 收敛才接第 1 轮
 
@@ -530,14 +534,14 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     expect(mocks.prompt).toHaveBeenCalledTimes(1);
 
     // 流式期用户排队了一条消息(经 timeline 入 ui-store.pendingQueue)
-    mocks.pendingQueue = { s: [{ id: "u1" }] };
+    enqueueMessage("用户插队的一条");
     emit({ type: "agentSettled" });
     expect(mocks.prompt).toHaveBeenCalledTimes(1); // 续跑让路,没抢发
     expect(result.current.goal?.round).toBe(1); // 轮次不空转
 
     // 用户消息发出、回合收敛、队列已清 → 续跑接上(先 flush 第 1 轮的落定微任务)
     await act(async () => { await Promise.resolve(); });
-    mocks.pendingQueue = {};
+    clearQueue();
     emit({ type: "agentSettled" });
     expect(mocks.prompt).toHaveBeenCalledTimes(2);
     expect(result.current.goal?.round).toBe(2);
@@ -545,23 +549,23 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("用户输入插队:排队未清时恢复也不即时装弹,等用户回合收敛再续", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
     await act(async () => { await runGoalCommand("/goal 恢复插队目标"); });
     await act(async () => { await runGoalCommand("/goal stop"); });
     const calls = mocks.prompt.mock.calls.length;
 
-    mocks.pendingQueue = { s: [{ id: "u2" }] };
+    enqueueMessage("用户插队的一条");
     await act(async () => { await runGoalCommand("/goal resume"); });
     expect(result.current.goal?.phase).toBe("active"); // 状态恢复
     expect(mocks.prompt).toHaveBeenCalledTimes(calls); // 但不抢发,让位排队用户输入
 
-    mocks.pendingQueue = {};
+    clearQueue();
     emit({ type: "agentSettled" }); // 用户消息的回合收敛
     expect(mocks.prompt).toHaveBeenCalledTimes(calls + 1); // 续跑此时才接上
   });
 
   it("续跑撞上在飞(慢 RPC):轮次不丢不空转——欠账挂起,inflight 落定按最新状态补发(「三轮只发两轮」根因回归)", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     // 让 continue 的在飞窗口可控
     let release: (() => void) | null = null;
@@ -585,7 +589,7 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
   });
 
   it("欠账挂起期间用户暂停:inflight 落定不补发(尊重最新阶段)", async () => {
-    const { result } = renderHook(() => useGoalController());
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
 
     let release: (() => void) | null = null;
     mocks.prompt.mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
