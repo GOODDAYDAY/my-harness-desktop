@@ -321,6 +321,9 @@ export {
 } from "@my-harness-desktop/shared";
 // renderer 运行时状态(stores 实体在 api/renderer/stores,此处 re-export 保插件 import 不变)
 export * from "../../../src/web/stores/ui-store";
+// 会话级待执行意图(模型 pending / 排队 / 草稿 / 工具过滤)——存储走会话作用域容器,
+// 消费方不再手拼 key(设计 docs/design/session-scope.md §2.6)
+export * from "../../../src/web/stores/session-pending";
 export { useLayoutStore, useGroupHidden } from "../../../src/web/stores/layout-store";
 export { useSessionStore, initSessionStore } from "../../../src/web/stores/session-store";
 export { buildToolLimitNote, stripToolLimitNote, getInflightToolCalls } from "../../../src/web/stores/session-store";

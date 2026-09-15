@@ -57,6 +57,12 @@ vi.mock("@my-harness-desktop/react", () => {
     usePluginContext: () => ({ sessions, messaging, notify, events }),
     useUiStore,
     useSessionStore,
+    // goal 的「用户插队让路」判据从读 useUiStore.pendingQueue 改成调 hasPendingUserSend
+    // (会话作用域派生层,设计 docs/design/session-scope.md §2.4.5:只看当前会话的队列)。
+    // 本测试在框架边界 mock @my-harness-desktop/react(续跑逻辑全真跑),所以这里提供
+    // hasPendingUserSend,读测试既有的 mocks.pendingQueue 模拟「有无排队用户消息」——
+    // 与迁移前 userSendPending 读 useUiStore.getState().pendingQueue 同一语义、同一测试 seam。
+    hasPendingUserSend: () => Object.values(mocks.pendingQueue).some((l) => l.length > 0),
   };
 });
 

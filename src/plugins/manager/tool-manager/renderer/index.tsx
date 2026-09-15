@@ -5,6 +5,7 @@ import { Wrench, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Clock, 
 import {
   usePluginContext,
   useUiStore,
+  usePendingToolConfig,
   EmptyState,
   Button,
   type SettingsComponentProps,
@@ -455,7 +456,10 @@ function GroupEditRow({ allTools, onSave, onCancel }: {
 export function ToolPanelTab(): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
-  const { currentCwd, currentSessionPath, sessionTitle, pendingToolConfig, setPendingToolConfig } = useUiStore();
+  const { currentCwd, currentSessionPath, sessionTitle } = useUiStore();
+  // 工具偏好从会话作用域读(设计 docs/design/session-scope.md §4.6.5):key 由作用域承担,
+  // 此前形态是「单值内嵌 sessionPath + 读取侧比对」——那正是手动实现作用域的样子。
+  const [pendingToolConfig, setPendingToolConfig] = usePendingToolConfig();
   const allTools = useDiscoveredTools();
   const { groups, loading } = useToolGroups(currentCwd);
   const headerConfig = useSessionToolConfig(currentSessionPath);
@@ -474,13 +478,13 @@ export function ToolPanelTab(): React.ReactNode {
 
   // 偏好/落盘两态(composerApplyTiming 同语义):开关只写 pending(内存偏好),
   // timeline send() 才 flush 到头行。flushed 的 pending 仍作显示值——它等于最新落盘值,避免跳变。
-  const pending = currentSessionPath && pendingToolConfig?.sessionPath === currentSessionPath ? pendingToolConfig : null;
+  // 作用域隔离保证 A 会话的偏好物理上落不进 B 的域,不再需要 sessionPath 比对。
+  const pending = pendingToolConfig;
 
   const pushPending = useCallback((enabledGroupIds: string[]): void => {
     if (!currentSessionPath) return;
     // enabledToolIds 随偏好展开落好(flush 直写头行,tool-gate 只认该字段,不回退组展开)
     setPendingToolConfig({
-      sessionPath: currentSessionPath,
       config: { enabledGroupIds, enabledToolIds: computeEnabledToolIds(groups, enabledGroupIds, allTools) },
       flushed: false,
     });
@@ -510,7 +514,6 @@ export function ToolPanelTab(): React.ReactNode {
     setEnabledIds(new Set(defaults));
     if (currentSessionPath) {
       setPendingToolConfig({
-        sessionPath: currentSessionPath,
         config: { enabledGroupIds: defaults, enabledToolIds: computeEnabledToolIds(groups, defaults, allToolsRef.current) },
         flushed: false,
       });

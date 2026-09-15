@@ -14,6 +14,11 @@ import { create } from "zustand";
 import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent, KernelId, ImageInput, DisplayMeta } from "@my-harness-desktop/shared";
 import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/shared";
 import { useUiStore } from "./ui-store";
+import { useSessionScopeStore } from "./session-scope";
+import {
+  readModelPending, clearModelPending, clearComposerDraft,
+  readPendingToolConfig, writePendingToolConfig,
+} from "./session-pending";
 import { initNeutralMirror, useNeutralMirror, mirrorMessages } from "./neutral-mirror";
 
 // ============ 内容镜像 + 执行态叠加(session-single-source §2.2/§3.2)============
@@ -291,13 +296,15 @@ function patchStateFromEvent(state: SessionState, event: SessionEvent): SessionS
 
 /** 三级模型偏好解析(发送/续跑共用):pending(点选内存) > 会话头(已持久化) > 兜底首项。
  *  pending 键必须与 timeline 的写入键一致(§kernel-forkless §32 主键迁移后 timeline 用
- *  currentNeutralSessionId 写 sessionModelPending):用 path 键读会永远 miss,导致
- *  「选了 dsh 模型却回落 header/兜底 → 调度到 pi」。活会话=neutralSessionId,新会话壳=`new:${cwd}`。
+ *  currentScopeKey 读模型意图槽):用 path 键读会永远 miss,导致
+ *  「选了 dsh 模型却回落 header/兜底 → 调度到 pi」。作用域 key 的口径由圆心 sessionScopeKey
+ *  单源给出(活会话=中立主键 ns,新会话壳=`new:${cwd}`),消费方不再各自拼装。
  *  兜底失败抛错,由调用方决定如何显形。 */
 async function resolveSessionModelPrefs(cwd: string): Promise<SessionModelPrefs | undefined> {
   const ui = useUiStore.getState();
-  const pendingKey = ui.currentNeutralSessionId ?? (cwd ? `new:${cwd}` : null);
-  const pending = pendingKey ? ui.sessionModelPending[pendingKey] : undefined;
+  // 模型意图从会话作用域读(设计 session-scope.md §2.6.1):key 由 currentScopeKey 内部消化,
+  // 不再在此手拼 `ns ?? new:${cwd}`——那正是「同一会话在不同消费方是两个 key」的根源。
+  const pending = readModelPending();
   if (pending) return pending;
   if (ui.currentSessionPath) return (await readHeaderPrefs(cwd, ui.currentSessionPath)) ?? undefined;
   // 新会话且无 pending:显式对齐默认/首项模型(根因同旧注释,勿回退)。
@@ -566,20 +573,20 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
     }
     const ui = useUiStore.getState();
-    // pendingKey 仍按 §32 主键口径单独留档:发送成功后清 pending 用(resolveSessionModelPrefs 已消费其值)。
-    const pendingKey = ui.currentNeutralSessionId ?? (cwd ? `new:${cwd}` : null);
-    const pending = pendingKey ? ui.sessionModelPending[pendingKey] : undefined;
+    const pending = readModelPending();
 
     let finalText = text;
     let toolFilterFlushed: { custom: boolean; count: number } | undefined;
     const sessionPath = ui.currentSessionPath;
     if (sessionPath) {
       try {
-        const pendingTools = ui.pendingToolConfig?.sessionPath === sessionPath ? ui.pendingToolConfig : null;
+        // 工具偏好从会话作用域读:key 由作用域承担,不再需要「内嵌 sessionPath + 读取侧比对」
+        // 那套手动作用域(设计 session-scope.md §4.6.5)。A 会话的偏好物理上落不进 B 的域。
+        const pendingTools = readPendingToolConfig();
         let toolCfg: SessionToolConfig | null;
         if (pendingTools && !pendingTools.flushed) {
           await window.kernel.sessions.updateHeader(sessionPath, { toolConfig: pendingTools.config });
-          ui.setPendingToolConfig({ ...pendingTools, flushed: true });
+          writePendingToolConfig({ ...pendingTools, flushed: true });
           toolCfg = pendingTools.config;
           toolFilterFlushed = { custom: toolCfg != null, count: toolCfg?.enabledToolIds?.length ?? 0 };
         } else {
@@ -645,13 +652,14 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       return { ok: false, reason: "modelPrefs", error: err instanceof Error ? err.message : String(err) };
     }
     // 执行成功才消费意图(session-model-config.md §4.1):pending 保留到此刻,失败不吞。
-    if (pending && pendingKey) {
-      ui.clearSessionModelPending(pendingKey);
-    }
+    if (pending) clearModelPending();
     // 新会话物化(new: → 真身)的草稿清账(根因修复,勿回退):物化是事件异步,晚于发送
     // 完成是常态——草稿 hook 在键变更那一刻会把当前文本存回 new: 键,下次新会话(⌘N)
     // 复活已发送的文本。发送成功即清 new: 键残留(对既有会话是无害 no-op)。
-    ui.clearComposerDraft(`new:${cwd}`);
+    // 新会话物化(new: → 真身)的草稿清账(根因修复,勿回退):物化是事件异步,晚于发送完成
+    // 是常态——草稿 hook 在键变更那一刻会把当前文本存回壳键域,下次新会话(⌘N)复活已发送
+    // 的文本。发送成功即清壳键域残留(对既有会话是无害 no-op)。
+    clearComposerDraft(`new:${cwd}`);
     set((s) => ({ lastSendNonce: s.lastSendNonce + 1 }));
     return { ok: true, toolFilterFlushed };
   },
@@ -698,7 +706,10 @@ export function hydrateSessionStart(event: SessionEvent): void {
   // 之前那版把"已修"寄托在头域镜像 → applyHeaderPatch 上,但新会话那一刻 sessionInfos
   // 里还没有这一行,补丁被早退丢弃且不重试 —— 修的是"陈旧",没修"键漂移"。
   if (cwd && prevNs === null && ns) {
-    useUiStore.getState().carrySessionKey(`new:${cwd}`, ns);
+    // 会话作用域搬迁(设计 session-scope.md §2.3.2):carry 遍历注册表按各槽策略搬,
+    // 加第 N 张按会话的表机制层零改动——此前 carrySessionKey 硬编码三个字段名,
+    // 于是 review 的第四张表只能自己手写迁移、goal 的第五张连迁移都没写。
+    useSessionScopeStore.getState().carry(`new:${cwd}`, ns);
   }
   // 新会话物化(首条消息落盘)在此刻才有 id:补记"该项目上次看的会话"。
   // 不写这一步,新会话壳期间的切换就没人记——下次切回该项目会回到更早那个会话。

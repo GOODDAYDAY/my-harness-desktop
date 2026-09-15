@@ -108,7 +108,7 @@ function mockWindow(): void {
 
 beforeEach(() => {
   mockWindow();
-  useUiStore.setState({ currentCwd: "/proj", currentSessionPath: null, sessionModelPending: {}, pendingToolConfig: undefined });
+  useUiStore.setState({ currentCwd: "/proj", currentSessionPath: null });
   useSessionStore.setState({ messages: [], snapshot: null });
   initSessionStore();
 });
@@ -145,7 +145,7 @@ describe("展示元数据(图)进中立层(neutral-first)", () => {
       stats: null,
     };
     (window as unknown as { kernel: { sessions: { openSession: () => Promise<unknown> } } }).kernel.sessions.openSession = async () => detail;
-    useUiStore.setState({ currentCwd: "/proj", currentSessionPath: "/s/b.jsonl", sessionModelPending: {} });
+    useUiStore.setState({ currentCwd: "/proj", currentSessionPath: "/s/b.jsonl" });
     await useSessionStore.getState().openSession("/s/b.jsonl");
     const user = useSessionStore.getState().messages.find((m) => m.role === "user");
     expect((user as { __image?: { src: string } }).__image).toEqual({ src: "~/.my-harness-desktop/s/b.png" });

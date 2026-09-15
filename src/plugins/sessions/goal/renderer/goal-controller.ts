@@ -20,7 +20,7 @@
 // 否则没有任何东西会触发 agentSettled,active 目标会静默停摆;忙时交给在飞回合的 agentSettled。
 // (/goal set 不装弹:目标正文消息本身就是 kickoff 回合,它的 agentSettled 自然接第一轮。)
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePluginContext, useUiStore, useSessionStore } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, hasPendingUserSend } from "@my-harness-desktop/react";
 import type { ComposerCommandResult, NeutralMessage } from "@my-harness-desktop/shared";
 import type { GoalState } from "../core/goal-state";
 import { createGoal, editGoal, GOAL_NOTE_ROLE, parseGoal, parseGoalCommand, pauseGoal, resumeGoal, setGoalMaxRounds, shouldContinue } from "../core/goal-state";
@@ -78,12 +78,15 @@ export function __resetGoalStoreForTests(): void {
   notifyGoalListeners();
 }
 
-/** 是否有排队中的用户发送(timeline 流式期入队的待发消息)。只读框架 store(§8.2 允许)。
+/** 是否有排队中的用户发送(timeline 流式期入队的待发消息)。只读框架作用域槽(§8.2 允许)。
  *  goal 续跑对用户输入让路=「用户插队」:有待发用户消息时,续跑不抢发,等用户消息
- *  的回合收敛后再续(用户要求 #5)。失败重挂篮的条目同样压住续跑——用户需先处置。 */
+ *  的回合收敛后再续(用户要求 #5)。失败重挂篮的条目同样压住续跑——用户需先处置。
+ *
+ *  只看**当前会话**的队列:此前实现扫的是全部会话的队列(Object.values(queues).some(…)),
+ *  于是 B 会话里排队的消息会压住 A 会话的续跑——跨会话泄漏,与「按会话隔离」的语义相反
+ *  (设计 docs/design/session-scope.md §2.4.5:让路语义是「这个会话里有用户待发消息」)。 */
 function userSendPending(): boolean {
-  const queues = useUiStore.getState().pendingQueue;
-  return Object.values(queues).some((list) => list.length > 0);
+  return hasPendingUserSend();
 }
 
 /** 异常收敛检测(设计 §5.2):回合收敛时看最后一条 assistant 消息的终结标记。

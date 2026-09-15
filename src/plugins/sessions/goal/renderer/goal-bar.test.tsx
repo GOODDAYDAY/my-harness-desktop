@@ -74,6 +74,9 @@ vi.mock("@my-harness-desktop/react", () => {
     usePluginContext: () => ({ sessions, messaging, notify, events }),
     useUiStore,
     useSessionStore,
+    // 同 goal-controller.test:插队让路判据已迁到会话作用域派生层的 hasPendingUserSend,
+    // 本测试在框架边界 mock react,提供它读 mocks.pendingQueue(同一测试 seam)。
+    hasPendingUserSend: () => Object.values(mocks.pendingQueue).some((l) => l.length > 0),
   };
 });
 

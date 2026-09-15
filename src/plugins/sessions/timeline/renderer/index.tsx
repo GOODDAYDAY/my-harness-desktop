@@ -16,6 +16,7 @@ import { foldToolResults } from "../core/tool-result-fold";
 import { parseImageContent } from "../core/attach-images";
 import { MessageMeta } from "./MessageMeta";
 import { useSessionDraft } from "./use-session-draft";
+import { useModelPending, usePendingQueue, useCurrentScopeKey } from "@my-harness-desktop/react";
 
 export const channels = ["timeline:scrollTo", "timeline:rewindRequested", "timeline:composerAttachments", "timeline:focusComposer", "timeline:cycleModel", "timeline:cycleThinking"] as const;
 
@@ -108,15 +109,16 @@ export function TimelineView(): React.ReactNode {
   // 经 props 传给纯 UI 的 Composer,避免 Composer 叶子直接读 window.kernel 全局(依赖倒置)。
   const kernelOrder = useMemo(() => Object.keys(ctx.kernels) as KernelId[], [ctx.kernels]);
   const { t } = useTranslation();
-  const {
-    currentCwd, currentNeutralSessionId, sessionModelPending, setSessionModelPending,
-    pendingQueue, enqueueMessage, removeFromQueue, clearQueue, markQueueFailed, markQueueItemFailed, clearQueueFailed,
-  } = useUiStore();
+  const { currentCwd, currentNeutralSessionId } = useUiStore();
+  // 会话级待执行意图全部经会话作用域读(设计 docs/design/session-scope.md §2.6):
+  // key 由框架内部消化,切会话自动换档,本组件不再手拼 `ns ?? new:${cwd}`。
+  const [pending, setModelPending] = useModelPending();
+  const [queue, queueApi] = usePendingQueue();
+  // scopeKey 只作「有无激活会话」的闸门(队列操作/发送编排都需要有会话才成立)。
+  const scopeKey = useCurrentScopeKey();
   const { snapshot, messages, streaming, switching, thinkingLevels, capabilities, syncNonce, openNonce, lastSendNonce } = useSessionStore();
-  // 输入框草稿按会话 key 隔离:活会话=neutralSessionId,新会话壳=`new:${cwd}`。
-  // 保存/恢复逻辑在 useSessionDraft(见 use-session-draft.ts,可 DOM e2e 单测)。
-  const draftKey = currentNeutralSessionId ?? (currentCwd ? `new:${currentCwd}` : null);
-  const [input, setInput] = useSessionDraft(draftKey);
+  // 输入框草稿按会话隔离:key 解析与换档都在 useSessionDraft 内(见 use-session-draft.ts)。
+  const [input, setInput] = useSessionDraft();
   // 供 sendText 读最新输入框内容(判断「发的是不是输入框内容」决定是否清输入框),
   // 避免 sendText 依赖 input state 导致 stickers:send 订阅随每次按键重建。
   const inputRef = useRef(input);
@@ -467,8 +469,7 @@ export function TimelineView(): React.ReactNode {
 
   // 显示链(设计 §4.2):pending > 快照/头 > 默认。活会话快照是实时真相;
   // 历史会话(进程没起)读头行 model 域;新会话壳读默认配置层。
-  const pendingKey = currentNeutralSessionId ?? (currentCwd ? `new:${currentCwd}` : null);
-  const pending = pendingKey ? sessionModelPending[pendingKey] : undefined;
+  // pending 来自会话作用域槽(useModelPending),身份算法单源、不再手拼 key。
   const headerPrefs = parseSessionModelPrefs(sessionCustom ?? undefined);
 
   const matchedPolicy = sessionCustom && composerPolicies.length > 0
@@ -616,9 +617,8 @@ export function TimelineView(): React.ReactNode {
       return;
     }
     // onSend:记内存 pending(含内核标 m.kernel,send 时透传给 setModel,不反查)。
-    if (pendingKey) {
-      setSessionModelPending(pendingKey, { provider: m.provider, modelId: m.id, thinkingLevel: currentLevel, kernel: m.kernel });
-    }
+    // 无激活会话时写口自动丢弃(设计 §2.4.5:undefined 态 setter 是空操作)。
+    setModelPending({ provider: m.provider, modelId: m.id, thinkingLevel: currentLevel, kernel: m.kernel });
   };
   const pickLevel = (l: string): void => {
     if (composerApplyTiming === "immediate") {
@@ -636,10 +636,10 @@ export function TimelineView(): React.ReactNode {
     // onSend:已有 pending 换档;无 pending 以当前显示模型为种子凑全字段。
     const provider = pending?.provider ?? currentModel?.provider;
     const modelId = pending?.modelId ?? currentModel?.id;
-    if (pendingKey && provider && modelId) {
+    if (provider && modelId) {
       // 内核标必须随 pending 一起带(§kernel-follows-model):换档不能丢 kernel,
       // 否则 send 回灌 prefs.kernel 缺失 → prompt 报「模型未携带内核归属」。
-      setSessionModelPending(pendingKey, { provider, modelId, thinkingLevel: l, kernel: pending?.kernel ?? currentModel?.kernel });
+      setModelPending({ provider, modelId, thinkingLevel: l, kernel: pending?.kernel ?? currentModel?.kernel });
     }
   };
 
@@ -835,9 +835,9 @@ export function TimelineView(): React.ReactNode {
     return [...(snapshot?.commands ?? []), ...pluginCmds];
   }, [snapshot?.commands, pluginsNonce]);
 
-  // 排队队列复用 pendingKey 形态(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
-  const queueKey = pendingKey;
-  const queue = queueKey ? (pendingQueue[queueKey] ?? []) : [];
+  // 排队队列来自会话作用域槽(usePendingQueue),切会话互不可见由作用域隔离保证。
+  // queueKey 只保留作「有无激活会话」闸门(下面几处 if (!queueKey) return 的语义)。
+  const queueKey = scopeKey;
 
   // 新评论浮层在 review 侧锚定选区弹出,无需滚动揭示;这里只剩互斥:
   // 浮层开 → 关掉"编辑已有评论"的内联框,同一时刻只许一个编辑器。
@@ -897,7 +897,7 @@ export function TimelineView(): React.ReactNode {
       return;
     }
     if (!queueKey || !currentCwd) return;
-    const q = pendingQueue[queueKey] ?? [];
+    const q = queue;
     if (q.length === 0 || q.some((x) => x.failed)) return;
     // 纯评论项 text 为空,合并时过滤,不留下前导/连续空行
     const merged = q.map((x) => x.text).filter((s) => s.trim().length > 0).join("\n\n");
@@ -905,17 +905,17 @@ export function TimelineView(): React.ReactNode {
     const snap = [...q].reverse().find((x) => (x.attachments?.items?.length ?? 0) > 0)?.attachments;
     if (!merged && !snap) {
       // 全空队列(理论上不该出现):清空不发,避免空 prompt
-      clearQueue(queueKey);
+      queueApi.clear();
       return;
     }
     const ok = await doSend(merged, snap);
     if (ok) {
-      clearQueue(queueKey);
+      queueApi.clear();
       if (q.length > 1) showToast(t("timeline.queue.mergedSent", { count: q.length }));
     } else {
-      markQueueFailed(queueKey, t("timeline.queue.sendFailed"));
+      queueApi.markFailed(t("timeline.queue.sendFailed"));
     }
-  }, [queueKey, currentCwd, pendingQueue, doSend, clearQueue, markQueueFailed, showToast, t]);
+  }, [queueKey, currentCwd, queue, queueApi, doSend, showToast, t]);
 
   /** 「立即发送」:打断当前生成,只发队列里这一条(其余条目留在队列等轮末 flush)。
    *  失败标该条 failed(flush 被阻塞,用户可编辑/移除/整队重试),不丢用户输入。
@@ -928,10 +928,10 @@ export function TimelineView(): React.ReactNode {
       await ctx.messaging.abort().catch(() => {});
       const ok = await doSend(item.text, item.attachments);
       if (ok) {
-        removeFromQueue(queueKey, item.id);
+        queueApi.remove(item.id);
         showToast(t("timeline.queue.interruptedSent"));
       } else {
-        markQueueItemFailed(queueKey, item.id, t("timeline.queue.sendFailed"));
+        queueApi.markItemFailed(item.id, t("timeline.queue.sendFailed"));
       }
     } finally {
       sendingRef.current = false;
@@ -943,7 +943,7 @@ export function TimelineView(): React.ReactNode {
         void flushQueue();
       }
     }
-  }, [queueKey, currentCwd, ctx, doSend, removeFromQueue, markQueueItemFailed, showToast, flushQueue, t]);
+  }, [queueKey, currentCwd, ctx, doSend, queueApi, showToast, flushQueue, t]);
 
   // streaming 边沿触发 flush:true→false 时(autoRetry 中 streaming 保持 true,不会误 flush)。
   const prevStreamingRef = useRef(streaming);
@@ -1015,7 +1015,7 @@ export function TimelineView(): React.ReactNode {
           : files.length > 0
             ? t("timeline.queue.filesOnly", { count: files.length })
             : undefined;
-      enqueueMessage(queueKey, fullText, snapshot, displayText);
+      queueApi.enqueue(fullText, snapshot, displayText);
       if (fromComposer) setInput("");
       setPendingFilesSync([]);
       showToast(t("timeline.queue.enqueued", { count: queue.length + 1 }));
@@ -1290,20 +1290,20 @@ export function TimelineView(): React.ReactNode {
             onEdit={(item) => {
               // 编辑 = 取出回输入框(追加语义,与 notes fillComposer 一致)。
               if (!queueKey) return;
-              removeFromQueue(queueKey, item.id);
+              queueApi.remove(item.id);
               setInput((prev) => {
                 const p = prev.trimEnd();
                 return p ? `${p}\n\n${item.text}` : item.text;
               });
             }}
-            onRemove={(id) => { if (queueKey) removeFromQueue(queueKey, id); }}
+            onRemove={(id) => { if (queueKey) queueApi.remove(id); }}
             onRetry={() => {
               if (!queueKey) return;
-              clearQueueFailed(queueKey);
+              queueApi.clearFailed();
               void flushQueue();
             }}
             onSendNow={(item) => void handleSendNow(item)}
-            onClearAll={() => { if (queueKey) clearQueue(queueKey); }}
+            onClearAll={() => { if (queueKey) queueApi.clear(); }}
           />
         )}
         {matched?.items?.length && AttachmentRenderer ? (

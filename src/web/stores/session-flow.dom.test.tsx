@@ -68,7 +68,7 @@ describe("会话流 DOM 交互(镜像读口全序列)", () => {
     cleanup();
     mockWindow();
     baseline = { session: null, activeLineageId: null };
-    useUiStore.setState({ currentCwd: "/proj", currentSessionPath: null, currentNeutralSessionId: null, sessionModelPending: {} });
+    useUiStore.setState({ currentCwd: "/proj", currentSessionPath: null, currentNeutralSessionId: null });
     useSessionStore.setState({ messages: [], overlay: [], snapshot: null, streaming: false });
   });
 

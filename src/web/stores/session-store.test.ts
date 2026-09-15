@@ -7,6 +7,14 @@ import {
   applyOverlayEvent, mergeMirrorWithOverlay, applySnapshot, useSessionStore, initSessionStore, hydrateSessionStart, refreshThinkingLevels,
 } from "./session-store";
 import { useUiStore } from "./ui-store";
+// 会话级待执行意图已迁到会话作用域容器(设计 docs/design/session-scope.md §2.6):
+// 断言对象从 ui-store 的 Record 字段改成派生层读写函数,**断言口径不变**——
+// 隔离/搬迁/清账三条语义在迁移前后必须一致(设计 §3.1.2 把本文件列为批 2 的行为门)。
+import {
+  readModelPending, writeModelPending, readComposerDraft, writeComposerDraft,
+  readPendingQueue, enqueueMessage,
+} from "./session-pending";
+import { __resetScopesForTests } from "./session-scope";
 import { sessionEntryToNeutral, type NeutralMessage, type SessionEvent, type SessionModelPrefs } from "@my-harness-desktop/shared";
 
 function n(entry: Record<string, unknown>): NeutralMessage {
@@ -180,7 +188,7 @@ describe("mergeMirrorWithOverlay → 合并视图(镜像内容 + 执行态叠加
 // 显式对齐 models.json 声明序首项,与 timeline 显示链 models[0] 兜底同源。
 describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", () => {
   beforeEach(() => {
-    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj", sessionModelPending: {} });
+    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj" });
     useSessionStore.setState({ snapshot: null, messages: [], overlay: [], lastSendNonce: 0 });
   });
 
@@ -279,7 +287,7 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
 // (透传 kernel)再 prompt,绝不落到「读头对齐/兜底」分支用旧模型。
 describe("sendMessage → pending 回灌(改模型后发送用新模型)", () => {
   beforeEach(() => {
-    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj", sessionModelPending: {} });
+    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj" });
     useSessionStore.setState({ snapshot: null, messages: [], overlay: [], lastSendNonce: 0 });
   });
 
@@ -307,9 +315,8 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
 
   it("有 pending:prefs=pending(含 kernel),一次 prompt 带全参,不落到兜底", async () => {
     const { calls, promptPrefs } = mockPi();
-    useUiStore.setState({
-      sessionModelPending: { "new:/tmp/proj": { provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" } },
-    });
+    // 新会话壳期间点选的模型:挂在壳键作用域上(身份算法由圆心 sessionScopeKey 单源给出)
+    writeModelPending({ provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" }, "new:/tmp/proj");
     const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
     expect(res.ok).toBe(true);
     expect(calls).toEqual(["prompt"]);
@@ -323,8 +330,8 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
     useUiStore.setState({
       currentNeutralSessionId: "ns-abc",
       currentSessionPath: "/tmp/proj/sessions/ns-abc.jsonl",
-      sessionModelPending: { "ns-abc": { provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" } },
     });
+    writeModelPending({ provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" }, "ns-abc");
     const res = await useSessionStore.getState().sendMessage("/tmp/proj", "hello");
     expect(res.ok).toBe(true);
     expect(calls).toEqual(["prompt"]);
@@ -339,7 +346,9 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
 // start),renderer 的 hydrateSessionStart 随即把 currentNeutralSessionId 从 null 翻成真实 ns。
 // 而所有读取侧一律用「currentNeutralSessionId ?? `new:${cwd}`」—— 翻键瞬间旧键再没人读,
 // 刚点选的那份 pending 变成孤儿,输入框在整个 spawn+首轮窗口里回落到应用默认模型。
-// 修法:翻键那一刻把旧键上的按会话暂存态整体搬到新键(ui-store.carrySessionKey)。
+// 修法:翻键那一刻把旧键上的按会话暂存态整体搬到新键。搬迁的实现已从 ui-store.carrySessionKey
+// (硬编码三个字段名)换成会话作用域容器的 carry(遍历注册表按各槽策略搬)——
+// 加第 N 张按会话的表,机制层零改动(设计 docs/design/session-scope.md §2.3.2/§3.1.2)。
 describe("sessionStart 翻键时按会话暂存的框架态必须跟着走", () => {
   beforeEach(() => {
     // hydrateSessionStart 会连带写"该项目上次看的会话"(rememberSessionForCwd → prefs.set),
@@ -353,43 +362,38 @@ describe("sessionStart 翻键时按会话暂存的框架态必须跟着走", () 
       currentCwd: "/tmp/proj",
       currentNeutralSessionId: null,
       currentSessionPath: null,
-      sessionModelPending: {},
-      pendingQueue: {},
-      composerDrafts: {},
       lastSessionByCwd: {},
     });
+    __resetScopesForTests();   // 作用域容器清空(身份解析器由 ui-store 模块级绑定,无需重设)
   });
 
   const startEvent = (ns: string) => ({ type: "sessionStart", sessionFile: `/tmp/proj/sessions/${ns}.jsonl`, neutralSessionId: ns }) as never;
 
   it("模型点选从 new:${cwd} 改挂到真实 ns(否则输入框回落默认模型)", () => {
-    useUiStore.getState().setSessionModelPending("new:/tmp/proj", { provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" });
+    writeModelPending({ provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" }, "new:/tmp/proj");
     hydrateSessionStart(startEvent("ns-real"));
-    const ui = useUiStore.getState();
-    expect(ui.sessionModelPending["ns-real"]).toEqual({ provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" });
-    expect(ui.sessionModelPending["new:/tmp/proj"]).toBeUndefined(); // 旧键不残留(残留会在下次新建时串味)
+    expect(readModelPending("ns-real")).toEqual({ provider: "p1", modelId: "m2", thinkingLevel: "high", kernel: "dsh" });
+    expect(readModelPending("new:/tmp/proj")).toBeUndefined(); // 旧键域已摘除(残留会在下次新建时串味)
   });
 
-  it("草稿与排队消息同步跟着走(三张按会话暂存的 map 一起搬,不是只搬模型那张)", () => {
-    useUiStore.getState().setComposerDraft("new:/tmp/proj", "写了一半");
-    useUiStore.getState().enqueueMessage("new:/tmp/proj", "排队的一条");
+  it("草稿与排队消息同步跟着走(全部按会话暂存的槽一起搬,不是只搬模型那个)", () => {
+    writeComposerDraft("写了一半", "new:/tmp/proj");
+    enqueueMessage("排队的一条", undefined, undefined, "new:/tmp/proj");
     hydrateSessionStart(startEvent("ns-real"));
-    const ui = useUiStore.getState();
-    expect(ui.composerDrafts["ns-real"]).toBe("写了一半");
-    expect(ui.pendingQueue["ns-real"]?.map((q) => q.text)).toEqual(["排队的一条"]);
-    expect(ui.composerDrafts["new:/tmp/proj"]).toBeUndefined();
-    expect(ui.pendingQueue["new:/tmp/proj"]).toBeUndefined();
+    expect(readComposerDraft("ns-real")).toBe("写了一半");
+    expect(readPendingQueue("ns-real").map((q) => q.text)).toEqual(["排队的一条"]);
+    // 壳键域整体摘除:草稿读回空、队列读回空
+    expect(readComposerDraft("new:/tmp/proj")).toBe("");
+    expect(readPendingQueue("new:/tmp/proj")).toEqual([]);
   });
 
   it("已有 ns 的会话再来 sessionStart(同键/回退)不搬、不覆盖目标键已有值", () => {
-    useUiStore.setState({
-      currentNeutralSessionId: "ns-real",
-      sessionModelPending: { "ns-real": { provider: "a", modelId: "a", thinkingLevel: "", kernel: "pi" }, "new:/tmp/proj": { provider: "b", modelId: "b", thinkingLevel: "", kernel: "dsh" } },
-    });
+    useUiStore.setState({ currentNeutralSessionId: "ns-real" });
+    writeModelPending({ provider: "a", modelId: "a", thinkingLevel: "", kernel: "pi" }, "ns-real");
+    writeModelPending({ provider: "b", modelId: "b", thinkingLevel: "", kernel: "dsh" }, "new:/tmp/proj");
     hydrateSessionStart(startEvent("ns-real"));
-    const p = useUiStore.getState().sessionModelPending;
-    expect(p["ns-real"]).toEqual({ provider: "a", modelId: "a", thinkingLevel: "", kernel: "pi" }); // 目标键已有值 → 不被覆盖
-    expect(p["new:/tmp/proj"]).toEqual({ provider: "b", modelId: "b", thinkingLevel: "", kernel: "dsh" }); // 非 null→ns 翻键,不触发搬迁
+    expect(readModelPending("ns-real")).toEqual({ provider: "a", modelId: "a", thinkingLevel: "", kernel: "pi" }); // 目标键已有值 → 不被覆盖(move 策略)
+    expect(readModelPending("new:/tmp/proj")).toEqual({ provider: "b", modelId: "b", thinkingLevel: "", kernel: "dsh" }); // 非 null→ns 翻键,不触发搬迁
   });
 });
 
@@ -397,7 +401,7 @@ describe("sessionStart 翻键时按会话暂存的框架态必须跟着走", () 
 // 发送当轮渲染层即能解析出引用条,不依赖落盘回放;镜像覆盖后 content 仍是全文(不丢块)。
 describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {
   beforeEach(() => {
-    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj", sessionModelPending: {} });
+    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj" });
     useSessionStore.setState({ snapshot: null, messages: [], overlay: [], lastSendNonce: 0 });
   });
 
@@ -494,8 +498,9 @@ describe("sessionEntryToNeutral → assistant 消息投影执行模型", () => {
 
 describe("sendMessage → 新会话草稿清账(「enter 后要清理」根因回归)", () => {
   beforeEach(() => {
-    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj", sessionModelPending: {}, composerDrafts: {} });
+    useUiStore.setState({ currentSessionPath: null, currentCwd: "/tmp/proj" });
     useSessionStore.setState({ snapshot: null, messages: [], overlay: [], lastSendNonce: 0 });
+    __resetScopesForTests();
   });
 
   it("发送成功:new:<cwd> 键下的草稿残留被清(物化晚于发送完成是常态,不再复活已发文本)", async () => {
@@ -513,10 +518,10 @@ describe("sendMessage → 新会话草稿清账(「enter 后要清理」根因�
       },
     });
     // 模拟物化竞态的产物:发送完成时 new: 键下仍有文本(键变更瞬间 hook 存回的)
-    useUiStore.getState().setComposerDraft("new:/tmp/proj", "已发送的正文");
+    writeComposerDraft("已发送的正文", "new:/tmp/proj");
     const res = await useSessionStore.getState().sendMessage("/tmp/proj", "已发送的正文");
     expect(res.ok).toBe(true);
-    expect(useUiStore.getState().composerDrafts["new:/tmp/proj"]).toBeUndefined();
+    expect(readComposerDraft("new:/tmp/proj")).toBe("");
   });
 
   it("发送失败:new: 键草稿保留(用户文本不丢,可改可重发)", async () => {
@@ -532,10 +537,10 @@ describe("sendMessage → 新会话草稿清账(「enter 后要清理」根因�
         },
       },
     });
-    useUiStore.getState().setComposerDraft("new:/tmp/proj", "别丢");
+    writeComposerDraft("别丢", "new:/tmp/proj");
     const res = await useSessionStore.getState().sendMessage("/tmp/proj", "别丢");
     expect(res.ok).toBe(false);
-    expect(useUiStore.getState().composerDrafts["new:/tmp/proj"]).toBe("别丢");
+    expect(readComposerDraft("new:/tmp/proj")).toBe("别丢");
   });
 });
 

@@ -8,9 +8,16 @@
 // general.json(项目性质偏好:defaultThinkingLevel 等)走分层 helper
 // (general-config.ts)——项目级覆盖全局,见 unified-project-config.md §5.4。
 // 模型/思考深度的归属已翻转(设计 docs/design/session-model-config.md):真相在会话进程
-// 与头行 model 域,这里只剩 onSend 意图的内存 pending——本 store 不再有全局"当前模型"。
+// 与头行 model 域,本 store 不再有全局"当前模型"。
+//
+// 职责边界(设计 docs/design/session-scope.md §2.6.1):本 store 只装**桌面偏好与导航**
+// (主题/字体/侧栏/视图/locale/general.json + 当前会话身份三元 path/ns/title)。
+// 「会话级的待执行意图」(模型 pending / 排队消息 / 草稿 / 工具过滤)已全部迁到
+// ./session-pending.ts,存储走会话作用域容器(./session-scope.ts 的框架保留槽)——
+// 此前它们是这里的四张按 key 分组的 map + carrySessionKey 硬编码搬迁清单,
+// 消费方各自手写 `ns ?? new:${cwd}` 拼 key,于是同一个会话在不同插件里是两个 key。
 import { create } from "zustand";
-import type { SidebarStyle, SidepanelStyle, SessionToolConfig, SessionModelPrefs } from "@my-harness-desktop/shared";
+import type { SidebarStyle, SidepanelStyle } from "@my-harness-desktop/shared";
 import { GENERAL_CONFIG_PATH } from "@my-harness-desktop/shared";
 import { useLayoutStore } from "./layout-store";
 import { readGeneralConfig, setGeneralConfigCwd } from "./general-config";
@@ -55,33 +62,6 @@ const clampSidebarWidth = (px: number): number =>
 
 const clampAreaFontScale = (scale: number): number =>
   Math.max(AREA_FONT_SCALE_MIN, Math.min(AREA_FONT_SCALE_MAX, Math.round(scale * 100) / 100));
-
-/** 排队消息(streaming 时按发送暂存,AI 完成后合并成一条自动 flush)。
- *  按 sessionKey 绑定(活会话=sessionPath,新会话壳=`new:${cwd}`),切会话互不可见。
- *  内存态不持久化——没 flush 就没发出,刷新丢失可接受。 */
-/** 评论附件快照条目(与 timeline:composerAttachments 的 items 同构,输入态展示用)。 */
-export interface CommentAttachment {
-  id: string;
-  messageId?: string;
-  seq: string;
-  quotePreview: string;
-  comment: string;
-}
-
-export interface QueuedMessage {
-  id: string;
-  text: string;
-  /** 空文本项(纯评论入队)的篮内显示文案;由调用方用 t() 算好,store 不持有文案。 */
-  displayText?: string;
-  /** 入队瞬间的评论附件快照:flush 时活篮子已被消费/清空则回落它,排队意图不漂。 */
-  attachments?: {
-    items?: CommentAttachment[];
-    promptFragment?: string;
-    channels?: Record<string, string>;
-  };
-  failed?: boolean;
-  errMsg?: string;
-}
 
 export interface UiState {
   /** 当前主题 id,决定 ThemeProvider 解析哪个主题 */
@@ -137,20 +117,6 @@ export interface UiState {
   currentLocale: string;
   /** general.json 分层合并视图(项目级覆盖全局);框架级偏好的单源,插件只读 */
   generalConfig: Record<string, unknown>;
-  /** 模型/深度的待执行意图(onSend 模式点选暂存,send 回灌执行后清空;设计 §4.1/§4.5)。
-   *  按会话 key 暂存:活会话=sessionPath,新会话壳=`new:${cwd}`。内存态不持久化——
-   *  没 send 就没生效,没生效的选择不留任何持久痕迹(RPC 拒绝时保留,只有执行成功才消费)。 */
-  sessionModelPending: Record<string, SessionModelPrefs>;
-  /** 会话级工具过滤的未落盘偏好(tool-manager 组开关只写这里,timeline send() 才 flush 到头行——
-   *  与 composerApplyTiming 的"偏好/落盘"两态同语义)。绑定 sessionPath:A 会话偏好不许误 flush 到 B。
-   *  flushed=true 已落盘,留存只为 ToolPanelTab 显示不跳变,send() 跳过。config=null = 切回全部工具。 */
-  pendingToolConfig: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null;
-  /** 排队消息队列(streaming 时按发送暂存,AI 完成后合并 flush)。 */
-  pendingQueue: Record<string, QueuedMessage[]>;
-  /** 输入框草稿,按会话 key 隔离(活会话=neutralSessionId,新会话壳=`new:${cwd}`)。
-   *  切换会话保留/恢复,发送成功后清空——与 sessionModelPending/pendingQueue 同款内存态:
-   *  草稿是未发送内容,重启丢失可接受(发送成功才落盘进会话文件)。 */
-  composerDrafts: Record<string, string>;
   setCurrentThemeId: (id: string) => void;
   setTimelineThemeId: (id: string) => void;
   setFontScale: (scale: number) => void;
@@ -166,45 +132,12 @@ export interface UiState {
   setSidepanelStyle: (style: SidepanelStyle) => void;
   /** 切界面 locale:落 prefs + 通知 i18next changeLanguage(由调用方接 react-i18next) */
   setCurrentLocale: (locale: string) => void;
-  /** 暂存/更新某会话的模型意图(整体替换该 key 的三字段)。 */
-  setSessionModelPending: (key: string, prefs: SessionModelPrefs) => void;
-  /** 消费某会话的模型意图(send 回灌执行成功后调)。 */
-  clearSessionModelPending: (key: string) => void;
-  enqueueMessage: (key: string, text: string, attachments?: QueuedMessage["attachments"], displayText?: string) => void;
-  removeFromQueue: (key: string, id: string) => void;
-  clearQueue: (key: string) => void;
-  /** 整队标失败(flush 失败后保留全部,用户重试/逐条编辑/取消)。 */
-  markQueueFailed: (key: string, errMsg: string) => void;
-  /** 单条标失败(「立即发送」单条失败后标红,flush 被阻塞,用户可编辑/移除/整队重试)。 */
-  markQueueItemFailed: (key: string, id: string, errMsg: string) => void;
-  /** 清失败标记(重试前调,不删条目)。 */
-  clearQueueFailed: (key: string) => void;
-  /** 写入某会话的输入框草稿(空文本等价 clear,调用方不必先判空)。 */
-  setComposerDraft: (key: string, text: string) => void;
-  /** 清除某会话的输入框草稿。 */
-  clearComposerDraft: (key: string) => void;
   /** 重读 general.json 分层合并视图(cwd 切换/写后广播时调) */
   reloadGeneralConfig: () => Promise<void>;
-  setPendingToolConfig: (p: { sessionPath: string; config: SessionToolConfig | null; flushed: boolean } | null) => void;
   setActiveView: (view: AppView) => void;
   setCurrentCwd: (cwd: string) => void;
   setCurrentSessionPath: (path: string | null) => void;
   setCurrentNeutralSessionId: (ns: string | null) => void;
-  /**
-   * 会话键迁移:把 `from` 键上的**所有按会话暂存的框架态**搬到 `to` 键。
-   *
-   * 存在理由(根因,勿删):会话键在**物化那一刻**发生身份切换 —— 新会话壳期间键是
-   * `new:${cwd}`,首条消息让内核起进程、壳合成 sessionStart 之后键变成真实 ns。
-   * 读取侧一律用「currentNeutralSessionId ?? `new:${cwd}`」,所以切换瞬间旧键就再也没人读了:
-   * 用户刚点选的模型、刚打的草稿、刚排的队列全部变成孤儿,表现就是
-   * 「发送之后输入框的模型没固定」(回落到应用默认模型)与草稿/队列凭空消失。
-   *
-   * 为什么收成一个方法而不是各调用点各修:这是**框架机制**(会话键是框架的东西),
-   * 按会话键暂存的 map 目前有三张(sessionModelPending / pendingQueue / composerDrafts),
-   * 将来还会加第四张。逐张在切换点补一行 = 加一张忘一次(同一症状第二次修复)。
-   * 收在这里后,新加的按会话态只需进本方法的搬迁清单,切换点永远只有一处。
-   */
-  carrySessionKey: (from: string, to: string) => void;
   /** 记下"这个项目上次看的会话"(ns 优先/路径兜底),内存 + prefs 同写。
    *  只由"成功打开/物化真实会话"的路径调用(openSession / sessionStart 水合)——新会话
    *  壳(null)不写,否则冷启动那次 startNewChat 会把记忆清成空。 */
@@ -244,10 +177,6 @@ export const useUiStore = create<UiState>((set, get) => ({
   sidepanelStyle: "default",
   currentLocale: "zh-CN",
   generalConfig: {},
-  sessionModelPending: {},
-  pendingToolConfig: null,
-  pendingQueue: {},
-  composerDrafts: {},
   activeView: "chat",
   currentCwd: "",
   lastSessionByCwd: {},
@@ -316,94 +245,10 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ currentLocale: locale });
     void window.kernel.prefs.set(PREF_KEYS.currentLocale, locale);
   },
-  setSessionModelPending: (key, prefs) =>
-    set((s) => ({ sessionModelPending: { ...s.sessionModelPending, [key]: prefs } })),
-  clearSessionModelPending: (key) =>
-    set((s) => {
-      if (!(key in s.sessionModelPending)) return s;
-      const next = { ...s.sessionModelPending };
-      delete next[key];
-      return { sessionModelPending: next };
-    }),
-  enqueueMessage: (key, text, attachments, displayText) =>
-    set((s) => ({
-      pendingQueue: {
-        ...s.pendingQueue,
-        [key]: [...(s.pendingQueue[key] ?? []), { id: crypto.randomUUID(), text, attachments, displayText }],
-      },
-    })),
-  removeFromQueue: (key, id) =>
-    set((s) => {
-      const cur = s.pendingQueue[key];
-      if (!cur) return s;
-      const nextList = cur.filter((q) => q.id !== id);
-      const next = { ...s.pendingQueue };
-      if (nextList.length === 0) delete next[key]; else next[key] = nextList;
-      return { pendingQueue: next };
-    }),
-  clearQueue: (key) =>
-    set((s) => {
-      if (!(key in s.pendingQueue)) return s;
-      const next = { ...s.pendingQueue };
-      delete next[key];
-      return { pendingQueue: next };
-    }),
-  markQueueFailed: (key, errMsg) =>
-    set((s) => {
-      const cur = s.pendingQueue[key];
-      if (!cur) return s;
-      return {
-        pendingQueue: {
-          ...s.pendingQueue,
-          [key]: cur.map((q) => ({ ...q, failed: true, errMsg })),
-        },
-      };
-    }),
-  markQueueItemFailed: (key, id, errMsg) =>
-    set((s) => {
-      const cur = s.pendingQueue[key];
-      if (!cur) return s;
-      return {
-        pendingQueue: {
-          ...s.pendingQueue,
-          [key]: cur.map((q) => (q.id === id ? { ...q, failed: true, errMsg } : q)),
-        },
-      };
-    }),
-  clearQueueFailed: (key) =>
-    set((s) => {
-      const cur = s.pendingQueue[key];
-      if (!cur) return s;
-      return {
-        pendingQueue: {
-          ...s.pendingQueue,
-          [key]: cur.map((q) => ({ ...q, failed: false, errMsg: undefined })),
-        },
-      };
-    }),
-  setComposerDraft: (key, text) =>
-    set((s) => {
-      if (text) {
-        if (s.composerDrafts[key] === text) return s;
-        return { composerDrafts: { ...s.composerDrafts, [key]: text } };
-      }
-      if (!(key in s.composerDrafts)) return s;
-      const next = { ...s.composerDrafts };
-      delete next[key];
-      return { composerDrafts: next };
-    }),
-  clearComposerDraft: (key) =>
-    set((s) => {
-      if (!(key in s.composerDrafts)) return s;
-      const next = { ...s.composerDrafts };
-      delete next[key];
-      return { composerDrafts: next };
-    }),
   reloadGeneralConfig: async () => {
     const cfg = await readGeneralConfig();
     set({ generalConfig: cfg });
   },
-  setPendingToolConfig: (p) => set({ pendingToolConfig: p }),
   setActiveView: (view) => set({ activeView: view }),
   setCurrentCwd: (cwd) => {
     set({ currentCwd: cwd });
@@ -414,28 +259,6 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   setCurrentSessionPath: (path) => set({ currentSessionPath: path }),
   setCurrentNeutralSessionId: (ns) => set({ currentNeutralSessionId: ns }),
-  carrySessionKey: (from, to) =>
-    set((s) => {
-      if (!from || !to || from === to) return s;
-      // 三张按会话暂存的 map 一起搬。目标键已有值时以**已存在的目标值**为准(不覆盖):
-      // 正常情况下目标键是全新的,但防御「物化后又回退到壳」这种交叠态。
-      const nextPending = { ...s.sessionModelPending };
-      const carriedPending = nextPending[from];
-      delete nextPending[from];
-      if (carriedPending && !nextPending[to]) nextPending[to] = carriedPending;
-
-      const nextQueue = { ...s.pendingQueue };
-      const carriedQueue = nextQueue[from];
-      delete nextQueue[from];
-      if (carriedQueue?.length) nextQueue[to] = [...(nextQueue[to] ?? []), ...carriedQueue];
-
-      const nextDrafts = { ...s.composerDrafts };
-      const carriedDraft = nextDrafts[from];
-      delete nextDrafts[from];
-      if (carriedDraft && !nextDrafts[to]) nextDrafts[to] = carriedDraft;
-
-      return { sessionModelPending: nextPending, pendingQueue: nextQueue, composerDrafts: nextDrafts };
-    }),
   rememberSessionForCwd: (cwd, sessionId) => {
     if (!cwd || !sessionId) return;
     const cur = get().lastSessionByCwd;
@@ -560,7 +383,7 @@ eventBus.on("system:configFileSaved", (payload) => {
 // 为什么绑在这里而不是 app 装配点:本 store 是两个身份字段(currentNeutralSessionId /
 // currentCwd)的属主,模块级绑定保证它在任何插件加载、任何 emit/on 之前就生效——不存在
 // 「插件已加载、resolver 还没绑」的时序窗口。scope store 不 import 本文件(经注入拿身份),
-// 所以这条边不成环;批 2 起 carrySessionKey 也要调 scope store 的 carry,那条边同样单向。
+// 所以这条边不成环;session-store 的物化换键处调 scope store 的 carry,那条边同样单向。
 //
 // event-bus 的 scoped channel 坐标绑的是同一个函数——状态写进哪个域、事件坐标是什么,
 // 两者同源,不会出现「状态写进 A 域、事件坐标是 B」的错配。
