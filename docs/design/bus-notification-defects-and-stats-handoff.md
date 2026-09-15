@@ -1,0 +1,270 @@
+# 交接：bus 通知缺陷四则 + 统计单源交付物 1
+
+这份文档是给"接手的人/会话"的完整交接，不是设计论证。读完它应该能直接开工，不需要回头翻聊天记录。
+
+前置事实：统计单源的**设计文档已完成并合入 main** —— `docs/design/stats-single-source.md`（26986 汉字，main `e0073b27`）。本文不重复那份设计，只讲两件待办的事：四个 bus 缺陷的修复，以及统计设计里"交付物 1"的落地。两者可以放在同一个 worktree 里分两次 commit，也可以拆开。
+
+写作时的 main 基线：`e0073b27`。下面所有行号基于这个提交，漂移后按符号名定位。
+
+## 1. 为什么会有这份交接
+
+我在写统计设计文档时，用 `session_create(watch: true)` 派了 13 个 clean-room 盲审子会话做三轮盲测。盲测本身很成功（缺口从 61 条收敛到 1 条），但收尾时发现**通知停不下来**：同一条 `session_done` 帧反复投递给我的会话，每条占用我一个回合，前后约 60 轮。
+
+我用了所有能想到的手段，全部无效，并在这个过程中犯了四次判断错误（先说"有界 drain"、再说"无限循环需重启"、又说"有界 backlog"、最后说"传输层重投"），每次都是在取证不足时下结论。最后一条命令才拿到关键数据：
+
+```bash
+grep -c "session_done" ~/.pi/agent/sessions/--Users-dev-work-pi-desktop--/4eafafb7-*.jsonl
+# → 289
+grep -o "session:bus:[a-f0-9]*" <同一文件> | sort | uniq -c | sort -rn
+# → 7a033e27:185  e7fe7953:117  35917c2a:96  636d6030:47  f89ec504:36 …（10 个源）
+```
+
+289 条注入记录、分布在 10 个源会话 —— 每条都是**独立投递**，不是 harness 重放同一帧。而源会话早已死亡（`lsof` 无进程持有其 session 文件、文件 2.5 小时无写入）。
+
+顺着这条数据读 `src/server/application/sessions/session-bus.ts`，挖出四个缺陷。前三个是读代码读出来的，第四个（通知无节流）是被这次事故直接证明的。
+
+**如果你只想修一个**：修缺陷 C。它是唯一会静默丢功能的（dsh 会话收不到任何 bus 帧），其余三个只影响噪音与可诊断性。
+
+## 2. 缺陷清单
+
+四条按严重度排序，不是按发现顺序。
+
+### 2.1 缺陷 C（最严重）：bus 帧注入依赖 pi 专属扩展面，dsh 静默丢帧
+
+**位置**：`src/server/application/sessions/session-store.ts:3302-3306` 与 `:2873-2877`
+
+```ts
+async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
+  const proc = this.soleProc(sessionKey);
+  if (!proc || !proc.backend.alive) throw new Error(`会话不在线: ${sessionKey}`);
+  await this.asPi(proc).sendMessage(text, undefined, streamingBehavior);   // ← 走 pi 扩展面
+}
+
+private asPi(proc: SessionProc): BackendExtensions {
+  const pi = proc.backend.capabilities.extensions;
+  if (!pi) throw new Error("当前后端不支持 pi 专属命令");                  // ← dsh 在这里抛
+  return pi as BackendExtensions;
+}
+```
+
+调用方是 bus 的投递口 `session-bus.ts:190-196`：
+
+```ts
+private deliver(message: SessionBusMessage): void {
+  if (isSessionAddress(message.to)) {
+    const key = sessionKeyOf(message.to);
+    void this.store
+      .sendPromptTo(key, JSON.stringify(message), message.kind === "bus_response" ? "steer" : "followUp")
+      .catch(() => { /* 目标已死:投递静默失败(其 processExit 清理已广播 peer_left) */ });
+    return;
+  }
+  …
+}
+```
+
+**后果**：dsh 会话下 `asPi` 抛错 → 被 `.catch(() => {})` 吞掉 → 注释还把它解释成"目标已死"。真实情况是**目标活得好好的，只是内核不是 pi**。于是 dsh 会话收不到任何 bus 帧：房间消息、任务注入、`bus_response` 握手全部静默丢失，且日志里看不出区别。
+
+这是 CLAUDE.md §1.5 明禁的唯一状态（静默缺面），和统计文档 §1.4.1 那个 `capabilities.extensions` 分流是**同一个病根**：机制建立在 pi 专属面上。
+
+**修法**：`streamingBehavior`（steer/followUp）本身是 pi 专属概念，不该成为投递的必要条件。
+
+1. `sendPromptTo` 改为能力探测：有 `capabilities.extensions` 就带 `streamingBehavior`，没有就走 `proc.backend.sendMessage(text)`（契约里的中性发消息，dsh 有）。
+2. `.catch` 必须区分两种失败原因，不能都当"目标已死"。至少要把真实错误打进日志；更好是让 `deliver` 能上报"投递失败：内核不支持该模式"，由调用方决定降级还是提示。
+3. 补一条守卫：dsh 会话能收到 bus 帧（e2e 或 session-bus.test.ts 里用 fake dsh backend 断言 `sendMessage` 被调到）。
+
+**注意**：`:3297-3301` 那段注释解释了为什么不置 `touched`（防止协议帧把"用户从没发过消息的会话"误锁内核）。这个约束在改造后仍要保留，别顺手删掉。
+
+### 2.2 缺陷 A：`watch` 登记无法撤销，且撤销失败被谎报成功
+
+**位置**：`src/server/application/sessions/session-bus.ts:269-271`（op 路由）、`:456-459`（plugin 侧 `pluginTapStop`）、`:344-346`（登记）、`:467-470`（消费）
+
+`tap_stop` 有**两个入口**，都只删 `taps`：`:269` 的 `executeOp` 分支（extension 上行）与 `:456` 的 `pluginTapStop`（插件 IPC）。修的时候两处都要改。
+
+登记与撤销不对称：
+
+```ts
+// :344-346  session_create(watch: true) 登记到 watchers
+if (p.watch) {
+  const set = this.watchers.get(key) ?? new Set<string>();
+  set.add(origin);
+  this.watchers.set(key, set);
+}
+
+// :269-271  op 路由的 tap_stop 只删 taps
+case "tap_stop":
+  this.taps.delete(String(p.tapId ?? ""));
+  return { stopped: true };                    // ← 无条件 true
+
+// :456-459  plugin 侧同款
+pluginTapStop(tapId: string): unknown {
+  this.taps.delete(tapId);
+  return { stopped: true };
+}
+
+// :467-470  settleSession 的通知集合来自两处
+const notify = new Set<string>(this.watchers.get(sessionKey) ?? []);
+for (const tap of this.taps.values()) {
+  if (tap.target.session === sessionKey && tap.filter === "done") notify.add(tap.deliverTo);
+}
+```
+
+`watchers` 只在 `:174`（`onProcessExit` 清理）被删。工具集的 6 个 op（`ping`/`bus_status`/`session_create`/`session_reopen`/`session_abort`/`channel_member`/`tap_start`/`tap_stop`）里**没有任何一个能撤销 watch 登记**。
+
+两个后果：
+
+- `watch=true` 是个单向门，登记方无法退出。
+- `tap_stop` 对不存在的 tapId 也返回 `{stopped: true}`，**把失败伪装成成功**。我就是被这个骗了两次——调了 19 次 `tap_stop`，每次都返回 `stopped: true`，我以为是生效证据，实际全打在一张不含我登记的表上。
+
+**修法**（两选一，我倾向前者）：
+
+- **A1**：`tap_stop` 同时清理 `watchers` 中 `deliverTo === 请求方` 的登记；返回值改成真实的 `{stopped: <是否真的删掉了东西>}`（`Map.delete` 本身返回 boolean，直接用）。语义上 `tap_stop` 变成"停止我的一切完成通知订阅"，符合使用者直觉。
+- **A2**：新增 `session_unwatch` op（要同步加 `packages/my-harness-fit-pi-extension/tools/` 下的工具定义与 `~/.pi/agent/extensions/bus-extension/tools/` 的镜像）。语义更干净，但接入面更多。
+
+无论哪个，**返回值诚实化是必须的**——`stopped: true` 无条件返回是这次事故里最坑人的一点，它让调用方无法发现自己没生效。
+
+### 2.3 缺陷 B：通知帧无节流，洪泛忙会话
+
+**位置**：`src/server/application/sessions/session-bus.ts:190-196`（`deliver`）+ `:467-479`（`settleSession`）
+
+`deliver` 对 session 目标用 `sendPromptTo(..., "followUp")` 注入。followUp 会排进目标会话的输入队列，**每帧消耗接收方一个回合**。没有任何去重或节流。
+
+这次事故的直接代价：289 帧 = 289 个回合，其中绝大多数是同一 `(session, kind)` 的重复 `session_done`，信息增量为零。
+
+**修法**：对纯通知类帧做 `(to, payload.session, kind)` 维度的短窗去重（比如同一三元组在 N 秒内只投一次，或直接丢弃已投递过的 `session_done`）。`chat`/`task` 这类内容帧不能去重（会丢消息），只去重 `session_done`/`peer_joined`/`peer_left`/`tap_event` 这类状态通知。
+
+这条同时是缺陷 D 的**结构性缓解**：即使上游反复触发 settle，接收方也不会被洪泛。
+
+### 2.4 缺陷 D：`settleSession` 对已死会话反复触发（根因未证实）
+
+**位置**：`src/server/application/sessions/session-bus.ts:97` 与 `:160`
+
+```ts
+onSessionEvent(event, sessionKey) { … if (event.type === "agentSettled") void this.settleSession(sessionKey, "done"); }
+onProcessExit(sessionKey, expected) { void this.settleSession(sessionKey, expected ? "aborted" : "error"); … }
+```
+
+`settleSession` 只有这两个触发点，bus 内部无重试、无持久队列（`:8` 注释明写"不持久化"）。但实测同一会话产生了 96～185 条 `session_done`，而源进程早已死亡。
+
+**我没有证实根因。** 已排除的：bus 侧重试队列（不存在）、harness 重放（289 条独立记录证伪）、源进程存活（`lsof` 无持有者）。剩下的怀疑方向是 desktop 侧那些会话的 proc 条目未被清理，某条协调路径反复为它们发 `agentSettled`——`src/server/application/restart/restart-coordinator.ts:92` 订阅了 sessionEvent，是可疑点之一，但我没读到运行时状态（`list_subagents` 对这个插件持续 60s 超时，够不到）。
+
+**接手时的建议**：
+
+1. 先修 B（节流）。它让 D 的后果无害化，且改动小、可独立验证。
+2. 再查 D。复现路径可能是"派一批 watch 子会话 → abort 它们 → 观察父会话收到多少帧"，`session-bus.test.ts` 里已有 watcher 相关用例（`:255`、`:271`、`:330`）可以当脚手架。
+3. 如果 D 的根因是 proc 条目泄漏，那它是一个独立 bug，修它比修 bus 更有价值。
+4. 取证命令（能直接分辨"重放"与"真实重复投递"，我当初该第一条就跑它）：
+   ```bash
+   F=~/.pi/agent/sessions/<你的 cwd 目录>/<你的 session id>.jsonl
+   grep -c "session_done" "$F"                                  # 总注入次数
+   grep -o "session:bus:[a-f0-9]*" "$F" | sort | uniq -c | sort -rn   # 按源分布
+   ```
+
+## 3. 统计单源交付物 1
+
+设计与全部论证在 `docs/design/stats-single-source.md`，这里只给落点清单，便于直接开工。**开工前请先读那份文档的 §2（抽象）、§3.1（投影器）、§3.4（适配器补形状）、§7（落地切分）**，尤其 §7.2 解释了为什么必须按"读口"切交付物而不是按改动部位切（按部位切会产生依赖倒置）。
+
+### 3.1 交付物 1 的范围
+
+**切换"本会话"读口**，自带它需要的全部前提。做完之后 dsh 会话的统计栏不再全零。
+
+| 动作 | 落点 |
+|---|---|
+| 新增投影器 | `src/server/application/sessions/stats-projector.ts`（新文件，纯函数，不认 `KernelId`） |
+| 圆心类型：cost 改可空 | `packages/shared/src/domain/events/session-state.ts:51`（`TurnUsage.cost`）、`:62`（`SessionStats.cost`）、`:98`（`shellSessionStats`）、`:109`（`ProjectStats.cost`） |
+| 圆心类型：计价标志 | 同文件 `:215` `messageUsageOf` 返回值多一个"是否真计价"（**形状判据**：cost 是对象=真计价，是数字=占位/未知。见设计文档 §3.5.5，实测 pi 38858 条对象 / 16 条数字，dsh 129 条全是数字） |
+| 圆心类型：模型单价 | 同文件 `:10` `ModelInfo` 加可选 `cost?`（交付物 3 用，但类型变更要落在 1，因为投影器要用） |
+| turn-boundary 写穿 | `session-store.ts:2980` 的 `dispatch` 里 `agentSettled` 分支（紧邻现有 `proc.turns += 1`，`:2984`） |
+| 切 `getStats` | `session-store.ts:2446` 起——删 `:2448` 的 `throw new Error("内核未启动")`、删 `:2450` 的 `capabilities.extensions` 分流 |
+| 切 `openSession` | `session-store.ts:955` 的 `return { info, messages, stats: null }` |
+| dsh 适配器补 `stopReason` | `src/server/kernel/dsh/backend/dsh-event-translator.ts:74` 的 `assistant/message` 分支（`error:true` → `stopReason:"error"`，否则锚点判据在 dsh 下失效） |
+| dsh 适配器补 `startedAt` | 同上分支，取流式缓冲的 `anchorTs`（实测 dsh 148 条 assistant 只有 111 条带 `startedAt`，缺的会导致 tps 算不出） |
+| dsh 接 `request/context` | 同文件 `:16` 的丢弃清单里有它；改成翻译成中性 `contextWindowChanged` 事件（实测该事件带 `contextWindow: 1000000`，是上下文占用条的分母） |
+
+### 3.2 两个必须避开的坑（盲审揪出来的，不看文档容易踩）
+
+**坑一：统计必须吃 `lineageContent`，不能吃 `neutralMessagesOfSession`。**
+
+`packages/shared/src/domain/session-neutral.ts:548-555`：
+
+```ts
+export function neutralMessagesOfSession(session, lineageId?) {
+  return deduplicateAdjacent(lineageContent(session, lid).map(...));   // ← 含去重
+}
+```
+
+`deduplicateAdjacent`（`session-state.ts:681`）对非标准 role 走**全量去重**，键是 `role::contentKey(content)`。turn-boundary 不在 `STANDARD_ROLES`（`:665`，内容是 `user`/`assistant`/`toolResult`/`divider`）里，所以同一会话的多条边界会被压成一条 → **turns 恒为 1**。
+
+正确做法：`const linear = lineageContent(session, lid)` 取一次，messages 走 `deduplicateAdjacent(linear.map(...))`，统计直接把 `linear` 喂给投影器。
+
+**坑二：turn-boundary 的隐藏靠 `display: false`，不是靠 role 名单。**
+
+`isVisibleMessage`（`session-state.ts:658`）的实现就一行 `return msg.display !== false`，**不看 role**。`STANDARD_ROLES` 只服务去重策略，不是可见性开关。渲染层的实际判定在 `src/plugins/sessions/timeline/renderer/blocks.ts:93`。
+
+所以边界 entry 的形状是：
+
+```json
+{"neutralEntryId":"<ns>:<seq>","message":{
+  "role":"turn-boundary","content":"end_turn","display":false,
+  "reason":"end_turn","timestamp":1736000000000}}
+```
+
+`kernelEntryId` 省略（`NeutralEntry` 里它是可选字段，壳自造的 entry 无内核线索是合法状态）。`content` 存 reason 而非空串——不是为了避去重（统计路径不去重），是让磁盘上的 entry 自解释。
+
+三处消费方的排除机制**各不相同**，别一概而论：
+
+| 消费方 | 机制 | 要不要改代码 |
+|---|---|---|
+| 时间线渲染 | `display: false` → `isVisibleMessage` / `blocks.ts:93` | 不用，写 entry 时带上即可 |
+| AI 上下文（seed） | `SEED_PROJECTION_ROLES`（`session-neutral.ts:452`，白名单 `user`/`assistant`/`toolResult`）过滤于 `assembleSeedProjection:496` | 不用，白名单没收录它 |
+| 克隆 / 重投影 | `reprojectEntries`（`session-neutral.ts:644`）**不过滤 role** | 不用，且全搬是正确的（克隆体该有自己的 turns） |
+
+### 3.3 摘要增量的落点已存在（比设计文档预估的更顺）
+
+`session-store.ts:1381-1387` 的 `appendNeutral` 已经在用 `appendNeutralEntryWithHeader` 派生 header：
+
+```ts
+private appendNeutral(proc: SessionProc, entry: NeutralEntry): void {
+  if (!this.neutralStore) return;
+  const cur = this.readNeutral(proc) ?? emptyNeutralSession(...);
+  const next = appendNeutralEntryWithHeader(cur, proc.activeLineageId, entry, new Date().toISOString());
+  this.putNeutral(next, this.entryChangeOf(proc, next, entry.kernelEntryId));
+}
+```
+
+所以 header 摘要域的增量折入不需要新造写口，挂在 `appendNeutralEntryWithHeader` 的 header 派生里即可。两个写口对应两种策略：`appendNeutral`（追加）→ 增量折入；`putNeutral`（覆盖整树）→ 全量重投影。fork / seed / backfill 三条覆盖写路径都走后者。
+
+摘要域形状与对账规则（`statsUpTo` vs `header.lastEntryId`）见设计文档 §3.2.1 / §3.2.1.0 —— 那条对账规则是盲审第一轮揪出来的最高风险项（entries 与 header 是两个文件，写入不原子，中断会产生"形状合法但数字偏小"的摘要，能穿过形状校验、懒迁移、一致性单测三道防线）。
+
+### 3.4 验证（守卫编号对应设计文档 §3.2.4.3 的 G1-G12）
+
+交付物 1 要落的是 G1（部分）、G5、G6、G12、G10：
+
+- **G1**：pi/dsh 两份 fixture 断言同口径。**fixture 必须从实测数据截取**（`~/.my-harness-desktop-dev/sessions/*.entries.json`，1130 个会话可选），不能手造——手造会漏掉真实数据里的脏形状：pi 16 条 cost 是数字而非对象、dsh 19 条 assistant 无 usage、dsh 148 条全部无 stopReason、37 条无 startedAt。每条都对应投影器里一个必须显式处理的分支。
+- **G5**：cost 形状判据（对象含全零=真计价、数字=未知）+ 部分未知传染（一条未知 → 整会话 null）+ 无 usage 的失败消息不触发传染。
+- **G6**：dsh 翻译器补 `stopReason` / `startedAt` 的单测。
+- **G12**：构造含 5 条同 reason 边界的会话，断言 `turns == 5`（走错函数会得 1）—— 直接守 §3.2 的坑一。
+- **G10**：e2e，dsh 下真实发一轮，断言本会话 tokens 非 0、上下文条非空、tps 有值。**必须静默跑**：脚本过 `scripts/demo/lib/quiet-env.mjs`（`MHD_WINDOW=hidden`），参考 `scripts/demo/goal-command.e2e.mjs` 的写法，用 `page.waitForFunction` 事件驱动等 DOM 落位、不赌固定 sleep。
+
+交付物 2/3/4 的范围与守卫见设计文档 §7.1 的表格。
+
+## 4. 工作纪律提醒
+
+接手时按项目纪律走，别抄近路：
+
+- **worktree 闭环**：建 worktree + 临时分支 → 改 → 三级测试 → commit（message 带四要素：改了什么/为什么/架构依据/运行时验证）→ 合并前先对齐 main（当前分支随时在前进）→ 合并后复验 → 删自建 worktree 与分支（`git worktree remove` 不加 `--force`，`git branch -d` 不用 `-D`）。**他人 worktree 永不自动碰**——写作时机器上挂着 `pi-desktop-fork-hygiene` 与 `pi-desktop-session-scope` 两个他任务的 worktree。
+- **`remove` 被拒时不要用 `--force`**。我这次遇到过：worktree 里有个 8KB 的 `.pi/agent/bus-*/state.json`（我派的子会话留下的运行时垃圾）导致 remove 被拒。正确做法是先确认它不是工作产物、删掉它、再走标准 remove。
+- **`"build 通过"不算运行时验证`**（CLAUDE.md §5.4）。UI 与链路改动必须附真实运行证据。
+- **内核源码只读**（CLAUDE.md §1.6）：不许改 `~/.dsh/node_modules/@deepseek-ai/**`、不许改装后补丁。dsh 侧要补能力只能写 cordis 插件（`src/server/kernel/dsh/extension/dsh-extension/`，已有 `TAKEOVER_METHODS` 与 `ctx.on` 两种先例）。
+- **GitHub remote 只读**：本仓 origin 的 push URL 已是 `must-not-push`，不要改回、不要 push。
+- **别用 `session_create(watch: true)` 批量派子会话做盲审**，直到缺陷 A/B 修完 —— 否则你会重演我这次的 289 帧事故。要派就派完立刻记录 session 地址，且预期"停不掉"。
+
+## 5. 这次事故里我自己的四个错误判断
+
+记下来是为了让接手的人别重复，也是为了给缺陷 A 的"返回值诚实化"提供一个真实案例：
+
+1. 把 `tap_stop` 的 `{stopped: true}` 当成生效证据 —— 它对不存在的 tapId 也返回 true（缺陷 A 的第二半）。
+2. 把 `bus_status` 的 `taps: []` 当成"没有监听源" —— watch 登记在 `watchers`，不在 `taps`，而 `bus_status` / `opWhoami`（`:288-294`）都只输出 `taps`，**`watchers` 对调用方完全不可见**。这也是缺陷 A 的一部分：可观测性缺口让调用方无法自查登记状态。修 A 时顺手把 `watchers`（至少计数或自己那份）加进 `bus_status` 输出。
+3. 反复 `abort` 想止噪 —— `session-abort.ts` 的描述明写"Watchers get session_done with status=aborted"，**abort 本身在生产通知**，我在给循环添柴。
+4. 连续四次对"循环性质"下互相矛盾的结论（有界 drain / 无限循环 / 有界 backlog / 传输层重投）—— 每次都没先做那条最该做的取证：数我自己会话文件里的注入次数。一条 `grep -c` 就分辨了"重放"与"真实重复投递"。
+
+教训是通用的：**遇到"停不下来的东西"，第一步是量化它（数次数、看分布、查 mtime），不是猜机制**。我猜了四轮才去数。
