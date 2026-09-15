@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Activity, BarChart3, Globe2 } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, EmptyState, type ProjectStats } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, useCurrentScopeKey, EmptyState, type ProjectStats } from "@my-harness-desktop/react";
 
 // titlebar / composerStats 槽贡献组件(manifest contributes.* 按名自动匹配,必须在入口 re-export)。
 // 三处统计展示(右上角次级统计 / composer 中段上下文条 / 右面板统计页签)同归本插件:
@@ -38,7 +38,10 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const cwd = useUiStore((s) => s.currentCwd);
-  const sessionPath = useUiStore((s) => s.currentSessionPath);
+  // 会话身份的失效键(切会话即重拉项目统计):用作用域 key(设计 session-scope.md §3.4.2),
+  // 不再用投影路径——dsh 会话的投影地址是裸 lineageId、迁移前旧 pi 会话可能没有投影文件,
+  // 拿它当身份在这两类会话上会读到空。本插件只把它当 effect 失效键,数据读 useSessionStore.stats。
+  const scopeKey = useCurrentScopeKey();
 
   const sessionStats = useSessionStore((s) => s.stats);
   const [projectStats, setProjectStats] = useState<ProjectStats | null>(null);
@@ -54,7 +57,7 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
     setProjectStats(null);
     void refreshProject();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionPath, cwd]);
+  }, [scopeKey, cwd]);
 
   /* ---- 项目总刷新触发:任一会话一轮结束 → 会话文件已增长,重扫(增量缓存)。
    *  哑触发无状态——卸载期漏触发不损失正确性,挂载即经上行 effect 重拉。 ---- */
@@ -66,7 +69,7 @@ export function TokenStatsTab({ isActive }: { isActive: boolean }): React.ReactN
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionPath, cwd]);
+  }, [scopeKey, cwd]);
 
   const turn = sessionStats?.turn;
   const lastTurn = sessionStats?.lastTurn ?? null;

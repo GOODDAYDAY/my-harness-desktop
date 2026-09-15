@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, TriangleAlert } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@my-harness-desktop/react";
-import { deriveSessionTitle, applyCustomOrder, advancePhase, type WorkingPhase, type SessionRawFilePaths } from "@my-harness-desktop/shared";
+import { deriveSessionTitle, applyCustomOrder, advancePhase, scopeKeyFromSessionKey, type WorkingPhase, type SessionRawFilePaths } from "@my-harness-desktop/shared";
 import { filterSessions } from "../core/search";
 import { PhaseIcon } from "./phase-icon";
 
@@ -145,9 +145,12 @@ export function SessionsSection(): React.ReactNode {
       return prev[path] === next ? prev : { ...prev, [path]: next };
     });
   };
-  /** 运维流 sessionKey(= proc.key,path)→ 中立主键(§32):经 sessionInfos 双键查,旧会话回退 path。 */
+  /** 运维流 sessionKey(= proc.key)→ 作用域 key(§kernel-forkless §32):算法出自圆心
+   *  scopeKeyFromSessionKey(设计 docs/design/session-scope.md §2.2.2),查表注入 sessionInfos。
+   *  此前这是本插件的私有实现,goal 的后台归账需要同一个转换却拿不到,于是拿 proc.key
+   *  直接比投影路径——fork 过的会话(rekeyProc 后 key≠path)被误判成后台会话,round 双跳。 */
   const nsForSessionKey = (sessionKey: string): string =>
-    useSessionStore.getState().sessionInfos?.[sessionKey]?.neutralSessionId ?? sessionKey;
+    scopeKeyFromSessionKey(sessionKey, (k) => useSessionStore.getState().sessionInfos?.[k]?.neutralSessionId);
   /** 最新条目记录(entryAppended 权威 id;messageEnd 兜底)。 */
   const recordEntry = (path: string, entryId: string | undefined): void => {
     if (!entryId) return;
