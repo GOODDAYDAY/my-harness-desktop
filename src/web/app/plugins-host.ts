@@ -1,5 +1,5 @@
-import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, registerAuxParsers, unregisterAuxParsers, registerComposerCommands, unregisterComposerCommands, type PluginListItem } from "@my-harness-desktop/react";
-import type { ChannelMeta, ComposerCommand } from "@my-harness-desktop/shared";
+import { useUiStore, eventBus, registerPluginComponents, unregisterPluginComponents, registerPluginMessageRenderers, unregisterPluginMessageRenderers, registerPluginModule, unregisterPluginModule, registerAuxParsers, unregisterAuxParsers, registerComposerCommands, unregisterComposerCommands, registerSessionSlots, unregisterSessionSlots, type PluginListItem } from "@my-harness-desktop/react";
+import type { ChannelMeta, ComposerCommand, SessionSlot } from "@my-harness-desktop/shared";
 
 // 构建期打进 bundle 的插件 renderer 表。两个根:
 //   · src/plugins/**          —— 随壳分发的内置壳插件(含 pi/dsh 内核的对接面)
@@ -37,10 +37,13 @@ for (const path of Object.keys(builtinModules)) {
 
 const pluginManifests = new Map<string, PluginListItem>();
 
-async function loadBuiltin(pluginId: string, manifest: PluginListItem): Promise<void> {
-  const path = builtinPathById.get(pluginId);
-  if (!path) throw new Error(`builtin 插件 ${pluginId} 的 renderer chunk 未找到`);
-  const mod = await builtinModules[path]() as Record<string, unknown>;
+/** 收集插件 module 的全部导出贡献(组件/消息渲染器/channel/auxParsers/命令/会话槽)。
+ *
+ *  此前这段逻辑在 loadBuiltin 与 loadThirdParty 里各写一遍(两个 loader 只差「chunk 表 vs
+ *  磁盘 import」这一件事)。加第五种导出(sessionSlots)会变成第三遍——按 CLAUDE.md §3.3
+ *  「多个调用方的逻辑大同小异、差别只在参数 → 收敛到框架一个实现」,收进这里,两个 loader
+ *  只负责「怎么拿到 mod」,收集口径单源。 */
+function collectModuleExports(pluginId: string, mod: Record<string, unknown>, manifest: PluginListItem): void {
   registerPluginComponents(mod, manifest.contributes ?? {});
   registerPluginMessageRenderers(mod, manifest.contributes ?? {});
   const channels = mod.channels;
@@ -59,34 +62,26 @@ async function loadBuiltin(pluginId: string, manifest: PluginListItem): Promise<
     registerComposerCommands(composerCommands as ComposerCommand[]);
     pluginComposerCommandNames.set(pluginId, (composerCommands as ComposerCommand[]).map((c) => c.name));
   }
+  // sessionSlots 可选导出(设计 docs/design/session-scope.md §2.4.1):按会话隔离的状态槽声明。
+  // 注册表在 scope store(单源),这里只是写入口——与 channels/auxParsers 同款收集模式。
+  const sessionSlots = mod.sessionSlots;
+  if (Array.isArray(sessionSlots)) registerSessionSlots(pluginId, sessionSlots as SessionSlot[]);
   pluginManifests.set(pluginId, manifest);
   registerPluginModule(pluginId, mod);
+}
+
+async function loadBuiltin(pluginId: string, manifest: PluginListItem): Promise<void> {
+  const path = builtinPathById.get(pluginId);
+  if (!path) throw new Error(`builtin 插件 ${pluginId} 的 renderer chunk 未找到`);
+  const mod = await builtinModules[path]() as Record<string, unknown>;
+  collectModuleExports(pluginId, mod, manifest);
   loadedBuiltin.add(pluginId);
 }
 
 async function loadThirdParty(pluginId: string, pluginPath: string, rendererEntry: string, manifest: PluginListItem): Promise<void> {
   const fullPath = `${pluginPath}/${rendererEntry}`.replace(/\\/g, "/");
   const mod = await import(/* @vite-ignore */ `file://${fullPath}?t=${Date.now()}`) as Record<string, unknown>;
-  registerPluginComponents(mod, manifest.contributes ?? {});
-  registerPluginMessageRenderers(mod, manifest.contributes ?? {});
-  const channels = mod.channels;
-  if (Array.isArray(channels)) {
-    // channelMeta 可选导出:channel 的可读描述(快捷键/命令面板动态列表用),缺省回退显示 channel 名。
-    const meta = mod.channelMeta as Record<string, ChannelMeta> | undefined;
-    eventBus.registerChannels(pluginId, channels as string[], meta);
-  }
-  const auxParsers = mod.auxParsers;
-  if (Array.isArray(auxParsers)) {
-    registerAuxParsers(auxParsers);
-    pluginAuxParserIds.set(pluginId, auxParsers.map((p) => (p as { id?: string }).id ?? ""));
-  }
-  const composerCommands = mod.composerCommands;
-  if (Array.isArray(composerCommands)) {
-    registerComposerCommands(composerCommands as ComposerCommand[]);
-    pluginComposerCommandNames.set(pluginId, (composerCommands as ComposerCommand[]).map((c) => c.name));
-  }
-  pluginManifests.set(pluginId, manifest);
-  registerPluginModule(pluginId, mod);
+  collectModuleExports(pluginId, mod, manifest);
   loadedThirdParty.add(pluginId);
 }
 
@@ -142,6 +137,9 @@ window.kernel.plugins.onUnloaded((pluginId: string, _components: string[]) => {
     unregisterComposerCommands(commandNames);
     pluginComposerCommandNames.delete(pluginId);
   }
+  // 会话槽摘除(设计 §2.4.4):摘注册表 + 对每个会话域的已存在值调 onLeave(释放订阅/定时器),
+  // 但**不删 scopes 里的数据**——插件热装回来时用户的态原样恢复。
+  unregisterSessionSlots(pluginId);
   const manifest = pluginManifests.get(pluginId);
   if (manifest) {
     unregisterPluginComponents(manifest.contributes ?? {});

@@ -372,6 +372,12 @@ export { useComposerAttachments, type ComposerAttachmentItem, type ComposerAttac
 export { useComposerActions, type ComposerActionItem } from "./composer-actions";
 export { useComposerStats, type ComposerStatsItem } from "./composer-stats";
 export { useComposerTop, type ComposerTopItem } from "./composer-top";
+// 会话作用域发布面(设计 docs/design/session-scope.md §2.4)
+export {
+  registerSessionSlots, unregisterSessionSlots,
+  useSessionScope, useSessionScopeRef, useSessionScopeAccess, useCurrentScopeKey,
+  type SessionScopeAccess,
+} from "./session-scope";
 export { useComposerVoice, type ComposerVoiceItem, type ComposerVoiceProps } from "./composer-voice";
 export { useSettingsGroups, type SettingsGroupItem } from "./settings-groups";
 export { getPluginComponent, registerPluginModule, unregisterPluginModule, getLoadedPluginIds, getPluginOverlay, asReactComponent } from "./plugin-modules";

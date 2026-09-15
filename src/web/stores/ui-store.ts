@@ -15,6 +15,8 @@ import { GENERAL_CONFIG_PATH } from "@my-harness-desktop/shared";
 import { useLayoutStore } from "./layout-store";
 import { readGeneralConfig, setGeneralConfigCwd } from "./general-config";
 import { eventBus } from "../../../packages/react/src/event-bus";
+import { setScopeKeyResolver } from "./session-scope";
+import { sessionScopeKey } from "@my-harness-desktop/shared";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
  *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */
@@ -551,4 +553,18 @@ eventBus.on("system:configFileSaved", (payload) => {
   if ((payload as { path?: string })?.path === GENERAL_CONFIG_PATH) {
     void useUiStore.getState().reloadGeneralConfig();
   }
+});
+
+// 会话作用域身份解析器绑定(设计 docs/design/session-scope.md §2.2.1/§2.5.2)。
+//
+// 为什么绑在这里而不是 app 装配点:本 store 是两个身份字段(currentNeutralSessionId /
+// currentCwd)的属主,模块级绑定保证它在任何插件加载、任何 emit/on 之前就生效——不存在
+// 「插件已加载、resolver 还没绑」的时序窗口。scope store 不 import 本文件(经注入拿身份),
+// 所以这条边不成环;批 2 起 carrySessionKey 也要调 scope store 的 carry,那条边同样单向。
+//
+// event-bus 的 scoped channel 坐标绑的是同一个函数——状态写进哪个域、事件坐标是什么,
+// 两者同源,不会出现「状态写进 A 域、事件坐标是 B」的错配。
+setScopeKeyResolver(() => {
+  const s = useUiStore.getState();
+  return sessionScopeKey(s.currentNeutralSessionId, s.currentCwd);
 });

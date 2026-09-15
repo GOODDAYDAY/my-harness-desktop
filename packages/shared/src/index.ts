@@ -32,6 +32,7 @@ export * from "./domain/path-utils";
 export * from "./domain/remote";
 export * from "./domain/restart";
 export * from "./domain/session-neutral";
+export * from "./domain/session-scope";
 export * from "./domain/sessions";
 export * from "./domain/text";
 export * from "./domain/skills";
