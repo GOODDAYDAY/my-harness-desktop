@@ -92,6 +92,19 @@ async function composerGoalAccent(page) {
   });
 }
 
+/** 轮询等绿晕达到期望态(want)。绿晕由 goal:state scoped channel 驱动,而 goal 的广播改成
+ *  「值变化」的 effect 驱动后,emit 比 setGoal 晚一个渲染周期(React 批处理);timeline 收到
+ *  再重渲染又是一个周期。即时断言会偶发抢在绿晕落定之前(实测间歇失败)。人眼几十 ms 内
+ *  看到绿晕、无感——是探针赌了固定时序(skill §3.4:收敛要轮询,不赌 sleep),改轮询即稳。 */
+async function waitGoalAccent(page, want) {
+  return page.waitForFunction((w) => {
+    const ta = document.querySelector("[data-timeline-composer]");
+    const pill = ta?.parentElement;
+    const on = !!pill && pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
+    return on === w;
+  }, { timeout: 6000, polling: 100 }, want).then(() => true).catch(() => false);
+}
+
 /** 目标条(含指定文本的横幅)左边框样式是否含某 CSS 变量。 */
 async function goalBarStyleContains(page, text, cssVar) {
   return page.evaluate(([t, v]) => {
@@ -213,14 +226,14 @@ try {
   ok((await selCount(page, '[title="停止"]')) >= 1, "② active 态:停止按钮在位");
   ok((await selCount(page, "[data-goal-bar]")) === 1, "② 目标横幅在位(composerTop 槽)");
   ok(await goalBarAboveComposer(page), "② 目标横幅位于输入框上方");
-  ok(await composerGoalAccent(page), "② goal 生效:输入框药丸挂绿晕着色");
+  ok(await waitGoalAccent(page, true), "② goal 生效:输入框药丸挂绿晕着色");
   await shot("goal-set");
 
   // ③ 点停止 → paused 态
   await clickSel(page, '[title="停止"]');
   await waitFor(page, () => !!document.querySelector('[title="恢复"]'), "③ 点停止 → 恢复按钮出现");
   ok(await goalBarStyleContains(page, OBJECTIVE, "--color-accent-warning"), "③ 目标条转警告色边框(paused)");
-  ok(!(await composerGoalAccent(page)), "③ 暂停后输入框绿晕熄灭");
+  ok(await waitGoalAccent(page, false), "③ 暂停后输入框绿晕熄灭");
   await shot("goal-paused");
 
   // ④ 点轮次按钮进编辑 → 键入新目标回车 → 更新
@@ -248,14 +261,14 @@ try {
     () => document.body.innerText.includes("1/1000"),
     "⑤ 恢复即装弹:轮次 1/1000(0 → 1;续跑发送在沙箱快速失败,轮次推进可见)",
   );
-  ok(await composerGoalAccent(page), "⑤ 恢复生效:输入框绿晕回归");
+  ok(await waitGoalAccent(page, true), "⑤ 恢复生效:输入框绿晕回归");
   await shot("goal-resumed");
 
   // ⑥ /goal stop → 再暂停
   await typeIntoComposer(page, "/goal stop");
   await page.keyboard.press("Enter");
   await waitFor(page, () => !!document.querySelector('[title="恢复"]'), "⑥ /goal stop → 恢复按钮回归(paused)");
-  ok(!(await composerGoalAccent(page)), "⑥ 再暂停:输入框绿晕再熄灭");
+  ok(await waitGoalAccent(page, false), "⑥ 再暂停:输入框绿晕再熄灭");
 
   // ⑦ 点垃圾桶 → 目标条从 DOM 消失
   await clickSel(page, '[title="关闭目标"]');

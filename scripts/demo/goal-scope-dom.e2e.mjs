@@ -96,7 +96,26 @@ async function typeIntoComposer(text) {
 }
 
 /** DOM 结构快照:一次 evaluate 取全部结构事实(避免多次往返与时序漂移)。 */
-const domStructure = () => page.evaluate(() => {
+/** 等绿晕态与 goal-bar 的 active 相位收敛一致(不变量:绿晕 === bar存在 && phase===active)。
+ *  绿晕经 goal:state scoped channel 跨组件传播,而 goal 广播是「值变化」effect 驱动
+ *  (比 setGoal 晚一个渲染周期)+ timeline 重渲染又一周期——瞬时快照会偶发抢在绿晕落定前
+ *  (goal-command.e2e 实测间歇失败)。等这个不变量成立再快照,自适应所有阶段(设/切/停/删)。
+ *  人眼几十 ms 无感,是探针赌固定时序的问题(skill §3.4),不是产品 bug。 */
+async function waitAccentSettled() {
+  await page.waitForFunction(() => {
+    const bar = document.querySelector("[data-goal-bar]");
+    const active = !!bar && bar.getAttribute("data-goal-phase") === "active";
+    const ta = document.querySelector("[data-timeline-composer]");
+    const pill = ta?.parentElement;
+    const accent = !!pill && pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
+    return accent === active;
+  }, { timeout: 6000, polling: 80 }).catch(() => {});
+}
+
+/** DOM 结构快照:先等绿晕收敛,再一次 evaluate 取全部结构事实(避免多次往返与时序漂移)。 */
+const domStructure = async () => {
+  await waitAccentSettled();
+  return page.evaluate(() => {
   const bar = document.querySelector("[data-goal-bar]");
   const ta = document.querySelector("[data-timeline-composer]");
   const pill = ta?.parentElement ?? null;
@@ -125,7 +144,8 @@ const domStructure = () => page.evaluate(() => {
     // 幽灵节点:页面里还有没有别的会话的目标文本
     bodyHasA: document.body.innerText.includes("结构审查目标甲"),
   };
-});
+  });
+};
 
 try {
   await page.waitForFunction(() => document.readyState === "complete", { timeout: 30000 });

@@ -137,6 +137,17 @@ const composerGoalAccent = () => page.evaluate(() => {
   const pill = ta?.parentElement;
   return !!pill && pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
 });
+/** 轮询等绿晕达到期望态。绿晕经 goal:state scoped channel 传播,而 goal 广播是「值变化」
+ *  effect 驱动(比 setGoal 晚一个渲染周期)+ timeline 重渲染又一个周期——即时断言会偶发抢跑
+ *  (goal-command.e2e 实测间歇失败)。人眼几十 ms 内看到绿晕无感,探针不能赌固定时序(§3.4)。 */
+async function waitGoalAccent(want) {
+  return page.waitForFunction((w) => {
+    const ta = document.querySelector("[data-timeline-composer]");
+    const pill = ta?.parentElement;
+    const on = !!pill && pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
+    return on === w;
+  }, { timeout: 6000, polling: 100 }, want).then(() => true).catch(() => false);
+}
 const roundText = () => page.evaluate(() => {
   const bar = document.querySelector("[data-goal-bar]");
   const m = bar?.innerText.match(/(\d+)\/(\d+)/);
@@ -155,7 +166,7 @@ try {
   await sendGoal(GOAL_A);
   ok((await goalBarCount()) === 1, "A: /goal 后目标条出现");
   ok(await goalBarHasText(GOAL_A), `A: 目标条显示「${GOAL_A}」`);
-  ok(await composerGoalAccent(), "A: goal 生效,输入框药丸挂绿晕");
+  ok(await waitGoalAccent(true), "A: goal 生效,输入框药丸挂绿晕");
   await shot("A-goal-set");
 
   // ── B) 切到乙:核心隔离断言 ──
@@ -163,7 +174,7 @@ try {
   await waitForDomIdle(page, { quietMs: 400, timeoutMs: 5000 }).catch(() => {});
   ok((await goalBarCount()) === 0, "B: 切到乙会话后目标条消失(甲的目标不串到乙——迁移核心目的)");
   ok(!(await goalBarHasText(GOAL_A)), "B: 乙会话看不到甲的目标文本");
-  ok(!(await composerGoalAccent()), "B: 乙会话输入框绿晕熄灭(goal:state scoped channel 按会话过滤)");
+  ok(await waitGoalAccent(false), "B: 乙会话输入框绿晕熄灭(goal:state scoped channel 按会话过滤)");
   await shot("B-switched-clean");
 
   // ── C) 乙设自己的目标 ──
