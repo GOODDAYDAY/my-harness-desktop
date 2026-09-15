@@ -323,7 +323,7 @@ private appendNeutral(proc: SessionProc, entry: NeutralEntry): void {
 
 - G10 e2e：`scripts/demo/stats-single-source.e2e.mjs`（新建），dsh 内核下真实发一轮，断言本会话 tokens 非 0、上下文条非空、tps 有值。过 `quiet-env.mjs` 静默跑，`page.waitForFunction` 事件驱动等 DOM。
 - 静态守卫：`scripts/dependency-audit.mjs` 加两条（设计文档 §3.2.4.2）——统计链路零 `capabilities.extensions`/`KernelId`/`asPi`；`SessionCatalog` 无 `projectStats`/`contextProbeTokens`。
-- 文档同步（§7.4）：改 `kernel-parity-audit.md:82` 的 stale ✅、重写 `token-stats.md` §6.4「dsh 缺面留空」整节。
+- 文档同步（§7.4）：改 `kernel-parity-audit.md:82` 的 stale ✅、重写 `docs/plugins/insight/token-stats.md` §6.4「dsh 缺面留空」整节（带路径：`token-stats.md` 在 `docs/plugins/insight/` 与 `docs/legacy/` 下各有一份同名文件，不带路径会让交叉引用门判为无法解析）。
 - 验：`npm run build` + e2e 静默跑通 + `npm run audit:deps` 全绿。
 
 **注意 Step 5 的依赖**：getStats 切到投影器后，pi 的 `getSessionStats`（`pi-backend.ts:271`）与 `toSessionStats`（`context-binding.ts:147`）失去调用方，但**本步不删**——删契约方法（`SessionCatalog.projectStats`/`contextProbeTokens`）是交付物 4 的事，删早了编译不过。Step 5 只切读口，留死代码给交付物 4。
