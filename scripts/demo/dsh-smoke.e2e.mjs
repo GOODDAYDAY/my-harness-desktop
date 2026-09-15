@@ -144,7 +144,12 @@ try {
   ok(recRows.some((r) => r.kind === "request"), "记录有 request 行(agent/request → LlmCallConfig 原样)");
   ok(recRows.some((r) => r.kind === "response"), "记录有 response 行(边界结算,不伪造 status/message)");
   const recIdx = JSON.parse(readFileSync(join(logDir, "index.json"), "utf-8"));
-  ok((recIdx.sessions?.[jsonl.replace(/\.jsonl$/, "")]?.bytes ?? 0) > 0, "index.json 记账 bytes>0(逐行增量,不双计)");
+  // index.json 的键 = **首片文件名(含 .jsonl)**,与 pi 侧同约定、与磁盘同名——这是产品契约,
+  // 权威守卫是 dsh-extension-flow.test.ts:247「index 的键必须是首片文件名 = `${SID}.jsonl`」。
+  // 此前本断言用 jsonl.replace(/\.jsonl$/, "") 剥掉后缀去查键,永远查不到 → bytes 恒 0 → 假失败
+  // (main 上既有,与 session-scope 无关)。续片命名是 <stem>.N.jsonl,归一到首片 <stem>.jsonl。
+  const shardKey = jsonl.replace(/\.\d+\.jsonl$/, ".jsonl");
+  ok((recIdx.sessions?.[shardKey]?.bytes ?? 0) > 0, `index.json 记账 bytes>0(键=首片文件名含 .jsonl,实际键 ${shardKey})`);
 
   // 探针锚点正值守卫(item 3):起了内核 → 模型控件在,且锚**带值**。
   // 档位锚不在此正断言:档位控件按**模型**条件渲染(`levels.length > 0` 才画),本 e2e 选的
