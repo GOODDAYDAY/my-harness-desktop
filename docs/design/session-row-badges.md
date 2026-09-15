@@ -228,7 +228,7 @@ sequenceDiagram
 
 #### 2.2.4 加载顺序：首次启动有渲染闸门，只有热装路径需要重拉
 
-一个自然的担心是：sessions-list 与 ask 是两个独立插件，`plugins-host.ts` 用 `Promise.all` 并发加载（`:104-121`），谁先 resolve 不确定——如果左栏先渲染出来、ask 后加载完，行首图标会不会先显示阶段图标、再跳成待答图标？
+sessions-list 与 ask 是两个独立插件，`plugins-host.ts` 用 `Promise.all` 并发加载（`:104-121`），谁先 resolve 不确定。那么：左栏先渲染出来、ask 后加载完时，行首图标会不会先显示阶段图标、再跳成待答图标？
 
 首次启动不会，因为 UI 根本不在这期间渲染。`web/app-main.tsx:209-216` 有一道渲染闸门：`Promise.race([Promise.all([hydrateP, layoutHydrateP, initI18n(), pluginsReadyP]), timeoutP])`，`pluginsReady` resolve（即全部插件加载完、`bumpPlugins()` 已在 `plugins-host.ts:122` 调过）之后才 `render`。注释写明了这道闸门的理由——"插件组件注册完成才 render，否则槽宿主首渲染会闪『组件未注册』回退"。所以左栏首次渲染看到的就是完整的槽清单，不存在图标替换。闸门有 5s race 兜底（`timeoutP`），超时也渲染——那种情况下确实可能后到的贡献项缺席，但它是既有的降级路径，所有走 `pluginsNonce` 重拉的贡献型槽都一样，本设计不新增风险。
 
@@ -274,7 +274,7 @@ flowchart TB
 
 leading 单选模型必须有一个兜底方，否则所有候选都不主张时行首会空着（图 4 的 E 分支）。兜底的自然写法看起来是"让它的 `claims()` 返回全部会话主键"，这个写法不成立：兜底语义是常量 `true`，却要物化一个 N 元素集合——500 个会话就是 500 个主键的 Set，每行渲染前都要构建与查询，而它承载的信息量是零。更要命的是这个全集从哪来没有答案：兜底方要么去读 sessions-list 的会话列表 store（违 §6.2.1 不共享数据），要么自己再订阅一条列表事件（多一条订阅只为表达"我全都要"）。
 
-正确做法是把缺省语义反过来：**判据是"这个贡献项有没有提供 `claims` 方法"，不是"有没有数据源"**。没有 `claims`（既包括完全没有数据源、也包括有数据源但只用于渲染不用于主张）就是无条件主张——任何会话都命中；提供了 `claims` 才是条件主张。这样兜底方零集合、零额外订阅，条件方按自己的数据主张，两种形态用一个方法在不在场来区分，不需要契约里再加 `fallback` / `claimScope` 之类的字段（CLAUDE.md §1.2「机制与内容分离」的推论，也是全局工程原则里的同一条：行为由实际内容与已有语义字段涌现，不靠新增一个让引擎 `switch` 的声明式类型标签）。
+正确做法是把缺省语义反过来：**判据是"这个贡献项有没有提供 `claims` 方法"，不是"有没有数据源"**。没有 `claims`（既包括完全没有数据源、也包括有数据源但只用于渲染不用于主张）就是无条件主张——任何会话都命中；提供了 `claims` 才是条件主张。这样兜底方零集合、零额外订阅，条件方按自己的数据主张，两种形态用一个方法在不在场来区分，不需要契约里再加 `fallback` / `claimScope` 之类的字段（CLAUDE.md §1.2「机制与内容分离」的推论：行为由实际内容与已有语义字段涌现，不靠新增一个让引擎 `switch` 的声明式类型标签）。
 
 为什么判据不能落在"有没有数据源"上：leading 兜底方 PhaseBadge 恰恰**有**数据源——它要维护每行的 phase 供组件渲染，只是那份数据不用于主张判定（§5.1.1、§2.6.1 三组合表的第二行）。若判据是"有源即条件主张"，PhaseBadge 就被迫提供 `claims()`，又回到返回全集那个不成立的写法。
 
@@ -284,7 +284,7 @@ leading 单选模型必须有一个兜底方，否则所有候选都不主张时
 
 #### 2.3.3 trailing：全部渲染，order 升序叠加
 
-trailing 区没有互斥语义——未读圆点和内核告警可以同时出现，现状就是两个独立条件并列（`:860` 与 `:871`）。所以规则是全部渲染、按 `order` 排视觉先后。贡献方"没事就不占位"靠组件返回 `null`，React 天然跳过。
+trailing 区没有互斥语义——未读圆点和内核告警可以同时出现，现状就是 `sessions-list/renderer/index.tsx` 里两个独立条件并列（`:860` 与 `:871`）。所以规则是全部渲染、按 `order` 排视觉先后。贡献方"没事就不占位"靠组件返回 `null`，React 天然跳过。
 
 trailing 不需要主张机制：它不单选，所以不需要在挂载前判定；把判定留给组件自己返回 null，少一层机制。这个不对称是有意的——**主张机制是为单选服务的，不是为徽章服务的**。
 
@@ -396,7 +396,7 @@ flowchart LR
 
 #### 2.5.3 hover 让位规则怎么表达
 
-现状是 `unread && !hovered && !childSessions?.length`（`:871`）——三个条件里，`unread` 是贡献方自己的数据，`hovered` 与 `hasChildren` 是行上下文，都由 props 提供（§2.1.3）。让位规则完整地由贡献方表达，壳只提供事实，不做判断。
+现状是 `unread && !hovered && !childSessions?.length`（`sessions-list/renderer/index.tsx:871`）——三个条件里，`unread` 是贡献方自己的数据，`hovered` 与 `hasChildren` 是行上下文，都由 props 提供（§2.1.3）。让位规则完整地由贡献方表达，壳只提供事实，不做判断。
 
 ### 2.6 行级数据源的注册机制
 
@@ -679,7 +679,7 @@ dock 是新组件，文案本就必须进 i18n；而只让新组件进、旧组�
 
 #### 4.4.1 现状：matchedPolicy 命中时 composerTopNodes 照样渲染
 
-timeline 有两处 `ComposerDock`：空会话态（`:1190`）与正常态（`:1290`），两处都是 `<ComposerDock>{composerTopNodes}{composer}</ComposerDock>` 形态——`composerTopNodes` 无条件渲染，而 `composer` 变量在只读态被换成 `readonlyBar`（`:1096`，判据是 `matchedPolicy`，定义在 `:478`：`sessionCustom` 命中某个 `composerPolicies` 贡献的 `customKey`）。
+timeline 有两处 `ComposerDock`（`timeline/renderer/index.tsx`）：空会话态（`:1190`）与正常态（`:1290`），两处都是 `<ComposerDock>{composerTopNodes}{composer}</ComposerDock>` 形态——`composerTopNodes` 无条件渲染，而 `composer` 变量在只读态被换成 `readonlyBar`（`:1096`，判据是 `matchedPolicy`，定义在 `:478`：`sessionCustom` 命中某个 `composerPolicies` 贡献的 `customKey`）。
 
 结果：子 agent 会话（`sub-agent/plugin.json:62` 声明了 `customKey: "subagent"` 的只读策略）里，输入框是"只读提示条"，但它上方的 GoalBar 照常渲染。AskDock 进来后同样会渲染——一个能回答问题却不能发消息的界面，语义矛盾。
 
@@ -705,7 +705,7 @@ timeline 有两处 `ComposerDock`：空会话态（`:1190`）与正常态（`:12
 
 它是 leading 区的兜底方，而兜底的表达方式是**不提供 `claims`**（§2.3.2）——它仍然导出行级数据源（要维护每行的 phase 供组件渲染），只是那份数据不用于主张判定。它不需要维护一个含全部会话主键的集合，也不需要知道会话列表长什么样。order 取最大（100），保证它只在所有条件方都不主张时才被问到，行首永远有图标。
 
-`phase` 的模块级 store 与 ask 的 store 同构：`init()` 里建一条 `onKernelEvent` 订阅喂 `advancePhase`，`processExit` / `rpcError` 归 idle（现有 `:204` 的逻辑原样搬），`Map<ns, WorkingPhase>` 供组件读。它**导出数据源但不带 `claims`**——落在 §2.6.1 三组合表的第二行（有数据、不参与主张判定）。
+`phase` 的模块级 store 与 ask 的 store 同构：`init()` 里建一条 `onKernelEvent` 订阅喂 `advancePhase`，`processExit` / `rpcError` 归 idle（现有 `sessions-list/renderer/index.tsx:204` 的逻辑原样搬），`Map<ns, WorkingPhase>` 供组件读。它**导出数据源但不带 `claims`**——落在 §2.6.1 三组合表的第二行（有数据、不参与主张判定）。
 
 #### 5.1.2 UnreadBadge（trailing，order 100）：readState 持久化原样搬
 
@@ -721,7 +721,7 @@ timeline 有两处 `ComposerDock`：空会话态（`:1190`）与正常态（`:12
 
 commit 2 声称"左栏视觉与行为完全不变"，而迁移确实把一条 `onKernelEvent` 订阅拆成了 phase 与 unread 两条（订阅数 1 → 2）。这个变化是 §2.4.1 的显式取舍（每个徽章一条订阅，而不是每行每徽章一条），不是漏算。要成立的是"拆开不改变最终状态"，三条理由：
 
-第一，两个 store 之间**没有数据依赖**。phase 读的是事件本身（`advancePhase(prev, event)`），unread 读的是事件里的 `entry.id` 与 config 里的位标，谁也不读对方的结果。现有那条订阅里两件事也是各写各的 state（`setPhase` 与 `recordEntry` 两个独立调用，`:210` 与 `:214`），本来就不是"unread 依赖 phase 已推进"的链式关系。
+第一，两个 store 之间**没有数据依赖**。phase 读的是事件本身（`advancePhase(prev, event)`），unread 读的是事件里的 `entry.id` 与 config 里的位标，谁也不读对方的结果。现有那条订阅里两件事也是各写各的 state（`setPhase` 与 `recordEntry` 两个独立调用，`sessions-list/renderer/index.tsx:210` 与 `:214`），本来就不是"unread 依赖 phase 已推进"的链式关系。
 
 第二，React 18 的自动批处理保证两次 setState 仍落在同一批次。`dispatchKernel`（`session-store.ts:3118`）是同步循环投递给全部订阅者，两个 store 的更新在同一次同步调用栈内完成，渲染只发生一次——不会出现"phase 先渲染一帧、unread 后渲染一帧"的中间态。注意这条依赖投递是同步的，若将来 `dispatchKernel` 改成异步或分帧，本条论证失效，需要重新评估。
 
