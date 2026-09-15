@@ -137,7 +137,7 @@ flowchart TB
  *  (待回答/未读/工作阶段等)。声明静态走 manifest(与 messageActions 同构);
  *  消费方(sessions-list)查槽后按 placement 分区渲染,组件经框架自动匹配。
  *  数据归贡献方自持(模块级 store + 一条订阅,N 行共用),壳不知道任何指示的业务语义。
- *  两区解析规则不同(§2.3):leading 由 主张集合单选,trailing 全部叠加。 */
+ *  两区解析规则不同(§2.3):leading 由主张集合单选,trailing 全部叠加。 */
 export interface SessionRowBadgeContribution {
   /** 贡献 id(插件内唯一);同 id 被后注册插件整项替换(registry removeById 通用语义)。 */
   id: string;
@@ -397,11 +397,11 @@ flowchart LR
 
 现状是 `unread && !hovered && !childSessions?.length`（`:871`）——三个条件里，`unread` 是贡献方自己的数据，`hovered` 与 `hasChildren` 是行上下文，都由 props 提供（§2.1.3）。让位规则完整地由贡献方表达，壳只提供事实，不做判断。
 
-### 2.6 行级数据源 的注册机制
+### 2.6 行级数据源的注册机制
 
 #### 2.6.1 导出形状
 
-行级数据源 与 `auxParsers` / `composerCommands` 同款：插件 renderer 模块的静态导出，框架加载时收集。
+行级数据源与 `auxParsers` / `composerCommands` 同款：插件 renderer 模块的静态导出，框架加载时收集。
 
 ```ts
 /** init 的依赖注入包:框架在模块加载期调用 init 时传入(§2.4.5)。
@@ -660,7 +660,7 @@ flowchart LR
 
 #### 4.3.1 AwaitingBadge：order 50 抢 leading，不主张时回落
 
-ask 声明 `{ id: "awaiting", component: "AwaitingBadge", placement: "leading", order: 50 }`，并导出配对 store（`badgeId: "awaiting"`，带 `claims`）。组件读模块级 store，本行有主张就渲染一个脉冲图标（`MessageCircleQuestion`，`animate-pulse`，颜色用 `--color-accent-warning`——警示语义，与未读圆点的 `--color-primary` 区分开），否则返回 `null`。实际上 leading 区解析（§2.3.1）已经保证只有 主张命中时才挂载它，组件内的 null 分支是防御性冗余，不是主路径。
+ask 声明 `{ id: "awaiting", component: "AwaitingBadge", placement: "leading", order: 50 }`，并导出配对 store（`badgeId: "awaiting"`，带 `claims`）。组件读模块级 store，本行有主张就渲染一个脉冲图标（`MessageCircleQuestion`，`animate-pulse`，颜色用 `--color-accent-warning`——警示语义，与未读圆点的 `--color-primary` 区分开），否则返回 `null`。实际上 leading 区解析（§2.3.1）已经保证只有主张命中时才挂载它，组件内的 null 分支是防御性冗余，不是主路径。
 
 #### 4.3.2 数据：模块级 store 订阅 question/questionSettled，冷启动 getPendingQuestionsAll 拉基线
 
@@ -903,7 +903,7 @@ flowchart TB
 
     subgraph Restart["重启 / 杀进程（虚线路径）"]
         HOLD["记录保持 pending<br/>无 TTL、无超时"]
-        BOOT["插件加载期 init()：<br/>dock 拉 getPendingQuestions<br/>行级数据源 拉 getPendingQuestionsAll"]
+        BOOT["插件加载期 init()：<br/>dock 拉 getPendingQuestions<br/>行级数据源拉 getPendingQuestionsAll"]
         HOLD --> BOOT
     end
     EV1 -.->|进程死 / 关 app| HOLD
@@ -954,7 +954,7 @@ flowchart TB
 
 ## 9 QA
 
-**Q：leading 区为什么不让贡献方在 manifest 里声明一个条件，而要额外搞一套 行级数据源导出？**
+**Q：leading 区为什么不让贡献方在 manifest 里声明一个条件，而要额外搞一套行级数据源导出？**
 
 manifest 是静态 JSON，表达不了"这个会话此刻有没有我的事"——那个判据是贡献方模块级 store 里的运行时数据（§2.4.2）。要让消费方在挂载前判定，只有两条路：把探测函数塞进契约（等于让壳认识"什么叫待回答"，违 §2.4.3），或者让贡献方导出一个数据查询接口。行级数据源是后者——它返回的是一组不透明会话主键，壳只做集合成员判断，语义仍在贡献方。额外的成本是一个模块导出与一张登记表，与 `auxParsers` / `composerCommands` 同构，不是新概念。
 
