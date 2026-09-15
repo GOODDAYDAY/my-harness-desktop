@@ -107,9 +107,9 @@
 
 - 读 `currentCwd`/`currentNeutralSessionId`、`useSessionStore` 的 `streaming`、`useArmConfirm`（react 的武装确认 hook）。
 - 守卫同上（assistant + id + currentNeutralSessionId）。
-- `handleFork`：`await ctx.tree.forkFromSession(currentCwd, currentNeutralSessionId, message.id, "at")`——不传 `abortSource`（「从此开新分支」是「两边都要」，源会话继续后台跑完）。**流式中照样可分叉**：不再有 `if (streaming) toast(...)` 的全局拦截，拦的粒度是「在飞的那一行」——manifest 声明 `when.settled: true`，框架经圆心 `messageActionApplies` 在 `pending` 行不渲染按钮（详见 `docs/design/bookmark-snapshot-fork-unify.md` §7.1/§10.1）。注：`forkFromSession` 是中性树面 `ctx.tree.*`，不是 pi 扩展面 `ctx.pi.*`（同一 `deriveSession` 派生核，两内核平等）。
+- `handleFork`：`await ctx.tree.forkFromSession(currentNeutralSessionId, message.id, "at")`——不传 `abortSource`（「从此开新分支」是「两边都要」，源会话继续后台跑完）。**流式中照样可分叉**：不再有 `if (streaming) toast(...)` 的全局拦截，拦的粒度是「在飞的那一行」——manifest 声明 `when.settled: true`，框架经圆心 `messageActionApplies` 在 `pending` 行不渲染按钮（详见 `docs/design/bookmark-snapshot-fork-unify.md` §7.1/§10.1）。注：`forkFromSession` 是中性树面 `ctx.tree.*`，不是 pi 扩展面 `ctx.pi.*`（同一 `deriveSession` 派生核，两内核平等）。
 - 交互是「武装确认」：首次点击 `arm(true)`（按钮原地变红「确认 fork?」，`useArmConfirm` 的 6 秒超时/Esc 自动复位），武装态再点才 `disarm()` + `handleFork()`。这是危险操作（切走当前会话）的二次确认，不是防抖。
-- **fork 与收藏的发起同源但路径不同**：收藏发起走 `ctx.sessions.resume`（读快照 → seed → fork），fork 动作走 `ctx.pi.forkFromSession`（pi 扩展面，直接在中立树切 lineage、惰性物化）。注释写明「与收藏发起同源『从某节点开新分支』」。`forkFromSession` 是 `PiExtensions` 的方法（`packages/shared/src/domain/sessions.ts`），dsh 下无此面——但 ForkAction 不感知这个差异，因为 `plugin-context.ts` 的 `ctx.pi` 恒存在、dsh 下调用会在后端 `piSend`/`asPi` 边界显式降级抛错，UI 用 try/catch 接住报 `shell.forkFailed`。错误消息用正则 `/Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/` 剥掉 IPC 前缀，取出内核侧原始错误文本。
+- **fork 与收藏的发起同源、同通道**（unify §1.3/§2.4：两个入口一条 `deriveSession`）：收藏发起走 `ctx.sessions.resume`（读**预存快照** → `deriveSession` 派生新会话），fork 动作走 `ctx.tree.forkFromSession`（**现算**中立树前缀 → 同一 `deriveSession` 派生新会话）。`forkFromSession` 是 `SessionTreeApi` 的方法（`packages/shared/src/domain/sessions.ts`，**中性面**——非 `PiExtensions`），pi/dsh/minimal 平等可用（minimal-fork.e2e 实测：派生会话 kernel 归属 minimal、首发物化 echo）。ForkAction 不感知内核差异：派生是纯中立写（零内核交互），内核侧物化推迟到首发、由 `materializeActiveLineage` 按 `factory.seed`/`capabilities` 分形态处理。错误消息用正则 `/Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/` 剥掉 IPC 前缀，取出内核侧原始错误文本。
 - 文案用 `shell.*` 共享命名空间（`shell.fork`/`shell.forkArmed`/`shell.forkFailed`/`shell.bookmark`/`shell.bookmarked` 等），由 timeline 贡献（§七.4）。
 
 ### 3.3 message-actions.test.tsx：DOM 测试
@@ -233,7 +233,7 @@
 - `proc.backend = newBackend; proc.boundSessionPath = newBackend.capabilities.pi ? newSessionId : null;`——注意这里 `newBackend.capabilities.pi` 是**能力探测**（pi 有 capabilities.pi，dsh 没有），不是内核身份硬分支。
 - `bindProcEvents(proc); proc.materializedLineageId = proc.activeLineageId;`
 
-`forkFromSession`（1601–1617 行）是 `ForkAction` 的后端落地（经 `ctx.pi.forkFromSession` → `PiExtensions.forkFromSession`）：在源会话中立树切一条新 lineage（`upsertNeutralLineage` 插 `fork: {parentLineageId: rootLineageId, boundaryEntryId: entryId}` + `entries: []`），设 `proc.neutralSessionId = srcNs; proc.activeLineageId = newLineageId`，惰性物化（分支只在下次 send 时 seed）。这就是「fork 与收藏同源」在后端的对照：fork 存 fork 指针 + 空 entries（惰性共享），收藏存物化 entries（快照自包含），两者都经 `materializeActiveLineage` seed 投影。
+`forkFromSession`（`session-store.ts`，`SessionTreeApi.forkFromSession`）是 `ForkAction` 的后端落地（经 `ctx.tree.forkFromSession` → **中性面**，非 pi 扩展面）：与 `fork` 共用 `deriveFromAnchor` 派生核——沿源会话中立树截锚点前缀（`materializeLineagePrefix` 现算）、`deriveSession` 物化成一个**全新会话**（新 ns + 根 lineageId ≡ ns + 物化 entries + `pendingSeed: true`），再 `activateDerived` 切激活、广播基线（**不再** `upsertNeutralLineage` 切空 lineage、**不再**改写 `proc.activeLineageId`——那是被 unify §2.1/§11.1 推翻的旧语义）。这就是「fork 与收藏同源」在后端的对照（unify §1.3/§5）：fork **现算**前缀、收藏发起（`resume`）**读预存快照**，来源之后同走 `deriveSession` 一条通道；两者产物都是「自带内容的新会话 + pendingSeed」，内核侧物化都推迟到首发（`materializeActiveLineage` seed 投影）。
 
 ### 5.4 网关 handler 与 headerChanged 广播
 
@@ -249,7 +249,7 @@
 
 收藏能力从 renderer 到内核会话的完整桥接链路，本插件只触碰 renderer 一侧，但把整条链读通才能定位 bug：
 
-**renderer → window.kernel**：`usePluginContext()`（`packages/react/src/plugin-context.ts`）构造 `SessionsApi`/`PiExtensions`。`SessionsApi.bookmark/resume/deleteBookmark`（84–87 行）与 `PiExtensions.forkFromSession`（47 行）分别桥接到 `window.kernel.sessions.bookmark/resume/deleteBookmark` 与 `window.kernel.sessions.pi.forkFromSession`。
+**renderer → window.kernel**：`usePluginContext()`（`packages/react/src/plugin-context.ts`）构造 `SessionsApi`/`SessionTreeApi`。`SessionsApi.bookmark/resume/deleteBookmark` 桥接到 `window.kernel.sessions.bookmark/resume/deleteBookmark`（经 `ctx.sessions.*`）；`SessionTreeApi.forkFromSession` 桥接到 `window.kernel.sessions.forkFromSession`（经 `ctx.tree.*`，**中性面**——非 `window.kernel.sessions.pi.*`）。
 
 **window.kernel → transport**：`src/web/kernel/build-kernel.ts`（345–347 行、424–425 行）把这些方法桥接成 `transport.invoke(IPC.sessions.bookmark, sessionPath, entryId, id, label, preview)`、`IPC.sessions.resume`、`IPC.sessions.deleteBookmark`、`IPC.session.copySession` 等 HTTP/WS 调用。
 
@@ -340,7 +340,7 @@ timeline（`src/plugins/sessions/timeline/`）是 messageActions 槽的**消费�
 - **机制与内容分离**（§1.2）：本插件是内容层——文案在 locales、渲染逻辑在 renderer、业务分支（「role 必须是 assistant」「label 默认会话名」）在插件内。壳后端只提供「物化前缀、写快照、seed 投影」的机制。
 - **契约单源**（§1.3）：`BookmarkSnapshot`/`MaterializedPrefix`/`materializeLineagePrefix`/`NeutralAnchor`/`neutralEntryId`/`lineageContent` 只在圆心定义一次，renderer 经 `@my-harness-desktop/shared` 引用，无本地副本。`cwdToBucketName` 是「cwd 分桶」唯一源，迁移时引用而非重写。
 - **无特权差异**（§1.4）：本插件是 official 壳插件，无任何「识别内置」路径；删掉它壳照常启动，只少收藏/分叉 UI。
-- **多内核默认**（§1.5）：发起收藏的 seed 投影不分内核硬分支（`materializeActiveLineage` 认 `factory.seed` 返回 null 与否、`capabilities.pi` 能力探测），渲染层 `ctx.sessions.resume` 不写 `if (kernel === "pi")`。`ForkAction` 走 `ctx.pi.forkFromSession` 是 pi 扩展面，dsh 下在后端边界显式降级抛错、UI catch 报错——符合「有则用、无则降级」。
+- **多内核默认**（§1.5）：`ForkAction` 走 `ctx.tree.forkFromSession` 是**中性面**（`SessionTreeApi`），pi/dsh/minimal 平等可用——minimal-fork.e2e 实测派生会话 kernel 归属 minimal、首发物化 echo，证明分叉不依赖任何内核专属能力。内核差异只在 seed 投影形态（`materializeActiveLineage` 认 `factory.seed` 返回 null 与否、`capabilities` 能力探测：pi 文件态预 seed + 重 spawn，dsh RPC seed），渲染层 `ctx.sessions.resume`/`ctx.tree.forkFromSession` 都不写 `if (kernel === "pi")`。
 - **事件驱动**（§3.6）：跨插件交互全走事件（invoke 入队 + tap 揭示 + 订阅冲刷），无 sleep、无轮询。`BookmarkAction` 的 `setTimeout 1500ms` 只是瞬时反馈复位，不是时序赌注。
 - **事件唯一通道**（§8.2）：本插件与 timeline/session-tree 的交互只走 `ctx.events.emit/on/invoke`，不读写对方 store。
 - **根因修复**（§3.7）：`legacyMigrated` 哨兵解决「迁移无完成态」根因、`pendingCreateRef` 豁免解决「文件先落盘/元数据后写在途窗口」根因、`deleteBookmark` 解耦解决「元数据删除被副本删除失败绑架」根因——都是定位根因后的结构修，不是补丁。
@@ -354,7 +354,7 @@ timeline（`src/plugins/sessions/timeline/`）是 messageActions 槽的**消费�
 
 **Q：`bookmark`（收藏）和 `resume`（发起）在 shell 里为什么一个「不同步内核」、一个「同步内核」？**
 
-这是插点抽象的「同步时机」二分。收藏的语义是「先记着，以后再分叉」——所以 `session-store.bookmark` 只物化前缀写快照文件、`materializedLineageId` 不动、不起内核进程。发起的语义是「现在就从这分叉」——所以 `session-store.resume` 要 `start` 起空新会话、`materializeActiveLineage` 把快照前缀 seed 投影到目标内核。fork（`ForkAction`/`ctx.pi.forkFromSession`）则是第三种时机：立即在中立树切 lineage，但**惰性物化**（分支只在下次 send 时才 seed），比发起更轻。
+这是插点抽象的「同步时机」二分。收藏的语义是「先记着，以后再分叉」——所以 `session-store.bookmark` 只物化前缀写快照文件、`materializedLineageId` 不动、不起内核进程。发起的语义是「现在就从这分叉」——`session-store.resume` 读快照、经 `deriveSession` 派生新会话（`pendingSeed: true`）、`activateDerived` 切激活，内核侧物化推迟到首发。fork（`ForkAction`/`ctx.tree.forkFromSession`）与 resume **同一时机、同一通道**（unify §1.3：两个入口一条 `deriveSession`）——唯一差别是内容来源：fork **现算**中立树前缀、resume **读预存快照**；产物都是「自带内容的新会话 + pendingSeed」，内核侧物化都惰性（首发才 seed）。
 
 **Q：快照文件路径为什么是 `<cwd>/.my-harness-desktop/bookmarks/`，而不是跟元数据一起放 config 目录？**
 
@@ -378,4 +378,4 @@ timeline（`src/plugins/sessions/timeline/`）是 messageActions 槽的**消费�
 
 **Q：`ForkAction`（立即分叉）和收藏发起（`resume`）都是「开新分支」，为什么不合并成一条路径？**
 
-它们同源（插点）但时机与数据载体不同：`ForkAction` 走 `ctx.pi.forkFromSession`（pi 扩展面，中立树切空 lineage、惰性物化，立即从当前会话某节点分叉）；收藏发起走 `ctx.sessions.resume`（读快照自包含前缀、seed 到目标内核，可跨会话、可跨内核、可跨时间）。前者「现在就分叉当前会话」、后者「从记过的快照发起」。UI 上两个入口（messageActions 的 fork 按钮 + 收藏列表的点击发起）语义不同，不能合并。这也是 `bookmark-fork-at.md` QA 里「fork 按钮和收藏按钮不重复」的答案。
+它们同源（插点）、**同通道**（`deriveSession`，unify §1.3/§2.4）但**内容来源**不同：`ForkAction` 走 `ctx.tree.forkFromSession`（中性面，**现算**源会话中立树的锚点前缀，立即从当前会话某节点派生新会话）；收藏发起走 `ctx.sessions.resume`（**读预存快照**的自包含前缀，可跨会话、可跨内核、可跨时间——源会话删了也能发起）。前者「现在就分叉当前会话」、后者「从记过的快照发起」。UI 上两个入口（messageActions 的 fork 按钮 + 收藏列表的点击发起）语义不同，不能合并；但后端产物同形（新 ns + 物化 entries + pendingSeed），走同一条 `deriveSession` 派生核。这也是 `bookmark-fork-at.md` QA 里「fork 按钮和收藏按钮不重复」的答案。

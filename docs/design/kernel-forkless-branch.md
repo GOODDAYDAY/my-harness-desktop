@@ -196,6 +196,8 @@ fork 的语义被实现成了"切了立刻物化"：pi 切新文件、dsh 开子
 
 `resume`（`session-store.ts:791–802`）现状：
 
+> ⚠️ 下面代码块是**本文写作时的现状快照**（历史），其中 `forkFromSession(cwd, …)` 的 `cwd` 入参已删（归属改取源会话 `header.cwd`）、`resume` 也已改走 `deriveSession` 惰性派生——以 `bookmark-snapshot-fork-unify.md` §5.1/§7.2/§11.1 为准。本文的 fork 产物形态（会话内 lineage）整体已被 unify 推翻（见 §33 标注），此处保留只为记录推理链。
+
 ```
 if (backend.resume && alive) return backend.resume(anchor)   // dsh：服务端子会话回切
 else await forkFromSession(cwd, anchor.lineageId, anchor.entryId, "at")  // pi：现场 fork

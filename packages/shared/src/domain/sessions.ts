@@ -324,8 +324,14 @@ export interface SessionTreeApi extends RpcOps {
   fork(parentLineageId: string, boundary?: string, position?: "before" | "at", opts?: ForkOptions): Promise<string>;
   /** 从任意会话分叉(unify §7.1):与 fork 同一派生核,源是任意会话(中立主键 ns),
    *  返回新 neutralSessionId。中性面(非 pi 扩展面)——两内核平等可用。
-   *  源会话不是激活会话时 `opts.abortSource` 无处可打(中断只作用于激活进程),显式忽略。 */
-  forkFromSession(cwd: string, srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions): Promise<string>;
+   *  源会话不是激活会话时 `opts.abortSource` 无处可打(中断只作用于激活进程),显式忽略。
+   *
+   *  **无 cwd 入参**(契约单源):派生会话的项目归属只能来自源会话自己(`header.cwd`),
+   *  调用方无权指定——fork = 在同一项目的 lineage 树上开分支,而内核会话文件按
+   *  `cwdToBucketName(cwd)` 分桶,挂到别的桶里就找不回历史(那是「移动/另存」不是「分叉」)。
+   *  此前签名收一个从不使用的 cwd,让调用方误以为能指定归属(实现读的是源会话 header),
+   *  同一概念两份说法必漂移,故删。 */
+  forkFromSession(srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions): Promise<string>;
   /** 克隆当前会话(session-single-source §4.2:壳纯操作——中立层整树复制 + 新 ns,
    *  内核不参与、离线可克隆;不再经 pi 内核 clone 命令)。 */
   clone(): Promise<void>;

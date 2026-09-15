@@ -239,7 +239,8 @@ describe("abort 双保险与强杀兜底", () => {
     const srcBefore = neutralStore.get(srcNs)!;
     expect(srcBefore.lineages).toHaveLength(1);
     const userEntry = srcBefore.lineages[0].entries.find((e) => e.message.role === "user")!;
-    const newNs = await dshStore.forkFromSession(CWD, srcNs, userEntry.neutralEntryId, "at");
+    // 无 cwd 入参(契约单源):派生会话的项目归属来自源会话 header.cwd,调用方不指定。
+    const newNs = await dshStore.forkFromSession(srcNs, userEntry.neutralEntryId, "at");
     // 返回新 neutralSessionId(契约 §7.1);源会话不动(派生是拷贝不是改源,不插分支)
     expect(newNs).not.toBe(srcNs);
     expect(neutralStore.get(srcNs)!.lineages).toHaveLength(1);
@@ -1165,6 +1166,74 @@ describe("fork:父 lineage 尊重调用方指定 + 派生新会话(根因修复�
     const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
     // 内容 = branch-B 的物化前缀(根前缀 + B 独有),不是「锚点不在根里」抛错、也不是根前缀截断
     expect(derived.lineages[0].entries.map((e) => e.message.content)).toEqual(["root-msg", "on-B"]);
+  });
+});
+
+// L2 根因守卫:派生会话的项目归属跟随**源会话**(header.cwd),不读全局激活态。
+// 为什么必须有守卫(§3.7):cwd 不只是展示字段——cwdToBucketName(cwd) 参与内核投影地址的
+// 桶目录派生(pi 的会话文件路径 = <agentDir>/sessions/<bucket(cwd)>/<lineageId>.jsonl),
+// 且 listByCwd 按 header.cwd 分桶。旧实现读 this.activeCwd,从另一个项目的会话派生时
+// header.cwd、内核文件桶目录、列表归属**三处一起错**,且全部静默(能打开、能聊,只是挂错项目)。
+// 判据设计:源会话 cwd 与激活 cwd **故意不同**——若实现回退成读激活态,断言当场红。
+describe("派生会话的项目归属跟随源会话(L2:cwd 真相源化,勿回退读全局激活态)", () => {
+  const SRC_CWD = "/tmp/src-proj";     // 源会话所属项目
+  const ACTIVE_CWD = "/tmp/other-proj"; // 用户此刻激活的另一个项目
+
+  /** 造一个「源会话属于 SRC_CWD、但 store 激活在 ACTIVE_CWD」的现场。 */
+  function newCrossCwdStore(): { s: SessionStore; neutralStore: NeutralSessionStore; ns: string } {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "fork-cwd-")));
+    const ns = "ns-cross-cwd";
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "pi", cwd: SRC_CWD, createdAt: "2026-09-15T00:00:00.000Z" }),
+      lineages: [
+        { lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "来自源项目的问题" } }] },
+      ],
+    });
+    const factory: BackendFactory = { create: (opts) => new PiBackend(adapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    // 激活态故意指向**另一个**项目:若实现读 this.activeCwd,派生会话就会错挂到这里
+    s.setContext(ACTIVE_CWD, null);
+    return { s, neutralStore, ns };
+  }
+
+  it("forkFromSession:派生会话 header.cwd = 源会话的 cwd(不是激活 cwd)", async () => {
+    const { s, neutralStore, ns } = newCrossCwdStore();
+    const newNs = await s.forkFromSession(ns, `${ns}:0`, "at");
+
+    const derived = neutralStore.get(newNs)!;
+    expect(derived.header.cwd).toBe(SRC_CWD);        // 跟随源会话
+    expect(derived.header.cwd).not.toBe(ACTIVE_CWD); // 绝不是「用户此刻激活的项目」
+  });
+
+  it("forkFromSession:激活切到派生会话所在的**源项目**(不劫持到激活项目)", async () => {
+    const { s, neutralStore, ns } = newCrossCwdStore();
+    const newNs = await s.forkFromSession(ns, `${ns}:0`, "at");
+
+    // 派生即跳转(§6.1):切激活到派生会话——cwd 也必须是源项目,否则派生会话
+    // 挂在一个与它 header.cwd 不一致的激活语境里(下一次发送的桶目录又漂一次)。
+    expect((s as unknown as { activeCwd: string }).activeCwd).toBe(SRC_CWD);
+    // 投影地址的桶目录由 cwd 派生:断言它落在源项目的桶里,坐实「cwd 参与路径派生」这条因果
+    const newPath = (s as unknown as { activeSessionPath: string }).activeSessionPath;
+    expect(newPath).toContain(cwdToBucketName(SRC_CWD));
+    expect(newPath).not.toContain(cwdToBucketName(ACTIVE_CWD));
+    expect(neutralStore.get(newNs)).toBeTruthy();
+  });
+
+  it("deriveSession 缺 cwd:显式抛错,不静默落到激活项目", async () => {
+    const { s, ns } = newCrossCwdStore();
+    // deriveSession 的 cwd 是必填契约(不给就抛),不是「省略则取 activeCwd」的可选参数——
+    // 可选 + 内部兜底正是这条根因的原形态。
+    // 指令必须贴在**调用行**上方:TS 把「Property 'cwd' is missing」报在实参位置,
+    // 贴在对象字面量内部既抑制不到、又会被当成 unused directive 再报一条。
+    // @ts-expect-error 故意漏 cwd:验证它不是可选的(漏了必抛,不静默兜底)
+    expect(() => s.deriveSession({
+      entries: [], kernel: "pi",
+      derivedFrom: { kind: "fork", sourceNeutralSessionId: ns, boundaryEntryId: "" },
+    })).toThrow(/项目归属|cwd/);
+    expect(() => s.deriveSession({
+      entries: [], kernel: "pi", cwd: "",
+      derivedFrom: { kind: "fork", sourceNeutralSessionId: ns, boundaryEntryId: "" },
+    })).toThrow(/项目归属|cwd/); // 空串同样拒(空 cwd 会派生出 --  这样的畸形桶名)
   });
 });
 

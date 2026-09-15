@@ -139,7 +139,7 @@ export interface KernelApi {
     setThinkingLevel: (level: string) => Promise<void>;
     fork: (parentLineageId: string, boundary?: string, position?: "before" | "at", opts?: ForkOptions) => Promise<string>;
     /** 从任意会话分叉派生新会话(unify §7.1 中性面,两内核平等):返回新 neutralSessionId。 */
-    forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions) => Promise<string>;
+    forkFromSession: (srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions) => Promise<string>;
     copySession: (srcPath: string, targetPath: string) => Promise<void>;
     getStats: () => Promise<unknown>;
     /** 克隆当前会话(session-single-source §4.2:壳的中性实现,内核不参与)。 */
