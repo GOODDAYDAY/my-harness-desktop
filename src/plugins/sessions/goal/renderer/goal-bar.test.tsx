@@ -68,12 +68,11 @@ vi.mock("@my-harness-desktop/react", async (importOriginal) => {
 
 import { GoalBar } from "./goal-bar";
 import { runGoalCommand } from "./goal-controller";
-import { useUiStore, useSessionStore, enqueueMessage, clearQueue } from "@my-harness-desktop/react";
-import { __resetScopesForTests } from "../../../../../src/web/stores/session-scope";
-import { ensureGoalSlotsRegistered, GoalPluginWrapper } from "./test-harness";
+import { useUiStore, useSessionStore, clearQueue } from "@my-harness-desktop/react";
+import { __resetScopesForTests } from "@my-harness-desktop/react";
+import { GoalPluginWrapper } from "./test-harness";
 
-// 真实注册 goal 的槽声明 + PluginIdContext(生产由 plugins-host 与槽壳做,测试补齐;不 mock 容器)。
-ensureGoalSlotsRegistered();
+// test-harness import 即完成注册(真实槽声明 + 绑好 pluginId 的 wrapper);不 mock 作用域容器。
 
 /** 切会话(生产路径同款:写 ui-store 身份字段,scopeKey 随之变,GoalBar 自动换档)。 */
 function switchSession(ns: string | null, path: string | null): void {

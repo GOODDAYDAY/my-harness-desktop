@@ -54,20 +54,14 @@ vi.mock("@my-harness-desktop/react", async (importOriginal) => {
 
 import { useGoalController, runGoalCommand } from "./goal-controller";
 import { useUiStore, useSessionStore, enqueueMessage, clearQueue } from "@my-harness-desktop/react";
-import { __resetScopesForTests } from "../../../../../src/web/stores/session-scope";
-import { ensureGoalSlotsRegistered, GoalPluginWrapper } from "./test-harness";
+import { __resetScopesForTests } from "@my-harness-desktop/react";
+import { GoalPluginWrapper } from "./test-harness";
 
-// 真实注册 goal 的槽声明 + 提供 PluginIdContext(生产由 plugins-host 与槽壳做,测试补齐)。
-// 不 mock 作用域容器:mock 掉就测不出「按会话隔离」这件迁移的核心目的。
-ensureGoalSlotsRegistered();
+// test-harness import 即完成:真实注册 goal 的槽声明(取自 renderer/index.tsx 的 export)
+// + 提供绑好 pluginId 的 wrapper。不 mock 作用域容器——mock 掉就测不出「按会话隔离」。
 
-/** 测试用的会话身份切换(生产路径同款:写 ui-store 的身份字段,scopeKey 随之变)。 */
+/** A 会话的投影路径(beforeEach 设的身份;updateHeader 断言用)。 */
 const SESSION_A_PATH = "/p/a.jsonl";
-function activateSession(ns: string | null, path: string | null = ns ? `/p/${ns}.jsonl` : null): void {
-  act(() => {
-    useUiStore.setState({ currentNeutralSessionId: ns, currentSessionPath: path, currentCwd: "/p" });
-  });
-}
 
 function emit(e: SessionEvent): void {
   act(() => { mocks.onEventCb?.(e); });

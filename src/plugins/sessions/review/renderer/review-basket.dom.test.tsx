@@ -1,60 +1,83 @@
 // @vitest-environment jsdom
-// review 插件 DOM 交互测试(三级测试第二级,补全 review 零测试缺口):
-//   评论篮全生命周期——addComment 入篮 → BasketBar 渲染条目/计数 → 就地编辑
-//   → 删除单条 → 清空;buildReviewBlock 的 <pi-review> 结构(转义/序号/空篮);
-//   auxParsers 的块解析(round-trip:build → parse 回读)。
+// review 插件 DOM 交互测试(三级测试第二级):
+//   评论篮全生命周期——入篮 → BasketBar 渲染条目 → 就地编辑 → 删单条 → 清空;
+//   buildReviewBlock 的 <pi-review> 结构(转义/序号/空篮);auxParsers round-trip;
+//   **篮子按会话隔离**(迁移到会话作用域槽后的核心目的,设计 docs/design/session-scope.md §3.3.1)。
+//
+// mock 边界:只 mock usePluginContext(IPC 边界)与 react-i18next。useUiStore/useSessionStore/
+// 会话作用域 hook 全部真跑——mock 掉作用域就测不出「A 的评论不出现在 B」这个迁移目的。
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, cleanup } from "@testing-library/react";
-import { useReviewBasketStore } from "./review-basket-store";
-import { buildReviewBlock } from "./index";
+import { render, cleanup, screen } from "@testing-library/react";
+import { buildReviewBlock, sessionSlots } from "./index";
+import type { ReviewComment } from "../core/basket";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (k: string, opts?: { defaultValue?: string }) => opts?.defaultValue ?? k, i18n: { language: "zh-CN" } }),
-}));
-vi.mock("@my-harness-desktop/react", () => ({
-  usePluginContext: () => ({ events: { on: () => () => {}, invoke: vi.fn() } }),
-  useUiStore: () => ({ currentNeutralSessionId: "sess-1" }),
-  useSessionStore: () => ({ snapshot: null, streaming: false }),
-}));
+// i18n:给真字典(断言跑真文案,不断言 key —— CLAUDE.md §5.6)。
+// 字典值取自 locales/zh-CN/shell.json,改文案时测试跟文案一起改。
+vi.mock("react-i18next", () => {
+  const dict: Record<string, string> = { "shell.clearAll": "清空全部" };
+  return {
+    useTranslation: () => ({
+      t: (k: string, opts?: { defaultValue?: string }) => dict[k] ?? opts?.defaultValue ?? k,
+      i18n: { language: "zh-CN" },
+    }),
+  };
+});
+vi.mock("@my-harness-desktop/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@my-harness-desktop/react")>();
+  return {
+    ...actual,   // 作用域 hook / useUiStore / useSessionStore 全部真跑
+    usePluginContext: () => ({ events: { on: () => () => {}, invoke: vi.fn() } }),
+  };
+});
 
 import { ReviewBasketBar } from "./basket-bar";
+import { useUiStore, ensureSlotsRegistered, pluginWrapper } from "@my-harness-desktop/react";
+import { __resetScopesForTests, useSessionScopeStore } from "@my-harness-desktop/react";
+import type { SessionSlot } from "@my-harness-desktop/shared";
 
-describe("评论篮 store 全生命周期(数据面)", () => {
+const REVIEW_PLUGIN_ID = "review";
+ensureSlotsRegistered(REVIEW_PLUGIN_ID, sessionSlots as SessionSlot[]);
+const ReviewWrapper = pluginWrapper(REVIEW_PLUGIN_ID);
+
+const c = (id: string, comment: string): ReviewComment =>
+  ({ id, quote: `引用-${id}`, comment, createdAt: 1, updatedAt: 1 });
+
+const BASKET_SLOT = "review:basket";
+/** 直接往某会话的篮子槽写(绕过 UI 构造前置态)。经**真实**作用域容器,不是假 store。 */
+function seedBasket(scopeKey: string, list: ReviewComment[]): void {
+  useSessionScopeStore.getState().write(BASKET_SLOT, scopeKey, list);
+}
+function readBasket(scopeKey: string): ReviewComment[] {
+  return useSessionScopeStore.getState().read<ReviewComment[]>(BASKET_SLOT, scopeKey);
+}
+
+function activate(ns: string): void {
+  useUiStore.setState({ currentNeutralSessionId: ns, currentSessionPath: `/p/${ns}.jsonl`, currentCwd: "/p" });
+}
+
+describe("评论篮按会话隔离(会话作用域槽,设计 §3.3.1)", () => {
   beforeEach(() => {
-    useReviewBasketStore.getState().clearBasket("sess-1");
-    useReviewBasketStore.getState().clearBasket("sess-2");
+    __resetScopesForTests();
+    activate("sess-1");
+    cleanup();
   });
 
-  it("addComment:入篮,sessionKey 隔离(两个会话互不可见)", () => {
-    const { addComment } = useReviewBasketStore.getState();
-    addComment("sess-1", { id: "c1", quote: "第一段", comment: "论证不足", createdAt: 1, updatedAt: 1 });
-    addComment("sess-2", { id: "c2", quote: "别的会话", comment: "隔离", createdAt: 1, updatedAt: 1 });
-    const { baskets } = useReviewBasketStore.getState();
-    expect(baskets.get("sess-1")).toHaveLength(1);
-    expect(baskets.get("sess-1")![0].comment).toBe("论证不足");
-    expect(baskets.get("sess-2")).toHaveLength(1);
+  it("两个会话的篮子互不可见(此前插件自己用 Map<sessionKey,…> 分组,现在容器承担)", () => {
+    seedBasket("sess-1", [c("a", "会话一的评论")]);
+    seedBasket("sess-2", [c("b", "会话二的评论")]);
+    expect(readBasket("sess-1").map((x) => x.comment)).toEqual(["会话一的评论"]);
+    expect(readBasket("sess-2").map((x) => x.comment)).toEqual(["会话二的评论"]);
   });
 
-  it("updateComment:改文本,updatedAt 推进;其它条目不动", () => {
-    const { addComment, updateComment } = useReviewBasketStore.getState();
-    addComment("sess-1", { id: "a", quote: "q", comment: "旧", createdAt: 1, updatedAt: 1 });
-    addComment("sess-1", { id: "b", quote: "q2", comment: "不动", createdAt: 1, updatedAt: 1 });
-    updateComment("sess-1", "a", "新文本");
-    const list = useReviewBasketStore.getState().baskets.get("sess-1")!;
-    expect(list[0].comment).toBe("新文本");
-    expect(list[0].updatedAt).toBeGreaterThanOrEqual(1);
-    expect(list[1].comment).toBe("不动");
-  });
-
-  it("removeComment/clearBasket:删单条与清空", () => {
-    const { addComment, removeComment, clearBasket } = useReviewBasketStore.getState();
-    addComment("sess-1", { id: "a", quote: "q", comment: "1", createdAt: 1, updatedAt: 1 });
-    addComment("sess-1", { id: "b", quote: "q", comment: "2", createdAt: 1, updatedAt: 1 });
-    removeComment("sess-1", "a");
-    expect(useReviewBasketStore.getState().baskets.get("sess-1")).toHaveLength(1);
-    clearBasket("sess-1");
-    expect(useReviewBasketStore.getState().baskets.get("sess-1")).toHaveLength(0);
+  it("物化搬迁 carry:concat 把壳期评论追加到真身已有评论之后(旧实现手写 17 行迁移的语义)", () => {
+    seedBasket("new:/p", [c("shell", "壳期加的")]);
+    seedBasket("ns-real", [c("real", "真身已有的")]);
+    useSessionScopeStore.getState().carry("new:/p", "ns-real");
+    // concat:目标已有值在前,搬来的在后(与旧实现的 [...(next.get(ns) ?? []), ...draft] 同语义)
+    expect(readBasket("ns-real").map((x) => x.id)).toEqual(["real", "shell"]);
+    // 壳键域整体摘除
+    expect(useSessionScopeStore.getState().scopes.has("new:/p")).toBe(false);
   });
 });
 
@@ -100,24 +123,42 @@ describe("buildReviewBlock(篮 → sendSuffix 结构文本)", () => {
 
 describe("ReviewBasketBar DOM(渲染面)", () => {
   beforeEach(() => {
-    useReviewBasketStore.getState().clearBasket("sess-1");
+    __resetScopesForTests();
+    activate("sess-1");
     cleanup();
   });
 
-  it("空篮:不渲染任何条目", () => {
-    const { container } = render(<ReviewBasketBar payload={{ items: [], promptFragment: "", sessionKey: "sess-1" } as never} />);
-    // 空篮:无条目文本(具体空态由组件决定,至少无残留)
-    expect(container.textContent ?? "").not.toContain("论证不足");
+  const payloadFor = (list: ReviewComment[]) => ({
+    items: list.map((x, i) => ({ id: x.id, seq: String(i + 1), messageId: x.messageId, quotePreview: x.quote, comment: x.comment })),
+    promptFragment: "",
+    sessionKey: "sess-1",
+  }) as never;
+
+  it("空篮:不渲染任何条目(组件在 items 为空时返回 null)", () => {
+    const { container } = render(<ReviewBasketBar payload={payloadFor([])} />, { wrapper: ReviewWrapper });
+    expect(container.firstChild).toBeNull();
   });
 
-  it("有篮:渲染引用+评论文本;删单条按钮逐条生效", () => {
-    const { addComment, removeComment } = useReviewBasketStore.getState();
-    addComment("sess-1", { id: "x1", quote: "被引用段落", comment: "这条不行", createdAt: 1, updatedAt: 1 });
-    const { getByText } = render(<ReviewBasketBar payload={{ items: useReviewBasketStore.getState().baskets.get("sess-1")!, promptFragment: "", sessionKey: "sess-1" } as never} />);
-    expect(getByText(/这条不行/)).toBeInTheDocument();
-    // 删单条(x1)——store 变化后条目消失
-    removeComment("sess-1", "x1");
-    // (bar 是受控 props 渲染;store 变化的重渲染经组件订阅——此处验 store 已删)
-    expect(useReviewBasketStore.getState().baskets.get("sess-1")).toHaveLength(0);
+  it("有篮:渲染引用 + 评论文本", () => {
+    render(<ReviewBasketBar payload={payloadFor([c("x1", "这条不行")])} />, { wrapper: ReviewWrapper });
+    expect(screen.getByText(/这条不行/)).toBeInTheDocument();
+    expect(screen.getByText(/引用-x1/)).toBeInTheDocument();
+  });
+
+  it("删单条:点 ✕ 按 payload.sessionKey 从作用域槽移除(不是从当前激活域)", () => {
+    seedBasket("sess-1", [c("x1", "要删的"), c("x2", "留下的")]);
+    render(<ReviewBasketBar payload={payloadFor(readBasket("sess-1"))} />, { wrapper: ReviewWrapper });
+    screen.getAllByText("✕")[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(readBasket("sess-1").map((x) => x.id)).toEqual(["x2"]);
+  });
+
+  it("清空:点「清空」按 payload.sessionKey 清对应会话的篮子", () => {
+    seedBasket("sess-1", [c("x1", "a"), c("x2", "b")]);
+    seedBasket("sess-2", [c("y1", "别动我")]);
+    render(<ReviewBasketBar payload={payloadFor(readBasket("sess-1"))} />, { wrapper: ReviewWrapper });
+    screen.getByText("清空全部").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(readBasket("sess-1")).toEqual([]);
+    // 关键:清的是 payload 指定的 sess-1,不是「当前激活会话」——用户可能已切走
+    expect(readBasket("sess-2").map((x) => x.id)).toEqual(["y1"]);
   });
 });

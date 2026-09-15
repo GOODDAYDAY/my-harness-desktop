@@ -375,6 +375,12 @@ export { useComposerAttachments, type ComposerAttachmentItem, type ComposerAttac
 export { useComposerActions, type ComposerActionItem } from "./composer-actions";
 export { useComposerStats, type ComposerStatsItem } from "./composer-stats";
 export { useComposerTop, type ComposerTopItem } from "./composer-top";
+// 会话作用域插件测试装置(设计 §5.2):真实注册槽 + PluginIdContext wrapper,不 mock 容器。
+// useSessionScopeStore/__resetScopesForTests 也经此暴露:插件测试要用**真实**容器构造前置态
+// (seed 某会话的槽、复位),而插件只许 import shared + react(audit:deps 检验④)——
+// 经发布面 re-export 才不违规(与 ui-store/session-pending 同一手法)。
+export { ensureSlotsRegistered, pluginWrapper } from "./session-scope-testkit";
+export { useSessionScopeStore, __resetScopesForTests, readTolerant } from "../../../src/web/stores/session-scope";
 // 会话作用域发布面(设计 docs/design/session-scope.md §2.4)
 export {
   registerSessionSlots, unregisterSessionSlots,

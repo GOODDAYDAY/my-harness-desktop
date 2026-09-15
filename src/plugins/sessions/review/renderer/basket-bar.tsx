@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePluginContext, type ComposerAttachmentProps } from "@my-harness-desktop/react";
-import { useReviewBasketStore } from "./review-basket-store";
+import { useReviewBasketAt } from "./use-basket";
 export function ReviewBasketBar({ payload }: ComposerAttachmentProps): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
-  const removeComment = useReviewBasketStore((s) => s.removeComment);
-  const clearBasket = useReviewBasketStore((s) => s.clearBasket);
-  const updateComment = useReviewBasketStore((s) => s.updateComment);
+  // 按 payload.sessionKey(入篮那一刻的身份)操作:用户可能在附件条还挂着时切走了会话,
+  // 按当前激活域写会把改动写到别的会话上(设计 docs/design/session-scope.md §2.4.5)。
+  const { removeComment, clearBasket, updateComment } = useReviewBasketAt();
   // 就地编辑态(点击条目展开):与选区浮层编辑器互斥——浮层编辑器打开时(editorActive)
   // 本组件不展开内联编辑;点击条目在篮子内就地编辑(位置从消息行迁到篮子,设计 §5.2)。
   const [editingId, setEditingId] = useState<string | null>(null);

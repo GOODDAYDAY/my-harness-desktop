@@ -2,11 +2,21 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { MessageSquarePlus } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, type AuxBlock, type AuxBlockParser } from "@my-harness-desktop/react";
-import { useReviewBasketStore, type ReviewComment } from "./review-basket-store";
+import { usePluginContext, useSessionStore, useCurrentScopeKey, type AuxBlock, type AuxBlockParser } from "@my-harness-desktop/react";
+import type { SessionSlot } from "@my-harness-desktop/shared";
+import type { ReviewComment } from "../core/basket";
+import { useReviewBasket } from "./use-basket";
 import { ReviewBasketBar } from "./basket-bar";
 
 export { ReviewBasketBar };
+export type { ReviewComment };
+
+// 会话作用域槽(设计 docs/design/session-scope.md §3.3.1):评论篮按会话隔离,物化搬迁用
+// concat(壳期入篮的评论追加到真身已有评论之后)——这正是旧实现手写那 17 行 prevKeyRef
+// 迁移的语义,现在由框架 carry 承担,插件不再自己侦测会话键变化。
+export const sessionSlots: SessionSlot[] = [
+  { id: "basket", initial: () => [] as ReviewComment[], carry: "concat" },
+];
 
 interface EditorState {
   anchorMessageId?: string;
@@ -118,24 +128,21 @@ function msgOfSelection(sel: Selection): Element | null {
 export function Overlay(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const currentNeutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
-  const currentCwd = useUiStore((s) => s.currentCwd);
 
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [floatState, setFloatState] = useState<{ visible: boolean; x: number; y: number }>({ visible: false, x: 0, y: 0 });
   const lastSelRef = useRef<{ messageId?: string; quoteText: string; left: number; bottom: number } | null>(null);
 
-  // 篮子状态提升模块级 store(渲染归位后 Overlay 与 BasketBar 共用,设计 §5.2)。
-  const baskets = useReviewBasketStore((s) => s.baskets);
-  const addCommentToStore = useReviewBasketStore((s) => s.addComment);
-  const clearBasket = useReviewBasketStore((s) => s.clearBasket);
+  // 评论篮来自会话作用域槽:切会话自动换档,不再手拼 sessionKey(设计 §2.1.1 身份单源)。
+  const basket = useReviewBasket();
+  const comments = basket.comments;
   const lastSendNonce = useSessionStore((s) => s.lastSendNonce);
-
-  const sessionKey = currentNeutralSessionId ?? (currentCwd ? `new:${currentCwd}` : "");
+  // sessionKey 仍要发给 timeline(composerAttachments 的 payload 契约里带它,BasketBar
+  // 据此按域操作);但它是**读出来的**,不是拼出来的——身份算法单源在圆心。
+  const sessionKey = useCurrentScopeKey() ?? "";
 
   const pushState = useCallback(() => {
     if (!sessionKey) return;
-    const comments = baskets.get(sessionKey) ?? [];
     const items = comments.map((c, i) => ({
       id: c.id,
       seq: numOf(i),
@@ -154,7 +161,7 @@ export function Overlay(): React.ReactNode {
         editorActive: editor != null,
       });
     } catch { /* 评论表面不可用,浮条与本地状态照常 */ }
-  }, [ctx, sessionKey, baskets, editor, t]);
+  }, [ctx, sessionKey, comments, editor, t]);
 
   useEffect(() => { pushState(); }, [pushState]);
 
@@ -162,7 +169,9 @@ export function Overlay(): React.ReactNode {
   // 清空当前篮子(替代旧 review:sent 通道回执,timeline 不再 invoke review)。
   useEffect(() => {
     if (lastSendNonce === 0) return;
-    if (sessionKey) clearBasket(sessionKey);
+    if (sessionKey) basket.clear();
+    // deps 只放 lastSendNonce:清空要按「发送成功那一刻」触发,不随篮子内容变化重跑
+    // (否则入篮就会触发一次清空判定)。basket.clear 引用稳定(useCallback),放进去也无害。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSendNonce]);
 
@@ -218,9 +227,9 @@ export function Overlay(): React.ReactNode {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    addCommentToStore(sessionKey, comment);
+    basket.add(comment);
     setEditor(null);
-  }, [sessionKey, addCommentToStore]);
+  }, [basket]);
 
   // Enter = 确认入篮 + 焦点移交 composer(随后 composer 里 Enter 发送,两段式)。
   // timeline 不在场时 invoke 抛错:静默降级为仅入篮,焦点不动,与现状一致。
@@ -261,23 +270,12 @@ export function Overlay(): React.ReactNode {
     sel?.removeAllRanges();
   }, []);
 
-  // 桶迁移只发生在"新会话首发落盘"一瞬:prevKey 是 new: 桶、当前拿到真实 sessionPath。
-  // 新会话窗口无消息可选,new: 桶唯一非空来源是首发到水合间的 IPC 窗口;
-  // path→path(打开旧会话/rewind fork)不迁——fork 后评论滞留原会话是写明的取舍(设计文档 §2.5)。
-  const prevKeyRef = useRef("");
-  useEffect(() => {
-    const prevKey = prevKeyRef.current;
-    prevKeyRef.current = sessionKey;
-    if (!prevKey.startsWith("new:") || !currentNeutralSessionId) return;
-    useReviewBasketStore.setState((s) => {
-      const draft = s.baskets.get(prevKey);
-      if (!draft?.length) return s;
-      const next = new Map(s.baskets);
-      next.delete(prevKey);
-      next.set(currentNeutralSessionId, [...(next.get(currentNeutralSessionId) ?? []), ...draft]);
-      return { baskets: next };
-    });
-  }, [sessionKey, currentNeutralSessionId]);
+  // 物化搬迁(壳键 → 真身 ns)由框架 carry 承担:篮子槽声明 carry:"concat",
+  // 与草稿/队列在同一时刻同步搬完。此处此前是 17 行 prevKeyRef 手写迁移——与框架
+  // carrySessionKey 同一逻辑的第二份实现,且时序不同(渲染后异步 vs 换键同步),
+  // 两者之间有一个窗口:那个窗口里入篮的评论会与搬来的草稿混在一起(设计 §1.3.2)。
+  // 删除它的守卫:audit:session-scope 检查③(插件目录里出现 prevKeyRef 即违规,§3.5.3)。
+
 
   // 两个浮层共存:划词按钮(选区右上)与新评论编辑器(选区正下方)。
   const btnW = 76;
