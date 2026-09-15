@@ -503,9 +503,29 @@ describe("goal 续跑引擎 e2e(useGoalController)", () => {
     await act(async () => { await runGoalCommand("/goal clear"); });
     expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: null });
 
-    // 全程通道名不变,payload 是全量快照
+    // 全程通道名不变,payload 是全量快照。广播由「goal 值变化」的 effect 驱动(不是写入口
+    // 同步 emit):挂载时 goal 从 undefined 惰性落初值到 null 会触发两次 effect,但两次 payload
+    // 都是 {goal:null}(幂等,消费方只看 phase,无害)。断言去掉连续重复后的**值变化序列**,
+    // 表达真实意图:每次 goal 变化都广播了对应快照。
     expect(mocks.eventsEmit.mock.calls.every((c) => c[0] === "goal:state")).toBe(true);
-    expect(phases()).toEqual(["active", "paused", "active", null]);
+    const dedup = phases().filter((p, i, arr) => i === 0 || arr[i - 1] !== p);
+    expect(dedup).toEqual([null, "active", "paused", "active", null]);
+  });
+
+  it("切会话换档重播 goal:state(真机 e2e 抓到的回归:换档是读不是写,广播必须由值变化驱动)", () => {
+    // 根因:此前广播只在 setGoal 写入口 emit,而切会话换档是 useSessionScope **读**到新会话
+    // 那份 goal(不是写),于是 timeline 缓存的绿晕态滞留——甲会话的绿晕切到乙会话不熄灭。
+    // 修法:广播改成监听 goal 值变化的 effect,换档/写入/水合三条路径都触发。
+    const { result } = renderHook(() => useGoalController(), { wrapper: GoalPluginWrapper });
+    emit({ type: "toolCallStart", toolName: "set_goal", args: { objective: "甲的目标" } });
+    const emitsInA = mocks.eventsEmit.mock.calls.length;
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: expect.objectContaining({ objective: "甲的目标" }) });
+
+    // 切到乙会话(乙无目标):goal 从「甲的目标」变 null → effect 必须重播
+    act(() => { useUiStore.setState({ currentNeutralSessionId: "ns-b", currentSessionPath: "/p/b.jsonl" }); });
+    expect(mocks.eventsEmit.mock.calls.length, "换档必须重播 goal:state(否则消费方绿晕滞留)").toBeGreaterThan(emitsInA);
+    expect(mocks.eventsEmit).toHaveBeenLastCalledWith("goal:state", { goal: null });
+    expect(result.current.goal).toBeNull();   // 乙会话无目标
   });
 
   it("模型 set_goal / achieve_goal 也广播(工具路径与命令路径同收口)", () => {

@@ -140,20 +140,29 @@ export function useGoalController() {
   const inflightAccess = useSessionScopeAccess<boolean>("inflight");
   const deferredAccess = useSessionScopeAccess<boolean>("deferred");
 
-  /** 单一状态写入口:写作用域槽(当前会话)+ 广播 goal:state(全量快照,消费方着色用)
-   *  + 持久化到会话头行 custom.goal(clear 时 goal=null 删键)。广播在写入口收口,
-   *  任何路径变更不漏发。壳期(currentSessionPath 为 null)写不了头行属预期——
-   *  物化那一刻由 onCarry 补写(persistGoalOnCarry)。 */
+  /** 单一状态写入口:写作用域槽(当前会话)+ 持久化到会话头行 custom.goal(clear 时 goal=null 删键)。
+   *  壳期(currentSessionPath 为 null)写不了头行属预期——物化那一刻由 onCarry 补写。
+   *
+   *  goal:state 广播**不在这里发**,而在下面的 effect 里按「当前会话的 goal 值变化」发。这是根因修复:
+   *  此前广播只在写入口 emit,但**切会话换档是读不是写**(useSessionScope 读到新会话那份),
+   *  于是 timeline 缓存的绿晕态滞留——甲会话亮着的绿晕切到乙会话不熄灭(真机 e2e 抓到)。
+   *  改成监听 goal 值本身:换档/写入/水合三条路径都会让 goal 引用变化,effect 统一补发,
+   *  「值变了就广播」而不是「写了才广播」——语义上也更贴消费方(着色只关心当前值)。 */
   const setGoal = useCallback((next: GoalState | null) => {
     setGoalSlot(next);
-    // goal:state 是 scoped channel(设计 §2.5):坐标由框架注入,这里只发业务数据。
-    events.emit("goal:state", { goal: next });
     if (sessionPath) {
       void sessions.updateHeader(sessionPath, { custom: { goal: next } }).catch(() => {
         // 持久化失败不阻断续跑(内存槽照常),下次变更再写。
       });
     }
-  }, [events, sessions, sessionPath, setGoalSlot]);
+  }, [sessions, sessionPath, setGoalSlot]);
+
+  // goal:state 广播(设计 §2.5 scoped channel:坐标由框架注入,这里只发业务数据)。
+  // 监听当前会话的 goal 值:切会话换档使 goal 变(读到新会话那份)→ 重发→消费方绿晕随之亮灭;
+  // 写入/水合同理。goal 引用是唯一依赖,换档与写入都被它捕获,不漏发也不重发。
+  useEffect(() => {
+    events.emit("goal:state", { goal: goal ?? null });
+  }, [goal, events]);
 
   const setSendError = useCallback((msg: string | null) => {
     setSendErrorSlot(msg);

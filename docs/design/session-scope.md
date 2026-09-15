@@ -936,6 +936,19 @@ ctx.events.on("goal:state", (payload) => {
 
 `__scope` 是传输层的信封，`PluginEventsApi` 的签名不变（`packages/shared/src/domain/context.ts` 里的 `emit` / `on` 类型一行不改）。插件声明「我这个 channel 是会话作用域的」（机制），框架负责坐标的注入与过滤（机制），插件的 payload 里只有业务数据（内容）——与 CLAUDE.md §1.2 机制与内容分离一致。
 
+**scoped channel 生产方的一条义务（实现期由真机 e2e 抓到、补进设计）**：作用域隔离只保证「payload 不串台」（分桶 + 过滤），但**换档是读不是写**——切会话时 `useSessionScope` 读到新会话那份值，这个「读」不产生新的 emit。若生产方只在写入口 emit，常驻消费方（如 timeline 的绿晕订阅）缓存的就是上一个会话的态，切会话后不刷新。
+
+真实症状（`goal-scope.e2e.mjs` 抓到）：甲会话设了 active 目标、输入框绿晕亮起，切到乙会话后目标条正确消失（那是 GoalBar 读作用域槽、随换档重渲染），但**输入框绿晕不熄灭**——因为 goal 只在 `setGoal` 里 emit `goal:state`，换档没有触发写、也就没 emit，timeline 缓存的 `goalActive=true` 滞留。
+
+修法（根因，不是补丁）：广播由「当前会话的 goal 值变化」的 effect 驱动，不由「写动作」驱动——
+
+```ts
+// goal-controller.ts:goal 引用是唯一依赖,换档/写入/水合三条路径都会让它变化
+useEffect(() => { events.emit("goal:state", { goal: goal ?? null }); }, [goal, events]);
+```
+
+换档使 `goal` 引用变（读到新会话那份）→ effect 重播 → 消费方随之刷新。「值变了就广播」而不是「写了才广播」，语义上也更贴消费方（着色只关心当前值是什么）。这条义务适用于**所有** scoped channel 的生产方：凡是消费方常驻、而生产方的值会随作用域换档而变的，广播都要挂在值上而非写动作上。
+
 ### 2.6 框架自己的会话态也进容器
 
 #### 2.6.1 六个框架保留槽（overlay 不迁）
@@ -1592,4 +1605,5 @@ A：归一也在 renderer。main 侧不需要知道作用域 key——它只按 
 - **实现期修正（批 1-3 落地时按源码事实/实测回写，三处）** ——
   ① **发布面 API**：首版的三个裸函数 `getSessionScopeValue(slotId)` 等拿不到 pluginId（`slotKey` 前缀来自 `PluginIdContext`，只能在 hook 里读），做成裸函数就得让插件手传自己的 id、违反 CLAUDE.md §8.3。改成 hook `useSessionScopeAccess(slotId)` 返回已绑定 pluginId 的 `{scopeKey,get,set,getAt,setAt}`，语义等价，把「插件侧只见短 id」贯彻到非渲染路径（§2.4.1 偏离说明）。
   ② **scoped channel 的错配推理被实测证伪**：首版 §2.5.2 担心「emit 时 resolver 未注入、on 时已注入会让 live 投递被 `null !== ns` 丢弃」。批 3 写测试时实测:live 投递是同步的,信封的 `__scope` 与过滤器的 `currentScopeKey()` 取自同一次 resolver 调用,两者必然一致,**不会错配**;错配的真正落点是 `replayLast`(无会话期 emit 不进桶 → 恢复 resolver 后捞不回)。§2.5.2 已改写。另实测抓到 `unregisterPlugin` 的 null 哨兵会让 scoped 信封 handler 解引用崩溃(§2.5.3 补透传)。这两条都是「设计阶段的推理」撞上「运行期真实时序」后修正的,不是缩水。
+  ④ **scoped channel 生产方必须在换档时重播**（真机 e2e `goal-scope.e2e.mjs` 抓到）：goal 只在写入口 emit `goal:state`，而切会话换档是读不是写、不触发 emit，于是 timeline 缓存的绿晕态滞留（甲会话的绿晕切到乙不熄灭）。修法是把广播从「写动作驱动」改成「值变化驱动」（effect 监听 goal 引用），换档/写入/水合三条路径统一覆盖。补进 §2.5.4 作为所有 scoped channel 生产方的义务。这条是纯设计阶段推不出来的——作用域隔离（分桶+过滤）本身是对的，问题出在「隔离」与「常驻消费方的缓存刷新」是两个正交关注点，只有真机切会话才暴露。
   ③ **overlay 不进容器**：首版 §2.6.1 把 `overlay` 与 ledger/inflight 并列为「三个执行态槽」都迁。实现时核实源码发现三者性质不同——overlay 是 session-store 的 **state 字段**（不是模块级单例）、与 `streaming`/`snapshot`/`messages` 在**同一个原子 setState** 里更新、写入源是只投激活会话的视图流、且本就有正确生命周期。迁走它会拆散原子更新、引入跨 store 竞态，而换来的「多会话并存」能力对它是空的（后台会话不产生 overlay）。故框架保留槽从七个改**六个**，只迁真正有 §1.1.3 病灶的两个模块级单例。这是 §4.5.4「存得下 ≠ 该存」判据的又一个实例，也是本文档「设计先行、实现按源码事实修正」的一次正面记录。
