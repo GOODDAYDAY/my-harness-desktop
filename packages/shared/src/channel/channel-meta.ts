@@ -15,6 +15,19 @@ export interface ChannelMeta {
   description?: string;
   /** payload 示例(设置页预填 JSON 编辑框,用户改后保存)。 */
   payloadExample?: unknown;
+  /** 会话作用域(设计 docs/design/session-scope.md §2.5)。
+   *
+   *  "session":框架在 emit 时自动注入作用域坐标、on 时按坐标过滤投递、replayLast 按坐标
+   *  分桶回放。缺省 "global" = 现有行为完全不变(跨会话的命令类 channel 本就不该被过滤)。
+   *
+   *  为什么由框架注入而不是让插件在 payload 里自己带会话 id:靠自觉等于靠不住——
+   *  goal 的 goal:state 就是没带的那个,而它同一份文件里写了几十行手动隔离逻辑。
+   *  注入后插件物理上不可能漏(CLAUDE.md §1.1「执行不靠自觉,靠物理隔离」)。
+   *  且 replayLast 的分桶是总线内部的存储结构问题,插件带不带坐标都改变不了
+   *  「lastPayload 每 channel 一份」这个事实——这一半只能由总线自己修。
+   *
+   *  payload 形状对插件透明:emit/on 两侧的签名与数据都不变,坐标是传输层的信封。 */
+  scope?: "session" | "global";
 }
 
 /** eventBus.listChannels() 的返回项:channel + 归属插件 + 可读描述。 */

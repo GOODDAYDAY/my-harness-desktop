@@ -11,7 +11,7 @@
 //    并为每个用例取**唯一频道名**,避免跨用例串味;结束用 unregisterPlugin 清理。
 import { describe, it, expect, beforeEach } from "vitest";
 
-import { eventBus } from "./event-bus";
+import { eventBus, setEventBusScopeKeyResolver } from "./event-bus";
 
 let n = 0;
 const ch = (s: string): string => `t${++n}:${s}`;      // 每用例唯一,避免跨用例污染
@@ -77,6 +77,141 @@ describe("eventBus(插件间唯一合法通信通道)", () => {
     off();
     eventBus.emit("p1", c, 2);
     expect(seen, "退订后仍收到派发").toEqual([1]);
+    eventBus.unregisterPlugin("p1");
+  });
+});
+
+// 会话作用域 channel(设计 docs/design/session-scope.md §2.5):scope:"session" 的 channel
+// 由框架注入坐标、按坐标过滤投递、replayLast 按坐标分桶。global channel 行为完全不变(回归)。
+describe("eventBus scoped channel(会话作用域坐标)", () => {
+  // 用一个可控的 resolver 模拟「当前会话」
+  let cur: string | null = "ns-A";
+  beforeEach(() => {
+    cur = "ns-A";
+    setEventBusScopeKeyResolver(() => cur);
+  });
+
+  const reg = (plugin: string, channel: string, scope: "session" | "global"): void => {
+    eventBus.registerChannels(plugin, [channel], { [channel]: { scope } });
+  };
+
+  it("scoped channel:同作用域订阅者收到 payload(信封对插件透明,拿到的是业务数据)", () => {
+    const c = ch("sc");
+    reg("p1", c, "session");
+    const seen: unknown[] = [];
+    eventBus.on(c, (p) => seen.push(p));
+    eventBus.emit("p1", c, { goal: "目标甲" });
+    expect(seen).toEqual([{ goal: "目标甲" }]);   // 不是信封,是业务数据
+    eventBus.unregisterPlugin("p1");
+  });
+
+  it("scoped channel:跨作用域不投递(A 发的,B 的订阅者收不到)", () => {
+    const c = ch("cross");
+    reg("p1", c, "session");
+    const seenByB: unknown[] = [];
+    cur = "ns-A";
+    eventBus.emit("p1", c, { from: "A" });        // A 会话发
+    cur = "ns-B";
+    eventBus.on(c, (p) => seenByB.push(p));       // 切到 B 后订阅
+    // B 的订阅者不该收到 A 的实时 emit
+    eventBus.emit("p1", c, { from: "B" });
+    expect(seenByB).toEqual([{ from: "B" }]);
+    eventBus.unregisterPlugin("p1");
+  });
+
+  it("scoped channel:常驻订阅者在会话切换后自动过滤旧会话 payload(不需重订阅)", () => {
+    const c = ch("resident");
+    reg("p1", c, "session");
+    const seen: unknown[] = [];
+    eventBus.on(c, (p) => seen.push(p));          // 常驻订阅者(timeline 形态)
+    cur = "ns-A";
+    eventBus.emit("p1", c, { s: "A" });
+    cur = "ns-B";                                  // 用户切到 B
+    eventBus.emit("p1", c, { s: "B" });
+    expect(seen).toEqual([{ s: "A" }, { s: "B" }]); // 各自作用域的都收到(emit 时 key 匹配当时的订阅者 key)
+    eventBus.unregisterPlugin("p1");
+  });
+
+  it("scoped channel:replayLast 只回放本作用域那一桶(A 的 payload 不回放给 B)", () => {
+    const c = ch("bucket");
+    reg("p1", c, "session");
+    cur = "ns-A";
+    eventBus.emit("p1", c, { v: "A 的状态" });     // A 发,无订阅者
+    cur = "ns-B";
+    const seenByB: unknown[] = [];
+    eventBus.on(c, (p) => seenByB.push(p), { replayLast: true });  // B 订阅 + replayLast
+    expect(seenByB, "B 不该回放到 A 的 payload(这正是 goal:state 绿晕串台的根因)").toEqual([]);
+    // 切回 A 再订阅:A 的桶还在,能回放到
+    cur = "ns-A";
+    const seenByA: unknown[] = [];
+    eventBus.on(c, (p) => seenByA.push(p), { replayLast: true });
+    expect(seenByA).toEqual([{ v: "A 的状态" }]);
+    eventBus.unregisterPlugin("p1");
+  });
+
+  it("global channel:replayLast 行为完全不变(不注入坐标、不分桶)——回归守卫", () => {
+    const c = ch("global");
+    reg("p1", c, "global");
+    cur = "ns-A";
+    eventBus.emit("p1", c, { v: "跨会话命令" });
+    cur = "ns-B";                                   // 即便切了会话
+    const seen: unknown[] = [];
+    eventBus.on(c, (p) => seen.push(p), { replayLast: true });
+    expect(seen, "global channel 必须照旧回放(命令类 channel 本就不该被作用域过滤)").toEqual([{ v: "跨会话命令" }]);
+    eventBus.unregisterPlugin("p1");
+  });
+
+  it("resolver 未注入时 emit scoped channel:不抛错、payload 不进桶(装配顺序问题不变白屏)", () => {
+    const c = ch("noresolver");
+    reg("p1", c, "session");
+    setEventBusScopeKeyResolver(null);              // 模拟装配未完成
+    expect(() => eventBus.emit("p1", c, { v: 1 })).not.toThrow();
+    // 未进桶:恢复 resolver 后 replayLast 也捞不回
+    setEventBusScopeKeyResolver(() => "ns-A");
+    const seen: unknown[] = [];
+    eventBus.on(c, (p) => seen.push(p), { replayLast: true });
+    expect(seen).toEqual([]);
+    eventBus.unregisterPlugin("p1");
+  });
+
+  it("live 投递自洽:emit 与过滤在同一次 resolver 调用取值,不会错配(设计 §2.5.2 修正)", () => {
+    // 设计首版曾担心「emit 时 __scope=null、on 时 currentScopeKey=ns → live 投递被丢」。
+    // 实测:live 投递是同步的——emit 里信封的 __scope 与过滤器的 currentScopeKey() 取自
+    // **同一次** resolver 调用,两者必然一致,不存在错配。resolver=null 时 __scope=null、
+    // 过滤也比 null,一致 → 照常投递(订阅者收到)。错配只可能发生在 replayLast(见下条)。
+    const c = ch("live-consistent");
+    reg("p1", c, "session");
+    const seen: unknown[] = [];
+    eventBus.on(c, (p) => seen.push(p));
+    setEventBusScopeKeyResolver(null);              // 无会话期 emit
+    eventBus.emit("p1", c, { v: "无会话期发的" });
+    expect(seen, "resolver=null 时信封与过滤都为 null,一致 → 投递").toEqual([{ v: "无会话期发的" }]);
+    eventBus.unregisterPlugin("p1");
+    setEventBusScopeKeyResolver(() => cur);
+  });
+
+  it("错配的真正落点是 replayLast:无会话期 emit 不进桶,恢复 resolver 后回放捞不回", () => {
+    const c = ch("replay-miss");
+    reg("p1", c, "session");
+    setEventBusScopeKeyResolver(null);              // 无会话期 emit → 不进任何桶
+    eventBus.emit("p1", c, { v: "孤儿" });
+    setEventBusScopeKeyResolver(() => "ns-A");      // 之后有会话了再订阅 + replayLast
+    const seen: unknown[] = [];
+    eventBus.on(c, (p) => seen.push(p), { replayLast: true });
+    expect(seen, "无会话期的 emit 没进桶,replayLast 捞不回(设计 §2.5.2)").toEqual([]);
+    eventBus.unregisterPlugin("p1");
+    setEventBusScopeKeyResolver(() => cur);
+  });
+
+  it("dropScope 清某会话在全部 scoped channel 上的回放桶", () => {
+    const c = ch("drop");
+    reg("p1", c, "session");
+    cur = "ns-A";
+    eventBus.emit("p1", c, { v: "A" });
+    eventBus.dropScope("ns-A");                      // 会话删除
+    const seen: unknown[] = [];
+    eventBus.on(c, (p) => seen.push(p), { replayLast: true });
+    expect(seen, "dropScope 后 A 的桶应被清,不再回放").toEqual([]);
     eventBus.unregisterPlugin("p1");
   });
 });

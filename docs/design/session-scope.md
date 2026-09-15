@@ -868,7 +868,12 @@ emit(pluginId: string, channel: string, payload?: unknown): void {
 
 为什么由框架注入而不是让插件在 payload 里自己带 ns：**靠自觉等于靠不住**。goal 的 `goal:state` 就没带（§1.3.4），而同一份文件里写了几十行细致的手动隔离逻辑——可见这件事没有机制承载时必然漏，与作者是否理解无关。框架注入后插件物理上不可能漏，与 CLAUDE.md §1.1「这条纪律的执行不靠自觉，靠物理隔离」同一手法。另外 `replayLast` 的分桶是总线内部的存储结构问题，插件带不带坐标都改变不了 `lastPayload` 每 channel 一份的事实——这一半只能由总线自己修。
 
-**一个必须点明的错配边界**：`emit` 与 `on` 各自独立调 `currentScopeKey()`。若 emit 时 resolver 未注入（`__scope = null`）、on 时已注入（`currentScopeKey() = ns`），§2.5.3 的过滤 `if ((env.__scope ?? null) !== currentScopeKey()) return` 会判 `null !== ns` 成立而**丢弃这条 payload**，且它没进任何桶、`replayLast` 也捞不回。这个错配在生产中不发生——resolver 在 app 装配期绑定，早于任何插件加载与任何 emit/on（下文）；它只可能出现在测试环境或装配顺序被破坏时。处置是 §5.1 补一条断言把它钉死（「emit 侧 resolver 未注入 + on 侧已注入 → payload 被丢、不崩、不进桶」），而不是靠「生产中不会发生」放过——因为一旦发生，症状是「插件发了状态、消费方没收到」，极难定位。
+**resolver 未注入时的行为（实现期实测修正了首版的一处错误推理）**。首版担心「emit 时 resolver 未注入（`__scope = null`）、on 时已注入（`currentScopeKey() = ns`）会让 live 投递因 `null !== ns` 被丢弃」——**这个推理是错的**，实现期写测试时实测证伪：
+
+- **live 投递不会错配**。`emit` 是同步的:它构造信封时读一次 `currentScopeKey()` 得到 `__scope`,紧接着在同一次调用里把信封派发给 handler,handler 的过滤器再读一次 `currentScopeKey()`——两次读之间没有 await、没有用户交互,resolver 状态不可能变。所以信封的 `__scope` 与过滤器的当前值**必然一致**,`null` 对 `null`、`ns` 对 `ns`,照常投递。首版设想的「emit 侧 null、on 侧 ns」在 live 路径上构造不出来(那需要 emit 与 on 之间 resolver 状态翻转,而 live 投递没有这个时间窗)。
+- **错配的真正落点是 `replayLast`**。无会话期(resolver=null)`emit` 时 `__scope=null`,按「key 为 null 不进任何桶」的规则,这条 payload **没进桶**;之后 resolver 恢复、有会话了再 `on(replayLast)`,查的是 `lastPayloadByScope.get(ns)`,那条孤儿 payload 不在里面——捞不回。这是真实行为,也是可接受的:无会话期发的 scoped 状态本就无归属,丢了不串台。
+
+resolver 未注入本身在生产中不发生——绑定发生在 app 装配期(下文),早于任何插件加载与任何 emit/on;它只可能出现在测试环境或装配顺序被破坏时,此时按「无会话」处理(dev 告警 + live 照发 + 不进桶),不抛错(抛错会让一个装配顺序问题变成白屏)。§5.1 的两条断言把这两个真实行为钉死:live 投递在 resolver=null 时自洽投递、replayLast 在无会话期 emit 后捞不回。
 
 `scopeKeyResolver` 由 `src/web/app` 在装配期绑定到 `useUiStore`：
 
@@ -891,6 +896,9 @@ on(channel: string, handler: EventHandler, opts?: { replayLast?: boolean }): () 
   const scoped = state.meta?.scope === "session";
   const wrappedHandler: EventHandler = scoped
     ? (w) => {
+        // unregisterPlugin 的 teardown 会给 handler 发 null 哨兵(通知订阅者 channel 已摘),
+        // 它不绑作用域,必须原样透传——否则下面解引用 env.payload 会崩(实现期实测抓到)。
+        if (w === null) { handler(null); return; }
         const env = w as { __scope: string | null; payload: unknown };
         if ((env.__scope ?? null) !== currentScopeKey()) return;   // 非当前作用域：丢
         handler(env.payload);
@@ -1442,7 +1450,7 @@ const pendingTools = ui.pendingToolConfig?.sessionPath === sessionPath ? ui.pend
 |---|---|
 | `packages/shared/src/domain/session-scope.test.ts`（即 §3.1.1 的 `session-scope-key.test.ts`，同一文件两种叫法，以本行为准） | `sessionScopeKey` 四形态（ns / 壳键 / 都无为 null / ns 优先于 cwd）；`scopeKeyFromSessionKey` 命中与未命中 |
 | `src/web/stores/session-scope.test.ts` | 隔离（两会话同槽互不覆盖）；carry 三策略（move 不覆盖已有 / concat 追加 / drop 不搬）；onCarry 在搬迁后按新 key 调用；drop 逐槽调 onLeave 后摘域并清回放桶；惰性建域；工厂形态不共享实例；值形态可变容器触发 dev 告警；未注册槽的两种失败形态（`read` 抛错 / `useSessionScope` 返回 undefined）；nonce 递增 |
-| `packages/react/src/event-bus.test.ts`（扩面） | scoped channel 跨作用域不投递；replayLast 只回放本桶；global channel 行为不变（回归）；常驻订阅者在 key 变化后自动过滤；resolver 未注入时不抛错、payload 不进桶；**emit 侧未注入 + on 侧已注入的错配 → payload 被丢、不崩、不进桶**；dropScope 清桶 |
+| `packages/react/src/event-bus.test.ts`（扩面） | scoped channel 跨作用域不投递；replayLast 只回放本桶；global channel 行为不变（回归）；常驻订阅者在 key 变化后自动过滤；**live 投递自洽**（resolver=null 时信封与过滤都为 null、一致投递，不会错配）；**replayLast 的错配落点**（无会话期 emit 不进桶、恢复 resolver 后捞不回）；resolver 未注入不抛错；dropScope 清桶；unregisterPlugin 的 null 哨兵对 scoped handler 不崩 |
 | `src/web/stores/ui-store.composer-drafts.test.ts`（改断言对象） | 五条断言口径不变，改成对 scope store |
 | `src/web/stores/session-store.test.ts:335+`（改断言对象） | 「翻键时按会话暂存的框架态必须跟着走」口径不变 |
 
@@ -1581,6 +1589,7 @@ A：归一也在 renderer。main 侧不需要知道作用域 key——它只按 
 - **r3** —— `drop` 的调用点此前只有承诺没有落点（补 §2.3.2：`removeSessionRows`，三条删除路径的唯一汇聚点）；「未发布阶段不做兼容层」这个前提此前只是转引（补 §7 QA：给出可验证锚点、以及前提不成立时的处置与判据）；`nsId` 与中立主键 `ns` 撞前缀（全文改称 `slotKey`）。
 - **r4（13 条矛盾 + 7 条悬空断言，由一次完整通读的横扫审阅报出）** —— 实质缺口两条：`carry:"drop"`（策略）与 `drop(scopeKey)`（动作）同名混淆，且物化丢弃的值由谁释放没讲（补 §2.2.4 对照表：策略不调 `onLeave`、靠 GC；动作调 `onLeave`）；scoped channel 的 emit/on 两侧 resolver 状态错配会静默丢 payload（补 §2.5.2 错配边界 + §5.1 测试断言）。其余为一致性问题：运维流白名单数错（14→13，以 `session-store.ts:3026-3039` 实数为准）、`goal-controller.ts:330` 两处引文不同（以源码为准）、`nsId→slotKey` 改名在变更记录里声称完成但代码块未落实、删除行数区间重叠重复计数（47→约 40）、`unregisterSessionSlots` 也调 `onLeave` 与「仅在 drop 时调」矛盾、引 CLAUDE.md 的节号错位两处（§1.5→§10 QA）、把 CLAUDE.md 原文改写后仍套引号两处、`sessions-list`「用错坐标系」与「本来就对」定性冲突（实为算法对但私有未上收）、e2e 断言的三个 DOM 锚点未交代来源（补：均为现状已有，`goal-bar.tsx:43-44`、`composer.tsx:325`）。
 - **r5（12 条矛盾 + 5 条悬空断言 + 3 处迟到回执逼出的下游 stale）** —— 矛盾的成因与前几轮不同：都是「同一事实散落多节、改了源头漏了呼应处」（六个/七个槽、五个/六个插件、store 的三种叫法、`§4.6.4` 与 `§4.6.5` 错位）。悬空断言三条是真错误：`manifest.piExtension` 属 CLAUDE.md §6.3 检验⑤而非④、`aux-block-parsers.ts:5` 的引文（「unload 时一并清」）恰与本文「数据可留」的结论相反、「CLAUDE.md 反对声明式 kind 字段」在 CLAUDE.md 里没有这句话。另补两处实质内容：`onLeave` 的四个时机收成一张全表（§4.5.5，此前散在三节且互相矛盾）、`unregisterSessionSlots` 遍历**全部会话域**而非只激活域（否则后台域的资源泄漏）。
-- **实现期修正（批 1/批 2 落地时按源码事实回写，两处）** ——
+- **实现期修正（批 1-3 落地时按源码事实/实测回写，三处）** ——
   ① **发布面 API**：首版的三个裸函数 `getSessionScopeValue(slotId)` 等拿不到 pluginId（`slotKey` 前缀来自 `PluginIdContext`，只能在 hook 里读），做成裸函数就得让插件手传自己的 id、违反 CLAUDE.md §8.3。改成 hook `useSessionScopeAccess(slotId)` 返回已绑定 pluginId 的 `{scopeKey,get,set,getAt,setAt}`，语义等价，把「插件侧只见短 id」贯彻到非渲染路径（§2.4.1 偏离说明）。
-  ② **overlay 不进容器**：首版 §2.6.1 把 `overlay` 与 ledger/inflight 并列为「三个执行态槽」都迁。实现时核实源码发现三者性质不同——overlay 是 session-store 的 **state 字段**（不是模块级单例）、与 `streaming`/`snapshot`/`messages` 在**同一个原子 setState** 里更新、写入源是只投激活会话的视图流、且本就有正确生命周期。迁走它会拆散原子更新、引入跨 store 竞态，而换来的「多会话并存」能力对它是空的（后台会话不产生 overlay）。故框架保留槽从七个改**六个**，只迁真正有 §1.1.3 病灶的两个模块级单例。这是 §4.5.4「存得下 ≠ 该存」判据的又一个实例，也是本文档「设计先行、实现按源码事实修正」的一次正面记录。
+  ② **scoped channel 的错配推理被实测证伪**：首版 §2.5.2 担心「emit 时 resolver 未注入、on 时已注入会让 live 投递被 `null !== ns` 丢弃」。批 3 写测试时实测:live 投递是同步的,信封的 `__scope` 与过滤器的 `currentScopeKey()` 取自同一次 resolver 调用,两者必然一致,**不会错配**;错配的真正落点是 `replayLast`(无会话期 emit 不进桶 → 恢复 resolver 后捞不回)。§2.5.2 已改写。另实测抓到 `unregisterPlugin` 的 null 哨兵会让 scoped 信封 handler 解引用崩溃(§2.5.3 补透传)。这两条都是「设计阶段的推理」撞上「运行期真实时序」后修正的,不是缩水。
+  ③ **overlay 不进容器**：首版 §2.6.1 把 `overlay` 与 ledger/inflight 并列为「三个执行态槽」都迁。实现时核实源码发现三者性质不同——overlay 是 session-store 的 **state 字段**（不是模块级单例）、与 `streaming`/`snapshot`/`messages` 在**同一个原子 setState** 里更新、写入源是只投激活会话的视图流、且本就有正确生命周期。迁走它会拆散原子更新、引入跨 store 竞态，而换来的「多会话并存」能力对它是空的（后台会话不产生 overlay）。故框架保留槽从七个改**六个**，只迁真正有 §1.1.3 病灶的两个模块级单例。这是 §4.5.4「存得下 ≠ 该存」判据的又一个实例，也是本文档「设计先行、实现按源码事实修正」的一次正面记录。

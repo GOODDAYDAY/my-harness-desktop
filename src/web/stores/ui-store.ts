@@ -21,8 +21,8 @@ import type { SidebarStyle, SidepanelStyle } from "@my-harness-desktop/shared";
 import { GENERAL_CONFIG_PATH } from "@my-harness-desktop/shared";
 import { useLayoutStore } from "./layout-store";
 import { readGeneralConfig, setGeneralConfigCwd } from "./general-config";
-import { eventBus } from "../../../packages/react/src/event-bus";
-import { setScopeKeyResolver } from "./session-scope";
+import { eventBus, setEventBusScopeKeyResolver } from "../../../packages/react/src/event-bus";
+import { setScopeKeyResolver, onScopeDrop } from "./session-scope";
 import { sessionScopeKey } from "@my-harness-desktop/shared";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
@@ -387,7 +387,14 @@ eventBus.on("system:configFileSaved", (payload) => {
 //
 // event-bus 的 scoped channel 坐标绑的是同一个函数——状态写进哪个域、事件坐标是什么,
 // 两者同源,不会出现「状态写进 A 域、事件坐标是 B」的错配。
-setScopeKeyResolver(() => {
+const resolveScopeKey = (): string | null => {
   const s = useUiStore.getState();
   return sessionScopeKey(s.currentNeutralSessionId, s.currentCwd);
-});
+};
+// 状态容器与事件总线绑**同一个**解析函数:状态写进哪个域、scoped channel 的坐标是什么,
+// 两者同源,不会出现「状态写进 A 域、事件坐标是 B」的错配(设计 §2.2.1/§2.5.2)。
+setScopeKeyResolver(resolveScopeKey);
+setEventBusScopeKeyResolver(resolveScopeKey);
+// 会话删除时清该会话在全部 scoped channel 上的回放桶(设计 §2.5.3):
+// scope store 的 drop 经 onScopeDrop 通知到这里,两个机制在 drop 这一个点汇合。
+onScopeDrop((scopeKey) => eventBus.dropScope(scopeKey));
