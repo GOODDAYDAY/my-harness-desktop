@@ -13,7 +13,7 @@
         "id": "retry",
         "component": "RetryAction",
         "placement": "left",
-        "when": { "role": ["assistant"] },
+        "when": { "role": ["assistant"], "settled": true },
         "order": 50
       }
     ],

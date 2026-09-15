@@ -2,7 +2,6 @@
   "shell.retry": "重试",
   "shell.retryArmed": "确认重试?",
   "shell.retryFailed": "重试失败：{{error}}",
-  "shell.retryStreamingBlocked": "生成进行中，无法重试",
   "shell.retryNoUserMessage": "找不到可重试的用户消息",
   "shell.retryStaleRow": "消息不在当前快照中，请稍候再点一次"
 }

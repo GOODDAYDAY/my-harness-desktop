@@ -3,7 +3,7 @@ import type { Gateway } from "../routing/gateway";
 import { sep } from "node:path";
 import { expandDesktopPath } from "../application/config/paths";
 import { IPC } from "@my-harness-desktop/shared";
-import type { ImageInput, SessionRole, SessionModelPrefs, SessionHeaderChangedEvent } from "@my-harness-desktop/shared";
+import type { ImageInput, SessionRole, SessionModelPrefs, SessionHeaderChangedEvent, ForkOptions } from "@my-harness-desktop/shared";
 import type { DisplayMeta } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
 import type { KernelId } from "@my-harness-desktop/shared";
@@ -139,15 +139,15 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
 
   // ---- SessionTreeApi(会话树操作)----
   // fork/clone 产生新 lineage/副本,同样广播——其他端的会话树/列表消费方按需重拉(第 22 项补漏)。
-  gateway.register(IPC.session.fork, async (_e, parentLineageId: string, boundary?: string, position?: "before" | "at") => {
-    const r = await sessionStore.fork(parentLineageId, boundary, position);
+  gateway.register(IPC.session.fork, async (_e, parentLineageId: string, boundary?: string, position?: "before" | "at", opts?: ForkOptions) => {
+    const r = await sessionStore.fork(parentLineageId, boundary, position, opts);
     notifyHeaderChanged({ kind: "fork", parentLineageId });
     return r;
   });
   // forkFromSession 已切中立 lineage(§kernel-forkless §14):入参是源会话 neutralSessionId,
   // 不再是文件路径;不复制文件 → 无需路径圈禁(旧 gate 会误拒裸 UUID ns,打断 timeline 分叉)。
-  gateway.register(IPC.session.forkFromSession, async (_e, cwd: string, srcNs: string, entryId: string, position?: "before" | "at") => {
-    const r = await sessionStore.forkFromSession(cwd, srcNs, entryId, position);
+  gateway.register(IPC.session.forkFromSession, async (_e, cwd: string, srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions) => {
+    const r = await sessionStore.forkFromSession(cwd, srcNs, entryId, position, opts);
     notifyHeaderChanged({ kind: "forkFromSession", srcNs });
     return r;
   });

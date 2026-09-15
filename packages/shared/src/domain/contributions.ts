@@ -5,6 +5,7 @@
 // 零外部依赖:不 import react/electron/pi(圆心纯度纪律,structure/16 §10.1)。
 import type { KernelId } from "./kernel";
 import type { KernelPluginManifest } from "./kernel-plugin";
+import type { NeutralMessage } from "./events/session-state";
 
 /** 设置子页槽(settings)贡献项:插件自己的配置页(DESIGN.md §3.3 / 952 行)。 */
 export interface SettingsContribution {
@@ -181,7 +182,20 @@ export interface MessageActionContribution {
   /** 按钮位置:"left"=消息内容侧,"right"=消息行末尾;缺省 "left"。 */
   placement?: "left" | "right";
   /** 适用消息角色:哪些 role 的消息显示此按钮。缺省=所有角色。 */
-  when?: { role?: string[] };
+  when?: {
+    role?: string[];
+    /** 只在**已落定**的消息上显示(排除在飞的流式占位 `message.pending`)。缺省 false=不限。
+     *
+     * 为什么是框架级声明而不是各插件自己判:凡以「某条消息」为锚点的动作(重试/分叉/收藏)
+     * 都必须等这条消息进中立层才有锚可锚——在飞的那条只活在渲染层的执行态叠加层里,
+     * 中立层没有它,拿它当锚点必然「锚点不在会话内容里」。这条约束对每个锚点类动作都一样,
+     * 所以收进槽位契约由消费方(timeline)统一过滤,而不是让每个插件各写一遍
+     * `if (message.pending) return null`(同一逻辑在多个入口各写一遍 = 该收进框架)。
+     *
+     * 注意粒度:它排的是**这一行**,不是整个会话。流式生成中,历史行照常可分叉/可收藏
+     * (中立层只增不改,读已落定的条目安全);只有在飞的那一行没有锚点。 */
+    settled?: boolean;
+  };
   /** 排序,同 placement 内小的在前;缺省 100。 */
   order?: number;
 }
@@ -580,6 +594,29 @@ export function derivePluginTags(contributes?: PluginContributes): string[] {
   if (contributes?.languages?.length) tags.push("i18n");
   if (contributes?.settings?.length || contributes?.settingsGroups?.length) tags.push("management");
   return tags;
+}
+
+/** 按 `when` 谓词判定一个 messageActions 贡献项是否适用于这条消息(纯函数)。
+ *
+ *  为什么这个判定在圆心而不在各插件:两个谓词都是**槽位契约的通用规则**,
+ *  对每个贡献者都一样——`role` 是契约原有的;`settled` 是「凡以这条消息为锚点的
+ *  动作(重试/分叉/收藏)必须等它落定」。所以声明进契约、判定在圆心一处,
+ *  而不是四个插件各写一遍 `if (message.pending) return null`(同一逻辑在多个入口
+ *  各写一遍 = 该收进内层统一承担)。
+ *
+ *  `settled` 存在的理由:在飞的那条消息只活在渲染层的执行态叠加层里(乐观回显 /
+ *  流式占位),中立层还没收到它的写穿回执——拿它当分叉/收藏锚点必然「锚点不在
+ *  会话内容里」。
+ *
+ *  粒度(勿误读):排的是**这一行**,不是整个会话。流式生成中,历史行(已落定)
+ *  照常可分叉/可收藏——中立层只增不改,读已落定的条目安全。 */
+export function messageActionApplies(
+  action: Pick<MessageActionContribution, "when">,
+  message: Pick<NeutralMessage, "role" | "pending">,
+): boolean {
+  if (action.when?.role && !action.when.role.includes(message.role)) return false;
+  if (action.when?.settled && message.pending === true) return false;
+  return true;
 }
 
 /** 解析最终 tags:推导 ∪ 声明,去重保序。 */
