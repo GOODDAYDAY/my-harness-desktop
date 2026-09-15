@@ -2,6 +2,8 @@
 
 这份文档是给"接手的人/会话"的完整交接，不是设计论证。读完它应该能直接开工，不需要回头翻聊天记录。
 
+> **进度更新**：§2 的四个 bus 缺陷（A/B/C/D）**已全部修复**，守卫测试已落地（`session-store.bus-frame.test.ts` + `session-bus.test.ts` 新增 6 条），typecheck + 全量测试（1649 passed）+ 依赖审计（0 违规）通过。缺陷 B 的最终修法比下文原计划更根本——不是"通知帧节流"，而是"watch 一次性交付"（见 §2.3 的实现说明）。**剩余待办是 §3 的统计交付物 1**（及其后的 2/3/4），那部分尚未开工。
+
 前置事实：统计单源的**设计文档已完成并合入 main** —— `docs/design/stats-single-source.md`（26986 汉字，main `e0073b27`）。本文不重复那份设计，只讲两件待办的事：四个 bus 缺陷的修复，以及统计设计里"交付物 1"的落地。两者可以放在同一个 worktree 里分两次 commit，也可以拆开。
 
 写作时的 main 基线：`e0073b27`。下面所有行号基于这个提交，漂移后按符号名定位。
@@ -122,19 +124,37 @@ for (const tap of this.taps.values()) {
 
 无论哪个，**返回值诚实化是必须的**——`stopped: true` 无条件返回是这次事故里最坑人的一点，它让调用方无法发现自己没生效。
 
-### 2.3 缺陷 B：通知帧无节流，洪泛忙会话
+### 2.3 缺陷 B（已修）：watch 非一次性交付，同一会话反复 settle 反复通知
 
-**位置**：`src/server/application/sessions/session-bus.ts:190-196`（`deliver`）+ `:467-479`（`settleSession`）
+**位置**：`src/server/application/sessions/session-bus.ts` 的 `settleSession`
 
-`deliver` 对 session 目标用 `sendPromptTo(..., "followUp")` 注入。followUp 会排进目标会话的输入队列，**每帧消耗接收方一个回合**。没有任何去重或节流。
+**原诊断（修正）**：我最初把它归成"通知帧无节流"，计划做 `(to, payload.session, kind)` 维度的短窗去重。写代码时发现那是治标——真正的根因是 **watch 的语义是"完成时通知一次"，但 `settleSession` 每轮 `agentSettled` 都投递且不清 watcher**。
 
-这次事故的直接代价：289 帧 = 289 个回合，其中绝大多数是同一 `(session, kind)` 的重复 `session_done`，信息增量为零。
+`session_create` 工具的描述明写 *"you get session_done with the COMPLETE final output when it finishes"*——单数、一次性。但实现里 watcher 登记只在 `onProcessExit`（`:174`）清除，`settleSession` 投递后不清。于是一个会话每 `agentSettled` 一次就向同一 watcher 重投一次 `session_done`。
 
-**修法**：对纯通知类帧做 `(to, payload.session, kind)` 维度的短窗去重（比如同一三元组在 N 秒内只投一次，或直接丢弃已投递过的 `session_done`）。`chat`/`task` 这类内容帧不能去重（会丢消息），只去重 `session_done`/`peer_joined`/`peer_left`/`tap_event` 这类状态通知。
+这次事故的完整链条：派 13 个 watch 子会话 → 子会话都在同一房间（`br-r1/r2/r3`）→ 房间消息互相转发触发各自反复 `agentSettled` → 每个 watcher 被反复通知 → 父会话（我）收到 289 帧，每帧占一个回合。
 
-这条同时是缺陷 D 的**结构性缓解**：即使上游反复触发 settle，接收方也不会被洪泛。
+**实际修法（比节流更根本）**：`settleSession` 投递给 watcher 后立即 `this.watchers.delete(sessionKey)`——把 watch 变回它本应是的"一次性交付"。从根上幂等：再多的 `agentSettled` 也不会重复通知，无需时间窗、无需去重表。
 
-### 2.4 缺陷 D：`settleSession` 对已死会话反复触发（根因未证实）
+```ts
+private async settleSession(sessionKey, status) {
+  const watchers = this.watchers.get(sessionKey);
+  const notify = new Set<string>(watchers ?? []);
+  for (const tap of this.taps.values()) { /* done 型 tap 也进 notify */ }
+  if (notify.size === 0) return;
+  const payload = await this.collectOutput(sessionKey, status);
+  for (const addr of notify) this.deliver({ … kind: "session_done", payload … });
+  if (watchers) this.watchers.delete(sessionKey);   // ← 一次性交付
+}
+```
+
+**为什么不清 done 型 tap**：watch 与 tap 语义不同。watch 是"完成时告诉我一次"（一次性）；done 型 tap 是"我要持续观察这个会话的完成"（`tap-start.ts`: *Observe a session's events*，调用方持 tapId 自行 `tap_stop`）。清 tap 会破坏监督会话对多轮完成的持续观察。所以只清 watch，tap 留给 `tap_stop` / `onProcessExit` 兜底。
+
+**守卫**：`session-bus.test.ts` 新增"watch 是一次性交付：同一会话反复 agentSettled 只通知一次"——连发 5 次 `agentSettled`，断言 watcher 只收到 1 条 `session_done`。
+
+**对 orchestrator 的影响**：已核实无回归。`spawn-subagent.ts:97` 用 `watch: true` 派的子 agent 是一次性 task（跑完退出 → 一次 `session_done` → settle），一次性交付与它语义完全一致，反而修掉了"子会话回声导致反复 settle"的隐患。全量测试 1649 passed。
+
+### 2.4 缺陷 D（已随 B 根治）：`settleSession` 反复触发的根因
 
 **位置**：`src/server/application/sessions/session-bus.ts:97` 与 `:160`
 
@@ -143,21 +163,29 @@ onSessionEvent(event, sessionKey) { … if (event.type === "agentSettled") void 
 onProcessExit(sessionKey, expected) { void this.settleSession(sessionKey, expected ? "aborted" : "error"); … }
 ```
 
-`settleSession` 只有这两个触发点，bus 内部无重试、无持久队列（`:8` 注释明写"不持久化"）。但实测同一会话产生了 96～185 条 `session_done`，而源进程早已死亡。
+我当初把它列为"根因未证实"，怀疑是 desktop 侧 proc 条目泄漏导致反复 `agentSettled`。**修 B 时发现不需要那个假设**：`agentSettled` 本来就是每轮回合结束都会发的合法事件（一个多轮会话会发很多次），`settleSession` 被反复调用是**正常**的；不正常的是它每次都向 watcher 重复投递。所以根因不在"谁反复触发 settle"，而在"settle 非幂等"——修 B 的一次性交付直接根治了 D。
 
-**我没有证实根因。** 已排除的：bus 侧重试队列（不存在）、harness 重放（289 条独立记录证伪）、源进程存活（`lsof` 无持有者）。剩下的怀疑方向是 desktop 侧那些会话的 proc 条目未被清理，某条协调路径反复为它们发 `agentSettled`——`src/server/application/restart/restart-coordinator.ts:92` 订阅了 sessionEvent，是可疑点之一，但我没读到运行时状态（`list_subagents` 对这个插件持续 60s 超时，够不到）。
+那 96～185 条 `session_done` 的来源现在清楚了：13 个盲审子会话在同一房间互相转发消息（房间 fan-out），每条转发都让接收方走一轮 → `agentSettled` → settle → 向父会话（watcher）投一帧。父会话作为 13 个会话的 watcher，被投了 13 × 各自回合数帧。
 
-**接手时的建议**：
+**仍存的一个疑点（不影响修复）**：`list_subagents` 对 sub-agent 插件持续 60s 超时。修 B 后不再洪泛，插件卡死的诱因（被 289 帧灌爆）消失，但我没有独立证实插件当时为何超时。若重启后仍复现，再单独查——它可能是这次洪泛的**结果**而非原因。
 
-1. 先修 B（节流）。它让 D 的后果无害化，且改动小、可独立验证。
-2. 再查 D。复现路径可能是"派一批 watch 子会话 → abort 它们 → 观察父会话收到多少帧"，`session-bus.test.ts` 里已有 watcher 相关用例（`:255`、`:271`、`:330`）可以当脚手架。
-3. 如果 D 的根因是 proc 条目泄漏，那它是一个独立 bug，修它比修 bus 更有价值。
-4. 取证命令（能直接分辨"重放"与"真实重复投递"，我当初该第一条就跑它）：
-   ```bash
-   F=~/.pi/agent/sessions/<你的 cwd 目录>/<你的 session id>.jsonl
-   grep -c "session_done" "$F"                                  # 总注入次数
-   grep -o "session:bus:[a-f0-9]*" "$F" | sort | uniq -c | sort -rn   # 按源分布
-   ```
+**取证命令**（能直接分辨"重放"与"真实重复投递"，我当初该第一条就跑它）：
+```bash
+F=~/.pi/agent/sessions/<你的 cwd 目录>/<你的 session id>.jsonl
+grep -c "session_done" "$F"                                        # 总注入次数
+grep -o "session:bus:[a-f0-9]*" "$F" | sort | uniq -c | sort -rn   # 按源分布
+```
+
+### 2.5 四个缺陷的修复落点汇总
+
+| 缺陷 | 修法 | 守卫 |
+|---|---|---|
+| C（dsh 静默丢帧） | `sendPromptTo` 能力探测：有扩展面带 `streamingBehavior`，无则走中性 `backend.sendMessage`；`deliver` 的 `.catch` 区分"会话不在线"（合法，静默）与真错误（记日志） | `session-store.bus-frame.test.ts` 3 条 + `session-bus.test.ts` 投递失败 2 条 |
+| A（watch 无法撤销 + 谎报成功） | `tap_stop` 不带 tapId 时停本地址全部订阅（taps + watchers）；返回值 `{stopped, removed}` 诚实反映；`pluginTapStop` 加 pluginId 参数；`bus_status.me` 暴露 `watching`；工具 schema tapId 改可选 | `session-bus.test.ts` 撤销 + 诚实返回 + 可观测性 3 条 |
+| B（watch 非一次性） | `settleSession` 投递后清 watcher | `session-bus.test.ts` 一次性交付 1 条 |
+| D（settle 反复触发） | 随 B 根治（settle 幂等化） | 同 B |
+
+改动文件：`session-bus.ts`（A/B/D）、`session-store.ts`（C）、`controllers/bus.ts` + `web/kernel/build-kernel.ts` + `react/src/index.ts` + `shared/.../session-bus.ts` + `my-harness-fit-pi-extension/tools/tap-stop.ts`（A 的 tapId 可选化贯穿链路）。`~/.pi/agent/extensions/bus-extension/` 是安装产物，未改（§1.6），由 installer 同步。
 
 ## 3. 统计单源交付物 1
 
@@ -246,6 +274,59 @@ private appendNeutral(proc: SessionProc, entry: NeutralEntry): void {
 - **G10**：e2e，dsh 下真实发一轮，断言本会话 tokens 非 0、上下文条非空、tps 有值。**必须静默跑**：脚本过 `scripts/demo/lib/quiet-env.mjs`（`MHD_WINDOW=hidden`），参考 `scripts/demo/goal-command.e2e.mjs` 的写法，用 `page.waitForFunction` 事件驱动等 DOM 落位、不赌固定 sleep。
 
 交付物 2/3/4 的范围与守卫见设计文档 §7.1 的表格。
+
+### 3.5 分步执行清单（按依赖顺序，每步验绿再进下一步）
+
+顺序是按「内层先于外层、类型先于实现、投影器先于读口切换」排的——每一步都能独立 typecheck + 跑测试，不留半成品（CLAUDE.md「完整设计，一次落地」的拆分边界：每个交付物自身完整）。
+
+**Step 1 — 圆心类型：cost 可空 + 计价标志 + ModelInfo.cost?**
+
+- 改 `packages/shared/src/domain/events/session-state.ts`：`:51` `TurnUsage.cost` → `number | null`；`:62` `SessionStats.cost` → `number | null`；`:109` `ProjectStats.cost` → `number | null`；`:98` `shellSessionStats` 的 `cost: 0` → `cost: null`。
+- 改 `:215` `messageUsageOf`：返回值从 `{tokens, cost}` 扩成 `{tokens, cost, priced}`，`priced = typeof raw.cost === "object" && raw.cost !== null`（**形状判据**，见设计文档 §3.5.5：对象=真计价哪怕全零，数字=占位/未知）。`cost` 本身仍返回数字（对象取 `.total`、数字原样），由 `priced` 表达「这个数字可不可信」。
+- 改 `:10` `ModelInfo` 加可选 `cost?: {input,output,cacheRead,cacheWrite}`（交付物 3 用，但类型现在就加，避免交付物 3 再动圆心）。
+- 验：`npm run typecheck` 会报出所有 `cost` 消费方——逐个看，渲染层（`CostRow`）留到 Step 6 改，此处只让类型自洽（可能需要临时 `?? 0` 兜底，Step 6 撤掉）。跑 `npx vitest run packages/shared`。
+
+**Step 2 — 投影器（纯函数，最内层）**
+
+- 新建 `src/server/application/sessions/stats-projector.ts`：`projectSessionStats(scope: {entries, contextWindow?}): SessionStats` + `foldProjectStats(summaries): ProjectStats`。骨架照设计文档 §3.1.1.1，switch 分支键是 `role` 不是内核。
+- 复用圆心四个函数：`messageUsageOf` / `contextSeqItemOf` / `estimateContextUsageFromSeq` / `toolCallsOf`，一行算法都不新写。
+- 三个必须显式处理的脏形状（否则 G1 挂）：无 usage 的 assistant（dsh 19 条，计 steps 不计 tokens）、cost 数字占位（判未知、触发传染）、无 startedAt（不参与 tps 分母）。
+- `lastTurn` 规则：从后往前第一个用量非零的区间（设计文档 §2.3.4）。
+- 验：新建 `stats-projector.test.ts`，从 `~/.my-harness-desktop-dev/sessions/*.entries.json` **截真实 pi/dsh 会话**当 fixture（不手造），断言两内核同口径 + G5（cost 传染）+ G12（5 条边界 turns==5）。此步不碰 session-store，纯函数可独立测。
+
+**Step 3 — turn-boundary 写穿 + 摘要增量**
+
+- `session-store.ts` 的 `dispatch`：`:2980` 的 `agentSettled` 分支里，除了现有 `proc.turns += 1`（`:2984`），加一条 `appendNeutral(proc, {message:{role:"turn-boundary", content:reason, display:false, reason, timestamp}})`。reason 从 `agentSettled` 事件取（dsh 侧 `dsh-event-translator.ts:36` 已透传）。
+- 摘要增量：在 `appendNeutralEntryWithHeader` 的 header 派生里折入 `stats`（`NeutralSessionHeader.stats` 域 + `statsUpTo`）。`appendNeutral`（追加）走增量、`putNeutral`（覆盖整树）走全量重投影——两个写口两种策略（§3.3）。
+- 验：G1（增量==全量，覆盖 fork/seed/backfill）+ G4（statsUpTo≠lastEntryId 判过期）。`npx vitest run src/server/application/sessions`。
+
+**Step 4 — dsh 适配器补三处形状**
+
+- `dsh-event-translator.ts:74` 的 `assistant/message` 分支：`error:true` → 补 `stopReason:"error"`（保留 `error:true`，只在失败时补，成功不伪造 `end_turn`，见设计文档 §3.4.1）。
+- 同分支补 `startedAt`：取流式缓冲 `anchorTs`，无 chunk 回落事件时间戳（§3.4.3）。
+- `:16` 丢弃清单里的 `request/context`：改成翻译成中性 `contextWindowChanged` 事件（中性事件联合加一种），proc 态记 contextWindow（§3.4.2）。
+- 验：G6（翻译器补 stopReason/startedAt 的单测，扩 `dsh-event-translator.test.ts`）。
+
+**Step 5 — 切 getStats / openSession 两个读口**
+
+- `session-store.ts:2446` 的 `getStats`：删 `:2448` 的 `throw "内核未启动"`、删 `:2450` 的 `capabilities.extensions` 分流与 `pi.getSessionStats`，改成 `lineageContent` 取当前 lineage entries → `projectSessionStats`。contextWindow 合并顺序：活进程 `contextWindowChanged` 值 → modelEvidence 查表 → 0。
+- `session-store.ts:955` 的 `openSession`：`stats: null` → 投影结果（复用已读出的 `session`，走 `lineageContent` **不走** `neutralMessagesOfSession`，§3.2 坑一）；`modelEvidence` 一并从 entries 线性扫描末条带 model 的 assistant 得出。
+- 验：G10 的 unittest 部分（getStats 对 dsh 形态 entries 返回非零 tokens）。`npx vitest run src/server/application/sessions/session-store.test.ts`——注意别打破现有 236 条。
+
+**Step 6 — token-stats 渲染层跟进 cost 可空**
+
+- `src/plugins/insight/token-stats/renderer/index.tsx:156` 的 `CostRow`：`cost == null` 渲染破折号 + tooltip，不再 `toFixed(null)`；`costCoverage.unknown > 0` 追加「（部分会话无计价）」。
+- 撤掉 Step 1 的临时 `?? 0` 兜底。
+- 验：G7（DOM test：cost=null 渲染破折号不渲染 `$0.00`），参考 `context-usage-bar.test.tsx` 的写法（jsdom + testing-library，按角色/文案查不按 class）。
+
+**Step 7 — e2e + 静态守卫 + 文档同步**
+
+- G10 e2e：`scripts/demo/stats-single-source.e2e.mjs`（新建），dsh 内核下真实发一轮，断言本会话 tokens 非 0、上下文条非空、tps 有值。过 `quiet-env.mjs` 静默跑，`page.waitForFunction` 事件驱动等 DOM。
+- 静态守卫：`scripts/dependency-audit.mjs` 加两条（设计文档 §3.2.4.2）——统计链路零 `capabilities.extensions`/`KernelId`/`asPi`；`SessionCatalog` 无 `projectStats`/`contextProbeTokens`。
+- 文档同步（§7.4）：改 `kernel-parity-audit.md:82` 的 stale ✅、重写 `docs/plugins/insight/token-stats.md` §6.4「dsh 缺面留空」整节（带路径：`token-stats.md` 在 `docs/plugins/insight/` 与 `docs/legacy/` 下各有一份同名文件，不带路径会让交叉引用门判为无法解析）。
+- 验：`npm run build` + e2e 静默跑通 + `npm run audit:deps` 全绿。
+
+**注意 Step 5 的依赖**：getStats 切到投影器后，pi 的 `getSessionStats`（`pi-backend.ts:271`）与 `toSessionStats`（`context-binding.ts:147`）失去调用方，但**本步不删**——删契约方法（`SessionCatalog.projectStats`/`contextProbeTokens`）是交付物 4 的事，删早了编译不过。Step 5 只切读口，留死代码给交付物 4。
 
 ## 4. 工作纪律提醒
 

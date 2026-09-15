@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // retry 插件 DOM 交互测试(三级测试第二级,补零测试缺口):
 //   重试按钮全生命周期——渲染条件(仅 assistant)/找不到 user 消息的诚实 toast/
-//   点击 → fork("before", abortSource) + prompt 重发(派生新会话 + 重发原文,§7.1 第一行)/失败 toast。
+//   点击 → fork(中立主键 ns, "before", abortSource) + prompt 重发(派生新会话 + 重发原文,
+//   §7.1 第一行)/失败 toast;以及 H1 回归守卫(第 1 参用 ns 不用投影路径)。
 //   流式态的拦截已改粒度:不再判全局 streaming,而是 manifest 声明 when.settled
 //   由框架在「在飞的那一行」不渲染按钮(历史行流式中照常可重试)。
 import "@testing-library/jest-dom/vitest";
@@ -22,6 +23,8 @@ const mocks = vi.hoisted(() => ({
       ],
     },
   },
+  /** useUiStore 面:中立主键(fork 的第 1 参要用它,不用投影路径——§kernel-forkless §32)。 */
+  ui: { currentNeutralSessionId: "ns-1" },
 }));
 
 vi.mock("@my-harness-desktop/react", () => ({
@@ -30,6 +33,7 @@ vi.mock("@my-harness-desktop/react", () => ({
     tree: { fork: mocks.fork },
   }),
   useSessionStore: (selector?: (s: unknown) => unknown) => (selector ? selector(mocks.state) : mocks.state),
+  useUiStore: (selector?: (s: unknown) => unknown) => (selector ? selector(mocks.ui) : mocks.ui),
   useArmConfirm: () => armState(),
 }));
 vi.mock("react-i18next", () => ({
@@ -93,16 +97,32 @@ describe("RetryAction 点击(重试 = fork before + 重发原文,§7.1)", () => 
     };
   });
 
-  it("点击 → fork(会话文件, user id, before, abortSource) + prompt(原 user 文本)", async () => {
+  it("点击 → fork(中立主键 ns, user id, before, abortSource) + prompt(原 user 文本)", async () => {
     const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} text="" />;
     const { rerender } = render(ui());
     clickArmConfirm(rerender, ui, () => screen.getByTitle("重试"));
+    // 第 1 参必须是**中立主键**(§kernel-forkless §32:neutralSessionId 是主键,path 降级为
+    // 投影线索)。此前这条断言固化的是 snapshot.state.sessionFile(pi 投影路径)——契约要
+    // lineageId、调用方给路径,靠壳侧「锚点归属纠偏」兜住结果,代价是每次重试打一条 warn
+    // 回落,且把「挂到活跃 lineage」这条已修过的根因重新变成活路径。现已与另两个入口
+    // (timeline rewind / session-tree)对齐,本断言守着不让它漂回投影路径。
+    //
     // abortSource:回退重跑隐含「这条不要了」——源会话在飞则壳侧先中断并等落定再派生
     // (顺序不可拆:abort 打激活进程,派生会把激活切走)。已落定的历史行上重试无事发生。
-    // 注:第 1 参传的是 snapshot.state.sessionFile(投影路径),而契约要的是 parentLineageId
-    // ——这是已知的契约漂移(靠壳侧「锚点归属纠偏」兜住),不在本轮范围,留待单独修。
-    await vi.waitFor(() => expect(mocks.fork).toHaveBeenCalledWith("/proj/sess.jsonl", "u1", "before", { abortSource: true }));
+    await vi.waitFor(() => expect(mocks.fork).toHaveBeenCalledWith("ns-1", "u1", "before", { abortSource: true }));
     await vi.waitFor(() => expect(mocks.prompt).toHaveBeenCalledWith("原始问题文本"));
+  });
+
+  it("第 1 参不用投影路径(H1 回归守卫):sessionFile 存在也传 ns,不传路径", async () => {
+    // 这条是 H1 的显式守卫:snapshot.state.sessionFile 明明在(/proj/sess.jsonl),
+    // 但 fork 的第 1 参必须是 ns。若哪天有人"顺手"改回 sessionFile,本条当场红。
+    const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} text="" />;
+    const { rerender } = render(ui());
+    clickArmConfirm(rerender, ui, () => screen.getByTitle("重试"));
+    await vi.waitFor(() => expect(mocks.fork).toHaveBeenCalled());
+    const firstArg = mocks.fork.mock.calls[0][0];
+    expect(firstArg).toBe("ns-1");
+    expect(firstArg).not.toContain(".jsonl"); // 投影路径的形态特征
   });
 
   it("行不在快照(idx<0):toast 显形而非静默死(r363 缺口守卫)", async () => {

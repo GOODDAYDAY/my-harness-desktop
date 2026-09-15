@@ -24,7 +24,7 @@ retry 是会话域里"重试"语义的壳插件承载者，但它实际牵涉**�
   - 第 1 步：`if (!message.id) return;`——无 id 无法定位，静默返回。
     （旧版这里的第 1 步是 `if (streaming) { setToast(...); return; }`——**已删**。流式中照样能重试：拦的粒度是「在飞的那一行」而非整个会话，由 manifest 的 `when.settled` 在渲染层挡住 pending 行，`handleRetry` 里不再有全局 `streaming` 判断。详见 §4 与 `docs/design/bookmark-snapshot-fork-unify.md` §7.1/§10.1。）
   - 第 3 步（第 29–39 行）：在 `snapshot?.messages` 里 `findIndex(m => m.id === message.id)` 找到目标消息，再**向前扫描**找最近一条 `role === "user"` 的消息（第 33–35 行 `for (let i = idx; i >= 0; i--) if (msgs[i].role === "user") { userMsg = msgs[i]; break; }`）。找不到 user 消息则 `setToast(t("shell.retryNoUserMessage"))` 返回——重试的本质是"重发那条提问"，没有提问就没有重试对象。
-  - 第 4 步：`await ctx.tree.fork(snapshot?.state.sessionFile ?? "", userMsg.id, "before", { abortSource: true })`——在那条 user 消息处派生新会话（`"before"` 排除锚点本身，否则同一条 user 在派生前缀与第 5 步的重发里各出现一次）。`abortSource: true` 是「回退重跑」的语义前提：这条不要了，所以壳侧先中断源会话、等它落定，再派生。
+  - 第 4 步：`await ctx.tree.fork(currentNeutralSessionId ?? "", userMsg.id, "before", { abortSource: true })`——在那条 user 消息处派生新会话（`"before"` 排除锚点本身，否则同一条 user 在派生前缀与第 5 步的重发里各出现一次）。第 1 参用**中立主键** `currentNeutralSessionId`（`useUiStore`），与另两个分叉入口（timeline rewind / session-tree）一致；`abortSource: true` 是「回退重跑」的语义前提：这条不要了，所以壳侧先中断源会话、等它落定，再派生。
   - 第 5 步（第 41–49 行）：把 `userMsg.content` 转成纯文本（string 直接用；数组则过滤 `type === "text"` 的块并 join），`await ctx.messaging.prompt(text)` 重发。
 - 文本提取（第 41–48 行）是"内容块数组 → 纯文本"的一次本地解包：`typeof userMsg.content === "string"` 直接取，否则 `Array.isArray` 时 `filter(c => typeof c === "object" && c !== null && c.type === "text").map(c => String(c.text ?? "")).join("")`。这与圆心 `messageContentText`（`packages/shared/src/domain/...`）是同一语义的重复实现——retry 插件自己写了一遍，而不是 import `messageContentText`，这是已知的轻微偏离（session-colors 的 `core/pin.ts` 就 import 了 `messageContentText` 单源，retry 没有）。
 - 错误呈现（第 50–53 行）：catch 后 `const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg); setToast(t("shell.retryFailed", { error: m?.[1] ?? msg }))`——正则剥掉 IPC 包装（`Error invoking remote method 'xxx': ...`），只显示内核真实错误。这是"壳插件收到 handler 拒绝后自己决定怎么呈现"（§8.1 权限边界）的落地：IPC 错误是壳后端的包装，内核错误才是用户该看的。
@@ -41,7 +41,7 @@ retry 是会话域里"重试"语义的壳插件承载者，但它实际牵涉**�
 
 - **流式中可重试的粒度是「行」不是「会话」**：retry 按钮在 manifest 里声明 `when.settled: true`（`src/plugins/sessions/retry/plugin.json`），框架消费方（timeline 的 `message-actions-host.tsx`）经圆心谓词 `messageActionApplies`（`packages/shared/src/domain/contributions.ts`）统一筛——`message.pending === true` 的在飞行不渲染按钮，已落定的历史行照常。所以流式生成中你依然能从上一条回答重试，只是不能拿正在生成的那条当锚点。`handleRetry` 里因此不再有 `if (streaming) return` 的全局判断。
 
-- **已知契约漂移（不在本轮范围，留待单独修）**：第 4 步传的第 1 参是 `snapshot?.state.sessionFile`（pi 投影路径），而契约要的是 `parentLineageId`。壳侧靠 `deriveFromAnchor` 的「锚点归属纠偏」兜住（按 `boundary` 反查它属于哪条 lineage，路径匹配不上就回落活跃 lineage），功能正确但每次重试都会打一条 `console.warn`。`renderer/index.test.tsx` 目前把这个错误入参固化进了断言——修它要连测试一起改，属 §1.3 契约单源的破口。
+- **契约漂移已修（H1）**：第 4 步的第 1 参此前传 `snapshot?.state.sessionFile`（pi 投影路径），而契约 `SessionTreeApi.fork` 要的是 `parentLineageId`。壳侧靠 `deriveFromAnchor` 的两层兜底救回结果——先 `console.warn` 回落活跃 lineage，再靠「锚点归属纠偏」按 `boundary` 反查真正的父——所以功能正确，但代价是每次重试一条 warn，且把「挂到活跃 lineage」这条**已修过的根因**重新变成活路径（纠偏的前置条件一变就退化）。现已改传 `currentNeutralSessionId`，与另两个入口对齐；`renderer/index.test.tsx` 补了一条显式守卫（`sessionFile` 明明在场也断言第 1 参是 ns、且不含 `.jsonl`），守住不让它漂回投影路径。这是 §1.3 契约单源的收口：**签名要什么坐标系，调用方就给什么坐标系，不靠被调方兜底**。
 
 ## 5 abortRetry：pi 扩展面，不是 retry 插件
 
@@ -60,7 +60,7 @@ retry 是会话域里"重试"语义的壳插件承载者，但它实际牵涉**�
 - **dependsOn**：`["timeline"]`——retry 的按钮由 timeline 挂载，同 continue 的生命周期护栏。
 - **不贡献、不消费的槽位**：retry 不贡献任何渲染槽，不 export `channels`，不在事件总线上 `emit` / `invoke` / `on`。它是单槽插件，与其它壳插件唯一耦合是 timeline 对 `messageActions` 的消费。
 - **消费的框架 API**：`ctx.tree.fork`（`SessionTreeApi.fork`，分叉意图）、`ctx.messaging.prompt`（`MessagingApi.prompt`，消息意图）、`ctx.pi.abortRetry`（`PiExtensions.abortRetry`，pi 扩展面——注意 retry 插件**不**消费它，是 timeline 消费）、`useSessionStore().snapshot` / `.streaming`（只读框架 store）、`useArmConfirm`（框架共享原语）、`useTranslation().t`。
-- **`snapshot` 的两个字段**是 retry 的数据源：`snapshot.messages`（`SyncSnapshot.messages`，`packages/shared/src/domain/events/session-state.ts` 第 201 行，时间线消息序列）与 `snapshot.state.sessionFile`（`SessionState.sessionFile`，会话文件路径/中立会话主键）。retry 用前者定位 user 消息、用后者做 fork 的入参。
+- **retry 的两个数据源**：`useSessionStore().snapshot.messages`（`SyncSnapshot.messages`，时间线消息序列——用它定位那条 user 消息）与 `useUiStore().currentNeutralSessionId`（中立主键——用它做 fork 的第 1 参）。注意 `snapshot.state.sessionFile`（投影路径）**不再是 fork 的入参**：§32 主键迁移后 path 降级为「投影线索」（打开文件/调试用），中立主键才是坐标。
 - **与 continue 的槽位并列**：两个插件在 `messageActions` 同一 `placement` / 同一 `when` 下各贡献一项，`order` 40 vs 50 排序，视觉上"继续"在左、"重试"在右。这是多插件同槽位确定性排序的现场（`order` 升序，同 order 按 source 优先级）。
 - **`session:abortRetry` 线通道**：属于 `window.kernel` RPC 线通道（channel-contract.ts 第 190 行），不是事件总线 channel。retry 插件的 renderer 不直接触碰这个字符串，它经 `ctx.pi.abortRetry()` 类型化 API 间接触达（且实际触达方是 timeline）。
 
@@ -94,11 +94,16 @@ retry 是会话域里"重试"语义的壳插件承载者，但它实际牵涉**�
 
 **Q：retry 为什么用 `snapshot.messages` 而不是 `useSessionStore().messages` 定位 user 消息？**
 
-两者都是 `NeutralMessage[]`，retry 选了 `snapshot?.messages`。`snapshot` 是 `SyncSnapshot`（投影基线，来自内核快照），`useSessionStore().messages` 是框架 store 的实时消息（含乐观占位）。retry 需要的是"已落定的历史序列"来精确反查 user 消息的 entry id，用基线快照更稳定；且 `snapshot.state.sessionFile` 与 `snapshot.messages` 同源，一次取 `snapshot` 两个字段，避免跨字段竞态。这是实现选择，不是硬约束。
+两者都是 `NeutralMessage[]`，retry 选了 `snapshot?.messages`。`snapshot` 是 `SyncSnapshot`（投影基线），`useSessionStore().messages` 是框架 store 的实时消息（含乐观占位与在飞的流式占位）。retry 需要的是"已落定的历史序列"来精确反查 user 消息的 entry id，用基线快照更稳定——这是实现选择，不是硬约束。（旧版这里还有一条「`sessionFile` 与 `messages` 同源、一次取 snapshot 两个字段避免跨字段竞态」的理由，随 H1 改用 `currentNeutralSessionId` 后不再成立，已删。）
 
-**Q：fork 的第一个参数 `sessionFile` 被 session-store.fork 用了吗？**
+**Q：fork 的第一个参数被 session-store.fork 用了吗？**
 
-没有。`session-store.fork(parentLineageId, boundary)` 的实现（第 1536–1545 行）里 `parentLineageId` 参数是**死参数**——它用 `proc.activeLineageId` 作为父 lineage，只用 `boundary` 作 `boundaryEntryId`。retry 传的 `sessionFile` 实际被忽略，父 lineage 永远是"当前活跃 lineage"。这是 API 签名与实现的一个历史不一致，属于 stale 标注待收的范畴，不影响 retry 的正确性（retry 要的就是"在当前活跃分支上回退 fork"）。
+用了。这条 QA 的旧答案是**双重过期**的，两段都已不成立，逐段纠正：
+
+- 旧答案说「`parentLineageId` 是死参数，父 lineage 永远取 `proc.activeLineageId`」——那是更早的实现。后来有过一次根因修复：会话树面板里点**非活跃分支**的节点分叉，会因硬取活跃 lineage 而静默挂错父（分叉关系整个错掉），于是改成尊重调用方指定的 `parentHint`，不在树里才 warn 回落。
+- 旧答案说「retry 传 `sessionFile` 实际被忽略，不影响正确性」——H1 之后 retry 传的是 `currentNeutralSessionId`，与契约一致，不再依赖任何忽略/兜底。
+
+现在 `deriveFromAnchor` 的父解析是三级：**调用方指定 → 锚点归属纠偏 → 回落活跃 lineage**。锚点归属纠偏是关键一层：条目属于且只属于一条 lineage，`boundary` 落在哪条 lineage，那条才是语义正确的父（会话树面板恒传会话主键＝根，节点却可能在分支上，靠这层纠偏）。
 
 **Q：dsh 下点重试会怎样？**
 

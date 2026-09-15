@@ -51,7 +51,10 @@ export function BookmarkAction({ message, text }: MessageActionProps): React.Rea
 export function ForkAction({ message }: MessageActionProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { currentCwd, currentNeutralSessionId } = useUiStore();
+  // 只取中立主键:forkFromSession 已无 cwd 入参(契约单源,项目归属来自源会话 header.cwd),
+  // currentCwd 在此不再参与任何调用;currentNeutralSessionId 非空即蕴含「有激活项目」,
+  // 是 fork 的真实前置(组件末尾的 return null 也以它为门),不需要再单独 guard cwd。
+  const { currentNeutralSessionId } = useUiStore();
   const [toast, setToast] = useState<string | null>(null);
   const { armed, arm, disarm } = useArmConfirm();
 
@@ -66,15 +69,15 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
   // 继续在后台跑完,列表行有执行中指示);在飞的那一行则由 manifest 的 when.settled
   // 挡在渲染层(没进中立层 = 没锚可锚),不在这里判全局 streaming。
   const handleFork = useCallback(async (): Promise<void> => {
-    if (!message.id || !currentCwd || !currentNeutralSessionId) return;
+    if (!message.id || !currentNeutralSessionId) return;
     try {
-      await ctx.tree.forkFromSession(currentCwd, currentNeutralSessionId, message.id, "at");
+      await ctx.tree.forkFromSession(currentNeutralSessionId, message.id, "at");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);
       setToast(t("shell.forkFailed", { error: m?.[1] ?? msg }));
     }
-  }, [ctx, t, message.id, currentCwd, currentNeutralSessionId]);
+  }, [ctx, t, message.id, currentNeutralSessionId]);
 
   if (!message.id || message.role !== "assistant" || !currentNeutralSessionId) return null;
 
