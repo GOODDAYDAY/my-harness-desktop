@@ -3298,11 +3298,24 @@ export class SessionStore implements
    *  不置 touched:总线流量(bus_response 握手/房间转发)不是用户内容——touched 驱动
    *  capabilities.locked(内核 TAB 锁定)、setModel 的 hasHistory、setContext 的孤儿回收
    *  三个消费者,协议帧置位会把「用户从没发过消息的会话」误锁内核(实弹:pi spawn 时
-   *  fit-pi-extension 的 bus ping 应答经此路置 touched,新会话模型下拉的 dsh TAB 锁死)。 */
+   *  fit-pi-extension 的 bus ping 应答经此路置 touched,新会话模型下拉的 dsh TAB 锁死)。
+   *
+   *  内核无关(根因修复,勿退回 asPi):streamingBehavior 是 pi 的多路并发档位,属 pi 扩展面。
+   *  此前这里无条件走 `this.asPi(proc).sendMessage(...)`,而 asPi 在无 extensions 时抛
+   *  「当前后端不支持 pi 专属命令」——bus 的 deliver 把它 catch 成静默失败并解释为「目标已死」,
+   *  于是 dsh 会话收不到任何 bus 帧(房间消息/任务注入/bus_response 全丢),且日志看不出区别。
+   *  这是 CLAUDE.md §1.5 明禁的静默缺面。修法:能力探测——有扩展面则带档位(保住 pi 的
+   *  steer/followUp 语义),没有则走契约里的中性 sendMessage(每个内核都必实现,§9.4 的 14 条 abstract 之一)。
+   *  降级的代价是「不分 steer/followUp 档位」,不是「收不到帧」——后者才是不可接受的。 */
   async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
     const proc = this.soleProc(sessionKey);
     if (!proc || !proc.backend.alive) throw new Error(`会话不在线: ${sessionKey}`);
-    await this.asPi(proc).sendMessage(text, undefined, streamingBehavior);
+    const ext = proc.backend.capabilities.extensions as BackendExtensions | undefined;
+    if (ext) {
+      await ext.sendMessage(text, undefined, streamingBehavior);
+      return;
+    }
+    await proc.backend.sendMessage(text);
   }
 
   /** 按 key 取最后一条 assistant 文本(完成采集主源;进程不在返回空串,调用方回退读文件)。 */
