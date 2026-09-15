@@ -45,10 +45,8 @@
   "shell.thinkingSwitchUnsupported": "This kernel doesn't support switching thinking depth at runtime (dsh sets it via config)",
   "shell.rewind": "Rewind",
   "shell.rewindFailed": "Rewind failed: {{error}}",
-  "shell.rewindStreamingBlocked": "Cannot rewind while generating",
   "shell.fork": "Fork",
   "shell.forkArmed": "Confirm fork?",
   "shell.forkFailed": "Fork failed: {{error}}",
-  "shell.forkStreamingBlocked": "Cannot fork while generating",
   "shell.kernelLocked": "This session is locked to the {{kernel}} kernel; cross-kernel switch is not yet supported"
 }

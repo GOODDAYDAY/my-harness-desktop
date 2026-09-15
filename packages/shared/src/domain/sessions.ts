@@ -294,16 +294,38 @@ export interface ModelApi extends RpcOps {
   setThinkingLevel(level: string): Promise<void>;
 }
 
+/** 分叉选项(派生行为的可调面)。
+ *
+ *  为什么 `abortSource` 进契约而不是让调用方自己先 `abort()` 再 `fork()`:
+ *  时序不能拆。`abort()` 打的是**激活会话**的进程,而 `fork()` 会把激活切到新会话——
+ *  两者分开调就只能「abort → fork → prompt」串行,中间那个「等落定」窗口没人管:
+ *  不等则在飞消息还没写穿进中立层,派生出来的前缀少一截;等则要每个调用方各写一遍
+ *  等待逻辑(同一逻辑在多个入口各写一遍)。所以「中断源会话 → 等它落定 → 再派生」
+ *  这个编排收进壳,调用方只声明意图。 */
+export interface ForkOptions {
+  /** 派生前先中断源会话的在飞生成,并等它落定(agentSettled / 终态 messageEnd / 超时兜底)。
+   *  缺省 false = 不碰源会话(它继续在后台跑完,列表行有执行中指示)。
+   *
+   *  语义分界(产品裁定):「回退重跑 / 回退改写」隐含「这条不要了」→ 传 true;
+   *  「从此开新分支 / 收藏」是「两边都要」→ 传 false,源会话继续生成。 */
+  abortSource?: boolean;
+}
+
 /** 会话树操作——继承 RpcOps。分叉、克隆、取分叉点消息。 */
 export interface SessionTreeApi extends RpcOps {
   /** 分叉(bookmark-snapshot-fork-unify §5):把锚点所在 lineage 的前缀派生成全新会话
    *  (新 ns + 根 lineageId ≡ ns),切激活并跳转;纯中立操作,惰性物化(首发 seed)。
    *  返回新会话的投影地址。position:"at"(默认)父前缀继承到 boundary 含锚点;"before"
-   *  继承到锚点前一条(retry/rewind 用,排除待重发 user 消息,避免重复)。 */
-  fork(parentLineageId: string, boundary?: string, position?: "before" | "at"): Promise<string>;
+   *  继承到锚点前一条(retry/rewind 用,排除待重发 user 消息,避免重复)。
+   *
+   *  流式生成中可调:派生只读中立层(零内核交互),锚点只要是**已落定**的条目就成立;
+   *  在飞的那条还没进中立层,拿它当锚点会显式报错(不静默产半截会话)。需要连带
+   *  中断源会话时传 `opts.abortSource`。 */
+  fork(parentLineageId: string, boundary?: string, position?: "before" | "at", opts?: ForkOptions): Promise<string>;
   /** 从任意会话分叉(unify §7.1):与 fork 同一派生核,源是任意会话(中立主键 ns),
-   *  返回新 neutralSessionId。中性面(非 pi 扩展面)——两内核平等可用。 */
-  forkFromSession(cwd: string, srcNs: string, entryId: string, position?: "before" | "at"): Promise<string>;
+   *  返回新 neutralSessionId。中性面(非 pi 扩展面)——两内核平等可用。
+   *  源会话不是激活会话时 `opts.abortSource` 无处可打(中断只作用于激活进程),显式忽略。 */
+  forkFromSession(cwd: string, srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions): Promise<string>;
   /** 克隆当前会话(session-single-source §4.2:壳纯操作——中立层整树复制 + 新 ns,
    *  内核不参与、离线可克隆;不再经 pi 内核 clone 命令)。 */
   clone(): Promise<void>;

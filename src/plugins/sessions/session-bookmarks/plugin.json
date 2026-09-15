@@ -31,14 +31,14 @@
         "id": "fork",
         "component": "ForkAction",
         "placement": "left",
-        "when": { "role": ["assistant"] },
+        "when": { "role": ["assistant"], "settled": true },
         "order": 18
       },
       {
         "id": "bookmark",
         "component": "BookmarkAction",
         "placement": "left",
-        "when": { "role": ["assistant"] },
+        "when": { "role": ["assistant"], "settled": true },
         "order": 20
       }
     ],

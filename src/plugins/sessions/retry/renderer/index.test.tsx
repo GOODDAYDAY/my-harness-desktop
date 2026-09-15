@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 // retry 插件 DOM 交互测试(三级测试第二级,补零测试缺口):
-//   重试按钮全生命周期——渲染条件(仅 assistant)/流式中拦截/找不到 user 消息的诚实 toast/
-//   点击 → fork("before") + prompt 重发(派生新会话 + 重发原文,§7.1 第一行)/失败 toast。
+//   重试按钮全生命周期——渲染条件(仅 assistant)/找不到 user 消息的诚实 toast/
+//   点击 → fork("before", abortSource) + prompt 重发(派生新会话 + 重发原文,§7.1 第一行)/失败 toast。
+//   流式态的拦截已改粒度:不再判全局 streaming,而是 manifest 声明 when.settled
+//   由框架在「在飞的那一行」不渲染按钮(历史行流式中照常可重试)。
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
@@ -36,7 +38,6 @@ vi.mock("react-i18next", () => ({
       "shell.retry": "重试",
       "shell.retryArmed": "确认重试?",
       "shell.retryFailed": `重试失败：${opts?.error ?? ""}`,
-      "shell.retryStreamingBlocked": "生成进行中，无法重试",
       "shell.retryNoUserMessage": "找不到可重试的用户消息",
       "shell.retryStaleRow": "消息不在当前快照中，请稍候再点一次",
     };
@@ -92,11 +93,15 @@ describe("RetryAction 点击(重试 = fork before + 重发原文,§7.1)", () => 
     };
   });
 
-  it("点击 → fork(会话文件, user id, before) + prompt(原 user 文本)", async () => {
+  it("点击 → fork(会话文件, user id, before, abortSource) + prompt(原 user 文本)", async () => {
     const ui = () => <RetryAction message={{ role: "assistant", id: "a1" } as never} text="" />;
     const { rerender } = render(ui());
     clickArmConfirm(rerender, ui, () => screen.getByTitle("重试"));
-    await vi.waitFor(() => expect(mocks.fork).toHaveBeenCalledWith("/proj/sess.jsonl", "u1", "before"));
+    // abortSource:回退重跑隐含「这条不要了」——源会话在飞则壳侧先中断并等落定再派生
+    // (顺序不可拆:abort 打激活进程,派生会把激活切走)。已落定的历史行上重试无事发生。
+    // 注:第 1 参传的是 snapshot.state.sessionFile(投影路径),而契约要的是 parentLineageId
+    // ——这是已知的契约漂移(靠壳侧「锚点归属纠偏」兜住),不在本轮范围,留待单独修。
+    await vi.waitFor(() => expect(mocks.fork).toHaveBeenCalledWith("/proj/sess.jsonl", "u1", "before", { abortSource: true }));
     await vi.waitFor(() => expect(mocks.prompt).toHaveBeenCalledWith("原始问题文本"));
   });
 

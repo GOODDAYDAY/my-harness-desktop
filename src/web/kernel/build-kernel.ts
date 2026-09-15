@@ -5,7 +5,7 @@ import type { KernelApi } from "@my-harness-desktop/react";
 import type { RemoteTransport } from "../transport/ws-transport";
 
 import { IPC } from "@my-harness-desktop/shared";
-import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry, SessionHeaderChangedEvent } from "@my-harness-desktop/shared";
+import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry, SessionHeaderChangedEvent, ForkOptions } from "@my-harness-desktop/shared";
 import type { DshProvider, DshDefaultModel } from "@my-harness-desktop/shared";
 import type { KernelId, KernelLogo, KernelStatusView, KernelVersionApi } from "@my-harness-desktop/shared";
 
@@ -322,11 +322,11 @@ const kernel = {
     setThinkingLevel: (level: string): Promise<void> =>
       transport.invoke(IPC.session.setThinkingLevel, level),
     // SessionTreeApi
-    fork: (parentLineageId: string, boundary?: string, position?: "before" | "at"): Promise<string> => transport.invoke(IPC.session.fork, parentLineageId, boundary, position),
+    fork: (parentLineageId: string, boundary?: string, position?: "before" | "at", opts?: ForkOptions): Promise<string> => transport.invoke(IPC.session.fork, parentLineageId, boundary, position, opts),
     // 中性树面(session-single-source §4.2 + unify §7.1):壳的实现,与内核无关。
     // forkFromSession 已从 pi 扩展面收编(同一 deriveSession 派生核,dsh 也可分叉)。
-    forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at"): Promise<string> =>
-      transport.invoke(IPC.session.forkFromSession, cwd, srcNs, entryId, position) as Promise<string>,
+    forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions): Promise<string> =>
+      transport.invoke(IPC.session.forkFromSession, cwd, srcNs, entryId, position, opts) as Promise<string>,
     clone: (): Promise<void> => transport.invoke(IPC.session.clone),
     getForkMessages: (entryId: string): Promise<unknown[]> => transport.invoke(IPC.session.getForkMessages, entryId),
     // SessionMaintenanceApi

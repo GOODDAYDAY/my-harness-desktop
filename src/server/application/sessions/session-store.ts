@@ -28,7 +28,7 @@ import type { SessionStoreForRestart } from "@my-harness-desktop/shared";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
-  SessionModelPrefs, SessionRole, KnownToolInfo, SessionRawFilePaths,
+  SessionModelPrefs, SessionRole, KnownToolInfo, SessionRawFilePaths, ForkOptions,
 } from "@my-harness-desktop/shared";
 import { truncateSessionName, messageContentText, SESSION_MODEL_PREFS_KEY, parseSessionModelPrefs, roleToPrompt, isKernelId } from "@my-harness-desktop/shared";
 
@@ -2497,7 +2497,7 @@ export class SessionStore implements
 
   // ============ SessionTreeApi ============
 
-  async fork(parentLineageId: string, boundary?: string, position: "before" | "at" = "at"): Promise<string> {
+  async fork(parentLineageId: string, boundary?: string, position: "before" | "at" = "at", opts?: ForkOptions): Promise<string> {
     // fork = 派生新会话(bookmark-snapshot-fork-unify §5):分叉在中立层把「锚点所在 lineage 的
     // 前缀」物化成一个全新的中立会话(新 ns + 新文件),根 lineageId ≡ 新 ns。纯中立操作——
     // 不需要活进程(推翻「内核未启动」校验:fork 曾是内核 RPC 时代的残留,§6.1 推翻表),
@@ -2505,10 +2505,41 @@ export class SessionStore implements
     const ns = this.activeSessionPath ? this.neutralSessionIdFromPath(this.activeSessionPath) : undefined;
     const cur = ns ? this.neutralStore?.get(ns) : null;
     if (!cur) throw new Error("当前会话无中立层数据,无法分叉");
-    const fallback = this.activeProc()?.activeLineageId
+    // 流式中分叉的中断语义(ForkOptions.abortSource):中断 → 等落定 → 再算前缀。
+    // 顺序不能倒:abort() 打的是**激活会话**的进程,派生会把激活切走——切走后再 abort
+    // 就打到新会话上了。等落定也不只是为了「别漏最后半截」:在飞那条消息的写穿触发是
+    // messageEnd,不等它落定则派生出的前缀永远缺这一条(重试语义下缺的正是「刚答完的
+    // 那条」)。等待用事件驱动(onSessionEvent),不 sleep 猜时长。
+    const srcProc = await this.settleSourceForFork(ns, opts);
+    const fallback = srcProc?.activeLineageId
       ?? cur.lineages.find((l) => l.fork === null)?.lineageId ?? cur.neutralSessionId;
     const newNs = this.deriveFromAnchor(cur, parentLineageId, fallback, boundary, position);
     return this.activateDerived(newNs, cur.header.kernel);
+  }
+
+  /** 派生前中断源会话(opts.abortSource)——fork/forkFromSession 共用(§3.3 收敛)。
+   *
+   *  三条边界,都是显式的、不静默:
+   *  - 没要求中断 / 源会话不是激活会话 → 原样返回,不碰任何进程(forkFromSession 的源可能
+   *    是另一个会话,中断只作用于激活进程,无处可打;契约已写明忽略)。
+   *  - 源会话没在跑(!isBusy)→ 直接返回,不发多余的 abort。
+   *  - 要求了但拿不到活进程 → 抛错。「要求中断却中断不了」不是可以静默跳过的细节:
+   *    调用方(retry/rewind)的语义前提是「那条不要了」,静默继续跑 = 用户以为停了、
+   *    实际两个内核进程并行烧 token。
+   *
+   *  返回源会话的 proc(可能为 null),供调用方取 activeLineageId——中断后它仍是
+   *  当前活跃分支,不受影响。 */
+  private async settleSourceForFork(srcNs: string | undefined, opts?: ForkOptions): Promise<SessionProc | undefined> {
+    if (!opts?.abortSource) return this.activeProc();
+    const proc = this.activeProc();
+    // 源不是激活会话:中断无处可打(契约写明显式忽略,不伪造成功)。
+    if (!proc || (srcNs != null && proc.neutralSessionId !== srcNs)) return proc;
+    if (!this.isBusy(proc.key)) return proc;
+    if (!proc.backend.alive) throw new Error("源会话进程已退出,无法中断后再分叉");
+    // 复用 switchKernel 的同一段编排(abort → 事件驱动等落定 → 超时兜底),不另写一套。
+    await proc.backend.abort().catch(() => {});
+    await this.waitSettled(proc, ABORT_TIMEOUT_MS);
+    return proc;
   }
 
   /** fork/forkFromSession 共用的派生核(§3.3 收敛 + unify §5):父解析(调用方指定 →
@@ -2741,10 +2772,12 @@ export class SessionStore implements
    *  跳转」),首发才物化(pendingSeed §6.5)。返回新 neutralSessionId(契约 §7.1)。
    *  父解析的回落 = 源会话根 lineage;中立坐标 entryId 内嵌 lineageId,跨分支锚点由
    *  锚点归属纠偏覆盖(条目属于且只属于一条 lineage)。 */
-  async forkFromSession(cwd: string, srcNs: string, entryId: string, position: "before" | "at" = "at"): Promise<string> {
+  async forkFromSession(cwd: string, srcNs: string, entryId: string, position: "before" | "at" = "at", opts?: ForkOptions): Promise<string> {
     if (!this.neutralStore) throw new Error("中立层未启用,无法分叉");
-    const cur = this.neutralStore.get(this.resolveNs(srcNs));
+    const ns = this.resolveNs(srcNs);
+    const cur = this.neutralStore.get(ns);
     if (!cur) throw new Error("源会话中立树不存在");
+    await this.settleSourceForFork(ns, opts);
     const rootLineageId = cur.lineages.find((l) => l.fork === null)?.lineageId ?? cur.neutralSessionId;
     const newNs = this.deriveFromAnchor(cur, undefined, rootLineageId, entryId, position);
     this.activateDerived(newNs, cur.header.kernel);

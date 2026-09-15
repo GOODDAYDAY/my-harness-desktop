@@ -2,7 +2,6 @@
   "shell.retry": "Retry",
   "shell.retryArmed": "Confirm retry?",
   "shell.retryFailed": "Retry failed: {{error}}",
-  "shell.retryStreamingBlocked": "Cannot retry while generating",
   "shell.retryNoUserMessage": "No user message found to retry from",
   "shell.retryStaleRow": "Message not in current snapshot, try again in a moment"
 }

@@ -106,10 +106,10 @@ export function usePluginContext(): PluginContext {
   }), []);
 
   const tree: SessionTreeApi = useMemo(() => ({
-    fork: (parentLineageId, boundary, position) => window.kernel.sessions.fork(parentLineageId, boundary, position) as Promise<string>,
+    fork: (parentLineageId, boundary, position, opts) => window.kernel.sessions.fork(parentLineageId, boundary, position, opts) as Promise<string>,
     // forkFromSession 是中性面(unify §7.1:同一 deriveSession 派生核,两内核平等),
     // 不再是 pi 扩展面——返回新 neutralSessionId,派生即跳转(壳侧 setContext)。
-    forkFromSession: (cwd, srcNs, entryId, position) => window.kernel.sessions.forkFromSession(cwd, srcNs, entryId, position),
+    forkFromSession: (cwd, srcNs, entryId, position, opts) => window.kernel.sessions.forkFromSession(cwd, srcNs, entryId, position, opts),
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
     // clone/getForkMessages 已是壳的中性实现(session-single-source §4.2),从 pi 扩展面收编到树面
     clone: () => window.kernel.sessions.clone(),

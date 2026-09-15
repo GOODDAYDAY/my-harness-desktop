@@ -107,7 +107,7 @@
 
 - 读 `currentCwd`/`currentNeutralSessionId`、`useSessionStore` 的 `streaming`、`useArmConfirm`（react 的武装确认 hook）。
 - 守卫同上（assistant + id + currentNeutralSessionId）。
-- `handleFork`：`streaming` 时 toast `shell.forkStreamingBlocked` 挡住；否则 `await ctx.pi.forkFromSession(currentCwd, currentNeutralSessionId, message.id, "at")`。
+- `handleFork`：`await ctx.tree.forkFromSession(currentCwd, currentNeutralSessionId, message.id, "at")`——不传 `abortSource`（「从此开新分支」是「两边都要」，源会话继续后台跑完）。**流式中照样可分叉**：不再有 `if (streaming) toast(...)` 的全局拦截，拦的粒度是「在飞的那一行」——manifest 声明 `when.settled: true`，框架经圆心 `messageActionApplies` 在 `pending` 行不渲染按钮（详见 `docs/design/bookmark-snapshot-fork-unify.md` §7.1/§10.1）。注：`forkFromSession` 是中性树面 `ctx.tree.*`，不是 pi 扩展面 `ctx.pi.*`（同一 `deriveSession` 派生核，两内核平等）。
 - 交互是「武装确认」：首次点击 `arm(true)`（按钮原地变红「确认 fork?」，`useArmConfirm` 的 6 秒超时/Esc 自动复位），武装态再点才 `disarm()` + `handleFork()`。这是危险操作（切走当前会话）的二次确认，不是防抖。
 - **fork 与收藏的发起同源但路径不同**：收藏发起走 `ctx.sessions.resume`（读快照 → seed → fork），fork 动作走 `ctx.pi.forkFromSession`（pi 扩展面，直接在中立树切 lineage、惰性物化）。注释写明「与收藏发起同源『从某节点开新分支』」。`forkFromSession` 是 `PiExtensions` 的方法（`packages/shared/src/domain/sessions.ts`），dsh 下无此面——但 ForkAction 不感知这个差异，因为 `plugin-context.ts` 的 `ctx.pi` 恒存在、dsh 下调用会在后端 `piSend`/`asPi` 边界显式降级抛错，UI 用 try/catch 接住报 `shell.forkFailed`。错误消息用正则 `/Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/` 剥掉 IPC 前缀，取出内核侧原始错误文本。
 - 文案用 `shell.*` 共享命名空间（`shell.fork`/`shell.forkArmed`/`shell.forkFailed`/`shell.bookmark`/`shell.bookmarked` 等），由 timeline 贡献（§七.4）。

@@ -47,13 +47,22 @@ class FakeAdapter {
   stderr = "";
   /** 已发命令 type 序列(get_state 等探测命令也记录,断言按类型筛)。 */
   sent: string[] = [];
+  /** 已登记的事件回调:emit 用它驱动 pi 事件流(agent_start/agent_settled → busyStates、waitSettled)。 */
+  private eventCbs: Array<(event: unknown) => void> = [];
   async start(): Promise<void> {
     this.alive = true;
   }
   async stop(): Promise<void> {
     this.alive = false;
   }
-  onEvent(): void {}
+  onEvent(cb?: (event: unknown) => void): () => void {
+    if (cb) this.eventCbs.push(cb);
+    return () => { this.eventCbs = this.eventCbs.filter((c) => c !== cb); };
+  }
+  /** 发一条 pi 形状的事件(经 PiBackend 的 translateEvent 进中性域)。 */
+  emit(piEvent: Record<string, unknown>): void {
+    for (const cb of [...this.eventCbs]) cb(piEvent);
+  }
   onBusFrame(): void {}
   onExtensionUI(): void {}
   async send(command: RpcCommand): Promise<unknown> {
@@ -1156,6 +1165,111 @@ describe("fork:父 lineage 尊重调用方指定 + 派生新会话(根因修复�
     const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
     // 内容 = branch-B 的物化前缀(根前缀 + B 独有),不是「锚点不在根里」抛错、也不是根前缀截断
     expect(derived.lineages[0].entries.map((e) => e.message.content)).toEqual(["root-msg", "on-B"]);
+  });
+});
+
+// 流式中分叉(ForkOptions.abortSource):中断 → 等落定 → 再派生。
+// 根因守卫:这两步顺序不可拆——abort() 打的是**激活会话**的进程,而派生会把激活切走。
+// 拆成插件各自「先 abort 再 fork」时,中间「等落定」没人管:在飞那条的写穿触发是
+// messageEnd,不等它落定则派生前缀永远缺这一条(重试语义下缺的正是「刚答完的那条」)。
+describe("fork 的 abortSource:中断源会话并等落定后再派生(流式中分叉)", () => {
+  function newBusyForkStore(): { s: SessionStore; neutralStore: NeutralSessionStore; ns: string; adapter: FakeAdapter } {
+    const neutralStore = new NeutralSessionStore(mkdtempSync(join(tmpdir(), "fork-busy-neutral-")));
+    const ns = "ns-busy";
+    neutralStore.put({
+      ...emptyNeutralSession(ns, { kernel: "pi", cwd: CWD, createdAt: "2026-09-15T00:00:00.000Z" }),
+      lineages: [
+        { lineageId: ns, fork: null, entries: [{ neutralEntryId: `${ns}:0`, message: { role: "user", content: "问题" } }] },
+      ],
+    });
+    const fakeAdapter = new FakeAdapter();
+    const factory: BackendFactory = { create: (opts) => new PiBackend(fakeAdapter as unknown as RpcAdapter, { cwd: opts.cwd, agentDir: dir }) };
+    const s = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore, new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]));
+    return { s, neutralStore, ns, adapter: fakeAdapter };
+  }
+
+  it("abortSource + 源在飞:abort 在「激活仍是源会话」时发出(先派生后 abort 会打到新会话上)", async () => {
+    const { s, neutralStore, ns, adapter: busyAdapter } = newBusyForkStore();
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    busyAdapter.emit({ type: "agent_start" });
+    expect(s.isBusy(sessionPath)).toBe(true);
+
+    // 在 abort 命令发出的**那一刻**记下激活会话是谁。这是顺序的可观察证据:
+    // 若实现是「先派生(激活切到新会话)再 abort」,这里记到的就是新路径——
+    // abort 打在刚派生的空会话上,源会话永不中断(用户以为停了,实际继续烧 token)。
+    let activeWhenAborted: string | null = null;
+    const rawSend = busyAdapter.send.bind(busyAdapter);
+    busyAdapter.send = async (command: RpcCommand) => {
+      if (command.type === "abort") {
+        activeWhenAborted = (s as unknown as { activeSessionPath: string }).activeSessionPath;
+      }
+      return rawSend(command);
+    };
+
+    const forkP = s.fork(ns, `${ns}:0`, "at", { abortSource: true });
+    busyAdapter.emit({ type: "agent_settled" });
+    const newPath = await forkP;
+
+    expect(activeWhenAborted).toBe(sessionPath); // 源会话,不是派生产物
+    expect(newPath).not.toBe(sessionPath);        // 派生确实发生了(且发生在 abort 之后)
+    expect(s.isBusy(sessionPath)).toBe(false);
+    const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
+    expect(derived.header.derivedFrom).toEqual({ kind: "fork", sourceNeutralSessionId: ns, boundaryEntryId: `${ns}:0` });
+    expect(derived.lineages[0].entries.map((e) => e.message.content)).toEqual(["问题"]);
+  });
+
+  it("abortSource + 源在飞:落定前不派生(事件驱动等待,不 sleep 猜时长)", async () => {
+    const { s, ns, adapter: busyAdapter } = newBusyForkStore();
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    busyAdapter.emit({ type: "agent_start" });
+
+    // fork 必须**挂起**到 agent_settled 到达。去掉 waitSettled 时 fork 会立即完成——
+    // 这就是本用例要钉住的回归(在飞那条的写穿触发是 messageEnd,不等落定则
+    // 派生前缀读到的是写了一半的中立层)。
+    let resolved = false;
+    const forkP = s.fork(ns, `${ns}:0`, "at", { abortSource: true }).then((p) => { resolved = true; return p; });
+    await new Promise((r) => setImmediate(r));
+    expect(resolved).toBe(false);           // 在飞中:尚未派生
+    expect(s.isBusy(sessionPath)).toBe(true);
+
+    busyAdapter.emit({ type: "agent_settled" });
+    const newPath = await forkP;
+    expect(resolved).toBe(true);            // 落定后才派生
+    expect(newPath).not.toBe(sessionPath);
+  });
+
+  it("不带 abortSource:源会话在飞也照样派生,不发 abort(「两边都要」语义——源继续后台跑完)", async () => {
+    const { s, neutralStore, ns, adapter: busyAdapter } = newBusyForkStore();
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    busyAdapter.emit({ type: "agent_start" });
+    busyAdapter.sent = [];
+
+    const newPath = await s.fork(ns, `${ns}:0`);
+
+    expect(busyAdapter.sent).not.toContain("abort");
+    // 源会话仍在跑(没被偷偷中断)
+    expect(s.isBusy(sessionPath)).toBe(true);
+    expect(neutralStore.get(basename(newPath, ".jsonl"))).toBeTruthy();
+  });
+
+  it("abortSource 但源没在跑:不发 abort、不等待,直接派生(空闲会话上重试零开销)", async () => {
+    const { s, neutralStore, ns, adapter: idleAdapter } = newBusyForkStore();
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    expect(s.isBusy(sessionPath)).toBe(false);
+    idleAdapter.sent = [];
+
+    const newPath = await s.fork(ns, `${ns}:0`, "before", { abortSource: true });
+
+    expect(idleAdapter.sent).not.toContain("abort");
+    expect(neutralStore.get(basename(newPath, ".jsonl"))).toBeTruthy();
   });
 });
 

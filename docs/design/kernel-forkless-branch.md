@@ -700,6 +700,8 @@ async seed(lineage: NeutralEntry[], opts: { neutralSessionId; lineageId; header 
 
 ## §33 fork 不再新增列表条目（语义变化）
 
+> ⚠️ **本节已被 `bookmark-snapshot-fork-unify.md` §2.1/§11.1 推翻**（本文写作时 fork 的产物设想是「会话内一条空 lineage」，故推出「列表不新增条目」；后续拍板改为 **fork 必产新会话**——列表**会**新增一个「源名 (copy)」条目，分支不再显示在源会话内）。本节保留只为记录推翻前的推理链，**不作为实现依据**；当前语义以 unify §1.1/§5 与 §7.1 为准。下方 §32（主键迁移）仍然成立，是已落地的实现。
+
 这是最大、最需要向用户交代的可见变化：
 
 - **现在**：书签 fork（`forkFromSession`）复制源文件 + fork → **列表里多一个「源名 (copy)」新会话**（`session-list-order-bookmark-fork.md` §3）。
