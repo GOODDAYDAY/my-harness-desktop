@@ -46,6 +46,7 @@
     "e2e:dispatch": "node scripts/demo/kernel-dispatch.e2e.mjs",
     "e2e:goal": "node scripts/demo/goal-command.e2e.mjs",
     "e2e:goal-scope": "node scripts/demo/goal-scope.e2e.mjs",
+    "e2e:goal-scope-dom": "node scripts/demo/goal-scope-dom.e2e.mjs",
     "e2e:dsh:recorder": "node scripts/demo/dsh-round.e2e.mjs",
     "e2e:quiet": "node scripts/demo/quiet-launch.e2e.mjs"
   },
