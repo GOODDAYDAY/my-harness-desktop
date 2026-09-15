@@ -325,8 +325,8 @@ const kernel = {
     fork: (parentLineageId: string, boundary?: string, position?: "before" | "at", opts?: ForkOptions): Promise<string> => transport.invoke(IPC.session.fork, parentLineageId, boundary, position, opts),
     // 中性树面(session-single-source §4.2 + unify §7.1):壳的实现,与内核无关。
     // forkFromSession 已从 pi 扩展面收编(同一 deriveSession 派生核,dsh 也可分叉)。
-    forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions): Promise<string> =>
-      transport.invoke(IPC.session.forkFromSession, cwd, srcNs, entryId, position, opts) as Promise<string>,
+    forkFromSession: (srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions): Promise<string> =>
+      transport.invoke(IPC.session.forkFromSession, srcNs, entryId, position, opts) as Promise<string>,
     clone: (): Promise<void> => transport.invoke(IPC.session.clone),
     getForkMessages: (entryId: string): Promise<unknown[]> => transport.invoke(IPC.session.getForkMessages, entryId),
     // SessionMaintenanceApi
@@ -374,7 +374,7 @@ const kernel = {
       transport.invoke(IPC.bus.channelMember, pluginId, channel, action, member),
     tapStart: (pluginId: string, opts: { session?: string; channel?: string; filter?: "done" | "lifecycle" | "stream"; deliverTo?: string }): Promise<{ tapId: string; filter: string }> =>
       transport.invoke(IPC.bus.tapStart, pluginId, opts),
-    tapStop: (pluginId: string, tapId: string): Promise<unknown> =>
+    tapStop: (pluginId: string, tapId?: string): Promise<unknown> =>
       transport.invoke(IPC.bus.tapStop, pluginId, tapId),
     onMessage: (cb: (message: unknown) => void): (() => void) => {
       const listener = (message: unknown) => cb(message);

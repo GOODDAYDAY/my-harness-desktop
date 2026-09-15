@@ -108,7 +108,9 @@ export interface BusApi {
   /** 房间成员管理(member 缺省=自己,可替别人拉/退房)。 */
   channelMember(channel: string, action: "join" | "leave", member?: string): Promise<unknown>;
   tapStart(opts: { session?: string; channel?: string; filter?: TapFilter; deliverTo?: string }): Promise<{ tapId: string; filter: string }>;
-  tapStop(tapId: string): Promise<unknown>;
+  /** 停订阅。给 tapId=只停那一个 tap;缺省=停掉本插件的全部订阅(tap + session_create 的 watch 登记)。
+   *  返回 {stopped, removed}:stopped 诚实反映是否真移除了至少一项(不再无条件 true)。 */
+  tapStop(tapId?: string): Promise<unknown>;
   /** 订阅投递到本插件的总线帧(返回值取消订阅;按 to === plugin:<ownId> 自行过滤)。 */
   onMessage(cb: (message: SessionBusMessage) => void): () => void;
 }

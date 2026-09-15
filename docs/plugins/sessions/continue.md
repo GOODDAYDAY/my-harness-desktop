@@ -54,7 +54,7 @@ continue 是会话域里最小、也最"薄"的一个插件：它只往消息行
 
 - 两个按钮相邻挂在 assistant 消息上（continue `order: 40`、retry `order: 50`），但语义完全不同，必须分清：
   - **continue**：原地续跑。目标消息是"异常停机"（`error` / `stopped`），动作是 `ctx.messaging.continue()`，不 fork、不重发旧消息，lineage 拓扑不变。它适合"工具失败/LLM 失败/用户不小心停了，想让模型接着干"。
-  - **retry**：回退重跑。目标消息是任意 assistant 节点，动作是 `ctx.tree.fork(sessionFile, userMsg.id)` 先分叉、再 `ctx.messaging.prompt(text)` 重发那条用户消息，开一条新 lineage。它适合"这条回复我不满意，换个分支重新生成"。
+  - **retry**：回退重跑。目标消息是任意 assistant 节点，动作是 `ctx.tree.fork(currentNeutralSessionId, userMsg.id, "before", { abortSource: true })` 派生一个新会话、再 `ctx.messaging.prompt(text)` 重发那条用户消息。第 1 参是**中立主键**（不是投影路径 `sessionFile`，见 `docs/plugins/sessions/retry.md` §4/H1）；`abortSource` 让壳侧先中断源会话在飞的生成、等落定，再派生（回退重跑隐含「这条不要了」）。它适合"这条回复我不满意，换个分支重新生成"。
 - 判据一句话：**要不要重发用户消息**。continue 不重发（模型从已生成的历史继续），retry 重发（找到最近一条 user 消息重新 prompt）。这条判据直接映射到两个内核意图——`continue?`（第八意图）vs `fork` + `prompt`（核心分支意图 + 消息意图）。
 - 视觉上的差异也强化了这条分界：continue 是 `Play` 图标、单拍触发（低风险，幂等）；retry 是 `RotateCcw` 图标、`useArmConfirm` 两步武装确认（第 63–65 行"点一下变确认？再点执行"，高风险，改变 lineage 拓扑）。低风险动作单拍、高风险动作武装，这是 `packages/react/src/inline-confirm.tsx` 的 `useArmConfirm` 原语被 retry 采用、continue 不用的原因。
 - 两个插件的 `dependsOn: ["timeline"]` 相同、`when: { role: ["assistant"] }` 相同、`placement: "left"` 相同，只有 `order` 和动作不同——这保证了它们在 assistant 消息上相邻但各司其职，用户一眼能区分"继续"和"重试"。

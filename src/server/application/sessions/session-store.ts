@@ -1300,12 +1300,18 @@ export class SessionStore implements
     const newNs = this.deriveSession({
       entries: snap.lineage.entries,
       kernel,
+      // 收藏发起的项目归属 = 收藏所在项目(cwd 是上面定位快照用的那个激活项目)。
+      // 快照自包含但不记 cwd(收藏是项目级资产,存 `<cwd>/.my-harness-desktop/bookmarks/`),
+      // 所以用发起时所在项目,与 bookmark()/createBookmark() 的 cwd 语义一致。
+      cwd,
       derivedFrom: { kind: "bookmark", sourceNeutralSessionId: snap.sourceNeutralSessionId, boundaryEntryId: snap.boundaryEntryId },
       name: snap.label,
       ...(srcPrefs ? { custom: { [SESSION_MODEL_PREFS_KEY]: srcPrefs } } : {}),
     });
     // 派生 → 跳转(§6.1):切激活 + 即时基线(无活进程,基线从中立层出)。
-    this.activateDerived(newNs, kernel);
+    // cwd = 收藏所在项目(收藏是项目级资产,存 `<cwd>/.my-harness-desktop/bookmarks/`,
+    // 快照不记 cwd——所以用定位到快照的那个 cwd,而不是源会话的)。
+    this.activateDerived(newNs, kernel, cwd);
     // 返回快照锚点在**新会话**的中立坐标(重投影后:边界=前缀最后一条,seq=len-1)。
     // 渲染层 forkFromBookmark 拿它 scrollTo 定位——此前返回投影路径,渲染层却拿源会话
     // bm.entryId 去定位,重投影后 id 变了、永不命中(DRIFT-12 scrollTo 静默落空)。
@@ -2514,7 +2520,15 @@ export class SessionStore implements
     const fallback = srcProc?.activeLineageId
       ?? cur.lineages.find((l) => l.fork === null)?.lineageId ?? cur.neutralSessionId;
     const newNs = this.deriveFromAnchor(cur, parentLineageId, fallback, boundary, position);
-    return this.activateDerived(newNs, cur.header.kernel);
+    // 项目归属跟随源会话(不取 this.activeCwd):派生会话属于源会话那个项目。
+    this.activateDerived(newNs, cur.header.kernel, cur.header.cwd);
+    // 返回**新 neutralSessionId**(unify §11.2 裁定),不是投影地址——三个派生入口
+    // (fork/forkFromSession/resume)返回值同一坐标系,且顺 §32 主键迁移的方向
+    // (一切向中立主键收敛)。投影地址是**内核专属派生量**(pi=文件路径、dsh=裸 ns),
+    // 把它当返回值会让调用方拿到一个双形态、跨内核不同义的字符串;需要时由消费方
+    // 自己经 catalog.projectionPath(cwd, ns) 派生。本改动零行为回归:改前全仓
+    // 三个调用方(retry/rewind/session-tree/ForkAction)均不消费返回值。
+    return newNs;
   }
 
   /** 派生前中断源会话(opts.abortSource)——fork/forkFromSession 共用(§3.3 收敛)。
@@ -2587,6 +2601,9 @@ export class SessionStore implements
     return this.deriveSession({
       entries: prefix.entries,
       kernel: cur.header.kernel,
+      // 项目归属跟随**源会话**(真相源在 cur.header.cwd),不读全局激活态——
+      // cwd 参与内核投影地址的桶目录派生,读激活态是静默挂错项目的温床。
+      cwd: cur.header.cwd,
       derivedFrom: { kind: "fork", sourceNeutralSessionId: cur.neutralSessionId, boundaryEntryId: prefix.boundaryEntryId },
       name: forkCopyName(cur.header.name),
       ...(srcPrefs ? { custom: { [SESSION_MODEL_PREFS_KEY]: srcPrefs } } : {}),
@@ -2595,16 +2612,21 @@ export class SessionStore implements
 
   /** 派生后的激活切换 + 即时基线(§6.1「派生 → 跳转」):切激活到新会话(投影地址按
    *  会话内核归属派生),基线直接从中立层出并广播——派生是零内核交互(惰性),无活进程,
-   *  renderer 即时看到派生内容,不等到首发。返回新会话的投影地址。
+   *  renderer 即时看到派生内容,不等到首发。
+   *
+   *  `cwd` 由调用方给(源会话的 header.cwd 或收藏所在项目),**不用 `this.activeCwd!`**:
+   *  非空断言把"没有激活项目"这个真实可能态静默变成了 `projectionPath(null, ns)`,
+   *  产出一个桶目录为 `--null--` 的错误路径(不报错,只是文件落错地方)。
    *
    *  源会话的内核**没装载**时退回中立 id 作投影地址:派生本身是纯中立操作(整树复制),
    *  不该因为"源会话记的是一个当前没启用的内核"就整条失败——和列表行同一个降级语义。 */
-  private activateDerived(newNs: string, kernel: KernelId): string {
-    const newPath = this.catalogOrNull(kernel)?.projectionPath(this.activeCwd!, newNs) ?? newNs;
-    this.setContext(this.activeCwd!, newPath);
+  private activateDerived(newNs: string, kernel: KernelId, cwd: string): void {
+    const newPath = this.catalogOrNull(kernel)?.projectionPath(cwd, newNs) ?? newNs;
+    this.setContext(cwd, newPath);
     const derived = this.neutralStore?.get(newNs);
     if (derived) this.broadcastDerivedBaseline(derived, newPath);
-    return newPath;
+    // 不返回 newPath:投影地址是内部细节(切激活/广播基线用),对外坐标系统一是中立主键。
+    // 旧签名返回 string 曾造成「同族方法两套坐标系」(fork 返路径、forkFromSession 返 ns)。
   }
 
   /** 惰性物化(§kernel-forkless §15 + session-single-source §4.4):换分支 = 换投影;
@@ -2740,13 +2762,23 @@ export class SessionStore implements
   deriveSession(opts: {
     entries: NeutralEntry[];
     kernel: KernelId;
+    /** 派生会话的**项目归属**。必须由调用方显式给出,不读全局激活态。
+     *
+     *  为什么不读 `this.activeCwd`(根因,勿回退):cwd 不只是展示字段——
+     *  `cwdToBucketName(cwd)` 参与内核投影地址的桶目录派生(pi 的会话文件路径 =
+     *  `<agentDir>/sessions/<bucket(cwd)>/<lineageId>.jsonl`),且 `listByCwd` 按
+     *  header.cwd 分桶。隐式取「用户此刻激活哪个项目」意味着:从另一个项目的会话
+     *  派生时,派生会话的 header.cwd、内核文件桶目录、列表归属**三处一起错**——
+     *  且全部静默(派生成功、能打开、能聊,只是挂错了项目)。
+     *  真相源在源会话自己身上(`NeutralSession.header.cwd`),所以显式传。 */
+    cwd: string;
     derivedFrom: { kind: "fork" | "bookmark"; sourceNeutralSessionId: string; boundaryEntryId: string };
     name?: string;
     custom?: Record<string, unknown>;
   }): string {
     if (!this.neutralStore) throw new Error("中立层未启用,无法派生会话");
-    const cwd = this.activeCwd;
-    if (!cwd) throw new Error("无激活 cwd,无法派生会话");
+    if (!opts.cwd) throw new Error("派生会话缺项目归属(cwd),拒绝静默落到激活项目");
+    const cwd = opts.cwd;
     const newNs = randomUUID();
     const nowIso = new Date().toISOString();
     const entries = reprojectEntries(opts.entries, newNs);
@@ -2772,7 +2804,7 @@ export class SessionStore implements
    *  跳转」),首发才物化(pendingSeed §6.5)。返回新 neutralSessionId(契约 §7.1)。
    *  父解析的回落 = 源会话根 lineage;中立坐标 entryId 内嵌 lineageId,跨分支锚点由
    *  锚点归属纠偏覆盖(条目属于且只属于一条 lineage)。 */
-  async forkFromSession(cwd: string, srcNs: string, entryId: string, position: "before" | "at" = "at", opts?: ForkOptions): Promise<string> {
+  async forkFromSession(srcNs: string, entryId: string, position: "before" | "at" = "at", opts?: ForkOptions): Promise<string> {
     if (!this.neutralStore) throw new Error("中立层未启用,无法分叉");
     const ns = this.resolveNs(srcNs);
     const cur = this.neutralStore.get(ns);
@@ -2780,7 +2812,7 @@ export class SessionStore implements
     await this.settleSourceForFork(ns, opts);
     const rootLineageId = cur.lineages.find((l) => l.fork === null)?.lineageId ?? cur.neutralSessionId;
     const newNs = this.deriveFromAnchor(cur, undefined, rootLineageId, entryId, position);
-    this.activateDerived(newNs, cur.header.kernel);
+    this.activateDerived(newNs, cur.header.kernel, cur.header.cwd);
     return newNs;
   }
 
@@ -3298,11 +3330,24 @@ export class SessionStore implements
    *  不置 touched:总线流量(bus_response 握手/房间转发)不是用户内容——touched 驱动
    *  capabilities.locked(内核 TAB 锁定)、setModel 的 hasHistory、setContext 的孤儿回收
    *  三个消费者,协议帧置位会把「用户从没发过消息的会话」误锁内核(实弹:pi spawn 时
-   *  fit-pi-extension 的 bus ping 应答经此路置 touched,新会话模型下拉的 dsh TAB 锁死)。 */
+   *  fit-pi-extension 的 bus ping 应答经此路置 touched,新会话模型下拉的 dsh TAB 锁死)。
+   *
+   *  内核无关(根因修复,勿退回 asPi):streamingBehavior 是 pi 的多路并发档位,属 pi 扩展面。
+   *  此前这里无条件走 `this.asPi(proc).sendMessage(...)`,而 asPi 在无 extensions 时抛
+   *  「当前后端不支持 pi 专属命令」——bus 的 deliver 把它 catch 成静默失败并解释为「目标已死」,
+   *  于是 dsh 会话收不到任何 bus 帧(房间消息/任务注入/bus_response 全丢),且日志看不出区别。
+   *  这是 CLAUDE.md §1.5 明禁的静默缺面。修法:能力探测——有扩展面则带档位(保住 pi 的
+   *  steer/followUp 语义),没有则走契约里的中性 sendMessage(每个内核都必实现,§9.4 的 14 条 abstract 之一)。
+   *  降级的代价是「不分 steer/followUp 档位」,不是「收不到帧」——后者才是不可接受的。 */
   async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
     const proc = this.soleProc(sessionKey);
     if (!proc || !proc.backend.alive) throw new Error(`会话不在线: ${sessionKey}`);
-    await this.asPi(proc).sendMessage(text, undefined, streamingBehavior);
+    const ext = proc.backend.capabilities.extensions as BackendExtensions | undefined;
+    if (ext) {
+      await ext.sendMessage(text, undefined, streamingBehavior);
+      return;
+    }
+    await proc.backend.sendMessage(text);
   }
 
   /** 按 key 取最后一条 assistant 文本(完成采集主源;进程不在返回空串,调用方回退读文件)。 */

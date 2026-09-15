@@ -185,20 +185,39 @@ flowchart TD
 
 ### 5.1 签名与职责边界
 
+> 📌 **本节签名已与实现对齐（修订）**：原稿写的是 `kernel?: KernelId`（可选、内部解析）、无 `cwd` 入参、返回 `Promise<string>`、无 `custom`。实现的实际形状是四个都不同——`kernel` **必传**、`cwd` **必传**、返回**同步** `string`、另有可选 `custom`。下面按代码真相重写，修订理由见本节末尾与 §11.1。
+
 ```ts
 deriveSession(opts: {
   entries: NeutralEntry[];          // 调用方按 3.1 二选一备好的前缀内容
-  kernel?: KernelId;                // 省略时由本函数内部解析：当前激活内核 ?? 来源内核
+  kernel: KernelId;                 // 必传：目标内核归属由调用方决定（见下）
+  cwd: string;                      // 必传：派生会话的项目归属（见下，勿改回读全局激活态）
   derivedFrom: {
     kind: "fork" | "bookmark";
     sourceNeutralSessionId: string;
     boundaryEntryId: string;        // 中立坐标 {lineageId}:{seq}
   };
   name?: string;
-}): Promise<string>                 // 返回新 neutralSessionId
+  custom?: Record<string, unknown>; // 头域 custom（当前唯一用途：随派生携带模型偏好域）
+}): string                          // 返回新 neutralSessionId（同步：纯中立写，零 IO 等待点）
 ```
 
-`entries` 由调用方备好，`deriveSession` 不关心内容来自现算还是快照——构造与执行分开：算内容是调用方的事，派生是它的事。目标内核的缺省解析收在本函数内部（`kernel` 省略时 = 当前激活内核 ?? 来源内核兜底：fork 的源是源会话 `header.kernel`，收藏的源是快照 `sourceKernel`），调用方一律不传；参数保留给「显式指定目标内核」的编排场景（跨内核切换这类壳内部用例）。新会话的 `header.cwd` 取当前激活 cwd——fork 与收藏都在当前项目语境发起，派生永远落在当前项目，列表分桶因此自然成立。失败语义显式：源数据缺失、中立层写失败一律抛错，不静默产出半个会话。返回值是新会话的中立 id，渲染层拿到后自行导航（渲染层经会话打开/切换 API 切过去，最终落到壳后端的打开用例）。
+`entries` 由调用方备好，`deriveSession` 不关心内容来自现算还是快照——构造与执行分开：算内容是调用方的事，派生是它的事。
+
+**`kernel` 必传，缺省解析在调用方**：两个入口的归属来源本就不同（fork = 源会话 `header.kernel`，收藏发起 = `this.activeKernel ?? snap.sourceKernel`），把它塞进 `deriveSession` 内部解析等于让派生核去猜调用方的语境。实现里三个调用方各自显式给出，派生核只落 `header.kernel`。
+
+**`cwd` 必传，且不得读全局激活态（本轮修订，根因勿回退）**：cwd 不只是展示字段——`cwdToBucketName(cwd)` 参与内核投影地址的桶目录派生（pi 的会话文件路径 = `<agentDir>/sessions/<bucket(cwd)>/<lineageId>.jsonl`），且 `listByCwd` 按 `header.cwd` 分桶。原稿的「取当前激活 cwd」意味着：从另一个项目的会话派生时，派生会话的 `header.cwd`、内核文件桶目录、列表归属**三处一起错**，且全部静默（派生成功、能打开、能聊，只是挂错了项目）。真相源在源会话自己身上，所以显式传：
+
+| 入口 | `cwd` 取值 | 理由 |
+|:---|:---|:---|
+| `fork` / `forkFromSession` | `cur.header.cwd`（源会话） | 分叉 = 在同一项目的 lineage 树上开分支 |
+| `resume`（收藏发起） | 定位快照用的那个 cwd | 收藏是项目级资产（存 `<cwd>/.my-harness-desktop/bookmarks/`），快照自包含但不记 cwd |
+
+配套地，`SessionTreeApi.forkFromSession` 的 `cwd` 入参**已删**（契约单源）：它此前是个从不被使用的死参数，却暗示调用方能指定归属；而语义上也不该有——挂到别的桶里就找不回历史，那是「移动/另存」不是「分叉」。`activateDerived` 同样改为显式收 cwd，去掉了 `this.activeCwd!` 非空断言（断言会把「没有激活项目」这个真实可能态静默变成 `projectionPath(null, ns)`，产出桶目录为 `--null--` 的错误路径）。
+
+**同步返回 `string`**：派生是纯中立写（无 await 点），`Promise` 只是历史签名。渲染层拿到新会话的中立 id 后自行导航（经会话打开/切换 API 切过去，最终落到壳后端的打开用例）。
+
+**失败语义显式**：源数据缺失、缺 cwd、中立层写失败一律抛错，不静默产出半个会话。
 
 ### 5.2 不变量：根 lineageId ≡ neutralSessionId
 
@@ -331,8 +350,8 @@ stateDiagram-v2
 
 | 入口 | 语义 |
 |:---|:---|
-| `fork(parentLineageId, boundary)` | 源 = 当前激活会话，`lineageId` 取 `parentLineageId` 实参（历史沿用的参数名，含义是「源 lineage」，可指向任意分支） |
-| `forkFromSession(cwd, srcNs, entryId, position?)` | 同一个 `deriveSession`，来源是任意会话；`lineageId` 取源会话根 lineage（fork:null 者）——中立坐标形态的 entryId 内嵌 lineageId，跨分支锚点定位留演进 |
+| `fork(parentLineageId, boundary?, position?, opts?)` | 源 = 当前激活会话，`lineageId` 取 `parentLineageId` 实参（历史沿用的参数名，含义是「源 lineage」，可指向任意分支）。**调用方须传中立主键 ns**，不传投影路径（§11.1 推翻项） |
+| `forkFromSession(srcNs, entryId, position?, opts?)` | 同一个 `deriveSession`，来源是任意会话；`lineageId` 取源会话根 lineage（fork:null 者）——中立坐标形态的 entryId 内嵌 lineageId，跨分支锚点定位留演进。**无 `cwd` 入参**（归属取自源会话 `header.cwd`） |
 
 fork 支路的调用形态（可直接照抄，与 5.1 签名同形）：
 
@@ -341,12 +360,15 @@ const session = neutralStore.get(srcNs);
 if (!session) throw new Error("源会话中立树不存在"); // 源缺失与锚点缺失是两种错误，不混报
 const prefix = materializeLineagePrefix(session, lineageId, boundary, position);
 if (!prefix) throw new Error("分叉锚点不在会话内容里（可能已被压缩移除）"); // 会话压缩（compaction）会移除旧条目，锚点随之失效
-await deriveSession({
+deriveSession({          // 同步：纯中立写，无 await 点（5.1）
   entries: prefix.entries,
+  kernel: session.header.kernel,   // 必传：归属跟随源会话，不由派生核去猜
+  cwd: session.header.cwd,         // 必传：同上（5.1 的 cwd 表）
   derivedFrom: { kind: "fork", sourceNeutralSessionId: srcNs, boundaryEntryId: prefix.boundaryEntryId },
-  // kernel 不传：缺省解析在 deriveSession 内部（5.1）
 });
 ```
+
+（实现里这段收敛在 `deriveFromAnchor`，它比上面多了两级父解析——调用方指定 → **锚点归属纠偏** → 回落活跃 lineage——以及模型偏好域的随派生携带；见 `session-store.ts`。）
 
 注意 `derivedFrom.boundaryEntryId` 用的是 `materializeLineagePrefix` 返回的归一值（中立坐标），不是入参 `boundary`（它可能是内核私有 id）——4.4 的归一规则靠这一步落地。
 
@@ -444,6 +466,9 @@ fork 改产新会话后，会话内分支停止增长——不再产生新的 `f
 | 推翻 | 「fork 不新增列表条目」的裁定（`docs/design/kernel-forkless-branch.md` §32） |
 | 推翻 | `fork()` 的 `proc.backend.alive` 校验（`session-store.ts:1656`——「fork 曾是内核 RPC」时代的残留；同文件 `forkFromSession` 早已是纯中立形状，两者对齐） |
 | 推翻 | `forkFromSession` 的 `position` 死参数，激活为真实截断语义（4.4） |
+| 推翻 | §5.1「新会话的 `header.cwd` 取当前激活 cwd」——改为**跟随源会话**（`cur.header.cwd`；收藏发起取快照所在项目）。理由见 5.1：cwd 参与内核桶目录派生，读全局激活态会让跨项目派生静默挂错项目 |
+| 推翻 | `forkFromSession` 的 `cwd` 入参（死参数，且语义上不该有）；`deriveSession`/`activateDerived` 改为显式收 cwd，去掉 `this.activeCwd!` 非空断言 |
+| 推翻 | `fork` 的第 1 参传投影路径（retry 曾传 `snapshot.state.sessionFile`）——契约要 `parentLineageId`，调用方就给中立主键，不靠被调方「锚点归属纠偏」兜底 |
 | 保留 | 分叉归壳主体：内核不 fork、seed 幂等投影、内核 id 由壳派生（9.1） |
 | 保留 | 收藏快照全链：创建、存储、删除、孤儿对账、懒迁移（8.1/8.2/8.4） |
 | 保留 | 前缀计算纯函数：`lineageContent` 与 `materializeLineagePrefix`，正好是统一抽象里「现算」那一支 |

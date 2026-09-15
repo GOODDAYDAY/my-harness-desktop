@@ -146,8 +146,8 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   });
   // forkFromSession 已切中立 lineage(§kernel-forkless §14):入参是源会话 neutralSessionId,
   // 不再是文件路径;不复制文件 → 无需路径圈禁(旧 gate 会误拒裸 UUID ns,打断 timeline 分叉)。
-  gateway.register(IPC.session.forkFromSession, async (_e, cwd: string, srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions) => {
-    const r = await sessionStore.forkFromSession(cwd, srcNs, entryId, position, opts);
+  gateway.register(IPC.session.forkFromSession, async (_e, srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions) => {
+    const r = await sessionStore.forkFromSession(srcNs, entryId, position, opts);
     notifyHeaderChanged({ kind: "forkFromSession", srcNs });
     return r;
   });
