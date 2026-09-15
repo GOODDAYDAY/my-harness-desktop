@@ -143,8 +143,9 @@ export interface SessionRowBadgeContribution {
   id: string;
   /** renderer 侧组件名,框架从插件 exports 自动匹配。 */
   component: string;
-  /** 挂载区:leading = 行首图标位(单选,主张命中者按 order 取首个);
-   *  trailing = 行尾指示位(叠加,按 order 全渲染)。缺省 trailing。 */
+  /** 挂载区:leading = 行首图标位(单选,按 order 升序取首个主张命中者;
+   *  贡献方未提供 claims 即无条件主张——兜底语义,§2.3.2);
+   *  trailing = 行尾指示位(叠加,按 order 全渲染,组件自返回 null)。缺省 trailing。 */
   placement?: "leading" | "trailing";
   /** 排序:leading 区决定谁先获得占位机会(小者先问),trailing 区决定视觉先后。缺省 100。 */
   order?: number;
@@ -271,7 +272,7 @@ flowchart TB
 
 #### 2.3.2 兜底怎么表达：不提供 claims 就是无条件主张
 
-leading 单选模型必须有一个兜底贡献方，否则所有候选都不主张时行首会空着（图 4 的 E 分支）。兜底的自然写法看起来是"让它的 `claims()` 返回全部会话主键"，这个写法不成立：兜底语义是常量 `true`，却要物化一个 N 元素集合——500 个会话就是 500 个主键的 Set，每行渲染前都要构建与查询，而它承载的信息量是零。更要命的是这个全集从哪来没有答案：兜底方要么去读 sessions-list 的会话列表 store（违 §6.2.1 不共享数据），要么自己再订阅一条列表事件（多一条订阅只为表达"我全都要"）。
+leading 单选模型必须有一个兜底方，否则所有候选都不主张时行首会空着（图 4 的 E 分支）。兜底的自然写法看起来是"让它的 `claims()` 返回全部会话主键"，这个写法不成立：兜底语义是常量 `true`，却要物化一个 N 元素集合——500 个会话就是 500 个主键的 Set，每行渲染前都要构建与查询，而它承载的信息量是零。更要命的是这个全集从哪来没有答案：兜底方要么去读 sessions-list 的会话列表 store（违 §6.2.1 不共享数据），要么自己再订阅一条列表事件（多一条订阅只为表达"我全都要"）。
 
 正确做法是把缺省语义反过来：**判据是"这个贡献项有没有提供 `claims` 方法"，不是"有没有数据源"**。没有 `claims`（既包括完全没有数据源、也包括有数据源但只用于渲染不用于主张）就是无条件主张——任何会话都命中；提供了 `claims` 才是条件主张。这样兜底方零集合、零额外订阅，条件方按自己的数据主张，两种形态用一个方法在不在场来区分，不需要契约里再加 `fallback` / `claimScope` 之类的字段（CLAUDE.md §1.2「机制与内容分离」的推论，也是全局工程原则里的同一条：行为由实际内容与已有语义字段涌现，不靠新增一个让引擎 `switch` 的声明式类型标签）。
 
@@ -399,6 +400,8 @@ flowchart LR
 
 ### 2.6 行级数据源的注册机制
 
+本文对同一个东西有几个称呼，先一次交代对应关系：**行级数据源**（`SessionRowStore`）是契约名，指贡献方导出的那个模块级对象；**模块级 store / 模块级单例**是它的实现形态描述（数据存在模块作用域、不随组件重挂载清空，与 `goal-controller` 同范式）；**指示**是 §1.2 描述现状时的用语（"三个硬编码指示"），**徽章**是它进槽之后的名字——同一个 UI 记号，迁移前后两个称呼。后文不再混用：讲契约用"行级数据源"，讲 UI 用"徽章"。
+
 #### 2.6.1 导出形状
 
 行级数据源与 `auxParsers` / `composerCommands` 同款：插件 renderer 模块的静态导出，框架加载时收集。
@@ -447,7 +450,7 @@ export interface SessionRowStore {
 }
 ```
 
-把生命周期与主张查询合在一个导出、但 `claims` 可缺省，是为了避开一个真实的矛盾：leading 兜底方（PhaseBadge）确实不需要 `claims()`，但它**仍然需要 `init()`** 去建订阅、拉基线——它有自己的数据（每行的 phase），只是那份数据不用于主张判定。若把两者拆成两个导出（一个数据源、一个主张源），兜底方就要导出两个互相依赖的东西；若合为一个且 `claims` 必选，兜底方就得返回全集（§2.3.2 已论证不成立的写法）。可缺省是唯一同时满足两边的形状。
+把生命周期与主张查询合在一个导出、但 `claims` 可缺省，是为了避开一个真实的矛盾：leading 兜底方（PhaseBadge）确实不需要 `claims()`，但它**仍然需要 `init()`** 去建订阅、拉基线——它有自己的数据（每行的 phase），只是那份数据不用于主张判定。若把两者拆成两个导出（一个存数据的 store、一个供查主张的接口），兜底方就要导出两个互相依赖的东西；若合为一个且 `claims` 必选，兜底方就得返回全集（§2.3.2 已论证不成立的写法）。可缺省是唯一同时满足两边的形状。
 
 trailing 徽章（UnreadBadge）走的是同一条路径，理由不同但结论相同：它有数据（已读位标 + 事件订阅），所以要有 store 与 `init(deps)`（`deps.config` 正是为它准备的，§2.4.5 补充判定）；但 trailing 区不查主张（§2.3.3），所以它也不需要 `claims`。三组合表的第二行因此同时收两个实例——leading 兜底方与 trailing 徽章，它们对 `claims` 的"不需要"来自不同原因，对 `init` 的"需要"却完全一致。
 
@@ -465,7 +468,7 @@ trailing 徽章（UnreadBadge）走的是同一条路径，理由不同但结论
 
 `packages/react` 里加一个行级数据源登记表，机械镜像 `registerAuxParsers` / `getAuxParsers` 那一对（`packages/react/src/aux-block-parsers.ts:10-26`）：`registerSessionRowStores(pluginId, stores)` / `unregisterSessionRowStores(pluginId)` / `getSessionRowStore(pluginId, badgeId)`。登记表是纯 Map 操作，不含任何业务判断。
 
-`plugins-host.ts` 的三处改动：`loadBuiltin`（`:41`）与 `loadThirdParty`（`:67`）各加一段收集 + 构造 deps + `init(deps)`（与 `auxParsers` 那段同构），`onUnloaded`（`:130`）加一段 `dispose()` + 摘除。
+`plugins-host.ts` 的三处改动：`loadBuiltin`（`:40`）与 `loadThirdParty`（`:67`）各加一段收集 + 构造 deps + `init(deps)`（与 `auxParsers` 那段同构），`onUnloaded`（`:130`）加一段 `dispose()` + 摘除。
 
 ## 3 提问的跨会话事实源
 
@@ -700,7 +703,7 @@ timeline 有两处 `ComposerDock`：空会话态（`:1190`）与正常态（`:12
 
 现有 `rowIcon` 的四级取值链（图 1）整体搬进这一个组件：它读 `session.pinned`（props 里有）、`phase`（自己的模块级 store）、`active`（props 里有）。返回 Pin / PhaseIcon / 实心或空心 MessageSquare 之一。
 
-它是 leading 区的兜底贡献方，而兜底的表达方式是**不提供 `claims`**（§2.3.2）——它仍然导出行级数据源（要维护每行的 phase 供组件渲染），只是那份数据不用于主张判定。它不需要维护一个含全部会话主键的集合，也不需要知道会话列表长什么样。order 取最大（100），保证它只在所有条件方都不主张时才被问到，行首永远有图标。
+它是 leading 区的兜底方，而兜底的表达方式是**不提供 `claims`**（§2.3.2）——它仍然导出行级数据源（要维护每行的 phase 供组件渲染），只是那份数据不用于主张判定。它不需要维护一个含全部会话主键的集合，也不需要知道会话列表长什么样。order 取最大（100），保证它只在所有条件方都不主张时才被问到，行首永远有图标。
 
 `phase` 的模块级 store 与 ask 的 store 同构：`init()` 里建一条 `onKernelEvent` 订阅喂 `advancePhase`，`processExit` / `rpcError` 归 idle（现有 `:204` 的逻辑原样搬），`Map<ns, WorkingPhase>` 供组件读。它**导出数据源但不带 `claims`**——落在 §2.6.1 三组合表的第二行（有数据、不参与主张判定）。
 
@@ -712,7 +715,7 @@ timeline 有两处 `ComposerDock`：空会话态（`:1190`）与正常态（`:12
 
 #### 5.1.3 KernelUnloadedBadge（trailing，order 50）：纯字段，最简
 
-读 `session.kernelLoaded === false` 就渲染 `TriangleAlert`，否则 null。零订阅、零持久化、零行级数据源（trailing 不查主张）——它是三个里最简的，适合作为**编码时的第一项**（先跑通查槽与渲染链路，再迁复杂的）。这是同一批 commit 内的编码次序，不是分批合入（§5.2.2）。
+读 `session.kernelLoaded === false` 就渲染 `TriangleAlert`，否则 null。零订阅、零持久化、零行级数据源——它要的判断全在 `session` 这一个 prop 里（纯字段派生，§1.2.3 表格的第一行），所以连 store 都不需要导出（§2.6.1 三组合表的第三行）。它是三个里最简的，适合作为**编码时的第一项**（先跑通查槽与渲染链路，再迁复杂的）。这是同一批 commit 内的编码次序，不是分批合入（§5.2.2）。
 
 #### 5.1.4 拆订阅的等价性：为什么一条变两条不改变行为
 
@@ -859,9 +862,9 @@ A 与 A′ 必须同批：槽落地但没人用它，等于槽没被验证过，
 | 改动 | unittest | DOM test | e2e |
 |---|---|---|---|
 | B 事实源 | ✓ `listAll` + 结算三路径 + 竞态幂等 | — | ✓ 复活后徽章消除 |
-| A 槽机制 | ✓ `resolveLeadingBadge` 纯函数 + 静态守卫 | ✓ 挂载顺序 + hover 让位 + 数据源生命周期 + 拆订阅等价 | — |
+| A 槽机制 | ✓ `resolveLeadingBadge` 纯函数 + 静态守卫 | ✓ 单候选直接胜出（§7.2.3 第一组）+ 多候选挂载顺序 + hover 让位 + 拆订阅等价 | — |
 | A′ 三指示迁移 | — | ✓ 视觉等价断言 | ✓ 现有 e2e 全绿即回归 |
-| C ask 迁移 | — | ✓ dock 全交互 + 卡片只读 | ✓ 两脚本锚点与滚动步骤更新 |
+| C ask 迁移 | — | ✓ dock 全交互 + 卡片只读 + ask 数据源生命周期（§7.2.4） | ✓ 两脚本锚点与滚动步骤更新 |
 
 ## 8 全生命周期图
 
