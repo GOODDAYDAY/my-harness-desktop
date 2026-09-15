@@ -61,7 +61,7 @@
         "id": "rewind",
         "component": "RewindAction",
         "placement": "right",
-        "when": { "role": ["user"] },
+        "when": { "role": ["user"], "settled": true },
         "order": 10
       }
     ],

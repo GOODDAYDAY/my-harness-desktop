@@ -6,6 +6,7 @@ import type {
   GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
   DshModelSpec, DshProvider, DshDefaultModel,
   KernelModelsApi, KernelConfigApi, ModelProbeApi,
+  ForkOptions,
 } from "@my-harness-desktop/shared";
 import { asReactComponent } from "./plugin-modules";
 
@@ -136,9 +137,9 @@ export interface KernelApi {
     /** 模型连通性测试(内核隔离临时会话 ping;对应 domain ModelApi.test) */
     testModel: (cwd: string, provider: string, modelId: string, kernel: KernelId) => Promise<{ ok: boolean; error?: string }>;
     setThinkingLevel: (level: string) => Promise<void>;
-    fork: (parentLineageId: string, boundary?: string, position?: "before" | "at") => Promise<string>;
+    fork: (parentLineageId: string, boundary?: string, position?: "before" | "at", opts?: ForkOptions) => Promise<string>;
     /** 从任意会话分叉派生新会话(unify §7.1 中性面,两内核平等):返回新 neutralSessionId。 */
-    forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at") => Promise<string>;
+    forkFromSession: (cwd: string, srcNs: string, entryId: string, position?: "before" | "at", opts?: ForkOptions) => Promise<string>;
     copySession: (srcPath: string, targetPath: string) => Promise<void>;
     getStats: () => Promise<unknown>;
     /** 克隆当前会话(session-single-source §4.2:壳的中性实现,内核不参与)。 */
@@ -298,7 +299,7 @@ export type {
   SessionInfo, ImageInput, SessionEvent, SyncSnapshot, TreeNode,
   MessageEntry, SessionState, ModelInfo, CommandItem, NeutralMessage,
   PluginContext, PluginConfigApi, AppInfo,
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, ForkOptions, PiExtensions, BashApi,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
   GitChangedFile, GitStatusResult, GitLogEntry, ToolCallBlock, ThinkingContent,
   HeaderPatch, SessionToolConfig, BashResult,

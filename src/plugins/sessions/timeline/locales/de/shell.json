@@ -45,10 +45,8 @@
   "shell.thinkingSwitchUnsupported": "Dieser Kernel unterstützt kein Umschalten der Denktiefe zur Laufzeit (dsh legt sie per Konfiguration fest)",
   "shell.rewind": "Zurück",
   "shell.rewindFailed": "Zurückspulen fehlgeschlagen: {{error}}",
-  "shell.rewindStreamingBlocked": "Zurückspulen während der Generierung nicht möglich",
   "shell.fork": "Abzweigen",
   "shell.forkArmed": "Abzweigen bestätigen?",
   "shell.forkFailed": "Abzweigen fehlgeschlagen: {{error}}",
-  "shell.forkStreamingBlocked": "Abzweigen während der Generierung nicht möglich",
   "shell.kernelLocked": "Diese Sitzung ist an den {{kernel}}-Kernel gebunden; Kernelwechsel noch nicht unterstützt"
 }

@@ -66,6 +66,57 @@ describe("hydrateSessionStart → 中立主键水合(fork/bookmark 入口的命�
   });
 });
 
+// 幽灵气泡根因守卫:流式中分叉/从收藏发起派生后,新会话消息流尾巴永久挂一条
+// 源会话的 pending 流式气泡。根因:overlay 是按会话的执行态暂存,而 fork/resume 派生
+// 走 setContext 路径(不经 openSession/startNewChat 那两处清 overlay 的地方);
+// 源会话的 messageEnd 又被主侧「仅激活会话」过滤挡住,占位永不摘除。
+// 非流式态 overlay 本来就空,所以这个洞只在「流式中分叉」时显形。
+describe("hydrateSessionStart → 会话换轨清执行态叠加层(流式中分叉的幽灵气泡守卫)", () => {
+  const pending = asst("", { pending: true, id: "stream-1" });
+
+  beforeEach(() => {
+    useUiStore.setState({ currentSessionPath: null, currentNeutralSessionId: null });
+    useSessionStore.setState({ sessionInfos: null, overlay: [], messages: [] });
+  });
+
+  it("已有会话 → 另一个已有会话(派生跳转):清 overlay,源会话在飞占位不跟过来", () => {
+    useUiStore.setState({ currentSessionPath: "/p/src.jsonl", currentNeutralSessionId: "ns-src" });
+    useSessionStore.setState({ overlay: [user("在飞的问", { __optimistic: true }), pending] });
+
+    hydrateSessionStart({
+      type: "sessionStart", sessionFile: "/p/derived.jsonl", neutralSessionId: "ns-derived",
+    } as unknown as SessionEvent);
+
+    expect(useUiStore.getState().currentNeutralSessionId).toBe("ns-derived");
+    expect(useSessionStore.getState().overlay).toHaveLength(0); // 幽灵气泡不再残留
+  });
+
+  it("边界(勿放宽):新会话首发 prevNs=null → 不清(乐观 user 回显正在 overlay 里等转正)", () => {
+    useUiStore.setState({ currentSessionPath: null, currentNeutralSessionId: null });
+    const optimistic = user("首条问题", { __optimistic: true });
+    useSessionStore.setState({ overlay: [optimistic, pending] });
+
+    hydrateSessionStart({
+      type: "sessionStart", sessionFile: "/p/ns-new.jsonl", neutralSessionId: "ns-new",
+    } as unknown as SessionEvent);
+
+    // 清了的话首条消息就从界面消失(中立层还没收到写穿回执)
+    expect(useSessionStore.getState().overlay).toEqual([optimistic, pending]);
+  });
+
+  it("边界(勿放宽):同一会话重发确认 ns 未变 → 不清(新会话物化后推的真 sessionStart)", () => {
+    useUiStore.setState({ currentSessionPath: "/p/ns-a.jsonl", currentNeutralSessionId: "ns-a" });
+    const optimistic = user("再发一条", { __optimistic: true });
+    useSessionStore.setState({ overlay: [optimistic] });
+
+    hydrateSessionStart({
+      type: "sessionStart", sessionFile: "/p/ns-a.jsonl", neutralSessionId: "ns-a",
+    } as unknown as SessionEvent);
+
+    expect(useSessionStore.getState().overlay).toEqual([optimistic]);
+  });
+});
+
 describe("startNewChat → 清空中立主键 + 叠加层(防止新会话锚到旧会话树)", () => {
   it("currentNeutralSessionId 随新会话清空,messages/overlay 清空", async () => {
     vi.stubGlobal("window", {

@@ -9,7 +9,7 @@ const ARMED_STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-s
 export function RetryAction({ message }: MessageActionProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
-  const { snapshot, streaming } = useSessionStore();
+  const { snapshot } = useSessionStore();
   const [toast, setToast] = useState<string | null>(null);
   const { armed, arm, disarm } = useArmConfirm();
 
@@ -20,10 +20,6 @@ export function RetryAction({ message }: MessageActionProps): React.ReactNode {
   }, [toast]);
 
   const handleRetry = useCallback(async (): Promise<void> => {
-    if (streaming) {
-      setToast(t("shell.retryStreamingBlocked"));
-      return;
-    }
     if (!message.id) return;
     try {
       const msgs = snapshot?.messages ?? [];
@@ -43,7 +39,10 @@ export function RetryAction({ message }: MessageActionProps): React.ReactNode {
         setToast(t("shell.retryNoUserMessage"));
         return;
       }
-      await ctx.tree.fork(snapshot?.state.sessionFile ?? "", userMsg.id, "before");
+      // 回退重跑隐含「这条不要了」→ abortSource:源会话在飞则先中断并等它落定,
+      // 再派生(编排收在壳侧,顺序不能拆——abort 打的是激活会话的进程,而派生会把
+      // 激活切走;见 ForkOptions.abortSource)。已落定的历史行上重试则无事发生。
+      await ctx.tree.fork(snapshot?.state.sessionFile ?? "", userMsg.id, "before", { abortSource: true });
       const text = typeof userMsg.content === "string"
         ? userMsg.content
         : Array.isArray(userMsg.content)
@@ -58,7 +57,7 @@ export function RetryAction({ message }: MessageActionProps): React.ReactNode {
       const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);
       setToast(t("shell.retryFailed", { error: m?.[1] ?? msg }));
     }
-  }, [ctx, t, streaming, snapshot, message.id]);
+  }, [ctx, t, snapshot, message.id]);
 
   if (!message.id || message.role !== "assistant") return null;
 

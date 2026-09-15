@@ -306,14 +306,24 @@ stateDiagram-v2
 
 ### 7.1 入口与交互
 
-| 入口 | 交互 | position |
-|:---|:---|:---|
-| retry（assistant 消息「回退重跑」按钮，`src/plugins/sessions/retry/renderer/index.tsx:40`） | 找到之前最近一条 user 消息 → 派生 → 导航到新会话 → `prompt` 重发那条消息 | `"before"` |
-| timeline rewind（user 消息「回退改写」，`src/plugins/sessions/timeline/renderer/index.tsx:674`） | 派生 → 导航 → 预填输入框，可改可发 | `"before"` |
-| session-tree 分叉按钮（右面板分支地图节点动作，`src/plugins/sessions/session-tree/renderer/index.tsx:144`） | 派生 → toast + 跳转新会话 | `"at"` |
-| ForkAction（assistant 消息「从此开新分支」按钮，`src/plugins/sessions/session-bookmarks/renderer/message-actions.tsx:72`） | 派生 → 跳转 | `"at"` |
+| 入口 | 交互 | position | 流式中（`abortSource`） |
+|:---|:---|:---|:---|
+| retry（assistant 消息「回退重跑」按钮，`src/plugins/sessions/retry/renderer/index.tsx`） | 找到之前最近一条 user 消息 → 派生 → 导航到新会话 → `prompt` 重发那条消息 | `"before"` | `true`（隐含中断） |
+| timeline rewind（user 消息「回退改写」，`src/plugins/sessions/timeline/renderer/index.tsx`） | 派生 → 导航 → 预填输入框，可改可发 | `"before"` | `true`（隐含中断） |
+| session-tree 分叉按钮（右面板分支地图节点动作，`src/plugins/sessions/session-tree/renderer/index.tsx:144`） | 派生 → toast + 跳转新会话 | `"at"` | 不传（源继续跑） |
+| ForkAction（assistant 消息「从此开新分支」按钮，`src/plugins/sessions/session-bookmarks/renderer/message-actions.tsx`） | 派生 → 跳转 | `"at"` | 不传（源继续跑） |
 
-流式中（模型正在生成）各入口在 UI 层统一拦截（按钮不响应 + toast 提示）——拦的是**发起动作**；中立层的**读取**不拦也不需要拦（只增不改，读取安全），只是锚点可能滞后于最后一条在飞消息，派生内容少那一截，属已知取舍（10.1）。
+**流式中分叉：拦的是「在飞的那一行」，不是整个会话**（本节旧版写的「各入口统一拦截 + toast」已推翻，见 10.1）。
+
+判据只有一条：**这条消息进中立层了吗**。在飞的那条只活在渲染层执行态叠加层（乐观回显 / 流式占位），写穿主触发是 `messageEnd`（6.5）——它没进中立层，拿它当锚点必然「锚点不在会话内容里」。已落定的历史行随时可作锚点（中立层只增不改，读取安全），所以流式生成中照样能从上一条回答分叉、照样能收藏。
+
+落地形态（不在各插件里判 `streaming`）：
+
+1. **渲染层按行降级**：锚点类动作在 manifest 声明 `when.settled: true`（retry / fork / bookmark / rewind 四处），框架消费方（timeline 的 `message-actions-host.tsx`）经圆心谓词 `messageActionApplies` 统一筛——`message.pending === true` 的行不渲染按钮。入口直接消失（§7.6 显式降级：隐藏入口，不静默、不伪造成功），而不是点了弹 toast。
+2. **隐含中断的动作声明意图**：retry / rewind 的语义前提是「这条不要了」，传 `{ abortSource: true }`。中断编排收在壳（`SessionStore.settleSourceForFork`）：**abort → 事件驱动等落定 → 再派生**，顺序不可拆——`abort()` 打的是激活会话的进程，而派生会把激活切走；且不等落定则前缀读到写了一半的中立层（在飞那条的写穿还没发生）。
+3. **两边都要的动作不中断**：「从此开新分支」/ 收藏是「源会话我留着」，不传 `abortSource`，源会话继续在后台跑完（列表行有执行中指示）。
+
+**fork 不再判「内核是否活着」**：派生是纯中立写（7.2），流式中与空闲时走同一条路径，无需活进程。
 
 ### 7.2 派生流程
 
@@ -405,7 +415,16 @@ await deriveSession({
 
 ### 10.1 流式中 fork
 
-发起动作在 UI 层拦截（7.1）；读取不拦。中立层只增不改，读取安全，但锚点可能滞后于最后一条在飞消息——派生内容少那一截，已知取舍。
+**分叉与收藏在流式生成中可用**——这不是例外，是常态：派生是纯中立写（零内核交互），流式中与空闲时走同一条路径。被拦的只有「拿在飞那一行当锚点」（7.1：按行降级，`when.settled`）。
+
+旧版本节写的「发起动作在 UI 层拦截」是把粒度搞错了——用全局 `streaming` 一刀切，等于把整条已落定的历史一起禁掉。真实的约束只有一条：在飞那条还没写穿进中立层，没有锚可锚。
+
+连带两点已知取舍（都显式标注，不静默）：
+
+- **锚点滞后**：流式中从上一条已落定的回答分叉，派生前缀自然不含在飞那条。要连它一起带走就用 retry/rewind（`abortSource` 先中断、等落定、再派生）。
+- **源会话在后台跑**：不传 `abortSource` 的派生不打断源会话，它的进程 `touched=true` 常驻（多会话并存保护），跑完即停。流式中分叉会让「常驻 + 在烧 token」同时成立——这是「两边都要」语义的固有代价，列表行的执行中指示让它是可见的。切回源会话看得到定稿内容（写穿落中立层），但看不到在飞那条的增量文本（后台会话不驱镜像），要等 `messageEnd`。
+
+**派生跳转必须清执行态叠加层**（根因守卫）：`overlay` 是**按会话**的执行态暂存（乐观回显 + 流式占位），而 fork/resume 派生走 `setContext` 路径——不经 `openSession`/`startNewChat` 那两处清 overlay 的地方；源会话的 `messageEnd` 又被主侧「仅激活会话」过滤挡住，占位永不摘除。结果是新会话消息流尾巴永久挂一条源会话的幽灵流式气泡。非流式态 overlay 本来就空，所以这个洞只在「流式中分叉」时显形。修法：会话主键换轨（`prevNs !== null && ns !== null && prevNs !== ns`）时清 overlay，收敛在 `hydrateSessionStart`——主键换轨的唯一汇聚点。**边界勿放宽**：`prevNs === null`（新会话首发，乐观回显正等着转正）与 `ns` 未变（同会话重发确认）都不清，清了首条消息就从界面消失。
 
 ### 10.2 列表膨胀
 

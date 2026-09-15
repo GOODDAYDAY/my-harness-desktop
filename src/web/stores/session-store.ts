@@ -733,6 +733,24 @@ export function hydrateSessionStart(event: SessionEvent): void {
     // 于是 review 的第四张表只能自己手写迁移、goal 的第五张连迁移都没写。
     useSessionScopeStore.getState().carry(`new:${cwd}`, ns);
   }
+  // 会话换轨清执行态叠加层(根因修复,勿删):overlay 是**按会话**的执行态暂存
+  // (乐观回显 + 流式占位),换会话就是换了它的宿主,旧宿主的东西不能跟过去。
+  //
+  // 症状(流式中分叉才现形):源会话正生成时派生 → 激活切到新会话 → 源会话的
+  // pending 占位仍留在 overlay,而源会话的 messageEnd 被主侧「仅激活会话」过滤挡住
+  // (永不回来摘占位)→ 新会话消息流尾巴永久挂一条幽灵流式气泡。非流式态 overlay
+  // 本来就空,所以这个洞只在「流式中分叉」时显形。
+  //
+  // 清 overlay 此前只有 openSession / startNewChat 两处,而 fork/resume 派生走的是
+  // setContext 路径,两处都不经过——收敛到这里(会话主键换轨的唯一汇聚点)。
+  //
+  // 边界(勿放宽):只在「已有会话 → 另一个已有会话」时清。prevNs === null 是新会话
+  // 首发(乐观 user 回显正在 overlay 里等着被中立层转正),清了首条消息就消失;
+  // ns 相同是同一会话的重发确认(新会话物化后推的真 sessionStart),清了乐观回显同样丢。
+  if (prevNs !== null && ns !== null && prevNs !== ns) {
+    useSessionStore.setState((s) => (s.overlay.length === 0 ? s : { overlay: [] }));
+    recomputeMessages();
+  }
   // 新会话物化(首条消息落盘)在此刻才有 id:补记"该项目上次看的会话"。
   // 不写这一步,新会话壳期间的切换就没人记——下次切回该项目会回到更早那个会话。
   if (cwd) ui.rememberSessionForCwd(cwd, ns ?? sf);

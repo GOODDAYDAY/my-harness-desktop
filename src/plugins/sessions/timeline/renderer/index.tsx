@@ -3,8 +3,11 @@ import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, useMessageActions, resolveMessageActionComponent, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon, getInflightToolCalls } from "@my-harness-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon, getInflightToolCalls } from "@my-harness-desktop/react";
 import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, classifyReferenceFile, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
+// messageActions 槽宿主(消费方渲染 + 圆心适用性判定)。抽出成模块是为了可测:
+// 「在飞的 pending 行不渲染锚点类按钮」是 UI 行为,得有 DOM 交互 test 守着(§5.6)。
+import { MessageActionsHost } from "./message-actions-host";
 import { Composer } from "./composer";
 import { BlockRenderer } from "./block-renderer";
 import { ImageBlock } from "./image-block";
@@ -320,12 +323,13 @@ export function TimelineView(): React.ReactNode {
   const rewindSendingRef = useRef(false);
 
   const openRewind = useCallback((message: NeutralMessage, text: string): void => {
-    if (streaming) { showToast(t("shell.rewindStreamingBlocked")); return; }
+    // 流式生成中照样可回退改写：锚点是已落定的 user 行(RewindAction 由 manifest
+    // 的 when.settled 挡在渲染层——在飞的行根本不显按钮)，不在这里再判全局 streaming。
     if (!message.id) return;
     if (rewindTarget?.message.id === message.id) { setRewindTarget(null); setRewindText(""); return; }
     setRewindTarget({ message });
     setRewindText(text);
-  }, [streaming, t, rewindTarget, showToast]);
+  }, [rewindTarget]);
 
   useEffect(() => {
     const off = ctx.events.on("timeline:rewindRequested", (payload) => {
@@ -690,7 +694,9 @@ export function TimelineView(): React.ReactNode {
     setRewindSending(true);
     try {
       try {
-        await ctx.tree.fork(currentNeutralSessionId ?? "", rewindTarget.message.id, "before");
+        // 回退改写隐含「这条不要了」→ abortSource:源会话在飞则先中断并等落定再派生
+        // (编排收在壳侧;见 ForkOptions.abortSource)。
+        await ctx.tree.fork(currentNeutralSessionId ?? "", rewindTarget.message.id, "before", { abortSource: true });
       } catch (err) {
         showToast(t("shell.rewindFailed", { error: errText(err) }));
         return;
@@ -1430,7 +1436,7 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
         <div className="flex items-center gap-1.5 mt-1 justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           {/* 时间紧贴按钮左侧(用户消息靠右,整行右对齐):hover 淡入,与复制/回退按钮相邻。 */}
           <MessageMeta message={message} />
-          <MessageActions message={message} text={rowText} />
+          <MessageActionsHost message={message} text={rowText} />
         </div>
       </div>
     );
@@ -1473,7 +1479,7 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
               dsh 中断无流式缓冲时落空内容行(stopped=true),「继续」是它唯一的恢复入口,
               却因「无正文」而永不出现(pi 中断常带部分内容,rowText 非空,故 pi 面看不出)。
               修法:终结态(stopped/error)的消息即使无正文也渲染动作区;普通空行维持原门禁。 */}
-          {(rowText || message.stopped === true || message.error === true) && <MessageActions message={message} text={rowText} />}
+          {(rowText || message.stopped === true || message.error === true) && <MessageActionsHost message={message} text={rowText} />}
           {/* 时间紧贴按钮右侧(AI 消息靠左,整行左对齐):hover 淡入,与复制/回退按钮相邻。 */}
           <MessageMeta message={message} />
         </div>
@@ -1496,28 +1502,6 @@ function SlotRenderedRow({ renderer: Renderer, message }: { renderer: React.Comp
   return <Renderer message={message} streaming={streaming} />;
 }
 
-function MessageActions({ message, text }: { message: NeutralMessage; text: string }): React.ReactNode {
-  const slotActions = useMessageActions();
-  const applicable = slotActions.filter((a) => !a.when?.role || a.when.role.includes(message.role));
-  const leftActions = applicable.filter((a) => a.placement !== "right");
-  const rightActions = applicable.filter((a) => a.placement === "right");
-  if (applicable.length === 0) return null;
-
-  const render = (action: typeof leftActions[number]): React.ReactNode => {
-    const Comp = resolveMessageActionComponent(action.pluginId, action.component);
-    if (!Comp) return null;
-    return <Comp key={`${action.pluginId}:${action.id}`} message={message} text={text} />;
-  };
-
-  // 用户气泡右对齐,动作行随之靠右;助手行保持靠左。整行(hover/opacity/mt)已由父层统一,
-  // 此处只做按钮组内排布(不再 w-full 抢占空间,时间徽标与按钮相邻)。
-  return (
-    <div className="flex items-center gap-1">
-      {leftActions.map(render)}
-      {rightActions.map(render)}
-    </div>
-  );
-}
 
 function ComposerDock({ children }: { children: React.ReactNode }): React.ReactNode {
   return (

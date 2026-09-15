@@ -52,7 +52,6 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
   const { currentCwd, currentNeutralSessionId } = useUiStore();
-  const { streaming } = useSessionStore();
   const [toast, setToast] = useState<string | null>(null);
   const { armed, arm, disarm } = useArmConfirm();
 
@@ -63,11 +62,10 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
   }, [toast]);
 
   // 分叉 = 从这条 assistant 回答后派生新会话(§5:派生 → 跳转)。与收藏发起同源「插点」。
+  // 流式生成中照样可分叉(不传 abortSource——「从此开新分支」是「两边都要」,源会话
+  // 继续在后台跑完,列表行有执行中指示);在飞的那一行则由 manifest 的 when.settled
+  // 挡在渲染层(没进中立层 = 没锚可锚),不在这里判全局 streaming。
   const handleFork = useCallback(async (): Promise<void> => {
-    if (streaming) {
-      setToast(t("shell.forkStreamingBlocked"));
-      return;
-    }
     if (!message.id || !currentCwd || !currentNeutralSessionId) return;
     try {
       await ctx.tree.forkFromSession(currentCwd, currentNeutralSessionId, message.id, "at");
@@ -76,7 +74,7 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
       const m = /Error invoking remote method '[^']+': (?:Error: )?([\s\S]*)$/.exec(msg);
       setToast(t("shell.forkFailed", { error: m?.[1] ?? msg }));
     }
-  }, [ctx, t, streaming, message.id, currentCwd, currentNeutralSessionId]);
+  }, [ctx, t, message.id, currentCwd, currentNeutralSessionId]);
 
   if (!message.id || message.role !== "assistant" || !currentNeutralSessionId) return null;
 
