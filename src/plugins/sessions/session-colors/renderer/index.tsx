@@ -3,11 +3,11 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
-import { useUiStore, usePluginContext, useSessionStore, type PluginContext, type SessionInfo, type MessageActionProps } from "@my-harness-desktop/react";
+import { useUiStore, usePluginContext, useSessionStore, useCurrentScopeKey, currentScopeKey, type PluginContext, type SessionInfo, type MessageActionProps } from "@my-harness-desktop/react";
 import { deriveSessionTitle } from "@my-harness-desktop/shared";
 import { PinSVG } from "./pin-svg";
 import { usePinStore } from "./pin-store";
-import { PALETTE, messagePreview, groupContentPins, backfillPreviews, type Pin, type ContentPin } from "../core/pin";
+import { PALETTE, messagePreview, groupContentPins, backfillPreviews, migrateContentPinKeys, uniqueSessionKeys, type Pin, type ContentPin } from "../core/pin";
 
 
 function getContrastText(hex: string): string {
@@ -180,25 +180,29 @@ export function SessionColorsPanel(): React.ReactNode {
     }
   };
 
-  const currentSessionPath = useUiStore((s) => s.currentSessionPath);
-  const currentNeutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
-  const projectPaths = useMemo(() => Object.keys(sessionInfos), [sessionInfos]);
+  // 项目内会话键清单:sessionInfos 是 path 与 ns 双键索引,直接 Object.keys 会让同一会话
+  // 出现两次(跨会话聚合列表重复)——经 uniqueSessionKeys 去重,每会话恰好一个键。
+  const projectPaths = useMemo(() => uniqueSessionKeys(sessionInfos), [sessionInfos]);
+  // 当前会话的作用域 key(设计 §3.3.2):身份算法单源,不再手拼 `ns ?? path`。
+  // 此前手拼口径与「钉入」写的键(path)不一致,同一会话被劈成两个键,钉进去后当前会话
+  // 读不到自己的钉(键空间分裂,实测 bug)——现在读写都用同一个 scopeKey。
+  const scopeKey = useCurrentScopeKey();
   // 跨会话聚合(core/pin.groupContentPins,设计 §6.1):当前会话按渲染口径(孤儿钉不列、
   // 按消息序),其他会话按项目顺序列出——retry 折叠的消息无 DOM 也无 messageActions,
   // 钉不上去,此处不必复刻折叠判定。
   const contentGroups = useMemo(
-    () => groupContentPins(contentPins, currentNeutralSessionId ?? currentSessionPath, messages, projectPaths, activeFilter === "all" ? null : activeFilter),
-    [contentPins, currentSessionPath, currentNeutralSessionId, messages, projectPaths, activeFilter],
+    () => groupContentPins(contentPins, scopeKey, messages, projectPaths, activeFilter === "all" ? null : activeFilter),
+    [contentPins, scopeKey, messages, projectPaths, activeFilter],
   );
 
   // 旧数据预览快照惰性补填:重开某会话时把缺 preview 的钉从 messages 解析写回
   // store(Overlay 投影落盘)——下次跨会话列出即有预览;孤儿钉补不上,不触发写盘。
   useEffect(() => {
-    if (!currentSessionPath || messages.length === 0) return;
-    const next = backfillPreviews(contentPins[currentNeutralSessionId ?? currentSessionPath] ?? [], messages);
+    if (!scopeKey || messages.length === 0) return;
+    const next = backfillPreviews(contentPins[scopeKey] ?? [], messages);
     if (!next) return;
-    usePinStore.getState().setContentPins({ ...contentPins, [currentNeutralSessionId ?? currentSessionPath]: next });
-  }, [messages, currentSessionPath, currentNeutralSessionId, contentPins]);
+    usePinStore.getState().setContentPins({ ...contentPins, [scopeKey]: next });
+  }, [messages, scopeKey, contentPins]);
 
   const onLocateMessage = (messageId: string): void => {
     try { ctx.events.invoke("timeline:scrollTo", { messageId }); } catch { /* timeline 未加载:channel 未注册 */ }
@@ -212,9 +216,10 @@ export function SessionColorsPanel(): React.ReactNode {
     onLocateMessage(messageId);
   };
 
-  const groupTitle = (path: string): string => {
-    const info = sessionInfos[path];
-    return info ? deriveSessionTitle(info) : (path.split("/").pop()?.replace(/\.jsonl$/, "") ?? path);
+  const groupTitle = (key: string): string => {
+    // key 是作用域 key(ns 优先);sessionInfos 双键索引,ns 与 path 都能查到。
+    const info = sessionInfos[key];
+    return info ? deriveSessionTitle(info) : (key.split("/").pop()?.replace(/\.jsonl$/, "") ?? key);
   };
 
   return (
@@ -494,17 +499,41 @@ export function Overlay(): React.ReactNode {
   const setContentPins = usePinStore((s) => s.setContentPins);
   const setLoaded = usePinStore((s) => s.setLoaded);
   const selectColor = usePinStore((s) => s.selectColor);
-  const currentSessionPath = useUiStore((s) => s.currentSessionPath);
-  const currentNeutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
+  // 内容钉的键 = 作用域 key(与面板读取侧同一口径;此前这里写 path、面板读 ns → 键空间分裂)
+  const scopeKey = useCurrentScopeKey();
+  // contentPins 是否已从 config 读回(迁移的前置条件;与 pin-store 的 loaded 分开,
+  // 后者在 setLoaded(true) 时就置位、早于 loadContentPins 的异步返回)。
+  const [contentPinsLoaded, setContentPinsLoaded] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [targets, setTargets] = useState<Map<string, HTMLElement>>(new Map());
   const [messageTargets, setMessageTargets] = useState<Map<string, HTMLElement>>(new Map());
   const rafRef = useRef<number>(0);
 
+  // 存量 contentPins 的键迁移(设计 docs/design/session-scope.md §3.3.2)。
+  // 为什么用 effect 而不是在 load 回调里做:lookup 依赖 sessionInfos(框架异步拉取),
+  // load 回调可能先于它到位,那时 lookup 全落空 → 迁移静默不发生且机会丢失。
+  // 改成「等 sessionInfos 到位后迁一次」,一次性标记防重复迁移与重复写盘。
+  // 迁移失败的条目保留原键(孤儿钉按 groupContentPins 既有口径照常列出,不丢用户数据)。
+  const migratedRef = useRef(false);
+  const sessionInfosForMigrate = useSessionStore((s) => s.sessionInfos);
+  useEffect(() => {
+    // 三个前置条件都要满足:① contentPins 已 load 完(独立标记,不能借用 loaded——
+    // loaded 在 setLoaded(true) 时就置位,而 loadContentPins 是并行的异步,那时 contentPins
+    // 可能还是 {},空对象迁移会误标记完成、真数据到位后永不再迁);② sessionInfos 已到位
+    // (lookup 的数据源);③ 还没迁过。
+    if (migratedRef.current || !contentPinsLoaded || !sessionInfosForMigrate) return;
+    migratedRef.current = true;
+    const lookup = (key: string): string | undefined => sessionInfosForMigrate[key]?.neutralSessionId;
+    const migrated = migrateContentPinKeys(contentPins, lookup);
+    if (!migrated) return;   // 无需迁移(全是新口径的键)
+    setContentPins(migrated);
+    persistContentPins(ctx, migrated);
+  }, [contentPinsLoaded, sessionInfosForMigrate, contentPins, ctx, setContentPins]);
+
   useEffect(() => {
     if (loaded) return;
     void loadPins(ctx).then((p) => setPins(p));
-    void loadContentPins(ctx).then((p) => setContentPins(p));
+    void loadContentPins(ctx).then((p) => { setContentPins(p); setContentPinsLoaded(true); });
     void loadVisibility(ctx).then((v) => { if (!v) usePinStore.setState({ pinsVisible: false }); });
     setLoaded(true);
   }, [ctx, loaded, setPins, setContentPins, setLoaded]);
@@ -543,8 +572,9 @@ export function Overlay(): React.ReactNode {
         e.preventDefault();
         e.stopPropagation();
         const messageId = msgEl.dataset.messageId;
-        const sessionPath = useUiStore.getState().currentSessionPath;
-        if (!messageId || !sessionPath) return;
+        // 写入键必须与读取键同口径:读的是 useCurrentScopeKey() 解析出的 currentScopeKey。
+        const sessionKey = currentScopeKey();
+        if (!messageId || !sessionKey) return;
         const rect = msgEl.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
@@ -552,7 +582,7 @@ export function Overlay(): React.ReactNode {
         // 未命中退 DOM 文本(理论上不发生——钉入目标必在当前 messages 渲染)。
         const msg = useSessionStore.getState().messages.find((m) => m.id === messageId);
         const preview = msg ? messagePreview(msg) : (msgEl.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 30);
-        usePinStore.getState().addContentPin(sessionPath, { id: crypto.randomUUID(), messageId, color: selectedColor!, x, y, preview });
+        usePinStore.getState().addContentPin(sessionKey, { id: crypto.randomUUID(), messageId, color: selectedColor!, x, y, preview });
         return;
       }
       const row = target?.closest("[data-session-path]");
@@ -628,7 +658,7 @@ export function Overlay(): React.ReactNode {
         return next;
       });
       const nextMsg = new Map<string, HTMLElement>();
-      const curPins = currentSessionPath ? contentPins[currentNeutralSessionId ?? currentSessionPath] ?? [] : [];
+      const curPins = scopeKey ? contentPins[scopeKey] ?? [] : [];
       for (const pin of curPins) {
         const el = document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(pin.messageId)}"]`);
         if (!el) continue;
@@ -662,7 +692,10 @@ export function Overlay(): React.ReactNode {
       msgObserver?.disconnect();
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [pins, contentPins, currentSessionPath, currentNeutralSessionId, pinsVisible, loaded]);
+  // deps 含 scopeKey:内容钉(curPins)按它取当前会话那一份,身份变了要重锚消息钉的 DOM 目标。
+  // 行钉(pins)遍历的是 Object.keys(pins)(投影路径当 DOM 锚点 data-session-path),
+  // 不读 currentSessionPath,所以它不在 deps 里(此前是死依赖,已删)。
+  }, [pins, contentPins, scopeKey, pinsVisible, loaded]);
 
   if (!loaded || !pinsVisible) return null;
 
@@ -686,8 +719,8 @@ export function Overlay(): React.ReactNode {
         <RowPins
           key={`msg:${messageId}`}
           el={el}
-          pins={(currentSessionPath ? contentPins[currentNeutralSessionId ?? currentSessionPath] ?? [] : []).filter((p) => p.messageId === messageId)}
-          onRemove={(pinId) => { if (currentSessionPath) usePinStore.getState().removeContentPin(currentNeutralSessionId ?? currentSessionPath, pinId); }}
+          pins={(scopeKey ? contentPins[scopeKey] ?? [] : []).filter((p) => p.messageId === messageId)}
+          onRemove={(pinId) => { if (scopeKey) usePinStore.getState().removeContentPin(scopeKey, pinId); }}
         />
       ))}
     </>,
@@ -763,17 +796,18 @@ function PinElement({ pin, animateIn, onRemove }: {
 export function ContentPinAction({ message }: MessageActionProps): React.ReactNode {
   const { t } = useTranslation();
   const currentSessionPath = useUiStore((s) => s.currentSessionPath);
-  const currentNeutralSessionId = useUiStore((s) => s.currentNeutralSessionId);
+  const scopeKey = useCurrentScopeKey();
   const lastUsedColor = usePinStore((s) => s.lastUsedColor);
   const pinned = usePinStore((s) =>
-    currentSessionPath
-      ? (s.contentPins[currentNeutralSessionId ?? currentSessionPath] ?? []).some((p) => p.messageId === message.id && p.color === s.lastUsedColor)
+    scopeKey
+      ? (s.contentPins[scopeKey] ?? []).some((p) => p.messageId === message.id && p.color === s.lastUsedColor)
       : false,
   );
-  if (!message.id || !currentSessionPath) return null;
+  // currentSessionPath 仍作「有没有激活会话」的闸门(与 scopeKey 等价,保留原判定不扩大改动)
+  if (!message.id || !currentSessionPath || !scopeKey) return null;
   return (
     <button
-      onClick={() => { usePinStore.getState().toggleContentPin(currentNeutralSessionId ?? currentSessionPath, message.id!, messagePreview(message)); }}
+      onClick={() => { usePinStore.getState().toggleContentPin(scopeKey, message.id!, messagePreview(message)); }}
       title={pinned ? t("pinColors.quickUnpin") : t("pinColors.quickPin")}
       className="flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer"
     >

@@ -384,7 +384,7 @@ export { useSessionScopeStore, __resetScopesForTests, readTolerant } from "../..
 // 会话作用域发布面(设计 docs/design/session-scope.md §2.4)
 export {
   registerSessionSlots, unregisterSessionSlots,
-  useSessionScope, useSessionScopeRef, useSessionScopeAccess, useCurrentScopeKey,
+  useSessionScope, useSessionScopeRef, useSessionScopeAccess, useCurrentScopeKey, currentScopeKey,
   type SessionScopeAccess,
 } from "./session-scope";
 export { useComposerVoice, type ComposerVoiceItem, type ComposerVoiceProps } from "./composer-voice";

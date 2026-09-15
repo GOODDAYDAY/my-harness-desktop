@@ -23,6 +23,12 @@ import {
   currentScopeKey,
 } from "../../../src/web/stores/session-scope";
 
+/** 当前作用域 key 的**非渲染**读口(设计 §2.2.1 身份单源)。
+ *  给插件在事件回调/命令桥等 hook 之外的路径用(如 session-colors 的 pointerdown 钉入)。
+ *  与 useCurrentScopeKey() 同源(都经圆心 sessionScopeKey),差别只是不经 React 订阅。
+ *  re-export 而非重定义:身份算法单源在 store 层,发布面只转发。 */
+export { currentScopeKey };
+
 /** 插件的作用域读写面(全部已绑定 pluginId,可在事件回调/异步收口里安全使用)。 */
 export interface SessionScopeAccess<T = unknown> {
   /** 当前作用域 key(事件回调里比对「是不是激活会话」用)。 */

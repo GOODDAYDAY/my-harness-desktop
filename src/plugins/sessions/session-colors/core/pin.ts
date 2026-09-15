@@ -110,3 +110,53 @@ export function backfillPreviews(
   });
   return changed ? next : null;
 }
+
+/** 会话键归一(设计 docs/design/session-scope.md §3.3.2):把存量 contentPins 的键统一到
+ *  作用域 key 口径(ns 优先、投影路径兜底)。
+ *
+ *  为什么需要:此前「钉入」写的是 currentSessionPath 键、「读取」查的是
+ *  `currentNeutralSessionId ?? currentSessionPath` 键——同一个会话在有 ns 时被劈成两个键,
+ *  钉进去后当前会话立刻读不到自己的钉(键空间分裂,实测 bug)。统一口径后新数据只有一个键,
+ *  但存量数据里仍有以投影路径为键的条目,必须迁移,否则老钉全部变成孤儿。
+ *
+ *  迁移规则:lookup(key) 命中(说明这个键是投影路径且能反查到 ns)→ 改键为 ns,与目标键
+ *  已有的钉**合并**(用户数据不覆盖);未命中 → 保留原键(它本身可能就是 ns,或会话已删:
+ *  孤儿钉按 groupContentPins 的既有口径照常列出,不丢)。
+ *  返回 null 表示无需迁移(调用方据此跳过写盘)。 */
+export function migrateContentPinKeys(
+  contentPins: Record<string, ContentPin[]>,
+  lookup: (key: string) => string | undefined,
+): Record<string, ContentPin[]> | null {
+  // 两遍:先算每个条目的目标键,再按目标键合并——避免「先写入的条目被后写入的覆盖」。
+  const target = new Map<string, ContentPin[]>();
+  let changed = false;
+  for (const [key, list] of Object.entries(contentPins)) {
+    const ns = lookup(key);
+    const to = ns && ns !== key ? ns : key;
+    if (to !== key) changed = true;
+    const prev = target.get(to);
+    if (prev) { target.set(to, [...prev, ...list]); changed = true; }   // 合并即数据有变
+    else target.set(to, list);
+  }
+  if (!changed) return null;   // 无需迁移:调用方据此跳过写盘
+  return Object.fromEntries(target);
+}
+
+/** 项目内会话的**唯一键清单**(作用域 key 口径)。
+ *
+ *  sessionInfos 是 path 与 ns 双键索引(§kernel-forkless §32 主键迁移过渡期),
+ *  直接 Object.keys 会让同一个会话出现两次——跨会话聚合列表因此重复。
+ *  这里按「ns 优先、无 ns 回落 path」去重,每个会话恰好一个键。 */
+export function uniqueSessionKeys(
+  sessionInfos: Record<string, { path: string; neutralSessionId?: string }>,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const info of Object.values(sessionInfos)) {
+    const key = info.neutralSessionId ?? info.path;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
