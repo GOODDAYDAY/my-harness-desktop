@@ -1,6 +1,6 @@
 # 会话行指示的注册机制与提问交互下沉
 
-本文所有 `文件:行号` 锚点指向本仓库当前 `main`（`8f075d8a`）的实际位置；同一小节内后续出现的裸 `:行号` 沿用该小节最近一次点名的文件。引用项目纪律时写作 `CLAUDE.md §x`，引用提问既有设计时写作 `ask-design.md §x`，与本文自身的节号空间区分开。
+本文所有 `文件:行号` 锚点指向本仓库当前 `main`（`f40fc821`）的实际位置；同一小节内后续出现的裸 `:行号` 沿用该小节最近一次点名的文件。引用项目纪律时写作 `CLAUDE.md §x`，引用提问既有设计时写作 `ask-design.md §x`，与本文自身的节号空间区分开。
 
 ## 1 问题
 
@@ -473,7 +473,7 @@ trailing 徽章（UnreadBadge）走的是同一条路径，理由不同但结论
 
 #### 3.1.1 getPendingQuestions() 绑 activeSessionPath
 
-`session-store.ts:1923` 的实现只查激活会话：先 `this.activeSessionPath`，为空直接返回空数组，再用 `neutralSessionIdFromPath` 反查主键、`listBySession(ns)` 过滤。这个形状对它的原始消费方（`ask-question-card.tsx:76` 的复活逻辑）是对的——卡片只关心自己所在会话。但左栏要的是"哪些会话有未答问题"，跨会话，现有 API 给不了。
+`session-store.ts:1929` 的实现只查激活会话：先 `this.activeSessionPath`，为空直接返回空数组，再用 `neutralSessionIdFromPath` 反查主键、`listBySession(ns)` 过滤。这个形状对它的原始消费方（`ask-question-card.tsx:76` 的复活逻辑）是对的——卡片只关心自己所在会话。但左栏要的是"哪些会话有未答问题"，跨会话，现有 API 给不了。
 
 底层存储本身没有这个限制：`PendingQuestionStore` 是一单一文件（`<dir>/<requestId>.json`），`listBySession` 的实现是读全目录再按 `neutralSessionId` 过滤（`pending-question-store.ts:47`）——去掉过滤就是 `listAll()`，存储层零障碍。缺的只是往上四层的通道。
 
@@ -504,9 +504,9 @@ flowchart LR
 
 | 调用点 | 触发场景 | 现有行为 |
 |---|---|---|
-| `answerQuestion`（定义 `:1817`，settle 在 `:1835`） | 用户经卡片作答 | settle + 分发（活路或续路） |
-| `settleQuestionByToolCallEnd`（settle 在 `:1807`） | abort 等不经卡片的收尾 | settle，无广播 |
-| `reconcilePendingQuestionsBeforeSend`（定义 `:1953`，settle 在 `:1974`） | 用户不答直接发新消息 | settle 为 cancelled + 合成 toolCallEnd（`:1975`） |
+| `answerQuestion`（定义 `:1823`，settle 在 `:1841`） | 用户经卡片作答 | settle + 分发（活路或续路） |
+| `settleQuestionByToolCallEnd`（settle 在 `:1813`） | abort 等不经卡片的收尾 | settle，无广播 |
+| `reconcilePendingQuestionsBeforeSend`（定义 `:1959`，settle 在 `:1980`） | 用户不答直接发新消息 | settle 为 cancelled + 合成 toolCallEnd（`:1981`） |
 
 三处都是"把一张单子标记为终态"，但只有第三处附带了一个视图流事件，且那个事件是给流内卡片用的（`dispatch` 是视图流，只含激活会话），不是给跨会话消费方用的。这是 CLAUDE.md §1.1 判别气味三的典型形态——同一逻辑在多个入口各写一遍。补广播的正确做法不是在三处各加一行 `dispatchKernel`，而是把三处的 settle 收进一个私有方法，由它统一落账 + 广播。
 
@@ -554,7 +554,7 @@ export interface QuestionSettledEvent {
 
 现有 `QuestionRequestEvent`（`kernel-event.ts:53`）带 `sessionKey` 但不带 `neutralSessionId`。左栏的 join 键是 `neutralSessionId`（sessions-list 的 `phaseByPath` 等都按它索引，见 `sessions-list/renderer/index.tsx:526`），renderer 现在只能靠 `nsForSessionKey` 反查 `sessionInfos`（同文件 `:149`）——而提问常在会话尚未进列表时到达（新会话首次发送就可能提问），反查落空。
 
-补一个字段，落账时从 `proc.neutralSessionId` 取（`session-store.ts` 的 `mintQuestionRecord` 已经在写这个字段进 store，`:1793`）。`injectQuestion` 路径（dsh 文件侧车桥）同样补——它的 `ownerProc` 查找逻辑已经在那里（`:1998`）。
+补一个字段，落账时从 `proc.neutralSessionId` 取（`session-store.ts` 的 `mintQuestionRecord` 已经在写这个字段进 store，`:1799`）。`injectQuestion` 路径（dsh 文件侧车桥）同样补——它的 `ownerProc` 查找逻辑已经在那里（`:2004`）。
 
 #### 3.3.3 结算收口：三处 settle 统一走一个私有方法再广播
 
@@ -634,7 +634,7 @@ flowchart LR
 
 #### 4.1.4 多题分页 / 多选 / 自定义 / 跳过 / 放弃的逻辑原样迁移
 
-`RunningQuestion` 现有的全部交互语义保持不变：多题分页（`index` 状态）、单选点选即跳下一题、多选 checkbox 语义、自定义 textarea（Enter 提交 / Shift+Enter 换行）、跳过本题、放弃整组（发 `selected: []` 的空答案，由 `answerQuestion` 判为 cancelled，`session-store.ts:1834`）。`enrichQuestions`（`ask-question-card.tsx:40`）从工具入参补回 `multi_select` / `description` 的对账逻辑也一并搬——pi 的 `extension_ui` 帧装不下这两个字段，这个补偿是必需的。
+`RunningQuestion` 现有的全部交互语义保持不变：多题分页（`index` 状态）、单选点选即跳下一题、多选 checkbox 语义、自定义 textarea（Enter 提交 / Shift+Enter 换行）、跳过本题、放弃整组（发 `selected: []` 的空答案，由 `answerQuestion` 判为 cancelled，`session-store.ts:1840`）。`enrichQuestions`（`ask-question-card.tsx:40`）从工具入参补回 `multi_select` / `description` 的对账逻辑也一并搬——pi 的 `extension_ui` 帧装不下这两个字段，这个补偿是必需的。
 
 ### 4.2 流内卡片降级为只读
 
@@ -720,7 +720,7 @@ commit 2 声称"左栏视觉与行为完全不变"，而迁移确实把一条 `o
 
 第一，两个 store 之间**没有数据依赖**。phase 读的是事件本身（`advancePhase(prev, event)`），unread 读的是事件里的 `entry.id` 与 config 里的位标，谁也不读对方的结果。现有那条订阅里两件事也是各写各的 state（`setPhase` 与 `recordEntry` 两个独立调用，`:210` 与 `:214`），本来就不是"unread 依赖 phase 已推进"的链式关系。
 
-第二，React 18 的自动批处理保证两次 setState 仍落在同一批次。`dispatchKernel`（`session-store.ts:3054`）是同步循环投递给全部订阅者，两个 store 的更新在同一次同步调用栈内完成，渲染只发生一次——不会出现"phase 先渲染一帧、unread 后渲染一帧"的中间态。注意这条依赖投递是同步的，若将来 `dispatchKernel` 改成异步或分帧，本条论证失效，需要重新评估。
+第二，React 18 的自动批处理保证两次 setState 仍落在同一批次。`dispatchKernel`（`session-store.ts:3118`）是同步循环投递给全部订阅者，两个 store 的更新在同一次同步调用栈内完成，渲染只发生一次——不会出现"phase 先渲染一帧、unread 后渲染一帧"的中间态。注意这条依赖投递是同步的，若将来 `dispatchKernel` 改成异步或分帧，本条论证失效，需要重新评估。
 
 第三，订阅者投递顺序不影响结果。既然无数据依赖、且同批渲染，两个订阅者谁先收到事件都不改变最终状态——与 §3.3.3 的幂等闸是同一类保证：结果由结构决定，不由到达顺序决定。
 
@@ -996,7 +996,7 @@ manifest 是静态 JSON，表达不了"这个会话此刻有没有我的事"—�
 
 **Q：只读会话（子 agent）里模型调了 ask_user_question 会怎样？**
 
-dock 不渲染（§4.4.2 的裁决），流内指引条照常出现（它在会话流里，不受 composerTop 只读态影响），左栏徽章照常亮起。所以问题不会静默丢失——用户看得见"这个会话在等回答"，但当前界面上答不了。这是缺陷还是可接受？现状是可接受的已知边界：`reconcilePendingQuestionsBeforeSend`（定义 `session-store.ts:1953`）只在新消息发出前闭合悬空单，而只读会话发不出消息，单子会一直悬着，但悬着不产生错误状态（无 TTL，`ask-design.md §1.3`），且切回父会话仍能看见徽章。实际影响有限——子 agent 会话的 ask 由其父会话驱动，且 subagent 扩展通常不给工人会话装 ask 工具。若将来确实出现，正确修法是给只读态一个"仅作答"的窄入口，不是回退 §4.4.2。
+dock 不渲染（§4.4.2 的裁决），流内指引条照常出现（它在会话流里，不受 composerTop 只读态影响），左栏徽章照常亮起。所以问题不会静默丢失——用户看得见"这个会话在等回答"，但当前界面上答不了。这是缺陷还是可接受？现状是可接受的已知边界：`reconcilePendingQuestionsBeforeSend`（定义 `session-store.ts:1959`）只在新消息发出前闭合悬空单，而只读会话发不出消息，单子会一直悬着，但悬着不产生错误状态（无 TTL，`ask-design.md §1.3`），且切回父会话仍能看见徽章。实际影响有限——子 agent 会话的 ask 由其父会话驱动，且 subagent 扩展通常不给工人会话装 ask 工具。若将来确实出现，正确修法是给只读态一个"仅作答"的窄入口，不是回退 §4.4.2。
 
 **Q：`order` 字段在 `sessionRowBadgeItems()` 的返回里保留还是剥掉？既有槽是剥掉的。**
 
