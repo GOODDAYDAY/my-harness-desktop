@@ -315,8 +315,10 @@ export interface ForkOptions {
 export interface SessionTreeApi extends RpcOps {
   /** 分叉(bookmark-snapshot-fork-unify §5):把锚点所在 lineage 的前缀派生成全新会话
    *  (新 ns + 根 lineageId ≡ ns),切激活并跳转;纯中立操作,惰性物化(首发 seed)。
-   *  返回新会话的投影地址。position:"at"(默认)父前缀继承到 boundary 含锚点;"before"
-   *  继承到锚点前一条(retry/rewind 用,排除待重发 user 消息,避免重复)。
+   *  **返回新会话的 neutralSessionId**(unify §11.2 裁定)——与 forkFromSession/resume 同一
+   *  坐标系,顺 §32 主键迁移向中立主键收敛。不返回投影地址(那是内核专属派生量、跨内核不同义;
+   *  需要时消费方自经 catalog.projectionPath 派生)。position:"at"(默认)父前缀继承到 boundary
+   *  含锚点;"before" 继承到锚点前一条(retry/rewind 用,排除待重发 user 消息,避免重复)。
    *
    *  流式生成中可调:派生只读中立层(零内核交互),锚点只要是**已落定**的条目就成立;
    *  在飞的那条还没进中立层,拿它当锚点会显式报错(不静默产半截会话)。需要连带

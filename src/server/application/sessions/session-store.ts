@@ -2521,7 +2521,14 @@ export class SessionStore implements
       ?? cur.lineages.find((l) => l.fork === null)?.lineageId ?? cur.neutralSessionId;
     const newNs = this.deriveFromAnchor(cur, parentLineageId, fallback, boundary, position);
     // 项目归属跟随源会话(不取 this.activeCwd):派生会话属于源会话那个项目。
-    return this.activateDerived(newNs, cur.header.kernel, cur.header.cwd);
+    this.activateDerived(newNs, cur.header.kernel, cur.header.cwd);
+    // 返回**新 neutralSessionId**(unify §11.2 裁定),不是投影地址——三个派生入口
+    // (fork/forkFromSession/resume)返回值同一坐标系,且顺 §32 主键迁移的方向
+    // (一切向中立主键收敛)。投影地址是**内核专属派生量**(pi=文件路径、dsh=裸 ns),
+    // 把它当返回值会让调用方拿到一个双形态、跨内核不同义的字符串;需要时由消费方
+    // 自己经 catalog.projectionPath(cwd, ns) 派生。本改动零行为回归:改前全仓
+    // 三个调用方(retry/rewind/session-tree/ForkAction)均不消费返回值。
+    return newNs;
   }
 
   /** 派生前中断源会话(opts.abortSource)——fork/forkFromSession 共用(§3.3 收敛)。
@@ -2613,12 +2620,13 @@ export class SessionStore implements
    *
    *  源会话的内核**没装载**时退回中立 id 作投影地址:派生本身是纯中立操作(整树复制),
    *  不该因为"源会话记的是一个当前没启用的内核"就整条失败——和列表行同一个降级语义。 */
-  private activateDerived(newNs: string, kernel: KernelId, cwd: string): string {
+  private activateDerived(newNs: string, kernel: KernelId, cwd: string): void {
     const newPath = this.catalogOrNull(kernel)?.projectionPath(cwd, newNs) ?? newNs;
     this.setContext(cwd, newPath);
     const derived = this.neutralStore?.get(newNs);
     if (derived) this.broadcastDerivedBaseline(derived, newPath);
-    return newPath;
+    // 不返回 newPath:投影地址是内部细节(切激活/广播基线用),对外坐标系统一是中立主键。
+    // 旧签名返回 string 曾造成「同族方法两套坐标系」(fork 返路径、forkFromSession 返 ns)。
   }
 
   /** 惰性物化(§kernel-forkless §15 + session-single-source §4.4):换分支 = 换投影;

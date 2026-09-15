@@ -1105,9 +1105,8 @@ describe("fork:父 lineage 尊重调用方指定 + 派生新会话(根因修复�
     const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
-    const newPath = await s.fork("branch-B", "branch-B:0");
-    // 返回新会话的投影路径;中立层多出全新会话(列表立即可见)
-    const newNs = basename(newPath, ".jsonl");
+    // fork 返回**新 neutralSessionId**(unify §11.2),不再是投影路径
+    const newNs = await s.fork("branch-B", "branch-B:0");
     expect(newNs).not.toBe(ns);
     const derived = neutralStore.get(newNs)!;
     expect(derived).toBeTruthy();
@@ -1125,8 +1124,8 @@ describe("fork:父 lineage 尊重调用方指定 + 派生新会话(根因修复�
     expect(derived.header.pendingSeed).toBe(true);
     // 源会话不动(派生是拷贝不是改源)
     expect(neutralStore.get(ns)!.lineages).toHaveLength(2);
-    // 激活已切到新会话
-    expect((s as unknown as { activeSessionPath: string }).activeSessionPath).toBe(newPath);
+    // 激活已切到新会话:activeSessionPath 是**投影路径**(内核专属派生量),文件名 = newNs
+    expect(basename((s as unknown as { activeSessionPath: string }).activeSessionPath, ".jsonl")).toBe(newNs);
   });
 
   it("fork(不存在的父):回落活跃 lineage 并 warn(不静默换父≠抛错打断)", async () => {
@@ -1135,11 +1134,11 @@ describe("fork:父 lineage 尊重调用方指定 + 派生新会话(根因修复�
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const newPath = await s.fork("no-such-lineage", `${ns}:0`);
+    const newNs = await s.fork("no-such-lineage", `${ns}:0`);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
     // 回落活跃 lineage(根 ns,proc 初始化即根):派生内容 = 根前缀(不是别条分支的)
-    const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
+    const derived = neutralStore.get(newNs)!;
     expect(derived.lineages[0].entries.map((e) => e.message.content)).toEqual(["root-msg"]);
   });
 
@@ -1149,8 +1148,8 @@ describe("fork:父 lineage 尊重调用方指定 + 派生新会话(根因修复�
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath);
     // retry 首条 user 消息:position=before 且锚点是父内容第一条 → 边界空串(零继承前缀)
-    const newPath = await s.fork(ns, `${ns}:0`, "before");
-    const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
+    const newNs = await s.fork(ns, `${ns}:0`, "before");
+    const derived = neutralStore.get(newNs)!;
     expect(derived.lineages[0].entries).toEqual([]); // 零继承:空前缀,重发时从零开始
     expect(derived.header.derivedFrom).toEqual({ kind: "fork", sourceNeutralSessionId: ns, boundaryEntryId: "" });
   });
@@ -1162,10 +1161,31 @@ describe("fork:父 lineage 尊重调用方指定 + 派生新会话(根因修复�
     await s.start(CWD, sessionPath);
     // 调用方传根 ns(会话树面板形态),锚点 branch-B:0 却属于 branch-B——
     // 条目属于且只属于一条 lineage,归属 lineage 是语义正确的父。
-    const newPath = await s.fork(ns, "branch-B:0");
-    const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
+    const newNs = await s.fork(ns, "branch-B:0");
+    const derived = neutralStore.get(newNs)!;
     // 内容 = branch-B 的物化前缀(根前缀 + B 独有),不是「锚点不在根里」抛错、也不是根前缀截断
     expect(derived.lineages[0].entries.map((e) => e.message.content)).toEqual(["root-msg", "on-B"]);
+  });
+
+  // L1 返回值契约守卫(unify §11.2):fork 返回**新 neutralSessionId**,不是投影地址。
+  // 为什么单独钉一条:fork/forkFromSession/resume 三个派生入口必须返回同一坐标系,
+  // 顺 §32 主键迁移向中立主键收敛。投影地址是内核专属派生量(pi=文件路径、dsh=裸 ns),
+  // 把它当返回值会让调用方拿到一个跨内核不同义的字符串。改前全仓调用方均不消费返回值,
+  // 所以这是纯契约收敛、零行为回归;本守卫钉住别改回投影地址。
+  it("fork 返回值是新 neutralSessionId(不是投影路径):三派生入口同一坐标系(§11.2)", async () => {
+    const { s, neutralStore, ns } = newForkStore();
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), `${ns}.jsonl`);
+    s.setContext(CWD, sessionPath);
+    await s.start(CWD, sessionPath);
+    const ret = await s.fork("branch-B", "branch-B:0");
+    // 返回值就是中立主键:能直接 get 到派生会话,且它不等于投影路径(不含 .jsonl 形态)
+    expect(neutralStore.get(ret)).toBeTruthy();
+    expect(ret).not.toContain(".jsonl");
+    expect(ret).not.toContain("/"); // 投影路径含目录分隔符,ns 是裸 UUID
+    // 与 forkFromSession 同坐标系(都返回 newNs),坐实「三入口统一」
+    const ret2 = await s.forkFromSession(ret, `${ret}:0`, "at");
+    expect(neutralStore.get(ret2)).toBeTruthy();
+    expect(ret2).not.toContain(".jsonl");
   });
 });
 
@@ -1279,12 +1299,12 @@ describe("fork 的 abortSource:中断源会话并等落定后再派生(流式中
 
     const forkP = s.fork(ns, `${ns}:0`, "at", { abortSource: true });
     busyAdapter.emit({ type: "agent_settled" });
-    const newPath = await forkP;
+    const newNs = await forkP;
 
-    expect(activeWhenAborted).toBe(sessionPath); // 源会话,不是派生产物
-    expect(newPath).not.toBe(sessionPath);        // 派生确实发生了(且发生在 abort 之后)
+    expect(activeWhenAborted).toBe(sessionPath); // abort 那一刻激活仍是源会话(不是派生产物)
+    expect(newNs).not.toBe(ns);                  // 派生确实发生了(新中立主键 ≠ 源)
     expect(s.isBusy(sessionPath)).toBe(false);
-    const derived = neutralStore.get(basename(newPath, ".jsonl"))!;
+    const derived = neutralStore.get(newNs)!;
     expect(derived.header.derivedFrom).toEqual({ kind: "fork", sourceNeutralSessionId: ns, boundaryEntryId: `${ns}:0` });
     expect(derived.lineages[0].entries.map((e) => e.message.content)).toEqual(["问题"]);
   });
@@ -1306,9 +1326,9 @@ describe("fork 的 abortSource:中断源会话并等落定后再派生(流式中
     expect(s.isBusy(sessionPath)).toBe(true);
 
     busyAdapter.emit({ type: "agent_settled" });
-    const newPath = await forkP;
+    const newNs = await forkP;
     expect(resolved).toBe(true);            // 落定后才派生
-    expect(newPath).not.toBe(sessionPath);
+    expect(newNs).not.toBe(ns);             // 派生产物是新会话(中立主键 ≠ 源)
   });
 
   it("不带 abortSource:源会话在飞也照样派生,不发 abort(「两边都要」语义——源继续后台跑完)", async () => {
@@ -1319,12 +1339,12 @@ describe("fork 的 abortSource:中断源会话并等落定后再派生(流式中
     busyAdapter.emit({ type: "agent_start" });
     busyAdapter.sent = [];
 
-    const newPath = await s.fork(ns, `${ns}:0`);
+    const newNs = await s.fork(ns, `${ns}:0`);
 
     expect(busyAdapter.sent).not.toContain("abort");
     // 源会话仍在跑(没被偷偷中断)
     expect(s.isBusy(sessionPath)).toBe(true);
-    expect(neutralStore.get(basename(newPath, ".jsonl"))).toBeTruthy();
+    expect(neutralStore.get(newNs)).toBeTruthy();
   });
 
   it("abortSource 但源没在跑:不发 abort、不等待,直接派生(空闲会话上重试零开销)", async () => {
@@ -1335,10 +1355,10 @@ describe("fork 的 abortSource:中断源会话并等落定后再派生(流式中
     expect(s.isBusy(sessionPath)).toBe(false);
     idleAdapter.sent = [];
 
-    const newPath = await s.fork(ns, `${ns}:0`, "before", { abortSource: true });
+    const newNs = await s.fork(ns, `${ns}:0`, "before", { abortSource: true });
 
     expect(idleAdapter.sent).not.toContain("abort");
-    expect(neutralStore.get(basename(newPath, ".jsonl"))).toBeTruthy();
+    expect(neutralStore.get(newNs)).toBeTruthy();
   });
 });
 
@@ -1709,8 +1729,7 @@ describe("fork/clone 派生会话首发物化(内核私有 id 派生自新会话
     const { s, neutralStore, ns, sessionPath, createdLineageIds } = newLineageForkStore();
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath, undefined, false, "pi", "p", "a"); // 带模型起,避免 prompt setModel 重起进程重置活跃 lineage
-    const newPath = await s.fork(ns, `${ns}:0`); // 派生新会话 + 切激活(惰性,不发请求)
-    const newNs = basename(newPath, ".jsonl");
+    const newNs = await s.fork(ns, `${ns}:0`); // 派生新会话(返回 ns) + 切激活(惰性,不发请求)
     // 派生即见:新会话在中立层,根 lineageId ≡ newNs;pendingSeed 置位(内核侧未物化)
     const derived = neutralStore.get(newNs)!;
     expect(derived.lineages.find((l) => l.fork === null)?.lineageId).toBe(newNs);
@@ -1732,8 +1751,7 @@ describe("fork/clone 派生会话首发物化(内核私有 id 派生自新会话
     });
     s.setContext(CWD, sessionPath);
     await s.start(CWD, sessionPath, undefined, false, "pi", "p", "a");
-    const newPath = await s.fork(ns, `${ns}:0`);
-    const newNs = basename(newPath, ".jsonl");
+    const newNs = await s.fork(ns, `${ns}:0`);
     // 首发:seed 失败 → 错误原文上抛(用户可见),pendingSeed 保持
     await expect(s.prompt("branch-first", undefined, undefined, { provider: "p", modelId: "a", kernel: "pi" as const, thinkingLevel: "" }))
       .rejects.toThrow("seed 被拒绝");
