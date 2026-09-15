@@ -275,6 +275,59 @@ private appendNeutral(proc: SessionProc, entry: NeutralEntry): void {
 
 交付物 2/3/4 的范围与守卫见设计文档 §7.1 的表格。
 
+### 3.5 分步执行清单（按依赖顺序，每步验绿再进下一步）
+
+顺序是按「内层先于外层、类型先于实现、投影器先于读口切换」排的——每一步都能独立 typecheck + 跑测试，不留半成品（CLAUDE.md「完整设计，一次落地」的拆分边界：每个交付物自身完整）。
+
+**Step 1 — 圆心类型：cost 可空 + 计价标志 + ModelInfo.cost?**
+
+- 改 `packages/shared/src/domain/events/session-state.ts`：`:51` `TurnUsage.cost` → `number | null`；`:62` `SessionStats.cost` → `number | null`；`:109` `ProjectStats.cost` → `number | null`；`:98` `shellSessionStats` 的 `cost: 0` → `cost: null`。
+- 改 `:215` `messageUsageOf`：返回值从 `{tokens, cost}` 扩成 `{tokens, cost, priced}`，`priced = typeof raw.cost === "object" && raw.cost !== null`（**形状判据**，见设计文档 §3.5.5：对象=真计价哪怕全零，数字=占位/未知）。`cost` 本身仍返回数字（对象取 `.total`、数字原样），由 `priced` 表达「这个数字可不可信」。
+- 改 `:10` `ModelInfo` 加可选 `cost?: {input,output,cacheRead,cacheWrite}`（交付物 3 用，但类型现在就加，避免交付物 3 再动圆心）。
+- 验：`npm run typecheck` 会报出所有 `cost` 消费方——逐个看，渲染层（`CostRow`）留到 Step 6 改，此处只让类型自洽（可能需要临时 `?? 0` 兜底，Step 6 撤掉）。跑 `npx vitest run packages/shared`。
+
+**Step 2 — 投影器（纯函数，最内层）**
+
+- 新建 `src/server/application/sessions/stats-projector.ts`：`projectSessionStats(scope: {entries, contextWindow?}): SessionStats` + `foldProjectStats(summaries): ProjectStats`。骨架照设计文档 §3.1.1.1，switch 分支键是 `role` 不是内核。
+- 复用圆心四个函数：`messageUsageOf` / `contextSeqItemOf` / `estimateContextUsageFromSeq` / `toolCallsOf`，一行算法都不新写。
+- 三个必须显式处理的脏形状（否则 G1 挂）：无 usage 的 assistant（dsh 19 条，计 steps 不计 tokens）、cost 数字占位（判未知、触发传染）、无 startedAt（不参与 tps 分母）。
+- `lastTurn` 规则：从后往前第一个用量非零的区间（设计文档 §2.3.4）。
+- 验：新建 `stats-projector.test.ts`，从 `~/.my-harness-desktop-dev/sessions/*.entries.json` **截真实 pi/dsh 会话**当 fixture（不手造），断言两内核同口径 + G5（cost 传染）+ G12（5 条边界 turns==5）。此步不碰 session-store，纯函数可独立测。
+
+**Step 3 — turn-boundary 写穿 + 摘要增量**
+
+- `session-store.ts` 的 `dispatch`：`:2980` 的 `agentSettled` 分支里，除了现有 `proc.turns += 1`（`:2984`），加一条 `appendNeutral(proc, {message:{role:"turn-boundary", content:reason, display:false, reason, timestamp}})`。reason 从 `agentSettled` 事件取（dsh 侧 `dsh-event-translator.ts:36` 已透传）。
+- 摘要增量：在 `appendNeutralEntryWithHeader` 的 header 派生里折入 `stats`（`NeutralSessionHeader.stats` 域 + `statsUpTo`）。`appendNeutral`（追加）走增量、`putNeutral`（覆盖整树）走全量重投影——两个写口两种策略（§3.3）。
+- 验：G1（增量==全量，覆盖 fork/seed/backfill）+ G4（statsUpTo≠lastEntryId 判过期）。`npx vitest run src/server/application/sessions`。
+
+**Step 4 — dsh 适配器补三处形状**
+
+- `dsh-event-translator.ts:74` 的 `assistant/message` 分支：`error:true` → 补 `stopReason:"error"`（保留 `error:true`，只在失败时补，成功不伪造 `end_turn`，见设计文档 §3.4.1）。
+- 同分支补 `startedAt`：取流式缓冲 `anchorTs`，无 chunk 回落事件时间戳（§3.4.3）。
+- `:16` 丢弃清单里的 `request/context`：改成翻译成中性 `contextWindowChanged` 事件（中性事件联合加一种），proc 态记 contextWindow（§3.4.2）。
+- 验：G6（翻译器补 stopReason/startedAt 的单测，扩 `dsh-event-translator.test.ts`）。
+
+**Step 5 — 切 getStats / openSession 两个读口**
+
+- `session-store.ts:2446` 的 `getStats`：删 `:2448` 的 `throw "内核未启动"`、删 `:2450` 的 `capabilities.extensions` 分流与 `pi.getSessionStats`，改成 `lineageContent` 取当前 lineage entries → `projectSessionStats`。contextWindow 合并顺序：活进程 `contextWindowChanged` 值 → modelEvidence 查表 → 0。
+- `session-store.ts:955` 的 `openSession`：`stats: null` → 投影结果（复用已读出的 `session`，走 `lineageContent` **不走** `neutralMessagesOfSession`，§3.2 坑一）；`modelEvidence` 一并从 entries 线性扫描末条带 model 的 assistant 得出。
+- 验：G10 的 unittest 部分（getStats 对 dsh 形态 entries 返回非零 tokens）。`npx vitest run src/server/application/sessions/session-store.test.ts`——注意别打破现有 236 条。
+
+**Step 6 — token-stats 渲染层跟进 cost 可空**
+
+- `src/plugins/insight/token-stats/renderer/index.tsx:156` 的 `CostRow`：`cost == null` 渲染破折号 + tooltip，不再 `toFixed(null)`；`costCoverage.unknown > 0` 追加「（部分会话无计价）」。
+- 撤掉 Step 1 的临时 `?? 0` 兜底。
+- 验：G7（DOM test：cost=null 渲染破折号不渲染 `$0.00`），参考 `context-usage-bar.test.tsx` 的写法（jsdom + testing-library，按角色/文案查不按 class）。
+
+**Step 7 — e2e + 静态守卫 + 文档同步**
+
+- G10 e2e：`scripts/demo/stats-single-source.e2e.mjs`（新建），dsh 内核下真实发一轮，断言本会话 tokens 非 0、上下文条非空、tps 有值。过 `quiet-env.mjs` 静默跑，`page.waitForFunction` 事件驱动等 DOM。
+- 静态守卫：`scripts/dependency-audit.mjs` 加两条（设计文档 §3.2.4.2）——统计链路零 `capabilities.extensions`/`KernelId`/`asPi`；`SessionCatalog` 无 `projectStats`/`contextProbeTokens`。
+- 文档同步（§7.4）：改 `kernel-parity-audit.md:82` 的 stale ✅、重写 `token-stats.md` §6.4「dsh 缺面留空」整节。
+- 验：`npm run build` + e2e 静默跑通 + `npm run audit:deps` 全绿。
+
+**注意 Step 5 的依赖**：getStats 切到投影器后，pi 的 `getSessionStats`（`pi-backend.ts:271`）与 `toSessionStats`（`context-binding.ts:147`）失去调用方，但**本步不删**——删契约方法（`SessionCatalog.projectStats`/`contextProbeTokens`）是交付物 4 的事，删早了编译不过。Step 5 只切读口，留死代码给交付物 4。
+
 ## 4. 工作纪律提醒
 
 接手时按项目纪律走，别抄近路：
