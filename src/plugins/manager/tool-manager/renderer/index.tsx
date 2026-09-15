@@ -459,7 +459,7 @@ export function ToolPanelTab(): React.ReactNode {
   const { currentCwd, currentSessionPath, sessionTitle } = useUiStore();
   // 工具偏好从会话作用域读(设计 docs/design/session-scope.md §4.6.5):key 由作用域承担,
   // 此前形态是「单值内嵌 sessionPath + 读取侧比对」——那正是手动实现作用域的样子。
-  const [pendingToolConfig, setPendingToolConfig] = usePendingToolConfig();
+  const [pending, setPendingToolConfig] = usePendingToolConfig();
   const allTools = useDiscoveredTools();
   const { groups, loading } = useToolGroups(currentCwd);
   const headerConfig = useSessionToolConfig(currentSessionPath);
@@ -478,8 +478,8 @@ export function ToolPanelTab(): React.ReactNode {
 
   // 偏好/落盘两态(composerApplyTiming 同语义):开关只写 pending(内存偏好),
   // timeline send() 才 flush 到头行。flushed 的 pending 仍作显示值——它等于最新落盘值,避免跳变。
-  // 作用域隔离保证 A 会话的偏好物理上落不进 B 的域,不再需要 sessionPath 比对。
-  const pending = pendingToolConfig;
+  // 作用域隔离保证 A 会话的偏好物理上落不进 B 的域,不再需要 sessionPath 比对
+  // (此前形态是 `{ sessionPath, config, flushed }` 单值内嵌 key + 读取侧比对,设计 §4.6.5)。
 
   const pushPending = useCallback((enabledGroupIds: string[]): void => {
     if (!currentSessionPath) return;
