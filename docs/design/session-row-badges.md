@@ -19,7 +19,7 @@
 | 插件 | `plugins/sessions/ask/plugin.json` 加贡献；新增 `ask/renderer/ask-dock.tsx` | `plugins/sessions/sessions-list/renderer/index.tsx` 加订阅与状态；四语 locales 加文案 |
 | 机制接入合计 | **2 处，全在 ask 目录内**（加贡献 + 写组件） | **10 处，跨 5 层** |
 
-底部那一半只有 2 处，是因为 `composerTop` 槽已经存在并被验证过：契约在 `packages/shared/src/domain/contributions.ts:297`，查询 hook 在 `packages/react/src/composer-top.ts`，timeline 在 `src/plugins/sessions/timeline/renderer/index.tsx:1190` 与 `:1290` 两处 `ComposerDock` 无条件渲染贡献项。当前往 `composerTop` 这个槽里放东西的只有 goal（`GoalBar`，`plugins/sessions/goal/plugin.json:36`），ask 会是第二个。与它同族的另外三个 composer 槽各自也都有真实贡献方——token-stats 用 `composerStats`、stickers 用 `composerActions`（`plugin.json:32`）、voice-input 用 `composerVoice`（`plugin.json:13`）——四个槽同一套"manifest 声明 + 查槽 + 组件自持数据"范式都被验证过，ask 走的是既有装载链。左栏那一半没有对应的槽，所以每层都要新铺一段。
+底部那一半只有 2 处，是因为 `composerTop` 槽已经存在并被验证过：契约在 `packages/shared/src/domain/contributions.ts:297`，查询 hook 在 `packages/react/src/composer-top.ts`，timeline 在 `src/plugins/sessions/timeline/renderer/index.tsx:1190` 与 `:1290` 两处 `ComposerDock` 无条件渲染贡献项。当前往 `composerTop` 这个槽里放东西的只有 goal（`GoalBar`，`plugins/sessions/goal/plugin.json:36`），ask 会是第二个。与它同族的另外三个 composer 槽各自也都有真实贡献方——token-stats 用 `composerStats`、stickers 用 `composerActions`（`plugins/project/stickers/plugin.json:32`）、voice-input 用 `composerVoice`（`plugins/sessions/voice-input/plugin.json:13`）——四个槽同一套"manifest 声明 + 查槽 + 组件自持数据"范式都被验证过，ask 走的是既有装载链。左栏那一半没有对应的槽，所以每层都要新铺一段。
 
 #### 1.1.2 差别的根源不是需求大小，是行级展示没有注册点
 
@@ -96,7 +96,7 @@ flowchart TB
 
 #### 1.3.3 现有 composer* 槽的形状为什么不能照搬
 
-`composerStats` / `composerTop` 的契约注释里明写"**组件 props 无，自订阅插件内状态**"（`contributions.ts:283`、`:297`）。这个形状对 composer 成立，因为 composer 全局只有一个、且只服务当前激活会话——组件自己从框架 store 读 `currentNeutralSessionId` 就够了。行级不成立：左栏同屏几十上百行，每行是一个不同会话，徽章组件必须知道"我是哪一行"，因此必须带 props。
+`composerStats` 与 `composerTop` 的契约注释都明写组件"props 无"、自订阅状态——前者订阅的是框架 store（`contributions.ts:283` 原文"自订阅框架 store"），后者订阅的是插件内状态（`:297` 原文"自订阅插件内状态"），数据来源不同但都不经 props。这个形状对 composer 成立，因为 composer 全局只有一个、且只服务当前激活会话——组件自己从框架 store 读 `currentNeutralSessionId` 就够了。行级不成立：左栏同屏几十上百行，每行是一个不同会话，徽章组件必须知道"我是哪一行"，因此必须带 props。
 
 仓库里已有带 props 的槽作为先例：`composerVoice`（`contributions.ts:312`）的组件 props 是 `{ onTranscribed, disabled? }`，由消费方注入回调，契约注释解释了为什么这个槽必须破例。行级徽章同理破例，但破的方向不同——它需要的是**行上下文**，不是回调。
 
@@ -339,7 +339,7 @@ flowchart LR
 
 **图 5 — 数据流：一条订阅喂一个模块级 Map，主张查询与 N 个行实例都只读它**
 
-用 `Map<ns, Set<requestId>>` 而不是 `Map<ns, number>` 计数，是为了让重复结算天然幂等：同一 `requestId` 被 add 两次仍是一个元素，delete 两次第二次是 no-op。计数方案在"用户作答与 abort 竞态"下会双减，而 `ask-design.md §3.4.3` 明确允许一个会话同时挂多张单，钳位到 0 会把另一张真实待答单吃掉。集合方案不需要钳位，也不需要消费方记"我见过哪些 requestId"。
+用 `Map<ns, Set<requestId>>` 而不是 `Map<ns, number>` 计数，是为了让重复结算天然幂等：同一 `requestId` 被 add 两次仍是一个元素，delete 两次第二次是 no-op。计数方案在"用户作答与 abort 竞态"下会双减，而一个会话本来就允许同时挂多张未答单（§3.4.3；存储层 `listBySession` 返回的就是数组，`ask-design.md §6.6` 的"用户不答、直接发新消息→旧单悬着"也是这一事实的来源），钳位到 0 会把另一张真实待答单吃掉。集合方案不需要钳位，也不需要消费方记"我见过哪些 requestId"。
 
 `claims()` 的实现是从这个 Map 派生一个 `Set<neutralSessionId>`（过滤掉空集合的键），纯读、无副作用。
 
@@ -734,7 +734,7 @@ commit 2 声称"左栏视觉与行为完全不变"，而迁移确实把一条 `o
 
 ### 5.2 顺序与不可分割性
 
-#### 5.2.1 A → B → C 依赖链
+#### 5.2.1 四段依赖链（A / B / A′ / C）
 
 ```mermaid
 flowchart LR
@@ -812,7 +812,7 @@ A 与 A′ 必须同批：槽落地但没人用它，等于槽没被验证过，
 
 主张方案的一个直接收益是解析可测。纯函数落在 `packages/react/src/session-row-badges.ts`，签名形如 `resolveLeadingBadge(items, hasClaims)`：`items` 是 order 升序的贡献项数组，`hasClaims` 是 `(pluginId, badgeId, ns) => boolean` 的查询函数（调用方注入，测试里给假实现）。断言五条，覆盖 §2.3.2 解析规则的两半：① 候选未提供 `claims` → 直接胜出（兜底路径，图 4 的 FB 分支）；② 有 `claims` 且不主张 → 落到下一个候选；③ 有 `claims` 且主张 → 胜出；④ 全部候选都提供 `claims` 且都不主张 → 返回 undefined；⑤ 同 order 取数组后者（与 `block-renderers.ts:50` 的 reduce 平手规则一致——`<=` 比较使后到者胜出，而数组序即注册序、注册序按 source 升序 builtin→installed→user→project，所以"数组后者"与"高优先级 source"是同一件事，`contributions.ts:483` 已写明这条等价）。
 
-它不碰 React、不碰 DOM，是 CLAUDE.md §4.5 判据下的内层材料——不需要 mock 任何外部环境。
+它不碰 React、不碰 DOM，按 CLAUDE.md §4.5 的可测性判据属"不需要 mock 外部环境"的纯逻辑（与圆心 `domain/` 的纯函数同档；物理上它落在 `packages/react` 发布面而非 `domain/`，因为消费方 hook 也在这里，但纯函数本身零依赖）。
 
 #### 7.1.2 PendingQuestionStore.listAll 与结算收口
 
@@ -846,7 +846,7 @@ A 与 A′ 必须同批：槽落地但没人用它，等于槽没被验证过，
 
 #### 7.3.1 ask-question.e2e.mjs 锚点迁移到底部 dock
 
-`data-ask-question` 这个锚点字符串不变，但它在 DOM 里的位置从 Virtuoso 列表内移到 `ComposerDock` 内，所以两个脚本里围绕它的**滚动与等待步骤**要改（`ask-question.e2e.mjs` 与 `ask-resume.e2e.mjs` 合计 9 处引用该锚点，其中涉及"滚到卡片再操作"的步骤全部删掉——它常驻可见，不需要滚）。常驻可见省掉了"滚到卡片"这一步，是这次改动的用户体验收益在测试侧的体现。
+`data-ask-question` 这个锚点字符串不变，但它在 DOM 里的位置从 Virtuoso 列表内移到 `ComposerDock` 内，所以两个脚本里围绕它的**滚动与等待步骤**要改（`ask-question.e2e.mjs` 5 处 + `ask-resume.e2e.mjs` 5 处，合计 10 处引用该锚点，其中涉及"滚到卡片再操作"的步骤全部删掉——它常驻可见，不需要滚）。常驻可见省掉了"滚到卡片"这一步，是这次改动的用户体验收益在测试侧的体现。
 
 #### 7.3.2 ask-resume.e2e.mjs 新增：杀内核重启后 dock + 左栏徽章双双复活
 
@@ -964,7 +964,7 @@ manifest 是静态 JSON，表达不了"这个会话此刻有没有我的事"—�
 
 **Q：为什么不延迟到第一个徽章组件挂载时再 init，那就能直接用 hook 了？**
 
-因为那把正确性押在"基线一定盖得住增量"上。ask 的基线（`getPendingQuestionsAll`）与 unread 的基线（config 位标）确实都可重建，但基线拉取是异步的：若 init 晚于前几条事件，异步基线读到的是拉取前的快照，而拉取期间到达的事件又被尚未建立的订阅错过——两边都接不住。模块加载期 init 没有这个窗口（§2.4.5）。额外好处是左栏折叠、分组收起、用户没滚到会话列表时数据照样在长，不会出现"提问早到了、徽章直到点开左栏才亮"。
+理由见 §2.4.5 补充判定三：延迟 init 把正确性押在"异步基线一定盖得住期间到达的增量事件"上，这个前提不成立；模块加载期 init 没有这个窗口。附带的好处是左栏折叠、分组收起、用户没滚到会话列表时数据照样在长（详见 §2.4.4）。
 
 **Q：一个会话同时有未答问题和未读消息，两个徽章会打架吗？**
 
