@@ -374,7 +374,7 @@ const kernel = {
       transport.invoke(IPC.bus.channelMember, pluginId, channel, action, member),
     tapStart: (pluginId: string, opts: { session?: string; channel?: string; filter?: "done" | "lifecycle" | "stream"; deliverTo?: string }): Promise<{ tapId: string; filter: string }> =>
       transport.invoke(IPC.bus.tapStart, pluginId, opts),
-    tapStop: (pluginId: string, tapId: string): Promise<unknown> =>
+    tapStop: (pluginId: string, tapId?: string): Promise<unknown> =>
       transport.invoke(IPC.bus.tapStop, pluginId, tapId),
     onMessage: (cb: (message: unknown) => void): (() => void) => {
       const listener = (message: unknown) => cb(message);

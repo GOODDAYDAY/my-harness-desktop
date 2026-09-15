@@ -170,7 +170,7 @@ export interface KernelApi {
     sessionAbort: (pluginId: string, session: string) => Promise<unknown>;
     channelMember: (pluginId: string, channel: string, action: "join" | "leave", member?: string) => Promise<unknown>;
     tapStart: (pluginId: string, opts: { session?: string; channel?: string; filter?: "done" | "lifecycle" | "stream"; deliverTo?: string }) => Promise<{ tapId: string; filter: string }>;
-    tapStop: (pluginId: string, tapId: string) => Promise<unknown>;
+    tapStop: (pluginId: string, tapId?: string) => Promise<unknown>;
     onMessage: (cb: (message: SessionBusMessage) => void) => () => void;
   };
   fs: {

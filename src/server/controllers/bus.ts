@@ -41,8 +41,8 @@ export function registerBus(gateway: Gateway, ctx: MainContext): void {
     assertBusPermission(pluginId);
     return sessionBus.opTapStart(`plugin:${pluginId}`, opts);
   });
-  gateway.register(IPC.bus.tapStop, (_e, pluginId: string, tapId: string) => {
+  gateway.register(IPC.bus.tapStop, (_e, pluginId: string, tapId?: string) => {
     assertBusPermission(pluginId);
-    return sessionBus.pluginTapStop(tapId);
+    return sessionBus.pluginTapStop(pluginId, tapId);
   });
 }

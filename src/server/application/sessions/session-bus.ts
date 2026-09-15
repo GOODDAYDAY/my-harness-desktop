@@ -186,13 +186,22 @@ export class SessionBus {
     await this.respondError(message, new Error(`undeliverable: 未知地址形态 ${message.to}`));
   }
 
-  /** 按帧型分派 streamingBehavior(路由器固定策略:响应=steer 插队,事件=followUp 排队)。 */
+  /** 按帧型分派 streamingBehavior(路由器固定策略:响应=steer 插队,事件=followUp 排队)。
+   *  失败不静默吞(根因修复,勿退回空 catch):此前 `.catch(() => {})` 把所有失败都解释成
+   *  「目标已死」,但真实原因至少有两种——会话不在线(合法,processExit 已广播 peer_left)
+   *  与内核不支持该投递模式(缺陷,必须可见)。后者被吞掉的症状是「dsh 会话收不到任何 bus 帧
+   *  且日志里看不出区别」(docs/design/bus-notification-defects-and-stats-handoff.md 缺陷 C)。 */
   private deliver(message: SessionBusMessage): void {
     if (isSessionAddress(message.to)) {
       const key = sessionKeyOf(message.to);
       void this.store
         .sendPromptTo(key, JSON.stringify(message), message.kind === "bus_response" ? "steer" : "followUp")
-        .catch(() => { /* 目标已死:投递静默失败(其 processExit 清理已广播 peer_left) */ });
+        .catch((err) => {
+          // 会话不在线 = 合法态(进程退出清理已广播 peer_left),不打日志噪音;
+          // 其余都是真缺陷(内核不支持/发送失败),必须可观测。
+          const offline = err instanceof Error && err.message.startsWith("会话不在线");
+          if (!offline) console.error(`[session-bus] 帧投递失败 kind=${message.kind} to=${message.to}:`, err);
+        });
       return;
     }
     if (isPluginAddress(message.to)) this.sink.broadcast(message);
@@ -267,8 +276,7 @@ export class SessionBus {
       case "tap_start":
         return this.opTapStart(origin, p);
       case "tap_stop":
-        this.taps.delete(String(p.tapId ?? ""));
-        return { stopped: true };
+        return this.stopSubscriptions(origin, String(p.tapId ?? ""));
       default:
         throw new Error(`未知 desktop op: ${op}`);
     }
@@ -290,7 +298,10 @@ export class SessionBus {
     const taps = [...this.taps.values()]
       .filter((t) => t.owner === origin || t.deliverTo === origin)
       .map((t) => ({ tapId: t.id, target: t.target, filter: t.filter, deliverTo: t.deliverTo, owner: t.owner }));
-    return { address: origin, channels: memberships, taps };
+    // watch 登记也要可见(缺陷 A 的可观测性半边):此前 bus_status 只输出 taps,
+    // 调用方看到 `taps: []` 会误判为「没有监听源」,而 session_done 照样在涌进来。
+    const watching = [...this.watchers].filter(([, set]) => set.has(origin)).map(([key]) => sessionAddress(key));
+    return { address: origin, channels: memberships, taps, watching };
   }
 
   opSessions(): unknown {
@@ -453,9 +464,37 @@ export class SessionBus {
     return this.opChannelMember(channel, action, member ?? pluginAddress(pluginId));
   }
 
-  pluginTapStop(tapId: string): unknown {
-    this.taps.delete(tapId);
-    return { stopped: true };
+  pluginTapStop(pluginId: string, tapId?: string): unknown {
+    return this.stopSubscriptions(pluginAddress(pluginId), tapId ?? "");
+  }
+
+  /** 停掉订阅。
+   *
+   *  根因修复(docs/design/bus-notification-defects-and-stats-handoff.md 缺陷 A):
+   *  此前 tap_stop 只删 this.taps 且无条件 `return {stopped: true}`,而 session_create(watch:true)
+   *  的登记在 this.watchers(settleSession 的通知集合 = watchers ∪ taps),工具集里没有任何 op
+   *  能撑销 watch——watch 成了单向门。更坑的是无条件 stopped:true 对不存在的 tapId 也说成功,
+   *  调用方无法发现自己没生效(实弹:一次盲审任务调了 19 次 tap_stop 全部无效却全部报成功)。
+   *
+   *  两种语义,由是否给 tapId 决定:
+   *  - 给了 tapId:只停那一个 tap(精确撑销),不连带清 watch。
+   *  - 未给 tapId:停掉本地址的**全部**订阅(taps 中 owner/deliverTo 为本地址的 + watchers 中
+   *    登记为本地址的)——这是使用者对「别再通知我」的真实意图,也是 watch 的撑销出口。
+   *  返回值诚实:stopped = 是否真的移除了至少一项;removed = 移除数量。 */
+  private stopSubscriptions(origin: string, tapId: string): unknown {
+    if (tapId) {
+      const deleted = this.taps.delete(tapId);
+      return { stopped: deleted, removed: deleted ? 1 : 0 };
+    }
+    let removed = 0;
+    for (const [id, tap] of [...this.taps]) {
+      if (tap.owner === origin || tap.deliverTo === origin) { this.taps.delete(id); removed += 1; }
+    }
+    for (const [key, set] of [...this.watchers]) {
+      if (set.delete(origin)) removed += 1;
+      if (set.size === 0) this.watchers.delete(key);
+    }
+    return { stopped: removed > 0, removed };
   }
 
   async pluginSessionCreate(pluginId: string, opts: Record<string, unknown>): Promise<unknown> {
@@ -465,7 +504,8 @@ export class SessionBus {
   // ============ 完成通知(§4:一次性交付完整输出) ============
 
   private async settleSession(sessionKey: string, status: SessionDoneStatus): Promise<void> {
-    const notify = new Set<string>(this.watchers.get(sessionKey) ?? []);
+    const watchers = this.watchers.get(sessionKey);
+    const notify = new Set<string>(watchers ?? []);
     for (const tap of this.taps.values()) {
       if (tap.target.session === sessionKey && tap.filter === "done") notify.add(tap.deliverTo);
     }
@@ -477,6 +517,15 @@ export class SessionBus {
         kind: "session_done", payload, timestamp: Date.now(),
       });
     }
+    // 根因修复(勿回退;docs/design/bus-notification-defects-and-stats-handoff.md 缺陷 B/D):
+    // watch 是「会话完成时通知一次」的一次性交付语义(session_create 描述:"you get session_done
+    // ... when it finishes"),但 settleSession 由每一轮 agentSettled 触发——此前投递后不清 watcher,
+    // 于是一个会话被反复 settle 就向同一 watcher 反复投 session_done。实弹:一次盲审派 13 个 watch
+    // 子会话,子会话间房间回声导致各自反复 agentSettled,父会话收到 289 帧、每帧占一个回合。
+    // 修法:投给 watcher 后即清除该会话的 watch 登记(一次性交付),从根上幂等——再多的 agentSettled
+    // 也不会重复通知。done 型 tap 是「显式持续观察」语义(调用方持 tapId 自行 tap_stop,且
+    // onProcessExit 会兼底清),与 watch 不同,不在这里清——避免破坏监督会话对多轮完成的持续观察。
+    if (watchers) this.watchers.delete(sessionKey);
   }
 
   /** 采集最终态完整输出——**不截断**(需求拍板:8000 token 截断删除,内容零丢失)。

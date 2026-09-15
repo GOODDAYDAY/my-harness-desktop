@@ -298,6 +298,93 @@ describe("SessionBus:tap 闸门与完成通知", () => {
   });
 });
 
+describe("SessionBus:订阅撑销(缺陷 A 守卫)", () => {
+  // 根因:此前 tap_stop 只删 taps 且无条件返回 {stopped:true},而 session_create(watch:true)
+  // 的登记在 watchers——watch 无法撑销,且失败被谎报成功。这几条把「能撑销 + 诚实返回」钉死。
+
+  it("不带 tapId 的 tap_stop:撑销本地址全部订阅(watch 登记也清),之后不再收 session_done", async () => {
+    const { store, prompts } = makeStore();
+    const { sink } = makeSink();
+    const bus = new SessionBus(store as never, sink);
+    // s1 watch 一个子会话,登记进 watchers
+    await bus.opSessionCreate(sessionAddress("s1"), { cwd: "/proj/x", watch: true });
+    // 不带 tapId 撑销 s1 的全部订阅(经真实 op 路径:上行帧 tap_stop)
+    await bus.handleFrame("s1", frame("session:s1", "desktop", "tap_stop", {}));
+    await settle();
+    // 子会话收敛:watcher 已撑销 → 不应再收到 session_done
+    prompts.length = 0;
+    bus.onSessionEvent({ type: "agentSettled", reason: "completed" } as unknown as SessionEvent, "spawned1");
+    await settle();
+    expect(framesOf(prompts, "s1").filter((m) => m.kind === "session_done")).toEqual([]);
+  });
+
+  it("不存在的 tapId:诚实返回 stopped:false(不再无条件 true 谎报成功)", async () => {
+    const { store, prompts } = makeStore();
+    const { sink } = makeSink();
+    const bus = new SessionBus(store as never, sink);
+    await bus.handleFrame("s1", frame("session:s1", "desktop", "tap_stop", { tapId: "no-such-tap" }));
+    await settle();
+    // tap_stop 的响应经 bus_response 回给发起方
+    const resp = framesOf(prompts, "s1").find((m) => m.kind === "bus_response");
+    expect(resp, "tap_stop 应回响应").toBeTruthy();
+    const payload = resp!.payload as { stopped: boolean; removed: number };
+    expect(payload.stopped, "对不存在 tapId 谎报成功 = 调用方无法发现未生效").toBe(false);
+    expect(payload.removed).toBe(0);
+  });
+
+  it("watch 是一次性交付:同一会话反复 agentSettled 只通知一次(缺陷 B/D 根因守卫)", async () => {
+    const { store, prompts } = makeStore();
+    const { sink } = makeSink();
+    const bus = new SessionBus(store as never, sink);
+    await bus.opSessionCreate(sessionAddress("s1"), { cwd: "/proj/x", watch: true });
+    // 实弹场景:子会话间房间回声导致同一会话反复 agentSettled
+    for (let i = 0; i < 5; i++) {
+      bus.onSessionEvent({ type: "agentSettled", reason: "completed" } as unknown as SessionEvent, "spawned1");
+      await settle();
+    }
+    const dones = framesOf(prompts, "s1").filter((m) => m.kind === "session_done");
+    expect(dones, "watch 应在首次完成通知后清除,反复 settle 不该重复通知").toHaveLength(1);
+  });
+
+  it("bus_status.me 暴露 watching(可观测性:调用方能自查 watch 登记,不再看到 taps:[] 就误判无监听源)", async () => {
+    const { store } = makeStore();
+    const { sink } = makeSink();
+    const bus = new SessionBus(store as never, sink);
+    await bus.opSessionCreate(sessionAddress("s1"), { cwd: "/proj/x", watch: true });
+    const who = bus.opWhoami(sessionAddress("s1")) as { watching: string[] };
+    expect(who.watching).toContain(sessionAddress("spawned1"));
+  });
+});
+
+describe("SessionBus:投递失败不静默吞(缺陷 C 的 bus 侧守卫)", () => {
+  it("sendPromptTo 抛非「会话不在线」错误时记日志(不把内核不支持伪装成目标已死)", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { store } = makeStore();
+    // 模拟一个真缺陷:sendPromptTo 抛「内核不支持」而非「会话不在线」
+    (store as unknown as { sendPromptTo: unknown }).sendPromptTo = () => Promise.reject(new Error("当前后端不支持 pi 专属命令"));
+    const { sink } = makeSink();
+    const bus = new SessionBus(store as never, sink);
+    bus.opChannelJoin("room", sessionAddress("s2"));
+    await bus.handleFrame("s1", frame("session:s1", channelAddress("room"), "chat", { text: "hi" }));
+    await settle();
+    expect(errSpy.mock.calls.some((c) => String(c[0]).includes("帧投递失败")), "内核不支持被静默吞掉 = 静默缺面").toBe(true);
+    errSpy.mockRestore();
+  });
+
+  it("sendPromptTo 抛「会话不在线」时不记日志(合法态,processExit 已广播 peer_left)", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { store } = makeStore();
+    (store as unknown as { sendPromptTo: unknown }).sendPromptTo = () => Promise.reject(new Error("会话不在线: s2"));
+    const { sink } = makeSink();
+    const bus = new SessionBus(store as never, sink);
+    bus.opChannelJoin("room", sessionAddress("s2"));
+    await bus.handleFrame("s1", frame("session:s1", channelAddress("room"), "chat", { text: "hi" }));
+    await settle();
+    expect(errSpy.mock.calls.some((c) => String(c[0]).includes("帧投递失败")), "会话不在线是合法态,不该刷错误日志").toBe(false);
+    errSpy.mockRestore();
+  });
+});
+
 describe("SessionBus:op 语义与清理", () => {
   it("session_reopen 的路径圈禁：只放行**任一内核会话根**内的文件", async () => {
     const { store } = makeStore({ sessionRoots: ["/kernels/pi/sessions", "/kernels/dsh/sessions"] });
