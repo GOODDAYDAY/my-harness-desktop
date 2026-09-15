@@ -13,7 +13,7 @@
 // 由调用方 MessageRow 统一,这里只做按钮组内排布。
 import type { NeutralMessage } from "@my-harness-desktop/shared";
 import { messageActionApplies } from "@my-harness-desktop/shared";
-import { useMessageActions, resolveMessageActionComponent } from "@my-harness-desktop/react";
+import { useMessageActions, resolveMessageActionComponent, PluginIdContext } from "@my-harness-desktop/react";
 
 export function MessageActionsHost({ message, text }: { message: NeutralMessage; text: string }): React.ReactNode {
   const slotActions = useMessageActions();
@@ -25,7 +25,17 @@ export function MessageActionsHost({ message, text }: { message: NeutralMessage;
   const render = (action: typeof leftActions[number]): React.ReactNode => {
     const Comp = resolveMessageActionComponent(action.pluginId, action.component);
     if (!Comp) return null;
-    return <Comp key={`${action.pluginId}:${action.id}`} message={message} text={text} />;
+    // 用贡献方 pluginId 包裹(与 composerActions/Stats/Top/Voice/Attachments 五个槽同款):
+    // 动作组件里的 usePluginId()/usePluginContext() 才能拿到**自己**的 id。此前没包,
+    // 贡献方拿到的是渲染它的 timeline 的 id(或空串)——retry/bookmarks/continue 目前只用
+    // ctx.events.invoke / ctx.tree(不依赖 pluginId 绑定)所以侥幸没炸,但这是与
+    // AttachmentRenderer 同源的潜在缺陷(那个已因 BasketBar 用作用域槽而实弹炸出),
+    // 一并补上,不留同类地雷。
+    return (
+      <PluginIdContext.Provider key={`${action.pluginId}:${action.id}`} value={action.pluginId}>
+        <Comp message={message} text={text} />
+      </PluginIdContext.Provider>
+    );
   };
 
   return (

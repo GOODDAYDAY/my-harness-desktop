@@ -739,10 +739,15 @@ export function TimelineView(): React.ReactNode {
 
   // 附件渲染槽(设计 §5.2):查槽取贡献组件(谁的数据谁画);数据仍经 composerAttachments 事件挂载。
   const attachmentContribs = useComposerAttachments();
+  // 必须一并带回贡献方 pluginId 并在渲染处用 PluginIdContext 包裹——与 composerActions/
+  // Stats/Top/Voice 四个槽同款。此前这里只取 Comp、丢了 pluginId(五个槽里唯一的遗漏),
+  // 于是贡献方组件里的 usePluginId() 读到**渲染它的那个插件**(timeline)的 id:
+  // review 的 BasketBar 用 useSessionScopeAccess 操作评论篮时 slotKey 算成 `timeline:basket`,
+  // 删除/编辑/清空全写进一个没人读的槽 → 按钮点了没反应(真机 e2e 拓到的实弹 bug)。
   const AttachmentRenderer = useMemo(() => {
     for (const c of attachmentContribs) {
       const Comp = getPluginComponent(c.pluginId, c.component) as React.ComponentType<ComposerAttachmentProps> | undefined;
-      if (Comp) return Comp;
+      if (Comp) return { Comp, pluginId: c.pluginId };
     }
     return undefined;
   }, [attachmentContribs]);
@@ -1315,7 +1320,9 @@ export function TimelineView(): React.ReactNode {
           />
         )}
         {matched?.items?.length && AttachmentRenderer ? (
-          <AttachmentRenderer payload={matched} />
+          <PluginIdContext.Provider value={AttachmentRenderer.pluginId}>
+            <AttachmentRenderer.Comp payload={matched} />
+          </PluginIdContext.Provider>
         ) : null}
         {/* 待发送图(表情包"加入输入框"):composer 上方展示,带移除按钮。 */}
         {composerImage && (
@@ -1382,7 +1389,7 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
   // 整消息渲染器优先(messageRenderers 槽,设计 §2.3):命中即整条交给插件,不进块管线。
   const PluginRenderer = getMessageRenderer(message.role);
   if (PluginRenderer) {
-    return <SlotRenderedRow renderer={PluginRenderer} message={message} />;
+    return <SlotRenderedRow renderer={PluginRenderer.comp} pluginId={PluginRenderer.pluginId} message={message} />;
   }
 
   // 图片消息(custom_message/customType:image 条目):会话流内置展示,不走块管线、
@@ -1497,9 +1504,15 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
 
 /** 整消息渲染器的流式壳:只有走 messageRenderers 槽的行才订阅全局 streaming,
  *  常规行不进这个分支,streaming 翻转时 DOM 稳定(选区/评论按钮存活)。 */
-function SlotRenderedRow({ renderer: Renderer, message }: { renderer: React.ComponentType<{ message: NeutralMessage; streaming: boolean }>; message: NeutralMessage }): React.ReactNode {
+function SlotRenderedRow({ renderer: Renderer, pluginId, message }: { renderer: React.ComponentType<{ message: NeutralMessage; streaming: boolean }>; pluginId: string; message: NeutralMessage }): React.ReactNode {
   const streaming = useSessionStore((s) => s.streaming);
-  return <Renderer message={message} streaming={streaming} />;
+  // 用贡献方 pluginId 包裹(与其余五个 composer 槽同款):组件里的 usePluginId/usePluginContext
+  // 才能拿到自己的 id。注册表已把 pluginId 与组件绑成一对,消费方无从遗漏。
+  return (
+    <PluginIdContext.Provider value={pluginId}>
+      <Renderer message={message} streaming={streaming} />
+    </PluginIdContext.Provider>
+  );
 }
 
 

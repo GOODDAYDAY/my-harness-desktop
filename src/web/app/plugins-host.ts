@@ -45,7 +45,7 @@ const pluginManifests = new Map<string, PluginListItem>();
  *  只负责「怎么拿到 mod」,收集口径单源。 */
 function collectModuleExports(pluginId: string, mod: Record<string, unknown>, manifest: PluginListItem): void {
   registerPluginComponents(mod, manifest.contributes ?? {});
-  registerPluginMessageRenderers(mod, manifest.contributes ?? {});
+  registerPluginMessageRenderers(pluginId, mod, manifest.contributes ?? {});
   const channels = mod.channels;
   if (Array.isArray(channels)) {
     // channelMeta 可选导出:channel 的可读描述(快捷键/命令面板动态列表用),缺省回退显示 channel 名。

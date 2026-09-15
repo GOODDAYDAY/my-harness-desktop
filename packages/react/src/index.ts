@@ -424,13 +424,19 @@ export interface MessageRendererProps {
   streaming: boolean;
 }
 
-const messageRendererComponents = new Map<string, ComponentType<MessageRendererProps>>();
+/** role → { 组件, 贡献方 pluginId }。
+ *
+ *  为什么必须记 pluginId:消费方渲染贡献组件时要用 PluginIdContext 包裹,组件里的
+ *  usePluginId()/usePluginContext() 才能拿到**自己**的 id。composerAttachments 槽就因为
+ *  消费方漏包 Provider 出过实弹 bug(review 的 BasketBar 把评论写进了 `timeline:basket`
+ *  这个没人读的槽)。注册表把 pluginId 与组件绑成一对后,消费方拿到就能包、无从遗漏。 */
+const messageRendererComponents = new Map<string, { comp: ComponentType<MessageRendererProps>; pluginId: string }>();
 
-export function registerMessageRenderer(role: string, comp: ComponentType<MessageRendererProps>): void {
-  messageRendererComponents.set(role, comp);
+export function registerMessageRenderer(role: string, comp: ComponentType<MessageRendererProps>, pluginId = ""): void {
+  messageRendererComponents.set(role, { comp, pluginId });
 }
 
-export function getMessageRenderer(role: string): ComponentType<MessageRendererProps> | undefined {
+export function getMessageRenderer(role: string): { comp: ComponentType<MessageRendererProps>; pluginId: string } | undefined {
   return messageRendererComponents.get(role);
 }
 
@@ -439,6 +445,7 @@ export function unregisterMessageRenderer(role: string): void {
 }
 
 export function registerPluginMessageRenderers(
+  pluginId: string,
   module: Record<string, unknown>,
   contributes: { messageRenderers?: { role: string; component: string }[] },
 ): void {
@@ -446,7 +453,7 @@ export function registerPluginMessageRenderers(
   for (const item of contributes.messageRenderers) {
     const comp = asReactComponent(module[item.component]);
     if (comp) {
-      messageRendererComponents.set(item.role, comp as ComponentType<MessageRendererProps>);
+      messageRendererComponents.set(item.role, { comp: comp as ComponentType<MessageRendererProps>, pluginId });
     } else {
       console.warn(`[registerPluginMessageRenderers] 组件 ${item.component} 未在 module exports 中找到 (role=${item.role})`);
     }

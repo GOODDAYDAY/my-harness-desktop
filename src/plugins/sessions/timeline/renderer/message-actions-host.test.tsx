@@ -13,11 +13,15 @@ import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import type { NeutralMessage } from "@my-harness-desktop/shared";
+import { usePluginId } from "@my-harness-desktop/react";
 
-/** 桩动作组件:渲染一个带 title 的按钮,title = 动作 id,便于按 title 查 DOM。 */
+/** 桩动作组件:渲染一个带 title 的按钮,title = 动作 id,便于按 title 查 DOM。
+ *  同时把 usePluginId() 读到的值写进 data-pluginid——用来断言宿主确实用**贡献方的**
+ *  pluginId 包了 PluginIdContext(不是渲染它的 timeline 的 id,也不是空串)。 */
 function stubAction(id: string): React.ComponentType<{ message: NeutralMessage; text: string }> {
   return function StubAction() {
-    return <button title={id}>{id}</button>;
+    const pluginId = usePluginId();
+    return <button title={id} data-pluginid={pluginId}>{id}</button>;
   };
 }
 
@@ -32,17 +36,23 @@ const SLOT_ACTIONS = [
   { id: "rewind", component: "RewindAction", placement: "right", when: { role: ["user"], settled: true }, order: 10, pluginId: "timeline" },
 ];
 
-vi.mock("@my-harness-desktop/react", () => ({
-  useMessageActions: () => SLOT_ACTIONS,
-  resolveMessageActionComponent: (_pluginId: string, component: string) => {
-    const map: Record<string, string> = {
-      RetryAction: "retry", ForkAction: "fork", BookmarkAction: "bookmark",
-      CopyAction: "copy", RewindAction: "rewind",
-    };
-    const id = map[component];
-    return id ? stubAction(id) : undefined;
-  },
-}));
+// 部分 mock:只桩掉槽清单与组件解析,**PluginIdContext 走真实 React Context**
+// (宿主用它给每个动作组件包贡献方 pluginId;mock 成假的会绕过这层,测不到真 Provider)。
+vi.mock("@my-harness-desktop/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@my-harness-desktop/react")>();
+  return {
+    ...actual,
+    useMessageActions: () => SLOT_ACTIONS,
+    resolveMessageActionComponent: (_pluginId: string, component: string) => {
+      const map: Record<string, string> = {
+        RetryAction: "retry", ForkAction: "fork", BookmarkAction: "bookmark",
+        CopyAction: "copy", RewindAction: "rewind",
+      };
+      const id = map[component];
+      return id ? stubAction(id) : undefined;
+    },
+  };
+});
 
 import { MessageActionsHost } from "./message-actions-host";
 
@@ -92,6 +102,18 @@ describe("MessageActionsHost:流式生成中的粒度是「行」不是「会话
   it("在飞的 pending user 行(乐观回显):rewind 不渲染", () => {
     render(<MessageActionsHost message={userMsg(true)} text="问题" />);
     expect(screen.queryByTitle("rewind")).not.toBeInTheDocument();
+  });
+
+  // 宿主必须用**贡献方**的 pluginId 包 Provider:动作组件里的 usePluginContext() 才是
+  // pluginId 绑定的(config/events 的归属)。漏包时组件拿到渲染方(timeline)的 id 或空串,
+  // 写进作用域槽就会落到 `timeline:xxx` 这种没人读的键上——composerAttachments 槽踩过
+  // (review 的 BasketBar 删除写进了 timeline:basket),同一缺陷族,一并钉住。
+  it("每个动作组件拿到的 pluginId 是它自己的贡献方 id(不是宿主 timeline、不是空串)", () => {
+    render(<MessageActionsHost message={assistant(false)} text="回答" />);
+    expect(screen.getByTitle("retry")).toHaveAttribute("data-pluginid", "retry");
+    expect(screen.getByTitle("fork")).toHaveAttribute("data-pluginid", "session-bookmarks");
+    expect(screen.getByTitle("bookmark")).toHaveAttribute("data-pluginid", "session-bookmarks");
+    expect(screen.getByTitle("copy")).toHaveAttribute("data-pluginid", "timeline");
   });
 
   it("未声明 when 的动作适用任意 role(divider 行仍有 copy):settled 不误伤非锚点类", () => {
