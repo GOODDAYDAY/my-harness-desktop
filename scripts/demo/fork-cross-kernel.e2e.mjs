@@ -170,6 +170,9 @@ try {
     ta.dispatchEvent(new Event("input", { bubbles: true }));
     ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
   });
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：两阶段收敛的第二阶段——
+  // 等「停止」消失（streaming 收尾）。等不到也继续：后续断言读的是终态 DOM，
+  // 若仍在 streaming 会由那些断言报出来，而不是在这里静默吞掉一个『没收尾』的信号。
   await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 120000, polling: 500 }).catch(() => {});
   await waitForDomIdle(page, { quietMs: 600, timeoutMs: 8000 }).catch(() => {});
 

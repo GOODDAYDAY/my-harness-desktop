@@ -69,6 +69,8 @@ try {
   });
   ok(!!rowBox, "找到会话行");
   await page.mouse.click(rowBox.x, rowBox.y, { button: "right" });
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：等右键/溢出菜单展开，
+  // 只为让后续对菜单项的采样稳定；菜单真没出来时，下面对**菜单项**的断言会自己红。
   await page.waitForSelector("[role='menu']", { timeout: 8000 }).catch(() => {});
   // Radix ContextMenu.Item 的 onSelect 用可信点击触发(合成 click 不保证触发)——取菜单项坐标 mouse.click
   const itemBox = await page.evaluate(() => {
@@ -81,6 +83,9 @@ try {
   await page.mouse.click(itemBox.x, itemBox.y);
 
   // 编辑行没有 data-session-path(编辑态行是另一个 div),按 value 找 rename input
+  // best-effort settle（r124 单独判定）：等重命名输入框带上当前名字。
+  // 等不到也继续：后面会直接读输入框的 value 并断言，
+  // 值不对时那条断言会红——这里只是给渲染一点时间。
   await page.waitForFunction(() => [...document.querySelectorAll("input")].some((i) => i.value === "rename 源"), { timeout: 8000, polling: 200 }).catch(() => {});
   const typed = await page.evaluate(() => {
     const inp = [...document.querySelectorAll("input")].find((i) => i.value === "rename 源");

@@ -65,19 +65,25 @@ try {
 
   // 点「搜索会话」图标(默认隐藏 input 的入口)
   await page.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find((x) => (x.getAttribute("aria-label") || "").includes("搜索会话"));
+    // r124：改用稳定锚点。此前按 aria-label 是否含「搜索会话」找按钮——语言绑定探针
+    //   （aria-label={t("sessions.search")} 随语言变），换 locale 就找不到、整段搜索测试空转。
+    //   ⚠ 注意区分：data-session-search 是**展开/收起搜索的按钮**，
+    //     data-session-search-input 才是**输入框**（产品侧 476-477 行的注释早就写明了这个区分）。
+    const b = document.querySelector("[data-session-search]");
     b?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
-  await page.waitForSelector("input[placeholder*='搜索会话']", { timeout: 8000 }).catch(() => {});
+  // r124：改用稳定锚点（此前 input[placeholder*='搜索会话'] 是语言绑定探针）。
+  // 这里等不到就**必须失败**：后面整段都依赖搜索框存在，静默吞掉会让下游断言基于假前提。
+  await page.waitForSelector("[data-session-search-input]", { timeout: 8000 });
   // 等展开动画落定(AnimatePresence height/opacity 0.18s):输入框仍处于 height:0/opacity:0
   // 时 page.click 点不到、keyboard 敲不进(实测 inputValue 恒空)。
   await waitForDomIdle(page, { quietMs: 300, timeoutMs: 5000 }).catch(() => {});
-  const inputShown = await page.evaluate(() => !!document.querySelector("input[placeholder*='搜索会话']"));
+  const inputShown = await page.evaluate(() => !!document.querySelector("[data-session-search-input]"));
   ok(inputShown, "点搜索图标后输入框出现(隐藏→toggle)");
 
   // 输入 alpha → 过滤(真实键盘键入:合成 setter+input 事件绕过 React 的 _valueTracker,
   // 不触发受控 input 的 onChange → query 恒空 → 过滤不生效)
-  await page.click("input[placeholder*='搜索会话']");
+  await page.click("[data-session-search-input]");
   await page.keyboard.type("alpha");
   await waitForDomIdle(page, { quietMs: 500, timeoutMs: 5000 }).catch(() => {});
   const filtered = await page.evaluate(() => {

@@ -82,6 +82,8 @@ try {
 
   // 打开草稿源会话
   await openSession();
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：先等『有消息行』这个泛条件，
+  // 再等目标那条；泛条件等不到时后面的具体等待会自己超时并报出来，所以这里吞掉失败是安全的。
   await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length > 0, { timeout: 10000, polling: 300 }).catch(() => {});
 
   // 1) 会话 A 写草稿 A

@@ -64,6 +64,8 @@ try {
   if (!(await clickByText(page, "收藏fork源"))) throw new Error("未找到「收藏fork源」行");
   // 两阶段收敛:泛条件(messages>0)通过 ≠ 目标那条在 DOM 里 —— 必须等**目标内容**出现再取样
   // (skills §10.3.1;本断言「找到 assistant 消息行」在 fork-cross-kernel / bookmark-fork 都栽过)。
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：先等『有消息行』这个泛条件，
+  // 再等目标那条；泛条件等不到时后面的具体等待会自己超时并报出来，所以这里吞掉失败是安全的。
   await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length > 0, { timeout: 10000, polling: 300 }).catch(() => {});
   await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((r) => (r.textContent || "").includes("答完了。")),
@@ -90,6 +92,9 @@ try {
   ok(bookmarked, "点击消息行内「收藏」");
 
   // 收藏面板由 revealOn 自动揭示——等收藏行出现
+  // best-effort settle（r124 单独判定）：等收藏条目渲染出来。
+  // 等不到时紧随其后的『收藏条目数』断言会自己红（那才是该报的地方），
+  // 所以这里吞掉失败不会掩盖缺陷。
   await page.waitForFunction(() => !!document.querySelector("[data-bookmark-id]"), { timeout: 10000, polling: 300 }).catch(() => {});
   const bmRow = await page.evaluate(() => {
     const row = document.querySelector("[data-bookmark-id]");

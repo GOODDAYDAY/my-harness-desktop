@@ -68,6 +68,8 @@ try {
   });
   if (!triggerRect) throw new Error("未找到模型下拉触发器");
   await page.mouse.click(triggerRect.x, triggerRect.y);
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：等右键/溢出菜单展开，
+  // 只为让后续对菜单项的采样稳定；菜单真没出来时，下面对**菜单项**的断言会自己红。
   await page.waitForSelector("[role='menu']", { timeout: 4000 }).catch(() => {});
   ok(true, "模型下拉已打开");
 
@@ -112,7 +114,13 @@ try {
   if (!sendRect) throw new Error("未找到发送按钮");
   await page.mouse.click(sendRect.x, sendRect.y);
 
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：两阶段收敛的第一阶段——
+  // 等「停止」出现。零 token / 模型端点不可达的剧本里 streaming 可能**从不开始**，
+  // 停止钮合法地不出现，所以等不到不算失败（真失败由『发送后该出现的产物』那些断言报出来）。
   await page.waitForSelector("[data-composer-stop]", { timeout: 30000 }).catch(() => {});
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：两阶段收敛的第二阶段——
+  // 等「停止」消失（streaming 收尾）。等不到也继续：后续断言读的是终态 DOM，
+  // 若仍在 streaming 会由那些断言报出来，而不是在这里静默吞掉一个『没收尾』的信号。
   await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 120000, polling: 1000 }).catch(() => {});
   const replied = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => {

@@ -91,6 +91,8 @@ try {
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
   await page.mouse.click(triggerRect.x, triggerRect.y);
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：等右键/溢出菜单展开，
+  // 只为让后续对菜单项的采样稳定；菜单真没出来时，下面对**菜单项**的断言会自己红。
   await page.waitForSelector("[role='menu']", { timeout: 5000 }).catch(() => {});
   // 多内核时下拉先按内核分 TAB（隔离 HOME 里 pi 的真实清单也在），先点 minimal TAB。
   // 单内核（只有 minimal）时没有 TAB，点了也白点——所以是**条件式**，不硬断言 TAB 存在。

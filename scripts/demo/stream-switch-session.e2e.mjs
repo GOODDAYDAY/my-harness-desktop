@@ -59,6 +59,8 @@ try {
     trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
     trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：等右键/溢出菜单展开，
+  // 只为让后续对菜单项的采样稳定；菜单真没出来时，下面对**菜单项**的断言会自己红。
   await page.waitForSelector("[role='menu']", { timeout: 6000 }).catch(() => {});
   await page.evaluate(() => {
     const tab = [...(document.querySelector("[role='menu']")?.querySelectorAll("button") ?? [])]

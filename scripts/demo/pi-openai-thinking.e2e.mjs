@@ -77,6 +77,9 @@ try {
   await setComposer("1+1=? 想一想再回答");
   await clickSend();
   // 收敛
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：两阶段收敛的第一阶段——
+  // 等「停止」出现。零 token / 模型端点不可达的剧本里 streaming 可能**从不开始**，
+  // 停止钮合法地不出现，所以等不到不算失败（真失败由『发送后该出现的产物』那些断言报出来）。
   await page.waitForSelector("[data-composer-stop]", { timeout: 25000 }).catch(() => {});
   await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 150000, polling: 500 });
   await waitForDomIdle(page, { quietMs: 600, timeoutMs: 8000 }).catch(() => {});

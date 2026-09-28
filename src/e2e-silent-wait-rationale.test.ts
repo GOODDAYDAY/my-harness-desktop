@@ -46,7 +46,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 /** r122 实测基线。只许减少；每消化一批（写理由或改成显式布尔探针）就下调。 */
-const CEILING = 43;   // r122 基线 50 → r123 标注 minimal-smoke 后 43（只许继续减少）
+const CEILING = 0;   // r122 基线 50 → r123 标注 minimal-smoke → 43 → r124 全部消化完毕 **0**（从此必须为 0）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -136,16 +136,16 @@ describe("e2e 剧本：丢弃结果的等待必须带行内理由（棘轮）", 
       "语料里应有显式布尔探针样本（用于确认判据没把它算进来）").toBe(true);
   });
 
-  it(`② 棘轮：无理由的「丢弃结果等待」只许减少（r122 基线 ${CEILING}）`, () => {
-    expect(bare.length, [
+  it(`② 棘轮：无理由的「丢弃结果等待」必须为 0（r124 起全部消化完毕）`, () => {
+    expect(bare, [
       `无行内理由的「丢弃结果等待」从 ${CEILING} 涨到了 ${bare.length}。`,
       "      处置二选一（不要只为了让它变绿而加一句敷衍注释）：",
       "      · 若确实 best-effort（等不到也继续是对的）⇒ 在同行或上一行写清**为什么可以吞掉失败**；",
       "      · 若下游断言其实依赖它 ⇒ 改成显式布尔探针：",
       "        `const appeared = await page.waitForSelector(sel, {timeout}).then(() => true).catch(() => false);`",
       "        然后 `ok(appeared, …)` —— 等不到就红，不会静默（r118/r121 两次事故都源于静默）。",
-      `      当前前 8 处：${bare.slice(0, 8).map((b) => b.where).join(", ")}`,
-    ].join("\n")).toBeLessThanOrEqual(CEILING);
+      `      当前 ${bare.length} 处：${bare.slice(0, 8).map((b) => b.where).join(", ")}`,
+    ].join("\n")).toEqual([]);
   });
 
   it("③ 分布可见：按剧本统计（便于逐轮消化，而不是只看总数）", () => {

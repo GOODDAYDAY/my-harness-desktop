@@ -94,6 +94,9 @@ const clickConfirm = async () => {
     await new Promise((res) => setTimeout(res, 25));
   }
   // 等浮层消失（保存完成后 activeDirty 清空 → 浮层卸载）
+  // best-effort settle（r124 单独判定）：等保存浮层消失。
+  // 等不到也继续：紧随其后的是对**盘上内容**的断言（读文件而不是读浮层），
+  // 所以浮层没消失不会影响结论；真出问题会由盘上内容断言报出来。
   await page.waitForFunction(() => !document.querySelector('[data-settings-save="confirm"]'), { timeout: 15000, polling: 300 }).catch(() => {});
   await waitForDomIdle(page, { quietMs: 500, timeoutMs: 10000 }).catch(() => {});
 };

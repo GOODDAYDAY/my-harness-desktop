@@ -338,6 +338,8 @@ try {
   note("幕C 当前可见模型项", JSON.stringify(c0.items.slice(0, 6)));
   await page.keyboard.press("Escape");
   // 探针开的菜单必须等它真关掉——否则 pickModel 的触发器点击把已开的菜单 toggle 关掉(实测踩过)
+  // best-effort settle（r124 标注，同族判定见 minimal-smoke r123）：等右键/溢出菜单展开，
+  // 只为让后续对菜单项的采样稳定；菜单真没出来时，下面对**菜单项**的断言会自己红。
   await page.waitForFunction(() => !document.querySelector("[role='menu']"), { timeout: 5000 }).catch(() => {});
   await pickModel("kimi-k3 dashscope", "dsh");
   ok(await setComposer("ping,只回 pong"), "幕C 输入框写入");
@@ -426,6 +428,11 @@ try {
   ok(await setComposer("再说一遍 pong"), "幕D 输入框写入");
   ok(await clickSend(), "幕D 发送点击");
   await settle();
+  // best-effort settle（r124 单独判定）：等「思考强度」分隔线的文案出现。
+  // 等不到也继续——下一行会**独立采样**同一个条件并用 note 记下来（d3），
+  // 所以这里的等待只是给渲染时间，吞掉失败不会掩盖任何结论。
+  // ⚠ 注意：采样用的是中文文案（语言绑定），本剧本只跑 zh-CN；若将来要跨语言跑，
+  //   需给分隔线补 data-* 锚点（与 r124 给搜索框补锚点同一处置）。
   await page.waitForFunction(() => document.body.innerText.includes("思考强度"), { timeout: 10000, polling: 300 }).catch(() => {});
   const d3 = await page.evaluate(() => document.body.innerText.includes("思考强度"));
   note("幕D 思考强度分隔线出现", d3);
