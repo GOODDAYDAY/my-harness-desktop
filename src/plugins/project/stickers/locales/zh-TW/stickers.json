@@ -53,5 +53,6 @@
   "stickers.exportedZip": "已匯出表情包 zip",
   "stickers.exportFailed": "匯出失敗：{{detail}}",
   "stickers.importFailed": "匯入失敗：{{detail}}",
-  "stickers.saveFailed": "儲存失敗：{{detail}}"
+  "stickers.saveFailed": "儲存失敗：{{detail}}",
+  "stickers.pickImageFailed": "無法開啟圖片選擇器：{{detail}}（遠端/瀏覽器存取下不支援系統對話框，請在本機視窗裡操作）"
 }

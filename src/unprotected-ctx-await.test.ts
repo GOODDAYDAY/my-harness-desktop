@@ -65,7 +65,13 @@ const LEDGER: { api: string; count: number; consequence: string; disposition: "a
   { api: "ctx.configFile.get", count: 1, disposition: "acceptable", consequence: "stickers 读取配置文件失败 ⇒ 表情包列表显示空态；用户重开面板即恢复，不会误以为已保存了什么" },
   { api: "ctx.dialog.openDirectory", count: 2, disposition: "acceptable",
     consequence: "多数情况是用户取消选择；真失败时对话框自身会报错" },
-  { api: "ctx.dialog.openImages", count: 1, disposition: "acceptable", consequence: "多数情况是用户在图片选择框里取消；真失败时系统对话框自身会报错，用户不会误以为图片已添加" },
+  // r136 删除本条目：调用点已修（sticker-card.tsx 的 pickBanner 现在 try/catch + 播报），
+  //   按 r83 的规则「调用点修好 ⇒ 删条目」。顺带更正原条目的理由——它写着
+  //   『真失败时系统对话框自身会报错，用户不会误以为图片已添加』，这是**错的**：
+  //   远程/浏览器宿主下对话框能力是 UNSUPPORTED_HOST，**系统对话框根本没打开**，
+  //   所以没有任何东西会替它报错；而 handler 裸 await 抛错 ⇒ unhandled rejection ⇒ 零反馈。
+  //   > 教训：账本里 acceptable 的理由也要能被证伪。这条理由听起来合理（本地确实如此），
+  //   > 但它默认了"对话框总是能打开"，而这正是 Host 抽象存在的原因（多宿主）。
   { api: "ctx.dialog.openZip", count: 1, disposition: "acceptable", consequence: "多数情况是用户取消选择压缩包；真失败时系统对话框自身会报错，且导入是用户主动发起的、没有产出他就会重试" },
   { api: "ctx.dialog.writeImages", count: 1, disposition: "acceptable", consequence: "导出失败 ⇒ 无文件产出；用户会立刻发现（导出是他主动发起的）" },
   // ⚠ `ctx.plugins.list` 的条目在 r83 被**删除**（不是改成 acceptable）：

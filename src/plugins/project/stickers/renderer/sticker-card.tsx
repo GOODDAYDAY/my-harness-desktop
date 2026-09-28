@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Globe, Folder, ImagePlus, Loader2, Pencil, Send, TextCursorInput, Trash2, X } from "lucide-react";
-import { PanelIconButton, usePluginContext , copyToClipboard } from "@my-harness-desktop/react";
+import { PanelIconButton, usePluginContext, copyToClipboard, announceTransient } from "@my-harness-desktop/react";
 import type { PluginContext } from "@my-harness-desktop/shared";
 import { StickerCard } from "./sticker";
 import type { LayeredSticker } from "../client/stickers-store";
@@ -257,7 +257,23 @@ export function StickerEditor({ initial, onSave, onCancel }: StickerEditorProps)
   const preview = uploaded ? `data:${uploaded.mimeType};base64,${uploaded.base64}` : existingUri;
 
   const pickBanner = async (): Promise<void> => {
-    const imgs = await ctx.dialog.openImages();
+    // ⚠ 必须兜住（r136）：这是用户动作（点「换图」），而 `ctx.dialog.openImages()` 有
+    //   **确定的失败路径**——远程/浏览器宿主下对话框能力是显式不支持的（UNSUPPORTED_HOST），
+    //   此时它会 reject。裸 await 的后果：handler 抛错 ⇒ unhandled rejection ⇒
+    //   用户点了按钮**什么都没发生、也没有任何提示**（§7.6 禁止的静默失败）。
+    //   同族的保存路径 r83 已经用 mutate 兜住了，这个入口当时漏了
+    //   （r120 的教训：修一类缺陷要在同文件搜完同类）。
+    //   失败文案要给出**可执行的下一步**（在本机窗口里操作），而不是只说"失败了"。
+    let imgs: { name: string; data: string; mimeType: string }[];
+    try {
+      imgs = await ctx.dialog.openImages();
+    } catch (err) {
+      announceTransient(
+        t("stickers.pickImageFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
+      return;
+    }
     if (imgs.length === 0) return;
     const img = imgs[0];
     setUploaded({ base64: img.data, mimeType: img.mimeType });
