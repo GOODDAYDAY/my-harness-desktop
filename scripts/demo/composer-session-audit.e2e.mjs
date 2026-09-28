@@ -135,6 +135,9 @@ try {
       hasThinkingAnchor: !!document.querySelector("[data-composer-thinking]"),
       sendLabel: send?.getAttribute("aria-label") ?? null,
       sendDisabled: send ? send.disabled : null,
+      // r119：发送钮的排队态**状态位**（streaming 时 aria-label 会从"发送"变"排队发送"，
+      // 所以状态不能从文案反推——r96 的通则）。静息态必须是 "false"。
+      sendQueued: document.querySelector("[data-composer-send]")?.getAttribute("data-composer-queued") ?? null,
       buttonsInForm: [...form.querySelectorAll("button")].length,
       unnamedButtons: [...form.querySelectorAll("button")].filter((b) =>
         !(b.getAttribute("aria-label") || b.getAttribute("title") || (b.textContent || "").trim())).length,
@@ -147,7 +150,11 @@ try {
     `模型锚点值形如 <kernel>:<provider>/<model>（实际 ${composer.modelAnchorValue}）`);
   ok(!!composer.modelAnchorText, `模型锚点渲染出可读模型名（「${composer.modelAnchorText}」）`);
   ok(composer.unnamedButtons === 0, `composer 内所有按钮都有可访问名（无名 ${composer.unnamedButtons} 个）`);
-  console.log(`  · 发送钮 aria-label=${JSON.stringify(composer.sendLabel)} disabled=${composer.sendDisabled}；思考档位锚点=${composer.hasThinkingAnchor}`);
+  console.log(`  · 发送钮 aria-label=${JSON.stringify(composer.sendLabel)} disabled=${composer.sendDisabled} 排队态=${composer.sendQueued}；思考档位锚点=${composer.hasThinkingAnchor}`);
+  // r119：断言排队态**状态位**（不是从 aria-label 文案反推——那个文案随语言与 streaming 变）。
+  //   静息态（还没发送）必须是 "false"；若为 "true" 说明按钮卡在排队态。
+  ok(composer.sendQueued === "false",
+    `发送钮静息态 data-composer-queued 应为 "false"（实际 ${JSON.stringify(composer.sendQueued)}）`);
 
   // 空输入 → 发送应当禁用（或点击无效）；键入后 → 可用
   const before = await page.evaluate(() => {
