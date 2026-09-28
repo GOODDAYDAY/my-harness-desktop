@@ -103,7 +103,7 @@ banner 图是「图文件 + 条目里的逻辑路径引用」两段式：
 
 `utf8ToBase64` / `utf8FromBase64`（`:237`、`:241`）：renderer 是 Chromium 环境没有 Node Buffer，用 `TextEncoder`/`btoa` 和 `TextDecoder`/`atob` 做 UTF-8 安全编码——zip 包里的 manifest 是 JSON 且可能含中文标题，`btoa` 直接吃非 Latin-1 字符串会崩，必须走 UTF-8。
 
-**遗留代码（已不接线，别误当功能）**：`exportStickers`（JSON 版，`:169`）、`importStickers`（JSON 版，`:185`）、`importImages`（`:207`）、`exportStickerImages`（`:219`）四个函数在 store 里仍 export，但 `renderer/index.tsx` 的 import 清单（`:31-35`）只引了 `exportStickersZip, importStickersZip` 做导入导出，四个旧函数无任何调用点——是 zip 方案上线后没清掉的旧入口（JSON 导入导出被 zip 取代，`importImages`/`exportStickerImages` 是早期的图入口）。它们仍在编译面暴露，属 stale 代码，不参与运行时路径。
+**遗留代码已整族删除（r139）**：`exportStickers`（JSON 版）、`importStickers`（JSON 版）、`importImages`、`exportStickerImages` 四个函数曾长期 export 但**零调用方**（zip 方案上线后被取代），已于 r139 从 `client/stickers-store.ts` 整族删除（同批更新本文档，§5.5 结构改动的随批义务）。删除前逐个确证零调用方：全仓引用只剩本文档与 `src/unprotected-ctx-await.test.ts` 的账本注释。⚠ 之所以整族一次删而不是逐个删：半删会留下「删了一半的遗留族」，读者无法判断哪些还有效（r138 的通则）。现存的导入导出入口只有 `exportStickersZip` / `importStickersZip`。
 
 ## 4 内置表情包：镜像 + 只读消费
 
@@ -354,4 +354,4 @@ vision 图是另一条路，stickers 不涉及，但必须列出来对照才能�
 
 **Q：stickers-store 里那几个 export 但没接线的函数是干嘛的？**
 
-`exportStickers`/`importStickers`（JSON 版）和 `importImages`/`exportStickerImages` 是 zip 方案上线前的旧入口，现在 `renderer/index.tsx` 只 import `exportStickersZip, importStickersZip`，四个旧函数无调用点，属 stale 代码。JSON 导入导出被 zip 取代（zip 能带图、JSON 只能带 base64 单文件），图片导入导出被「设置页 zip 整体导入导出」取代。它们仍在编译面暴露但不参与运行时路径，未来清理熵增时可删。
+`exportStickers`/`importStickers`（JSON 版）和 `importImages`/`exportStickerImages` 是 zip 方案上线前的旧入口，**已于 r139 整族删除**（此前长期零调用点，属 stale 代码）。JSON 导入导出被 zip 取代（zip 能带图、JSON 只能带 base64 内联，体积与可移植性都更差）。现存入口：`exportStickersZip` / `importStickersZip`。
