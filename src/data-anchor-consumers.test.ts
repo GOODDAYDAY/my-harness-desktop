@@ -126,7 +126,16 @@ describe("data-* 探针锚点：发出 ⇔ 消费对账", () => {
   const emittedBy = new Map<string, Set<string>>();   // 锚点 → 发出它的文件集合（r125）
   for (const f of prod) {
     const rel = relative(ROOT, f);
-    const src = readFileSync(f, "utf-8");
+    // ⚠ 必须**剥注释**再扫（r125，反向注入时发现的判据缺陷）：
+    //   首版直接扫原文，于是注释里提到的锚点名也算"发出"。反证：把
+    //   `// data-r125-collision 注入` 写进两个文件的注释里，③ 就把它们当成
+    //   "同名锚点被两个文件发出"报了出来——而产品其实一个都没发。
+    //   这与 r113 给 e2e-anchor-coverage 补的"两侧都剥注释"是同一条纪律：
+    //   **对账类判据的两侧（发出方 / 消费方）必须在同一套预处理下比较**，
+    //   一侧剥注释、另一侧不剥，就会同时产生假阳性与假阴性。
+    //   消费方侧（consumerFiles）本来就读原文——那里也需要剥，见下。
+    const raw = readFileSync(f, "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const src = raw.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
     for (const m of src.matchAll(EMIT)) {
       if (!emitted.has(m[1])) emitted.set(m[1], rel);
       (emittedBy.get(m[1]) ?? emittedBy.set(m[1], new Set()).get(m[1])!).add(rel);
@@ -137,7 +146,11 @@ describe("data-* 探针锚点：发出 ⇔ 消费对账", () => {
     .map(([k, v]) => ({ anchor: k, files: [...v].sort() })).sort((a, b) => a.anchor.localeCompare(b.anchor));
   const used = new Set<string>();
   for (const f of cons) {
-    for (const m of readFileSync(f, "utf-8").matchAll(REF)) used.add(m[1]);
+    // 同样剥注释（r125）：账本/说明性注释里写到的锚点名不算"消费"，
+    //   否则守卫会被自己的账本自证清白（r111 已排除守卫自身，但别的测试文件的注释同样会污染）。
+    const raw = readFileSync(f, "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const code = raw.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+    for (const m of code.matchAll(REF)) used.add(m[1]);
   }
   const dead = [...emitted.keys()].filter((k) => !used.has(k)).sort();
 
@@ -192,10 +205,8 @@ describe("data-* 探针锚点：发出 ⇔ 消费对账", () => {
   const MULTI_FILE_LEDGER: { anchor: string; semantics: string }[] = [
     { anchor: "data-message-id",
       semantics: "消息行的 id——timeline / review / session-colors 三处各自渲染消息行，语义同一（同一条消息在哪个视图里都是它）" },
-    { anchor: "data-section-header",
-      semantics: "侧栏分组的**标题行**——section.tsx（分组组件本体）与 sidebar.tsx（容器）共用同一语义；与 data-section-collapsed 配对使用（一个定位标题行、一个读折叠态）。r125 由守卫发现（Python 预估脚本漏了它，说明两侧判据有细微差别，以守卫为准）" },
     { anchor: "data-section-collapsed",
-      semantics: "侧栏分组的折叠态——section.tsx（分组组件本体）与 sidebar.tsx（容器）共用同一语义，供剧本判展开/收起" },
+      semantics: "侧栏分组的折叠态——section.tsx（分组组件本体）与 sidebar.tsx（容器）共用同一语义，供剧本判展开/收起。⚠ 同族的 data-section-header **不在本账本**：它在 sidebar.tsx 里只出现在注释与选择器中（消费方），真正发出只有 section.tsx 一处——r125 首版把它登记进来是靠未剥注释的判据得到的假阳性" },
     { anchor: "data-session-path",
       semantics: "会话行的路径标识——两个会话列表视图（主列表与搜索结果）各渲染一次，语义同一" },
     { anchor: "data-sidebar-style",
