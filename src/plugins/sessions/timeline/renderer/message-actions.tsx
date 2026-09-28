@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Undo2 } from "lucide-react";
-import { usePluginContext, type MessageActionProps } from "@my-harness-desktop/react";
+import { usePluginContext, type MessageActionProps , copyToClipboard } from "@my-harness-desktop/react";
 
 const STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer";
 
@@ -12,7 +12,8 @@ export function CopyAction({ text }: MessageActionProps): React.ReactNode {
   return (
     <button
       onClick={async () => {
-        await navigator.clipboard.writeText(text);
+        // r134：改走统一原语（此前抛错会从 onClick 冒出去成 unhandled rejection）
+        if (!(await copyToClipboard(text))) return;
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}

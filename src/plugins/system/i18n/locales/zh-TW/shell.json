@@ -60,5 +60,7 @@
   "shell.configWriteFailed": "設定儲存失敗：{{detail}}",
   "shell.layoutSaveFailed": "版面儲存失敗：{{detail}}",
   "shell.installZipUnsupported": "ZIP 格式暂未支援，請使用 .tar.gz",
-  "shell.settingsLoadFailed": "設定載入失敗：{{detail}}"
+  "shell.settingsLoadFailed": "設定載入失敗：{{detail}}",
+  "shell.clipboardFailed": "複製失敗：{{detail}}",
+  "shell.clipboardUnavailable": "目前環境不提供剪貼簿（瀏覽器只在安全上下文開放它：請用本機或 https 存取）"
 }

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Globe, Folder, ImagePlus, Loader2, Pencil, Send, TextCursorInput, Trash2, X } from "lucide-react";
-import { PanelIconButton, usePluginContext } from "@my-harness-desktop/react";
+import { PanelIconButton, usePluginContext , copyToClipboard } from "@my-harness-desktop/react";
 import type { PluginContext } from "@my-harness-desktop/shared";
 import { StickerCard } from "./sticker";
 import type { LayeredSticker } from "../client/stickers-store";
@@ -46,7 +46,7 @@ export function useCopyFeedback(text: string): { copied: boolean; copy: () => vo
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const copy = useCallback((): void => {
-    void navigator.clipboard.writeText(text);
+    void copyToClipboard(text);   // r134：统一原语（失败会播报，不再静默 + unhandled rejection）
     setCopied(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), 1500);

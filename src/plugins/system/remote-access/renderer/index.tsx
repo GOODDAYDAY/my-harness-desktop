@@ -8,7 +8,7 @@
 // - 控件一律用框架 Button(control-geometry 等高);输入框按同一几何契约手写尺寸。
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, SettingsSection } from "@my-harness-desktop/react";
+import { Button, SettingsSection , copyToClipboard } from "@my-harness-desktop/react";
 
 /** 脱敏后的远程访问状态(服务端不落 hash 出边界)。 */
 interface RemoteStatus {
@@ -78,11 +78,15 @@ function UrlValue({ url }: { url: string }): React.ReactNode {
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   const copy = () => {
-    void navigator.clipboard?.writeText(url).then(() => {
+    // r134：改走统一原语。此前 .catch 注释写"剪贴板不可用:保持可手动选择复制"——
+    // 但远程访问恰恰最可能跑在 http（非安全上下文）下、也就是剪贴板最可能不可用的场景，
+    // 静默会让用户以为复制成功了；现在失败会播报并说明"请用本机或 https 访问"。
+    void copyToClipboard(url).then((ok) => {
+      if (!ok) return;
       setCopied(true);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1600);
-    }).catch(() => { /* 剪贴板不可用:保持可手动选择复制 */ });
+    });
   };
 
   return (
@@ -207,11 +211,14 @@ export function RemoteAccessPage(): React.ReactNode {
 
   const copyFresh = () => {
     if (!freshPassword) return;
-    void navigator.clipboard?.writeText(freshPassword).then(() => {
+    // r134：改走统一原语（此前 .catch(() => {}) 是纯静默；密码复制失败尤其不能静默——
+    // 用户会以为密码已在剪贴板里，粘贴到别处才发现是空的）
+    void copyToClipboard(freshPassword).then((ok) => {
+      if (!ok) return;
       setPwdCopied(true);
       if (pwdTimer.current) clearTimeout(pwdTimer.current);
       pwdTimer.current = setTimeout(() => setPwdCopied(false), 1600);
-    }).catch(() => {});
+    });
   };
 
   // 设备管理(第 23/24 项):踢单个 / 踢全部。close 事件回推新清单,列表自动更新。

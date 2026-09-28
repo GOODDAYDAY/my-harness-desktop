@@ -10,6 +10,7 @@ import {
   resolveCodeBlockRenderer,
   resolveCodeBlockRendererComponent,
   type CodeBlockRendererItem,
+  copyToClipboard,
 } from "@my-harness-desktop/react";
 
 function rawText(node: ReactNode): string {
@@ -33,7 +34,9 @@ function CodeBlock({ children, streaming, codeBlockItems }: {
   const text = rawText(codeEl?.props?.children);
 
   const copy = async (): Promise<void> => {
-    await navigator.clipboard.writeText(text);
+    // r134：改走统一原语。此前 await 抛错时 setCopied 走不到、且异常从 onClick 冒出去
+    // 成 unhandled rejection；现在原语不抛、失败自己播报。
+    if (!(await copyToClipboard(text))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

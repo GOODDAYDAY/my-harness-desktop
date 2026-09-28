@@ -60,5 +60,7 @@
   "shell.configWriteFailed": "Failed to save setting: {{detail}}",
   "shell.layoutSaveFailed": "Failed to save layout: {{detail}}",
   "shell.installZipUnsupported": "ZIP archives are not supported yet — please use .tar.gz",
-  "shell.settingsLoadFailed": "Failed to load settings: {{detail}}"
+  "shell.settingsLoadFailed": "Failed to load settings: {{detail}}",
+  "shell.clipboardFailed": "Copy failed: {{detail}}",
+  "shell.clipboardUnavailable": "The clipboard is not available in this context (browsers expose it only in secure contexts — use localhost or https)"
 }

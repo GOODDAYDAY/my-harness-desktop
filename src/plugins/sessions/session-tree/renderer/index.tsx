@@ -11,7 +11,7 @@ import {
   ListTree, RefreshCw, Maximize2, Crosshair, ChevronRight, ChevronDown,
   GitFork, Bookmark, Copy, Check,
 } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfirmInput, useArmConfirm } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfirmInput, useArmConfirm , copyToClipboard } from "@my-harness-desktop/react";
 import type { TreeNode } from "@my-harness-desktop/react";
 import type { LineageTree } from "@my-harness-desktop/shared";
 import { FullscreenMap } from "./fullscreen-map";
@@ -146,7 +146,10 @@ export function SessionTreeTab(): React.ReactNode {
     void ctx.tree.fork(currentNeutralSessionId ?? "", node.entryId).catch(() => {});
   };
   const copyPreview = (node: TreeNode): void => {
-    void navigator.clipboard.writeText(node.preview ?? "").then(() => {
+    // r134：改走统一原语。此前 .then 无 catch ⇒ 失败时既不显示"已复制"也无提示（静默）；
+    // 现在只有成功才置"已复制"，失败由原语自己播报。
+    void copyToClipboard(node.preview ?? "").then((ok) => {
+      if (!ok) return;
       setCopiedId(node.entryId);
       setTimeout(() => setCopiedId((id) => (id === node.entryId ? null : id)), 1200);
     });

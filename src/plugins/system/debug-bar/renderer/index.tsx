@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bug } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { usePluginContext, GENERAL_CONFIG_PATH } from "@my-harness-desktop/react";
+import { usePluginContext, GENERAL_CONFIG_PATH , copyToClipboard } from "@my-harness-desktop/react";
 
 interface BoxInfo {
   n: number;
@@ -180,9 +180,10 @@ export function DebugBar(): React.ReactNode {
       return;
     }
     const n = best.n;
-    navigator.clipboard
-      .writeText(el.outerHTML)
-      .then(() => {
+    // r134：改走统一原语（失败会播报原因，不再静默）
+    copyToClipboard(el.outerHTML)
+      .then((ok) => {
+        if (!ok) return;
         setInspectNote(t("debug.copiedElement", { n }));
         later(exitInspect, 900);
       })

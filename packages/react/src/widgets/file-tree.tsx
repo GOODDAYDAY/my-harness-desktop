@@ -18,6 +18,7 @@
 // - fileIcons 槽消费:行图标按 文件名/扩展名 查槽解析(useFileIconIndex + resolveFileIcon),
 //   内置批次由 file-tree 插件 manifest 贡献,第三方插件可同槽覆盖;未命中回退通用文件图标。
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { copyToClipboard } from "./clipboard";   // r134：同包内相对导入（不走发布面）
 import { ControlledTreeEnvironment, Tree, type TreeItem, type TreeItemIndex, type TreeRef } from "react-complex-tree";
 import {
   File as FileIcon, Folder, FolderOpen, FilePlus, FolderPlus, Scissors, Copy, Clipboard,
@@ -379,7 +380,7 @@ export function FileTree({
   }, []);
   const viewState = useMemo(() => ({ [TREE_ID]: { expandedItems } }), [expandedItems]);
 
-  const copyText = useCallback((text: string) => void navigator.clipboard.writeText(text), []);
+  const copyText = useCallback((text: string) => void copyToClipboard(text), []);   // r134
   const relativeOf = useCallback((path: string) => (path.startsWith(cwd + "/") ? path.slice(cwd.length + 1) : path), [cwd]);
 
   if (!cwd) return null;

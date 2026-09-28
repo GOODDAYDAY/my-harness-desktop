@@ -60,5 +60,7 @@
   "shell.configWriteFailed": "Einstellung konnte nicht gespeichert werden: {{detail}}",
   "shell.layoutSaveFailed": "Layout konnte nicht gespeichert werden: {{detail}}",
   "shell.installZipUnsupported": "ZIP-Archive werden noch nicht unterstützt — bitte .tar.gz verwenden",
-  "shell.settingsLoadFailed": "Einstellungen konnten nicht geladen werden: {{detail}}"
+  "shell.settingsLoadFailed": "Einstellungen konnten nicht geladen werden: {{detail}}",
+  "shell.clipboardFailed": "Kopieren fehlgeschlagen: {{detail}}",
+  "shell.clipboardUnavailable": "Die Zwischenablage ist in diesem Kontext nicht verfügbar (Browser stellen sie nur in sicheren Kontexten bereit — localhost oder https verwenden)"
 }

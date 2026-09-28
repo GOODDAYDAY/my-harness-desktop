@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import {
   useBlockRenderers, resolveBlockRenderer, resolveBlockRendererComponent,
+  copyToClipboard,
 } from "@my-harness-desktop/react";
 import {
   describeRequest, describeResponse, firstLineOf, safeStringify,
@@ -113,10 +114,14 @@ function CopyButton({ getText }: { getText: () => string }): ReactNode {
       title={t("panel.copy")}
       onClick={(e) => {
         e.stopPropagation();
-        void navigator.clipboard.writeText(getText()).then(() => {
+        // r134：改走统一原语。此前的 .catch 注释明写"剪贴板不可用时静默"——
+        // 但用户点了复制却什么都没发生，正是 §7.6 禁止的静默失败；现在失败会播报原因
+        // （并区分"环境不提供剪贴板"与"权限被拒"两种可执行指引）。
+        void copyToClipboard(getText()).then((ok) => {
+          if (!ok) return;
           setDone(true);
           setTimeout(() => setDone(false), 1500);
-        }).catch(() => { /* 剪贴板不可用时静默 */ });
+        });
       }}
       style={{
         cursor: "pointer", flexShrink: 0, display: "inline-flex", alignItems: "center",
