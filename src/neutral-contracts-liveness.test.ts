@@ -59,9 +59,9 @@ function ifaceMembers(file: string, iface: string): { name: string; optional: bo
 
 /** 已知的"文档要求但未接线"成员：进账本、不判死（每条写明取证与出路）。 */
 const LEDGER: { iface: string; member: string; why: string; next: string }[] = [
-  { iface: "HostLifecycle", member: "onReady",
-    why: "设计文档 web-service-architecture.md §20.1 明确要求（能力映射表 164 行 + 接口清单 729 行 + 语义 735 行「服务器：onReady 立即触发；Electron：app.whenReady」），按 r102 纪律不能单方面删；而实测四处引用全是声明/实现（契约、node-host、electron-host、e2e-inmem 桩），无调用方",
-    next: "二选一，都需单独一轮验证：① 接上——bootstrap 在冷启动/起 HTTP 服务前先等宿主就绪（Electron 下可消除 app 未 ready 就建窗口的时序风险）；② 双删——同批改契约与 §20.1 文档并说明为何不再需要" },
+  // r133 起为空：曾登记 HostLifecycle.onReady（文档 §20.1 要求但无调用方），
+  // 本轮把它接上了（assemble 开头 await host.lifecycle.onReady），账本卫生检查随即要求删条目——
+  // 这正是那条检查的用途：接线之后账本不许留着，否则下一个人会以为它仍未接线。
 ];
 
 describe("其余中立契约：成员活性对账（SessionCatalog / KernelModelSource / BackendCapabilities / HostLifecycle）", () => {

@@ -11,22 +11,17 @@ import type { AppInfo } from "./context";
 
 /** 应用生命周期(§20.1)。 */
 export interface HostLifecycle {
-  /** ⚠ 已知状态（r132 实测）：**契约与三个宿主实现都在，但全仓没有调用方**。
-   *  取证：`onReady` 只出现在 ① 本契约 ② `src/server/host/node-host.ts`
-   *  ③ `src/server/host/electron-host.ts` ④ `scripts/e2e-inmem.mjs` 的宿主桩——
-   *  四处全是**声明/实现**，没有一处 `host.lifecycle.onReady(...)` 调用。
+  /** 宿主就绪钩子（§20.1）。
    *
-   *  为什么**不删**：设计文档 `docs/design/web-service-architecture.md` §20.1 明确要求它
-   *  （第 164 行的能力映射表、第 729 行的接口清单、第 735 行的语义
-   *  「服务器：onReady 立即触发；Electron：app.whenReady」）。
-   *  按纪律（r102）：**有文档背书的成员，删之前要先推翻文档的理由**——
-   *  而这里的理由是成立的（宿主就绪是启动时序的一环，Electron 下对应 app.whenReady）。
+   *  调用方：`bootstrap/assemble.ts` 的开头——`await new Promise((r) => host.lifecycle.onReady(r))`。
+   *  为什么在 assemble 而不在各入口（r133）：此前 `electron.ts` 自己 `await app.whenReady()`、
+   *  `server.ts` 直接调 assemble，于是这个成员**全仓没有调用方**（r132 查证并记为
+   *  "文档要求但未接线"）。两个入口各用各的原生机制，代价是**第四宿主陷阱**：
+   *  新增宿主时它的入口必须自己记得"先等就绪再组装"。收进 assemble 后就绪语义与宿主实现绑定
+   *  （Electron = `app.whenReady`、Node = 立即回调），入口不必再关心，且幂等安全。
    *
-   *  所以这是一处**文档与代码的分歧**，不是单纯的死成员。两条出路（都需单独一轮验证）：
-   *    ① **接上**：bootstrap 在冷启动/起 HTTP 服务之前先 `await` 宿主就绪
-   *       （Electron 下这能消除"app 未 ready 就建窗口"的潜在时序问题）；
-   *    ② **双删**：同时改契约与 §20.1 文档，并说明为什么不再需要宿主就绪钩子。
-   *  在做出选择之前，本注释就是这处状态的单源记录（避免下一个人再花一轮重新查）。 */
+   *  历史：r132 曾把它记进"死成员"账本（附四条取证与两条出路），r133 选择"接上"这条出路；
+   *  接线后 `neutral-contracts-liveness` 的账本卫生检查立刻要求删条目——那条检查就是为此存在的。 */
   onReady(cb: () => void): void;
   onBeforeQuit(cb: (e: { preventDefault(): void }) => void): void;
   quit(): void;

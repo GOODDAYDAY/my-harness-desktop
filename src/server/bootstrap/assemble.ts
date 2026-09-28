@@ -42,6 +42,17 @@ export async function assemble(
   host: Host,
   opts: { isPackaged: boolean; rendererDir: string },
 ): Promise<Assembled> {
+  // ---- 宿主就绪（r133：把 `HostLifecycle.onReady` 接上）----
+  // 为什么放在这里而不是各入口：此前 `electron.ts` 自己 `await app.whenReady()`、
+  // `server.ts` 直接调 assemble（Node 宿主本就立即就绪），于是 `onReady` 这个契约成员
+  // **全仓没有调用方**（r132 查证：四处引用全是声明/实现），而设计文档 §20.1 明确要求它。
+  // 两个入口各用各的原生机制，代价是**第四宿主陷阱**：新增一个宿主时，
+  // 它的入口必须自己记得"先等就绪再组装"，忘了就会在宿主未 ready 时建窗口/起服务。
+  // 收进 assemble 之后：① 契约成员有了唯一调用方（活性守卫会盯着）；
+  // ② 就绪语义与宿主实现绑定（Electron=app.whenReady、Node=立即），入口不必再关心；
+  // ③ 幂等安全——Electron 入口已在 whenReady 里调 assemble，此时 onReady 立即回调。
+  await new Promise<void>((resolve) => host.lifecycle.onReady(() => resolve()));
+
   // ---- 环境解析：main 进程唯一读 process.env / os.homedir() / process.resourcesPath 的地方 ----
   const ctx = createBootContext(host, opts.rendererDir, {
     isPackaged: opts.isPackaged,
