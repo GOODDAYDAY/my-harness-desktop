@@ -21,6 +21,9 @@
 //    所以 ① 抓不到。实测这一类不小——r86 自己加的两个键就被首版误判成死键。
 //    收集方式：语料里所有"含点"的字符串字面量（**精确值**，不做前缀匹配，
 //    否则又会退化成"匹配一切"，见 r104 的空前缀教训）。
+// ⑧ **manifest 里任何含点的字符串值**（r107 补）：如主题贡献的 `name: "theme.dark"`，
+//    由 `t(opt.name, { defaultValue })` 在运行时查——键当数据传、字段名不带 Key 后缀。
+//    ⚠ 语言包有两种键形态（带 ns 前缀 / 裸键），所以完整值与 ns 剥离尾键都要登记。
 // ⑥ **结构性遍历 resources**（不经 t()）：实测全仓只有一处——
 //    `src/server/application/i18n/merge.ts` 的 `collectLocaleList` 读 `resources[id].common.locale[id]`
 //    ⇒ `common.locale.*` 整族算已用。
@@ -48,7 +51,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const LOCALES = ["zh-CN", "zh-TW", "en", "de"];
 /** r105 实测基线（删掉 80 条死键后）。只许减少；每核实并删一批就下调。 */
-const CEILING = 190;   // r105 建模六类后 231 → r106 补第七类（键作变量传递）后 190（只许继续减少）
+const CEILING = 186;   // r105 六类 231 → r106 补第七类 190 → r107 删 4 个确证死键 + 补第八类 186（只许继续减少）   // r105 建模六类后 231 → r106 补第七类（键作变量传递）后 190（只许继续减少）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -136,6 +139,23 @@ function buildModel(): Model {
         }
       };
       walkKeys(d.contributes ?? {});
+      // ⑧ **manifest 里任何含点的字符串值**（r107 补）：不只 `*Key` 字段。
+      //    实测形态：theme-tab.tsx 用 `t(opt.name, { defaultValue: opt.name })` 翻译主题名，
+      //    而 `opt.name` 来自主题贡献的 `name` 字段（值形如 `theme.dark`）——
+      //    键当**运行时数据**传，字段名不带 Key 后缀，所以 ④ 抓不到。
+      //    ⚠ 语言包里有两种键形态：带 ns 前缀的扁平键（`shell.cancel`）与
+      //    **裸键**（`theme.json` 里的 `dark`，ns 由文件名给出）。所以两个形态都要登记：
+      //    完整值进 dataKeys，ns 剥离后的尾键也进（否则裸键永远匹配不上）。
+      const walkAny = (o: unknown): void => {
+        if (Array.isArray(o)) { for (const x of o) walkAny(x); return; }
+        if (o && typeof o === "object") { for (const v of Object.values(o as Record<string, unknown>)) walkAny(v); return; }
+        if (typeof o === "string" && /^[a-z][\w-]*\.[\w.-]+$/.test(o)) {
+          dataKeys.add(o);
+          const dot = o.indexOf(".");
+          dataKeys.add(o.slice(dot + 1));
+        }
+      };
+      walkAny(d.contributes ?? {});
       const c = (d.contributes ?? {}) as Record<string, Array<Record<string, unknown>> | undefined>;
       for (const st of c.settings ?? []) {
         if (typeof st.id === "string") prefixes.add(`settings.${st.id}.`);
@@ -186,7 +206,7 @@ describe("i18n 死键普查（六类消费方建模 + 棘轮）", () => {
     expect(notCovered, `这些在用的键被判成死键 ⇒ 判据在漏：${notCovered.join()}`).toEqual([]);
   });
 
-  it("② 棘轮：未被任何消费方覆盖的键数只许减少（r106 基线 190）", () => {
+  it("② 棘轮：未被任何消费方覆盖的键数只许减少（r107 基线 186）", () => {
     expect(dead.length, [
       `疑似死键从 ${CEILING} 涨到了 ${dead.length}。`,
       "      新增的键要么真的没人用（该删或该接上消费方），要么引入了一种**本判据没建模的消费方式**。",
