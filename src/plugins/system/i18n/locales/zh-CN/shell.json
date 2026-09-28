@@ -62,5 +62,6 @@
   "shell.installZipUnsupported": "ZIP 格式暂不支持，请使用 .tar.gz",
   "shell.settingsLoadFailed": "设置加载失败：{{detail}}",
   "shell.clipboardFailed": "复制失败：{{detail}}",
-  "shell.clipboardUnavailable": "当前环境不提供剪贴板（浏览器只在安全上下文开放它：请用本机或 https 访问）"
+  "shell.clipboardUnavailable": "当前环境不提供剪贴板（浏览器只在安全上下文开放它：请用本机或 https 访问）",
+  "shell.directoryPickerFailed": "无法打开目录选择器：{{detail}}（远程/浏览器访问下不支持系统对话框，请在本机窗口里操作）"
 }

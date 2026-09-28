@@ -1,3 +1,4 @@
+import { pickDirectory } from "../widgets/pick-directory";
 // packages/react 内核管理共享 base —— 「内核版本管理」页骨架（kernel-design-spec.md §12.4）。
 //
 // pi-manager 的 KernelSection + CustomCliSection 与 dsh-manager 的 DshKernelPage +
@@ -257,7 +258,7 @@ function CustomCliSection({ api, i18nPrefix, status, onStatus }: {
   };
 
   const browse = async (): Promise<void> => {
-    const dir = await ctx.dialog.openDirectory();
+    const dir = await pickDirectory(ctx);   // r137：统一原语（同包内相对导入）
     if (dir) setInput(dir);
   };
 

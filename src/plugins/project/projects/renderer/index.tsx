@@ -15,7 +15,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {  usePluginContext, useUiStore, useSessionStore, Section } from "@my-harness-desktop/react";
+import {  usePluginContext, useUiStore, useSessionStore, Section , pickDirectory } from "@my-harness-desktop/react";
 import { pathBasename } from "@my-harness-desktop/shared";
 
 
@@ -50,7 +50,7 @@ export function ProjectsSection(): React.ReactNode {
   };
 
   const openDirectory = async (): Promise<void> => {
-    const dir = await ctx.dialog.openDirectory();
+    const dir = await pickDirectory(ctx);   // r137：统一原语（失败会播报，不再静默）
     if (!dir) return;
     persist([dir, ...cwds.filter((c) => c !== dir)].slice(0, 10));
     await switchCwd(dir);

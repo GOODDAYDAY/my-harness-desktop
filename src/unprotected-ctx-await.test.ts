@@ -63,8 +63,14 @@ const LEDGER: { api: string; count: number; consequence: string; disposition: "a
     consequence: "读取失败 ⇒ 该插件面板显示空态；用户重开面板即恢复" },
   { api: "ctx.config.getScope", count: 1, disposition: "acceptable", consequence: "stickers 分层配置读取失败 ⇒ 该层显示空态；不影响其它层，用户重开面板即恢复" },
   { api: "ctx.configFile.get", count: 1, disposition: "acceptable", consequence: "stickers 读取配置文件失败 ⇒ 表情包列表显示空态；用户重开面板即恢复，不会误以为已保存了什么" },
-  { api: "ctx.dialog.openDirectory", count: 2, disposition: "acceptable",
-    consequence: "多数情况是用户取消选择；真失败时对话框自身会报错" },
+  // r137 删除本条目：3 处调用点已收敛到发布面原语 pickDirectory（try/catch + 播报）。
+  //   原理由『多数情况是用户取消选择；真失败时对话框自身会报错』与 r136 删掉的
+  //   openImages 那条**一模一样地错**：远程/浏览器宿主下对话框能力是 UNSUPPORTED_HOST，
+  //   系统对话框根本没打开 ⇒ 没有任何东西会替它报错。
+  //   ⚠ 这一族（dialog.openDirectory / openImages / openZip / writeImages）的理由
+  //   都默认了"本地 Electron 宿主"，r136/r137 已逐条证伪其中两条；
+  //   剩下的 openZip / writeImages 在 store 层（stickers-store.ts），
+  //   按 r83/r84 的分层结论 store 该抛、由 UI 层兜——**待查其 UI 调用方是否兜了**（记入待办）。
   // r136 删除本条目：调用点已修（sticker-card.tsx 的 pickBanner 现在 try/catch + 播报），
   //   按 r83 的规则「调用点修好 ⇒ 删条目」。顺带更正原条目的理由——它写着
   //   『真失败时系统对话框自身会报错，用户不会误以为图片已添加』，这是**错的**：

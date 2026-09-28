@@ -62,5 +62,6 @@
   "shell.installZipUnsupported": "ZIP 格式暂未支援，請使用 .tar.gz",
   "shell.settingsLoadFailed": "設定載入失敗：{{detail}}",
   "shell.clipboardFailed": "複製失敗：{{detail}}",
-  "shell.clipboardUnavailable": "目前環境不提供剪貼簿（瀏覽器只在安全上下文開放它：請用本機或 https 存取）"
+  "shell.clipboardUnavailable": "目前環境不提供剪貼簿（瀏覽器只在安全上下文開放它：請用本機或 https 存取）",
+  "shell.directoryPickerFailed": "無法開啟目錄選擇器：{{detail}}（遠端/瀏覽器存取下不支援系統對話框，請在本機視窗裡操作）"
 }

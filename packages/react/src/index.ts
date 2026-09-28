@@ -367,6 +367,9 @@ export { LiveRegionHost, Announce, announceTransient } from "./widgets/live-regi
 // 复制到剪贴板的统一原语（r134）：9 处各自调 navigator.clipboard 的形态收敛成一个，
 // 失败时自己播报（§7.6 不许静默）、返回 boolean 供调用方驱动"已复制"状态。
 export { copyToClipboard } from "./widgets/clipboard";
+// 选目录的统一原语（r137）：3 处渲染层用户动作各自裸 await ctx.dialog.openDirectory() 收敛成一个；
+// 失败自己播报（远程/浏览器宿主下对话框能力是 UNSUPPORTED_HOST ⇒ 必然失败），用户取消不播报。
+export { pickDirectory, type DirectoryPicker } from "./widgets/pick-directory";
 export { CollapsibleCardHeader, ExecutionStatus, type CollapsibleCardHeaderProps, type ExecStatus } from "./widgets/collapsible-card-header";
 export { FileTree } from "./widgets/file-tree";
 export { PluginIcon, resolvePluginIcon } from "./widgets/plugin-icon";

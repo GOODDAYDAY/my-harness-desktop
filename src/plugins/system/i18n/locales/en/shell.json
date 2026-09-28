@@ -62,5 +62,6 @@
   "shell.installZipUnsupported": "ZIP archives are not supported yet — please use .tar.gz",
   "shell.settingsLoadFailed": "Failed to load settings: {{detail}}",
   "shell.clipboardFailed": "Copy failed: {{detail}}",
-  "shell.clipboardUnavailable": "The clipboard is not available in this context (browsers expose it only in secure contexts — use localhost or https)"
+  "shell.clipboardUnavailable": "The clipboard is not available in this context (browsers expose it only in secure contexts — use localhost or https)",
+  "shell.directoryPickerFailed": "Could not open the directory picker: {{detail}} (system dialogs are not available over remote/browser access — use the local window)"
 }

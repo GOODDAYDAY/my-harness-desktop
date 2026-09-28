@@ -62,5 +62,6 @@
   "shell.installZipUnsupported": "ZIP-Archive werden noch nicht unterstützt — bitte .tar.gz verwenden",
   "shell.settingsLoadFailed": "Einstellungen konnten nicht geladen werden: {{detail}}",
   "shell.clipboardFailed": "Kopieren fehlgeschlagen: {{detail}}",
-  "shell.clipboardUnavailable": "Die Zwischenablage ist in diesem Kontext nicht verfügbar (Browser stellen sie nur in sicheren Kontexten bereit — localhost oder https verwenden)"
+  "shell.clipboardUnavailable": "Die Zwischenablage ist in diesem Kontext nicht verfügbar (Browser stellen sie nur in sicheren Kontexten bereit — localhost oder https verwenden)",
+  "shell.directoryPickerFailed": "Verzeichnisauswahl konnte nicht geöffnet werden: {{detail}} (Systemdialoge sind über Remote-/Browserzugriff nicht verfügbar — lokales Fenster verwenden)"
 }
