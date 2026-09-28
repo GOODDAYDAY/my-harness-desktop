@@ -87,7 +87,6 @@ html, body, #root {
   /* 三档时长 */
   --motion-duration-fast: 120ms;   /* 菜单出场/行 hover */
   --motion-duration-normal: 200ms; /* 分组折叠/面板开合 */
-  --motion-duration-slow: 300ms;   /* 大面积展开 */
   /* 两条缓动(emphasized 用于进场/折叠,standard 用于一般过渡) */
   --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --motion-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
@@ -405,7 +404,6 @@ html, body, #root {
   --sidepanel-header-px: 12px;
   --sidepanel-header-border: 1px solid var(--color-border);
   --sidepanel-header-bg: var(--color-chrome);
-  --sidepanel-header-bg-hover: var(--color-surface);
   --sidepanel-header-fs: var(--font-size-sm);
   --sidepanel-header-fw: 500;
   --sidepanel-content-py: 8px;
@@ -413,7 +411,6 @@ html, body, #root {
   --sidepanel-icon-btn-size: 36px;
   --sidepanel-icon-btn-radius: var(--radius-sm);
   --sidepanel-icon-btn-bg: transparent;
-  --sidepanel-icon-btn-bg-hover: var(--color-surface);
   --sidepanel-icon-btn-bg-active: var(--color-surface);
   --sidepanel-icon-btn-border: none;
   --sidepanel-icon-active-indicator: 3px solid var(--color-primary);
@@ -513,13 +510,11 @@ html, body, #root {
 [data-sidepanel-style="minimal"] {
   --sidepanel-header-py: 6px;
   --sidepanel-header-border: none;
-  --sidepanel-header-bg-hover: transparent;
   --sidepanel-header-fw: 400;
   --sidepanel-content-py: 4px;
   --sidepanel-content-px: 8px;
   --sidepanel-icon-btn-size: 32px;
   --sidepanel-icon-btn-radius: 0px;
-  --sidepanel-icon-btn-bg-hover: transparent;
   --sidepanel-icon-btn-border: none;
   --sidepanel-icon-gap: 2px;
   --sidepanel-icon-size: 18px;
@@ -559,8 +554,6 @@ html, body, #root {
 
 [data-sidepanel-style="outline"] {
   --sidepanel-header-border: 1px dashed var(--color-border);
-  --sidepanel-header-bg-hover: transparent;
-  --sidepanel-icon-btn-bg-hover: transparent;
   --sidepanel-icon-btn-border: none;
   --sidepanel-divider-color: var(--color-border);
   --sidepanel-row-py: 8px;
@@ -586,10 +579,8 @@ html, body, #root {
 [data-sidepanel-style="glass"] {
   --sidepanel-header-border: 1px solid var(--color-border);
   --sidepanel-header-bg: var(--color-chrome);
-  --sidepanel-header-bg-hover: color-mix(in srgb, var(--color-surface) 50%, transparent);
   --sidepanel-icon-btn-radius: var(--radius-md);
   --sidepanel-icon-btn-bg: transparent;
-  --sidepanel-icon-btn-bg-hover: var(--color-surface);
   --sidepanel-icon-btn-bg-active: var(--color-surface);
   --sidepanel-icon-btn-border: none;
   --sidepanel-divider-visual-display: none;
