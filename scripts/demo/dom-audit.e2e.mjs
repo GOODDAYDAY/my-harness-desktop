@@ -113,7 +113,26 @@ const AUDIT_FN = `
   // ⚠ 只用源码里真实存在的锚点：src/e2e-anchor-coverage.test.ts 会把 e2e 脚本里出现、
   //   而 src/ 中不存在的 data-* 全部列为失败。首版凭空写了 data-slot/data-region/data-container
   //   三个选择器，被那条守卫当场抓住——这正是它存在的意义（e2e 不该依赖想象中的锚点）。
-  for (const el of visible(document.querySelectorAll("[data-section], [data-panel]"))) {
+  // ⚠ r112 修掉一个**空探针**：此前这里写死了两个属性选择器（data-section / data-panel），
+  //   而生产代码**这两个属性一个都不发**（实测 91 种 data- 前缀属性里没有它们）⇒
+  //   选择器恒匹配空集 ⇒ ③ 这一维的 emptyAnchored **永远是空数组**，
+  //   看起来像"没有空壳容器"，实际是"根本没扫"。
+  //   而且上面那段注释声称 e2e-anchor-coverage 会抓住这种想象出来的锚点——它没抓住，
+  //   说明那条守卫的判据也有漏（本轮一并记入待办）。
+  //   修法不是再换两个锚点（下次锚点演化又会变空集），而是**扫所有带 data- 前缀属性的元素**：
+  //   这一维的语义本来就是"任何锚点元素都不该是空壳"，与具体锚点名无关。
+  // 设计上就该为空的锚点族（白名单，每条写明理由——不是豁免，是"这一族的空是语义"）：
+  //   · data-toast-live-region：常驻 live region **宿主**（r37 的设计：宿主先于内容存在，
+  //     才能播报瞬时内容），空的时候正是它待命的正常态；
+  //   · data-resize-handle：拖拽把手，本身不含文本也不含子元素（视觉靠 CSS 伪元素/边框）；
+  //   · data-panel-group-*：布局库（panel-group）的包装层与手柄，内容由库在运行时填。
+  const EMPTY_BY_DESIGN = ["data-toast-live-region", "data-resize-handle", "data-panel-group-"];
+  const anchored = [...document.querySelectorAll("*")].filter((el) => {
+    const names = [...el.attributes].map((a) => a.name).filter((n) => n.startsWith("data-"));
+    if (names.length === 0) return false;
+    return !names.every((n) => EMPTY_BY_DESIGN.some((p) => n.startsWith(p)));
+  });
+  for (const el of visible(anchored)) {
     const hasKids = el.children.length > 0;
     const hasText = (el.textContent || "").trim().length > 0;
     if (!hasKids && !hasText) {
