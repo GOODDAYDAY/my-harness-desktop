@@ -51,7 +51,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const LOCALES = ["zh-CN", "zh-TW", "en", "de"];
 /** r105 实测基线（删掉 80 条死键后）。只许减少；每核实并删一批就下调。 */
-const CEILING = 186;   // r105 六类 231 → r106 补第七类 190 → r107 删 4 个确证死键 + 补第八类 186（只许继续减少）   // r105 建模六类后 231 → r106 补第七类（键作变量传递）后 190（只许继续减少）
+const CEILING = 26;   // r105 六类 231 → r106 七类 190 → r107 删4键+八类 186 → r108 语料补 test-plugins（消除 160 个假阳性）26（只许继续减少）   // r105 六类 231 → r106 补第七类 190 → r107 删 4 个确证死键 + 补第八类 186（只许继续减少）   // r105 建模六类后 231 → r106 补第七类（键作变量传递）后 190（只许继续减少）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -78,7 +78,15 @@ function localeKeys(): Set<string> {
 /** 代码语料（生产代码；不含测试与语言包） */
 function codeFiles(): string[] {
   const out: string[] = [];
-  for (const base of ["src/web", "src/plugins", "src/server", "packages/react/src", "packages/shared/src"]) {
+  // ⚠ 语料必须与 localeKeys() 的扫描根**对称**（r108）：语言包侧扫 src/plugins + test-plugins
+  //   两个根，代码侧首版却只扫 src/* 与 packages/*，漏了 test-plugins/。
+  //   后果是**系统性假阳性**：minimal / probe4 是 test-plugins 里的测试内核，
+  //   它们的 renderer 确实用 `<KernelVersionPage i18nPrefix="minimal">` 消费
+  //   `minimal.customCli.*` / `probe4.customCli.*`（经 kernel-version-page.tsx 的
+  //   `t(`${i18nPrefix}.customCli.${suffix}`)` 两级动态键），但那 26 个键全被判成死键。
+  //   这正是 r67/r76 那条纪律的又一次应验：**任何计数都要能报出语料基数，
+  //   而"两侧语料范围不一致"是最隐蔽的一类判据缺陷**（它不报错，只是默默多报）。
+  for (const base of ["src/web", "src/plugins", "src/server", "packages/react/src", "packages/shared/src", "test-plugins"]) {
     for (const f of walk(join(ROOT, base))) {
       if (!/\.tsx?$/.test(f) || /\.test\.tsx?$/.test(f) || f.includes("/locales/")) continue;
       out.push(f);
@@ -190,7 +198,17 @@ describe("i18n 死键普查（六类消费方建模 + 棘轮）", () => {
     expect(empty, "前缀族里混进了空串 ⇒ covered() 会恒真、死键永远报 0（r104 踩过）").toEqual([]);
     expect([...model.prefixes].every((p) => p.length > 0), "存在空/纯空白前缀").toBe(true);
     expect(model.prefixes.has("common.locale."), "结构性遍历族 common.locale. 必须在模型里（merge.ts 的 collectLocaleList 不经 t()）").toBe(true);
-    expect(codeFiles().length, "代码语料规模异常").toBeGreaterThan(400);
+    const cf = codeFiles();
+    expect(cf.length, `代码语料只有 ${cf.length} 个文件 ⇒ 扫描根可能漏了`).toBeGreaterThan(400);
+    // ⚠ 显式钉住"语料含 test-plugins"：r108 的缺陷正是漏了它，而总数仍 >400 所以看不出来。
+    //   只看总量看不出**缺了哪一根**，必须按根断言。
+    // ⚠ codeFiles() 返回的是**绝对路径**（join(ROOT, base)），所以判归属要用 includes
+    //   而不是 startsWith——首版写 startsWith("test-plugins/") 恒假，
+    //   于是"按根断言"自己成了假红（而前缀其实已经收进来了、计数已降到 26）。
+    expect(cf.some((f) => f.includes("/test-plugins/")),
+      "代码语料里没有 test-plugins/ ⇒ 测试内核（minimal/probe4）消费的键会被全部误判成死键（r108）").toBe(true);
+    expect(model.prefixes.has("minimal.") || model.prefixes.has("probe4."),
+      "test-plugins 里内核插件的 i18nPrefix 没被收进来 ⇒ 语料或正则失效").toBe(true);
   });
 
   it("① 自检：已知的**在用**键必须被判为已覆盖（否则判据在漏，死键数会虚高）", () => {
@@ -206,7 +224,7 @@ describe("i18n 死键普查（六类消费方建模 + 棘轮）", () => {
     expect(notCovered, `这些在用的键被判成死键 ⇒ 判据在漏：${notCovered.join()}`).toEqual([]);
   });
 
-  it("② 棘轮：未被任何消费方覆盖的键数只许减少（r107 基线 186）", () => {
+  it("② 棘轮：未被任何消费方覆盖的键数只许减少（r108 基线 26）", () => {
     expect(dead.length, [
       `疑似死键从 ${CEILING} 涨到了 ${dead.length}。`,
       "      新增的键要么真的没人用（该删或该接上消费方），要么引入了一种**本判据没建模的消费方式**。",
