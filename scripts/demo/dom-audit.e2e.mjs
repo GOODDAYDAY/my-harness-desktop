@@ -126,7 +126,17 @@ const AUDIT_FN = `
   //     才能播报瞬时内容），空的时候正是它待命的正常态；
   //   · data-resize-handle：拖拽把手，本身不含文本也不含子元素（视觉靠 CSS 伪元素/边框）；
   //   · data-panel-group-*：布局库（panel-group）的包装层与手柄，内容由库在运行时填。
-  const EMPTY_BY_DESIGN = ["data-toast-live-region", "data-resize-handle", "data-panel-group-"];
+  // ⚠ 判据是"**全部** data-* 都命中白名单才排除"（r114）：因为一个元素可能同时带
+  //   库发出的布局属性与我们自己的语义属性，只要有一个不属于"设计上就该空"的族，
+  //   它就仍然值得被审。所以白名单要按**前缀族**列全，漏一个前缀整族就漏不掉。
+  const EMPTY_BY_DESIGN = [
+    "data-toast-live-region",        // 常驻 live region 宿主（r37：空是待命态）
+    "data-resize-handle",            // 拖拽把手（视觉靠 CSS）+ 其 -state 变体
+    "data-panel-group-",             // react-resizable-panels 的 PanelGroup 包装层
+    "data-panel-resize-handle-",     // 同库的把手属性（r114 实测：漏了这个前缀，6 个把手全漏不掉）
+    "data-kernel-custom-dir",        // 条件挂载点：未设自定义内核目录时本就为空（不是空壳）
+    "data-timeline-composer",        // 零会话基线下时间线无内容 ⇒ 容器为空是正常态
+  ];
   const anchored = [...document.querySelectorAll("*")].filter((el) => {
     const names = [...el.attributes].map((a) => a.name).filter((n) => n.startsWith("data-"));
     if (names.length === 0) return false;
@@ -136,7 +146,7 @@ const AUDIT_FN = `
     const hasKids = el.children.length > 0;
     const hasText = (el.textContent || "").trim().length > 0;
     if (!hasKids && !hasText) {
-      out.emptyAnchored.push({ anchor: [...el.attributes].filter(a => a.name.startsWith("data-")).map(a => a.name + "=" + a.value).join(" ").slice(0, 80) });
+      out.emptyAnchored.push({ anchor: [...el.attributes].filter(a => a.name.startsWith("data-")).map(a => a.name).join(",").slice(0, 200), tag: el.tagName });
     }
   }
 
@@ -185,6 +195,20 @@ async function auditSurface(label) {
   for (const x of r.nesting.slice(0, 6)) note("H", label, "交互嵌套违规", `${x.outer} 套 ${x.inner}（外层可访问名「${x.outerLabel}」，锚点 ${x.anchor || "无"}）`);
   for (const x of r.dupAnchors.slice(0, 6)) note("H", label, "锚点重复", `${x.kind}="${x.value}" 出现 ${x.count} 次`);
   for (const x of r.emptyAnchored.slice(0, 6)) note("M", label, "空壳容器", x.anchor);
+  // ③「空壳容器」从**审计输出**升级为**断言**（r114）：此前它只打印条数，
+  //   而 r112 查明这一维因为写死了两个不存在的锚点而**恒为空**——恒空 + 只打印
+  //   是最坏的组合：它既没在验，也不会因为没在验而报错。
+  //   现在扫描范围改成"所有带 data- 前缀属性的元素"，并给"设计上就该为空"的族
+  //   建了带理由的白名单（EMPTY_BY_DESIGN），所以 0 是一个**有意义的结果**。
+  //   ⚠ 断言放在 auditSurface 内部（不是外层）：每个被审的界面各自断言，
+  //     放外层只能覆盖最后一次调用的结果（首版就放错了作用域，报 r is not defined）。
+  ok(r.emptyAnchored.length === 0, [
+    `[${label}] 有 ${r.emptyAnchored.length} 个带 data-* 锚点的元素既无子元素也无文本（空壳容器）：`,
+    ...r.emptyAnchored.slice(0, 6).map((x) => `      <${x.tag}> ${x.anchor}`),
+    "      两种可能：① 挂载点没被填（贡献没注册成功/组件没渲染）；② 渲染条件永假（功能漂移）。",
+    "      若确认是'设计上就该为空'（条件挂载点、库的包装层、待命态宿主），",
+    "      把它加进 AUDIT_FN 里的 EMPTY_BY_DESIGN 白名单并**写明理由**——白名单不是豁免表。",
+  ].join("\n"));
   for (const x of r.i18nLeak.slice(0, 8)) note("H", label, "i18n key 漏成文本", `「${x.text}」（${x.why}）`);
   for (const x of r.unnamedIcons.slice(0, 8)) note("M", label, "图标按钮无可访问名", x.html);
   for (const x of r.imgNoAlt.slice(0, 4)) note("L", label, "图片无 alt", x.src);
