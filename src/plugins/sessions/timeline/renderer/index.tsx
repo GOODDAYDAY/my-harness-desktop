@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon, getInflightToolCalls } from "@my-harness-desktop/react";
-import { parseSessionModelPrefs, phaseFromView, classifyReferenceFile, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
+import { parseSessionModelPrefs, phaseFromView, partitionReferenceFiles, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
 // messageActions 槽宿主(消费方渲染 + 圆心适用性判定)。抽出成模块是为了可测:
 // 「在飞的 pending 行不渲染锚点类按钮」是 UI 行为,得有 DOM 交互 test 守着(§5.6)。
 import { Announce } from "@my-harness-desktop/react";
@@ -230,18 +230,17 @@ export function TimelineView(): React.ReactNode {
   // 拖拽/粘贴入口:File[] → 分类 → 可参考(文本/代码 + 图片)入 pendingFiles(绝对路径引用);
   // 图片不读 base64(图片输入是协议/模型能力,壳只传路径);二进制拒绝 + toast。
   const ingestFiles = useCallback((files: File[]): void => {
-    const newFiles: Array<{ path: string; name: string }> = [];
-    let rejected = 0;
-    for (const f of files) {
-      if (classifyReferenceFile(f.name) !== null) {
-        const path = window.mhdFile?.getPathForFile(f) || "";
-        newFiles.push({ path: path || f.name, name: f.name });
-      } else {
-        rejected++;
-      }
-    }
-    if (newFiles.length > 0) setPendingFilesSync([...pendingFilesRef.current, ...newFiles]);
-    if (rejected > 0) showToast(t("timeline.attachSkipped", { count: rejected }), "error");
+    // r144：分类/分流/路径回落抽成圆心纯函数 `partitionReferenceFiles`（可裸单测），
+    //   本回调只剩三件事：注入宿主能力（取绝对路径）、并入待发清单、拒收时告知用户。
+    //   ⚠ 抽出的动机是**可测性**（§4.5：单测需要 mock 外层 ⇒ 把外层依赖推到参数里）——
+    //   原先 14 行内联逻辑要测就得渲染整个 timeline（1400 行 + store + 事件总线）。
+    const { accepted, rejectedCount } = partitionReferenceFiles(
+      files,
+      (f) => window.mhdFile?.getPathForFile(f as File),   // Electron webUtils；浏览器宿主无此能力 ⇒ 回落文件名
+    );
+    if (accepted.length > 0) setPendingFilesSync([...pendingFilesRef.current, ...accepted]);
+    // §7.6：拒收不许静默——用户拖进来 5 个文件只上了 2 个，必须告诉他另外 3 个为什么没上
+    if (rejectedCount > 0) showToast(t("timeline.attachSkipped", { count: rejectedCount }), "error");
   }, [setPendingFilesSync, showToast, t]);
 
   // 移除单个待发送文件。
