@@ -123,10 +123,18 @@ describe("data-* 探针锚点：发出 ⇔ 消费对账", () => {
   const prod = prodFiles();
   const cons = consumerFiles();
   const emitted = new Map<string, string>();
+  const emittedBy = new Map<string, Set<string>>();   // 锚点 → 发出它的文件集合（r125）
   for (const f of prod) {
-    const s = readFileSync(f, "utf-8");
-    for (const m of s.matchAll(EMIT)) if (!emitted.has(m[1])) emitted.set(m[1], relative(ROOT, f));
+    const rel = relative(ROOT, f);
+    const src = readFileSync(f, "utf-8");
+    for (const m of src.matchAll(EMIT)) {
+      if (!emitted.has(m[1])) emitted.set(m[1], rel);
+      (emittedBy.get(m[1]) ?? emittedBy.set(m[1], new Set()).get(m[1])!).add(rel);
+    }
   }
+  /** 被 **多个文件** 发出的锚点（r125：同名锚点多义性检查的输入） */
+  const multiFile = [...emittedBy.entries()].filter(([, v]) => v.size > 1)
+    .map(([k, v]) => ({ anchor: k, files: [...v].sort() })).sort((a, b) => a.anchor.localeCompare(b.anchor));
   const used = new Set<string>();
   for (const f of cons) {
     for (const m of readFileSync(f, "utf-8").matchAll(REF)) used.add(m[1]);
@@ -168,7 +176,58 @@ describe("data-* 探针锚点：发出 ⇔ 消费对账", () => {
     expect(gone, `账本里这些锚点生产代码已不再发出（连同条目一起删）：${gone.join()}`).toEqual([]);
   });
 
-  it("③ 棘轮：死锚点总数只许减少（r115 基线 7）", () => {
+  /**
+   * 多文件发出的锚点账本（r125）：每条写明**共享语义**。
+   *
+   * 为什么需要这条：同名锚点有两种情形——
+   *   · **同语义、多发出方**（合法）：镜像预览组件与真组件用同一个属性，
+   *     好让剧本用一条选择器同时命中；或同一语义的行在多个视图里各渲染一次。
+   *   · **同名、不同语义**（危险）：r124 我差点造出一个——给搜索**输入框**新加
+   *     `data-session-search`，而工具条上那个**展开/收起按钮**已经占用了这个名字。
+   *     ⚠ 运行时 DOM 审计抓不到它：输入框是条件渲染（searchOpen 时才在 DOM 里），
+   *     两个同名锚点从不同时出现，所以"锚点重复"检查恒为 0。**只有静态对账能抓。**
+   * 判据无法自动区分这两种（那需要理解语义），所以要求**每个多文件锚点都登记共享语义**：
+   * 登记时写不出"它们语义相同"的，就是撞名了。
+   */
+  const MULTI_FILE_LEDGER: { anchor: string; semantics: string }[] = [
+    { anchor: "data-message-id",
+      semantics: "消息行的 id——timeline / review / session-colors 三处各自渲染消息行，语义同一（同一条消息在哪个视图里都是它）" },
+    { anchor: "data-section-header",
+      semantics: "侧栏分组的**标题行**——section.tsx（分组组件本体）与 sidebar.tsx（容器）共用同一语义；与 data-section-collapsed 配对使用（一个定位标题行、一个读折叠态）。r125 由守卫发现（Python 预估脚本漏了它，说明两侧判据有细微差别，以守卫为准）" },
+    { anchor: "data-section-collapsed",
+      semantics: "侧栏分组的折叠态——section.tsx（分组组件本体）与 sidebar.tsx（容器）共用同一语义，供剧本判展开/收起" },
+    { anchor: "data-session-path",
+      semantics: "会话行的路径标识——两个会话列表视图（主列表与搜索结果）各渲染一次，语义同一" },
+    { anchor: "data-sidebar-style",
+      semantics: "侧栏样式变体——sidebar.tsx（真组件）与 sidebar-style-preview.tsx（设置页里的**镜像预览**）刻意同名，好让一条选择器同时命中真品与预览" },
+    { anchor: "data-sidepanel-style",
+      semantics: "右面板样式变体——right-panel.tsx 与 sidepanel-style-preview.tsx，同上的镜像预览模式" },
+    { anchor: "data-state",
+      semantics: "**Radix 约定**的展开态（open/closed），挂在 .shell-collapsible 上；sessions-list 两处发出、session-colors 读它。属库约定的通用属性，不是本项目自有锚点" },
+  ];
+
+  it("③ 多文件发出的锚点必须登记**共享语义**（防同名不同义）", () => {
+    const listed = new Set(MULTI_FILE_LEDGER.map((l) => l.anchor));
+    const unlisted = multiFile.filter((m) => !listed.has(m.anchor));
+    expect(unlisted.map((m) => `${m.anchor} ← ${m.files.map((f) => f.split("/").pop()).join(" + ")}`), [
+      `${unlisted.length} 个锚点被多个文件发出，但没登记共享语义。`,
+      "      两种可能：① 它们语义确实相同（镜像预览 / 同一语义在多个视图各渲染一次）",
+      "      ⇒ 在 MULTI_FILE_LEDGER 里写明共享语义；",
+      "      ② **同名不同义**（r124 差点造出的那种：搜索输入框与展开按钮都想叫 data-session-search）",
+      "      ⇒ 改名，让每个语义有自己的锚点名。",
+      "      ⚠ 运行时 DOM 审计抓不到 ②：条件渲染的两个同名锚点从不同时出现在 DOM 里，",
+      "      所以 dom-audit 的『锚点重复』恒为 0。这条静态对账是唯一的防线。",
+    ].join("\n")).toEqual([]);
+    // 账本腐烂检查：登记了但已不再是多文件发出 ⇒ 删条目
+    const stale = MULTI_FILE_LEDGER.filter((l) => !multiFile.some((m) => m.anchor === l.anchor));
+    expect(stale.map((l) => l.anchor),
+      `这些锚点已不再被多个文件发出，从账本删掉：${stale.map((l) => l.anchor).join()}`).toEqual([]);
+    // 账本条目必须真的写了语义（防空条目）
+    const thin = MULTI_FILE_LEDGER.filter((l) => l.semantics.trim().length < 12);
+    expect(thin.map((l) => l.anchor), "账本条目的共享语义写得太短（等于没写）").toEqual([]);
+  });
+
+  it("④ 棘轮：死锚点总数只许减少（r115 基线 7）", () => {
     expect(dead.length, [
       `无消费方的 data-* 锚点从 7 涨到了 ${dead.length}。`,
       "      每消化一条（补消费方或删锚点）就下调这个数字；账本条目的 why/next 必须具体到能照着做。",
