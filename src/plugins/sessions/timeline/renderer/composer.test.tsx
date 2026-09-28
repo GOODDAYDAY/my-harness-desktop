@@ -220,3 +220,78 @@ describe("Composer 思考开关的显式降级(§7.6:dsh 无运行时切档面)"
     expect(screen.getByTitle("shell.thinkingOn")).toBeInTheDocument();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 附件链：拖拽 / 粘贴（r143 补——这条缺口从 r26 记到今天，117 轮未覆盖）
+//
+// 为什么在 DOM 层测：拖拽与粘贴是**浏览器事件**，e2e 侧用 CDP 造 DataTransfer 带文件的
+// drop/paste 很别扭（Input.dispatchDragEvent 需要真实拖拽源），而 jsdom + testing-library
+// 可以直接把带 files 的 dataTransfer 交上去（§5.6 三级分工）。
+//
+// ⚠ 按 r141 的纪律，**两侧都要覆盖**：
+//   · 该收的情形：drop/paste 带文件 ⇒ onFiles 收到 File 数组 + preventDefault（吞掉浏览器默认行为）
+//   · **不该收的情形**：drop/paste 不带文件（拖文本、粘文本）⇒ onFiles 不被调用，
+//     且 **preventDefault 不被调用**——否则「粘贴文本」会被吞掉，那是比不收附件严重得多的回归。
+//   只测前者，一个「无条件 preventDefault + 无条件调 onFiles」的实现也能通过。
+// ─────────────────────────────────────────────────────────────────────────────
+describe("Composer 附件链（拖拽 / 粘贴）", () => {
+  function makeFile(name: string): File {
+    return new File(["x"], name, { type: "image/png" });
+  }
+  /** fireEvent 返回 false 表示事件被 preventDefault 过（testing-library 的语义）。 */
+  function renderWith(onFiles?: (files: File[]) => void) {
+    const utils = render(
+      <Composer value="" onValueChange={() => {}} onSubmit={() => {}} onFiles={onFiles} />,
+    );
+    return { form: utils.container.querySelector("form")!, ta: screen.getByRole("textbox") };
+  }
+
+  it("① drop 带文件 ⇒ onFiles 收到 File 数组，且 preventDefault（吞掉浏览器默认打开文件）", () => {
+    const onFiles = vi.fn();
+    const { form } = renderWith(onFiles);
+    const f = makeFile("a.png");
+    const notCancelled = fireEvent.drop(form, { dataTransfer: { files: [f] } });
+    expect(onFiles).toHaveBeenCalledTimes(1);
+    expect(onFiles.mock.calls[0][0]).toHaveLength(1);
+    expect((onFiles.mock.calls[0][0][0] as File).name).toBe("a.png");
+    expect(notCancelled, "带文件的 drop 必须 preventDefault，否则浏览器会直接打开该文件").toBe(false);
+  });
+
+  it("② drop **不带**文件（拖的是文本）⇒ onFiles 不调用，且**不** preventDefault（文本拖放照常）", () => {
+    const onFiles = vi.fn();
+    const { form } = renderWith(onFiles);
+    const notCancelled = fireEvent.drop(form, { dataTransfer: { files: [], types: ["text/plain"] } });
+    expect(onFiles, "没有文件就不该走附件链").not.toHaveBeenCalled();
+    expect(notCancelled, "没有文件时不许 preventDefault，否则会吞掉正常的文本拖放").toBe(true);
+  });
+
+  it("③ 未提供 onFiles（宿主不支持附件）⇒ drop 带文件也不炸、不调用", () => {
+    const { form } = renderWith(undefined);
+    expect(() => fireEvent.drop(form, { dataTransfer: { files: [makeFile("a.png")] } })).not.toThrow();
+  });
+
+  it("④ paste 带图片文件 ⇒ onFiles 收到，且 preventDefault（不把二进制当文本插进输入框）", () => {
+    const onFiles = vi.fn();
+    const { ta } = renderWith(onFiles);
+    const notCancelled = fireEvent.paste(ta, { clipboardData: { files: [makeFile("shot.png")] } });
+    expect(onFiles).toHaveBeenCalledTimes(1);
+    expect((onFiles.mock.calls[0][0][0] as File).name).toBe("shot.png");
+    expect(notCancelled, "带文件的 paste 必须 preventDefault").toBe(false);
+  });
+
+  it("⑤ paste **纯文本** ⇒ onFiles 不调用，且**不** preventDefault（粘贴文本必须照常）", () => {
+    const onFiles = vi.fn();
+    const { ta } = renderWith(onFiles);
+    const notCancelled = fireEvent.paste(ta, {
+      clipboardData: { files: [], getData: () => "一段文本" },
+    });
+    expect(onFiles, "纯文本粘贴不该走附件链").not.toHaveBeenCalled();
+    expect(notCancelled, "纯文本粘贴不许 preventDefault——吞掉它是比不收附件严重得多的回归").toBe(true);
+  });
+
+  it("⑥ dragOver 必须 preventDefault（否则浏览器不允许 drop，①根本触发不了）", () => {
+    const { form } = renderWith(vi.fn());
+    const notCancelled = fireEvent.dragOver(form, { dataTransfer: { files: [] } });
+    expect(notCancelled, "dragOver 不 preventDefault 的话 drop 事件不会派发").toBe(false);
+  });
+});
