@@ -46,7 +46,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 /** r122 实测基线。只许减少；每消化一批（写理由或改成显式布尔探针）就下调。 */
-const CEILING = 50;   // r122 实测基线（收窄到空体 .catch 后 50 处；只许减少）
+const CEILING = 43;   // r122 基线 50 → r123 标注 minimal-smoke 后 43（只许继续减少）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -76,8 +76,25 @@ const WAIT_CALL = /await\s+page\.waitFor(?:Selector|Function)\s*\(/;
 //   与其去做跨行语句分析，不如把判据收窄到"空体"这一个无歧义形态。
 const SWALLOW = /\.catch\(\s*\(\s*\w*\s*\)\s*=>\s*\{\s*\}\s*\)/;
 const ASSIGNED = /^\s*(?:const|let|var|return)\b|[^=!<>]=\s*(?:await\s+)?page\.waitFor/;
-/** 行内理由：同行或上一行的注释里出现"理由标记" */
-const RATIONALE = /(best-effort|尽力而为|可[选不]|等不到也|不[影响]要?紧|swallow|optional|非必需|仅?为了稳定|settle)/i;
+/**
+ * 理由标记。**看同行 + 向上连续的注释块**（最多 6 行），不只看上一行。
+ * ⚠ r123 修正：首版只看"同行或上一行"，于是写成 2–3 行的注释块**不被认**
+ *   （紧邻的上一行未必含标记词）——标注了却仍被计入棘轮，看着像"标注没用"。
+ *   通则：**要求人写理由的判据，必须接受"多行理由"**；
+ *   否则人会为了过判据把理由挤成一行，反而写不清。
+ * 标记词也放宽了：`等不到也` → `等不到`（真实写法是"等不到不算失败"/"等不到也继续"两种都有）。
+ */
+const RATIONALE = /(best-effort|尽力而为|可[选不]|等不到|不[影响]要?紧|swallow|optional|非必需|为了稳定|settle|吞掉失败)/i;
+/** 从 idx 向上收集连续注释行（含 idx 行自身的行尾注释） */
+function rationaleAbove(lines: string[], idx: number): string {
+  const parts: string[] = [lines[idx] ?? ""];
+  for (let k = idx - 1, n = 0; k >= 0 && n < 6; k -= 1, n += 1) {
+    const t = (lines[k] ?? "").trim();
+    if (!t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")) break;
+    parts.push(t);
+  }
+  return parts.join("\n");
+}
 
 describe("e2e 剧本：丢弃结果的等待必须带行内理由（棘轮）", () => {
   const files = scenarioFiles();
@@ -89,8 +106,7 @@ describe("e2e 剧本：丢弃结果的等待必须带行内理由（棘轮）", 
       if (st.startsWith("//") || st.startsWith("*")) return;
       if (!WAIT_CALL.test(st) || !SWALLOW.test(st)) return;
       if (ASSIGNED.test(ln)) return;                       // 结果被接住 ⇒ 可断言，不在本判据范围
-      const prev = (lines[idx - 1] ?? "").trim();
-      if (RATIONALE.test(st) || RATIONALE.test(prev)) return;  // 已有理由
+      if (RATIONALE.test(rationaleAbove(lines, idx))) return;  // 已有理由（同行或上方注释块）
       // ⚠ 存**整行**（不截断）：②③ 的自检要在 code 上跑正则，截断会把 .catch(() => {}) 切掉 ⇒ 假红
       bare.push({ where: `${rel}:${idx + 1}`, code: st });
     });
