@@ -122,7 +122,10 @@ try {
   const composer = await page.evaluate(() => {
     const ta = document.querySelector("[data-timeline-composer]");
     const form = ta?.closest("form") ?? document.body;
-    const send = document.querySelector("button[aria-label*='发送'], button[aria-label*='停止']");
+    // ⚠ r119：改用稳定锚点。此前是 button[aria-label*='发送'] / [aria-label*='停止']——
+    //   对**本地化 aria-label 做子串匹配**，即语言绑定探针：换 --locale en 就静默失效
+    //   （r118 刚修掉两个同类）。现在产品侧有 data-composer-send / data-composer-stop（r119 补）。
+    const send = document.querySelector("[data-composer-send], [data-composer-stop]");
     return {
       hasComposer: !!ta,
       composerTag: ta?.tagName,

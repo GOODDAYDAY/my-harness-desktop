@@ -544,6 +544,12 @@ export function Composer({
             {streaming && (
               <button
                 type="button"
+                // ⚠ 稳定探针锚点（r119，skills §10.3：探针必须靠稳定锚，不靠文本子串）。
+                //   此前这个按钮只有 aria-label={t("shell.stop")}（**随语言变**），
+                //   于是 composer-session-audit 剧本只能写 [aria-label="停止"] 去定位——
+                //   那是**语言绑定探针**：换 --locale en 就静默失效（r118 刚在 e2e-inmem 里
+                //   修掉两个同类：按 title 文案找按钮、按已移除的 aria-label 找徽标）。
+                data-composer-stop=""
                 onClick={onStop}
                 aria-label={t("shell.stop")}
                 title={t("shell.stop")}
@@ -560,6 +566,12 @@ export function Composer({
             <button
               type="submit"
               disabled={!canSend}
+              // 同上（r119）：稳定锚点 + **排队态**单独标出。
+              //   这个按钮的 aria-label 会在 streaming 时从"发送"变成"排队发送"，
+              //   所以光有 data-composer-send 不足以判状态；data-composer-queued 是状态位本身
+              //   （r96 的通则：断言状态位要让产品暴露状态位本身，不要从文案反推）。
+              data-composer-send=""
+              data-composer-queued={streaming ? "true" : "false"}
               aria-label={streaming ? t("timeline.queue.send") : t("shell.send")}
               title={streaming ? t("timeline.queue.sendHint") : undefined}
               style={{
