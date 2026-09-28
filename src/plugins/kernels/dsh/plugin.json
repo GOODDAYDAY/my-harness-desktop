@@ -41,14 +41,29 @@
     ],
     "languages": [
       {
-        "id": "dsh.dsh",
+        "id": "dsh.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "dsh.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "dsh.plugin",
         "locale": "zh-CN",
-        "resources": "./locales/zh-CN/dsh.json"
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "dsh.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
       },
       {
         "id": "dsh.dsh",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/dsh.json"
+        "locale": "de",
+        "resources": "./locales/de/dsh.json"
       },
       {
         "id": "dsh.dsh",
@@ -57,8 +72,13 @@
       },
       {
         "id": "dsh.dsh",
-        "locale": "de",
-        "resources": "./locales/de/dsh.json"
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/dsh.json"
+      },
+      {
+        "id": "dsh.dsh",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/dsh.json"
       }
     ]
   }

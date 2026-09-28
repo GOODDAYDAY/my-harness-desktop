@@ -8,7 +8,10 @@ import type { KernelExtensionSource, KernelExtensionInfo, KernelExtensionMutatio
 
 /** minimal 的扩展源:第一版空清单 + 不支持装/卸(诚实降级)。 */
 export class MinimalExtensionSource implements KernelExtensionSource {
-  readonly capabilities: KernelExtensionCapabilities = { update: false, reorder: false };
+  // ⚠ install/uninstall 都是 false（r46）：内核插件系统第一版未落地，两个方法都直接返回失败。
+  //   壳据此**在 UI 上就不给入口**（显式降级），而不是让用户填完来源点安装再事后报错。
+  readonly capabilities: KernelExtensionCapabilities = { install: false };
+  //   壳据此**在 UI 上就不给安装入口**（显式降级），而不是让用户填完来源点安装再事后报错。
 
   list(): KernelExtensionInfo[] {
     return [];

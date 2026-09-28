@@ -182,7 +182,7 @@
 
 - 与 markdown：**零交互**。markdown 是 `blockRenderers` 槽的 text 块贡献方 + `codeBlockRenderers` 槽的消费方，im-graph 是 `sidePanel` 槽贡献方，两者分属完全不同的槽，不查对方槽、不消费对方 channel、不 `dependsOn`。写作要求里「与 markdown 插件（消费方）的交互」对 im-graph 不成立——im-graph 不产出任何 markdown 文本、不消费任何围栏代码块。
 
-- 内核无关性：im-graph 的三层保证。其一，读的是中性契约——`SessionBusMessage` 信封由圆心定义（`session-bus.ts`），Session Bus 路由器由哪个内核驱动对 im-graph 透明；其二，渲染是纯函数——`core/graph-model.ts` 的 `applyStatus`/`applyFrame`/`layout` 无 React 无 IO，给定同一批 `SessionBusMessage` 画出的图与内核无关；其三，无内核身份分支——全插件 grep 不到 `if (kernel === "pi")` 或 `asPi()`，它不认识 pi/dsh，只认识 `session:<key>`/`channel:<name>` 中性地址。
+- 内核无关性：im-graph 的三层保证。其一，读的是中性契约——`SessionBusMessage` 信封由圆心定义（`session-bus.ts`），Session Bus 路由器由哪个内核驱动对 im-graph 透明；其二，渲染是纯函数——`core/graph-model.ts` 的 `applyStatus`/`applyFrame`/`layout` 无 React 无 IO，给定同一批 `SessionBusMessage` 画出的图与内核无关；其三，无内核身份分支（也不经已退役的 `asPi()` 那类按身份取面的助手）——全插件 grep 不到 `if (kernel === "pi")` 或 `asPi()`，它不认识 pi/dsh，只认识 `session:<key>`/`channel:<name>` 中性地址。
 
 - 无 `dependsOn`：im-graph 的 `plugin.json` 无 `dependsOn` 字段。它消费的是 `ctx.bus`（声明能力，经 `permissions: ["sessions:bus"]` 门控），不是任何插件的 channel；它贡献的是 `sidePanel` 槽（被框架消费），不是依赖任何插件。所以它既不需要 `dependsOn` 别人，也没人 `dependsOn` 它——是一个「自足」的观察型插件。
 

@@ -4,6 +4,7 @@
 // 依赖只向内:本文件是 api/renderer 的流入适配器,只 import core/domain 的线协议类型 +
 // core/application 的 wire 序列化,不 import electron(渲染层零 Electron)。
 
+import { i18next } from "../app/i18n-init";
 import type { WireMessage } from "@my-harness-desktop/shared";
 import { parseWire, serializeWire } from "@my-harness-desktop/shared";
 
@@ -85,7 +86,9 @@ export function wsTransport(ws: WebSocket, opts: WsTransportOptions = {}): Remot
         authed = true;
         flush();
       } else {
-        failAll("鉴权失败: hello 被服务端拒绝");
+        // ⚠ 这条会**浮到 UI**（failAll 把它作为 reject 原因交给调用方显示），所以走 i18n。
+        //   非组件的壳代码用 i18next 单例（同 build-kernel.ts 的做法，r42）。
+        failAll(i18next.t("shell.wsAuthRejected"));
       }
       return;
     }
@@ -94,14 +97,16 @@ export function wsTransport(ws: WebSocket, opts: WsTransportOptions = {}): Remot
       if (!p) return;
       pending.delete(m.id);
       if (m.ok) p.resolve(m.result);
-      else p.reject(new Error(m.error?.message ?? "remote error"));
+      else // 兜底文案会**浮到 UI**（服务端返回 error 但没带 message 时，这条就是用户看到的错误），
+        // 所以走 i18n。非组件的壳代码用 i18next 单例（同 build-kernel.ts 的做法）。
+        p.reject(new Error(m.error?.message ?? i18next.t("shell.remoteError")));
     } else if (m.kind === "push") {
       for (const cb of subs.get(m.channel) ?? []) cb(...(m.args ?? []));
     }
   });
   ws.addEventListener("close", () => {
     open = false;
-    failAll("连接已断开");
+    failAll(i18next.t("shell.wsDisconnected"));
     opts.onDisconnect?.();
   });
 

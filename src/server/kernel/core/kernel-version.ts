@@ -17,8 +17,9 @@ export interface WrapVersionApiOptions {
   markPending: (reason: string) => void;
   /** 安装/切换完成后的通用刷新信号。 */
   refresh: () => void;
-  /** tool-gate 扩展可用性探测(pi 专属;缺省 false = 无此面)。 */
-  fitPiExtensionAvailable?: () => boolean;
+  /** 该内核能否强制执行工具白名单（语义见圆心 `KernelVersionApi.toolFilterEnforced`）。
+   *  缺省 false = 该内核不声明此面，壳按「不能强制过滤」显式降级。 */
+  toolFilterEnforced?: () => boolean;
 }
 
 /** 把 KernelManager 包装成中性 KernelVersionApi(§kernel-plugin)。 */
@@ -47,6 +48,6 @@ export function wrapVersionApi(manager: KernelManager, opts: WrapVersionApiOptio
       });
       return p;
     },
-    fitPiExtensionAvailable: () => Promise.resolve(opts.fitPiExtensionAvailable?.() ?? false),
+    toolFilterEnforced: () => Promise.resolve(opts.toolFilterEnforced?.() ?? false),
   };
 }

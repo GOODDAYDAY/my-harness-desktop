@@ -4,6 +4,7 @@ import {
   ChevronRight, ChevronDown,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { CollapsibleCardHeader, ExecutionStatus, type ExecStatus } from "@my-harness-desktop/react";
 import { usePluginContext, type ToolCallBlock } from "@my-harness-desktop/react";
 import { StreamingCaret } from "./stream-text-reveal";
 
@@ -62,11 +63,20 @@ interface CardHeaderProps {
   isStreaming: boolean;
   isError?: boolean;
   collapsed: boolean;
+  /** 是否有可展开的详情。false ⇒ 不画 chevron、不给 button 语义、不声明 aria-expanded
+   *  （给一个点了不动的元素挂 aria-expanded="false" 是**错误承诺**，读屏用户会一直试着展开）。 */
+  expandable?: boolean;
   onToggle: () => void;
   right?: ReactNode;
 }
 
-function CardHeader({ toolName, summary, isStreaming, isError, collapsed, onToggle, right }: CardHeaderProps): ReactNode {
+function CardHeader({ toolName, summary, isStreaming, isError, collapsed, onToggle, right, expandable = true }: CardHeaderProps): ReactNode {
+  // r57 收敛：容器样式/交互三件套/四段布局全部来自共享的 `CollapsibleCardHeader`，
+  // 本函数只剩**工具卡特有**的两件事：① 按 isError/isStreaming/toolName 算左边条颜色；
+  // ② 组装图标（含运行态 animate-pulse）与执行状态。
+  // 此前这里是完整的一份实现，与 goal 插件 GoalCard 的内联头逐字重复——
+  // r41 修的那三个缺陷（aria-expanded / 硬编码 running / 纯图标状态）在 GoalCard 里
+  // 一个不少地留着，就是重复实现的代价（§3.5）。
   const borderColor = isError
     ? "var(--color-accent-error)"
     : isStreaming
@@ -74,57 +84,23 @@ function CardHeader({ toolName, summary, isStreaming, isError, collapsed, onTogg
       : toolName === "toolResult" || toolName === "custom_message"
         ? "var(--color-primary)"
         : "var(--color-accent-success)";
+  const status: ExecStatus = isStreaming ? "running" : isError ? "error" : "success";
   return (
-    <div
-      className="flex items-center gap-2 text-[length:var(--font-size-sm)] font-[var(--font-family-mono)] cursor-pointer transition-colors rounded-[var(--radius-md)]"
-      style={{
-        borderLeft: `3px solid ${borderColor}`,
-        background: "color-mix(in srgb, var(--color-surface) 30%, transparent)",
-        padding: "5px 12px",
-        position: "relative",
-        overflow: "hidden",
-      }}
-      onClick={onToggle}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-    >
-      {isStreaming && (
-        <span
-          aria-hidden
-          style={{
-            position: "absolute", left: 0, top: 0, bottom: 0, width: 2,
-            background: "var(--color-accent-success)",
-            animation: "tool-live-pulse 2.4s ease-in-out infinite",
-          }}
-        />
-      )}
-      {/* 运行中图标明暗交替(诉求 15):此前整卡只有文案 shimmer + 左侧呼吸条,图标本身是静态的
-          ——「只要运行中,图标要么动、要么明暗交替」是逐图标的纪律,不是整卡的。 */}
-      <span className={`text-[var(--color-muted)]${isStreaming ? " animate-pulse" : ""}`}>{toolIcon(toolName)}</span>
-      <span className="text-[var(--color-fg)] flex-1 truncate">{summary || toolName}</span>
-      {isStreaming && (
-        <span className="text-xs text-[var(--color-accent-success)]" style={{ animation: "shimmer 2s linear infinite" }}>
-          running
-        </span>
-      )}
-      {!isStreaming && isError && (
-        <span className="text-xs text-[var(--color-accent-error)]">
-          <X className="size-3.5" />
-        </span>
-      )}
-      {!isStreaming && !isError && (
-        <span className="text-xs text-[var(--color-muted)]">
-          <Check className="size-3.5" />
-        </span>
-      )}
-      {right}
-      <span className="text-[var(--color-muted)]">
-        {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
-      </span>
-    </div>
+    <CollapsibleCardHeader
+      borderColor={borderColor}
+      collapsed={collapsed}
+      onToggle={onToggle}
+      expandable={expandable}
+      livePulse={isStreaming}
+      // 运行中图标明暗交替(诉求 15):「只要运行中,图标要么动、要么明暗交替」是逐图标的纪律。
+      icon={<span className={`text-[var(--color-muted)]${isStreaming ? " animate-pulse" : ""}`}>{toolIcon(toolName)}</span>}
+      summary={summary || toolName}
+      status={<ExecutionStatus state={status} />}
+      trailing={right}
+    />
   );
 }
+
 
 interface BashArgs {
   command?: string;
@@ -138,6 +114,7 @@ interface BashResult {
 }
 
 export function BashCard({ toolCall, collapseDefault = true }: { toolCall: ToolCallItem; collapseDefault?: boolean }): ReactNode {
+  const { t } = useTranslation();
   const a = (toolCall.args as BashArgs) ?? {};
   const command = a.command ?? "";
   const result = toolCall.result as BashResult | undefined;
@@ -176,13 +153,13 @@ export function BashCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
           {lines.slice(0, 200).join("\n")}
           {lines.length > 200 && (
             <div style={{ color: "var(--color-muted)", marginTop: 4, fontSize: 11 }}>
-              ...({lines.length - 200} {lines.length - 200 > 0 ? "lines collapsed" : ""})
+              {t("timeline.linesCollapsed", { count: lines.length - 200 })}
             </div>
           )}
           {isStreaming && <StreamingCaret />}
           {!isStreaming && exitCode !== undefined && (
             <div style={{ marginTop: 6, color: isError ? "var(--color-accent-error)" : "var(--color-muted)", fontSize: 11 }}>
-              exit {exitCode}
+              {t("timeline.exitCode", { code: exitCode })}
             </div>
           )}
           {result?.truncated && result.fullOutputPath && (
@@ -316,6 +293,7 @@ function CollapsibleOutput({
   onOpen: (file: string, line?: number) => void;
   truncated?: boolean;
 }): ReactNode {
+  const { t } = useTranslation();
   const lines = text.split("\n").filter(l => l.trim() !== "");
   const parseFileLine = (line: string): { file: string; line?: number } | null => {
     const m = /^([^:\s]+):(\d+):/.exec(line);
@@ -349,7 +327,10 @@ function CollapsibleOutput({
           </div>
         );
       })}
-      {truncated && <div style={{ color: "var(--color-accent-warning)", marginTop: 4 }}>truncated</div>}
+      {/* 此前是硬编码英文 `truncated`（r51 修）。它能溜过 r42 的英文守卫，是因为那条判据
+          刻意要求「2 个以上英文单词」以避免专名/类名造成大片假阳性——**单词级字面量是它
+          记录在案的已知盲区**。这类"一个词的界面提示"只能靠人工看 DOM 或逐个组件审。 */}
+      {truncated && <div style={{ color: "var(--color-accent-warning)", marginTop: 4 }}>{t("timeline.outputTruncated")}</div>}
     </div>
   );
 }
@@ -439,42 +420,35 @@ export function DefaultCard({ toolCall, collapseDefault = true }: { toolCall: To
   const resultText = fmtResult(toolCall.result);
   const hasDetail = args.length > 0 || resultText.length > 0;
   const isStreaming = toolCall.state === "pending" || toolCall.state === "running";
-  const isError = toolCall.isError;
-  const borderColor = isError
-    ? "var(--color-accent-error)"
-    : toolCall.name === "toolResult" || toolCall.name === "custom_message"
-      ? "var(--color-primary)"
-      : "var(--color-accent-success)";
+  const isError = !!toolCall.isError;
 
+  // ⚠ 卡头**复用 CardHeader**，不再自己内联一份（r41 收敛）。
+  //   内联那一份比 CardHeader 差三处，而且都是"看不见"的：
+  //     ① `onClick` 挂在 div 上却**没有 role / tabIndex / 键处理** ⇒ 键盘完全不可达
+  //        （BashCard / EditCard / ReadCard 都走 CardHeader，唯独兜底卡不行——
+  //        而兜底卡恰恰是 custom_message / 未知工具的落点，最需要能被展开看内容）；
+  //     ② 状态文案硬编码英文 `running` / `error`（换语言不变，且与 CardHeader 的 i18n 版并存）；
+  //     ③ 没有 `aria-expanded`（展开与否只有 chevron 图标在变）。
+  //   收敛到一份实现后三处一起消失，也符合 §3.5「手写收敛」与 §3.3「框架管通用」。
+  //   视觉差异：外层不再自带 borderLeft/背景（改由 CardHeader 提供，与其它卡片一致），
+  //   正文块改用与 BashCard 正文同款的容器样式；`isStreaming` 时左边条取 success 色
+  //   （原兜底卡在这一分支取 primary，现与其余卡片统一）。
   return (
-    <div
-      className="mb-1.5 rounded-[var(--radius-md)] cursor-pointer transition-colors"
-      style={{
-        borderLeft: `3px solid ${borderColor}`,
-        background: "color-mix(in srgb, var(--color-surface) 30%, transparent)",
-        padding: "5px 12px",
-      }}
-      onClick={() => hasDetail && setCollapsed(!collapsed)}
-    >
-      <div className="flex items-center gap-2 text-[length:var(--font-size-sm)] font-[var(--font-family-mono)]">
-        <span className={`text-[var(--color-muted)]${isStreaming ? " animate-pulse" : ""}`}>{toolIcon(toolCall.name)}</span>
-        <span className="text-[var(--color-fg)] flex-1 truncate">{toolCall.name}</span>
-        {isStreaming && (
-          <span className="text-xs text-[var(--color-muted)]" style={{ animation: "shimmer 2s linear infinite" }}>
-            running
-          </span>
-        )}
-        {isError && (
-          <span className="text-xs text-[var(--color-accent-error)]">error</span>
-        )}
-        {hasDetail && (
-          <span className="text-[var(--color-muted)]">
-            {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
-          </span>
-        )}
-      </div>
+    <div className="mb-1.5">
+      <CardHeader
+        toolName={toolCall.name}
+        summary={toolCall.name}
+        isStreaming={isStreaming}
+        isError={isError}
+        collapsed={collapsed}
+        expandable={hasDetail}
+        onToggle={() => setCollapsed((c) => !c)}
+      />
       {!collapsed && hasDetail && (
-        <div className="mt-1 pt-1 border-t border-[var(--color-border)] text-xs font-[var(--font-family-mono)] max-h-[400px] overflow-y-auto">
+        <div
+          className="mt-1 rounded-[var(--radius-md)] p-2.5 text-xs font-[var(--font-family-mono)] max-h-[400px] overflow-y-auto"
+          style={{ background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))" }}
+        >
           {args.length > 0 && (
             <>
               <div className="text-[length:var(--font-size-xs)] font-semibold uppercase tracking-wide text-[var(--color-muted)] opacity-60 mb-0.5">

@@ -36,6 +36,7 @@
   "shell.toolExecuting": "正在执行工具…",
   "shell.outputting": "正在生成…",
   "shell.compacting": "正在压缩…",
+  "shell.retrying": "正在重试…",
   "shell.scrollToBottom": "回到底部",
   "shell.switchingSession": "切换会话…",
   "shell.error": "生成失败",

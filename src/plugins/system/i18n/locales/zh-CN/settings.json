@@ -1,4 +1,10 @@
 {
   "settings.language": "语言",
-  "settings.languageDesc": "选择界面语言,实时生效。"
+  "settings.languageDesc": "选择界面语言,实时生效。",
+  "settings.otherFields": "其他字段(内核配置里没有预设说明的项,按实际值自动展示)",
+  "settings.noSchemaFields": "此内核未提供字段清单,且当前没有可编辑的配置项——它的配置可能由内核自己管理。",
+  "settings.valueNotInOptions": "{{value}}（当前值不在可选项内）",
+  "settings.ungrouped": "未分组",
+  "settings.listRemoveItem": "移除此项",
+  "settings.unknownError": "未知错误"
 }

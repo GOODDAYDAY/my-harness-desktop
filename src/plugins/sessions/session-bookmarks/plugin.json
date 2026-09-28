@@ -31,18 +31,58 @@
         "id": "fork",
         "component": "ForkAction",
         "placement": "left",
-        "when": { "role": ["assistant"], "settled": true },
+        "when": {
+          "role": [
+            "assistant"
+          ],
+          "settled": true
+        },
         "order": 18
       },
       {
         "id": "bookmark",
         "component": "BookmarkAction",
         "placement": "left",
-        "when": { "role": ["assistant"], "settled": true },
+        "when": {
+          "role": [
+            "assistant"
+          ],
+          "settled": true
+        },
         "order": 20
       }
     ],
     "languages": [
+      {
+        "id": "session-bookmarks.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "session-bookmarks.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "session-bookmarks.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "session-bookmarks.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "session-bookmarks.bookmarks",
+        "locale": "de",
+        "resources": "./locales/de/bookmarks.json"
+      },
+      {
+        "id": "session-bookmarks.bookmarks",
+        "locale": "en",
+        "resources": "./locales/en/bookmarks.json"
+      },
       {
         "id": "session-bookmarks.bookmarks",
         "locale": "zh-CN",
@@ -54,14 +94,24 @@
         "resources": "./locales/zh-TW/bookmarks.json"
       },
       {
-        "id": "session-bookmarks.bookmarks",
-        "locale": "en",
-        "resources": "./locales/en/bookmarks.json"
+        "id": "session-bookmarks.sidePanel",
+        "locale": "de",
+        "resources": "./locales/de/sidePanel.json"
       },
       {
-        "id": "session-bookmarks.bookmarks",
-        "locale": "de",
-        "resources": "./locales/de/bookmarks.json"
+        "id": "session-bookmarks.sidePanel",
+        "locale": "en",
+        "resources": "./locales/en/sidePanel.json"
+      },
+      {
+        "id": "session-bookmarks.sidePanel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sidePanel.json"
+      },
+      {
+        "id": "session-bookmarks.sidePanel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sidePanel.json"
       }
     ]
   }

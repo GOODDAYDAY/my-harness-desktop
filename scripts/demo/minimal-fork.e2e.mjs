@@ -160,11 +160,11 @@ try {
   // 必须等列表换成目标内核的(点 TAB → Radix 状态更新 → 重渲染是异步的;立刻取样会读到上一个内核的列表)。
   // 同族假失败实测过(minimal-model「Mock 未找到」:tabs 有 minimal 但 items 全是 pi 的)。见 skills §10.3.1。
   await page.waitForFunction(
-    () => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes('Minimal Echo')),
+    () => [...document.querySelectorAll("[role^='menuitem']")].some((el) => (el.textContent || "").includes('Minimal Echo')),
     { timeout: 6000, polling: 200 },
   ).catch(() => {});
   const itemRect = await page.evaluate(() => {
-    const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => (el.textContent || "").includes("Minimal Echo") && el.getBoundingClientRect().width > 0);
+    const item = [...document.querySelectorAll("[role^='menuitem']")].find((el) => (el.textContent || "").includes("Minimal Echo") && el.getBoundingClientRect().width > 0);
     if (!item) return null;
     const r = item.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };

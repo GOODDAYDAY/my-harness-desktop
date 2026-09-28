@@ -1,0 +1,4 @@
+{
+  "plugin.dsh.displayName": "DSH Manager",
+  "plugin.dsh.description": "dsh kernel management: version + settings + extensions + models (one entry, three tabs, on par with PI)"
+}

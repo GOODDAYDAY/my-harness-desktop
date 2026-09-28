@@ -32,7 +32,8 @@ export const DSH_METHODS = {
   sessionProjectStats: "session/projectStats",
   sessionPrompt: "session/prompt",
   sessionRename: "session/rename",
-  sessionResume: "session/resume",
+  // ⚠ 曾有 sessionResume: "session/resume"，r72 随契约的 resume? 一起删除（无人 import 的死条目；
+  //   本文件是"壳会调用的方法名"单源，不被调用的方法留在这里会让人以为壳在用它）。
   sessionSeed: "session/seed",
   sessionSetModel: "session/setModel",
   /** 运行时切思考深度(补面方法,由桌面适配插件拦截提供;dsh-thinking-level.md)。 */

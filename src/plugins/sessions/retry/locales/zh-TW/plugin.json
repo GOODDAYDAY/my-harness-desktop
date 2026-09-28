@@ -1,0 +1,4 @@
+{
+  "plugin.retry.displayName": "重試",
+  "plugin.retry.description": "訊息重試按鈕：從任意 assistant/tool 節點 fork 並重新產生"
+}

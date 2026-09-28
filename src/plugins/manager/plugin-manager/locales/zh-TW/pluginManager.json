@@ -1,6 +1,6 @@
 {
-  "pluginManager.title": "插件",
-  "pluginManager.install": "安裝插件",
+  "pluginManager.title": "外掛",
+  "pluginManager.install": "安裝外掛",
   "pluginManager.installPlaceholder": "輸入 URL 或選擇本地檔案",
   "pluginManager.selectFile": "選擇檔案",
   "pluginManager.installing": "安裝中...",
@@ -14,7 +14,7 @@
   "pluginManager.protectedTooltip": "受保護，不可解除安裝",
   "pluginManager.pagePrev": "上一頁",
   "pluginManager.pageNext": "下一頁",
-  "pluginManager.total": "共 {{count}} 個插件",
+  "pluginManager.total": "共 {{count}} 個外掛",
   "pluginManager.tierOfficial": "官方",
   "pluginManager.tierVerified": "認證",
   "pluginManager.tierCommunity": "社群",
@@ -33,5 +33,6 @@
   "pluginManager.tag.review": "評審",
   "pluginManager.tag.dev": "開發",
   "pluginManager.tag.productivity": "效率",
-  "pluginManager.tag.insight": "洞察"
+  "pluginManager.tag.insight": "洞察",
+  "pluginManager.systemPromptInert": "目前核心不承接附加系統 prompt，此外掛貢獻的 systemPrompts 暫不生效"
 }

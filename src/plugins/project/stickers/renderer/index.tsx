@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, Download, Upload } from "lucide-react";
+import { Announce, announceTransient } from "@my-harness-desktop/react";
 import {
   DndContext, PointerSensor, closestCenter, useDroppable, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
@@ -48,16 +49,20 @@ export const channels = ["stickers:fillComposer", "stickers:send"] as const;
  *  设置页用(用户要求导入导出放设置页);失败原因可见,不再静默。 */
 function useStickerTransfer(ctx: PluginContext, reload: () => Promise<void>): {
   busy: boolean;
-  msg: string | null;
+  msg: { text: string; kind: "info" | "error" } | null;
   doExport: () => Promise<void>;
   doImport: () => Promise<void>;
 } {
+  // hook 里同样可以用 useTranslation（它本身就是 hook）；导入结果的 flash 文案要翻译。
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  // ⚠ 状态带**严重级**（r59）：只有字符串的话，播报时无法区分"导出成功"与"导出失败"，
+  //   而失败恰恰该用 role=alert 立刻打断（r37 定的：错误可打断，告知用 polite）。
+  const [msg, setMsg] = useState<{ text: string; kind: "info" | "error" } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
-  const flash = useCallback((m: string) => {
-    setMsg(m);
+  const flash = useCallback((m: string, kind: "info" | "error" = "info") => {
+    setMsg({ text: m, kind });
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => setMsg(null), 3000);
   }, []);
@@ -66,11 +71,11 @@ function useStickerTransfer(ctx: PluginContext, reload: () => Promise<void>): {
     setBusy(true);
     try {
       const path = await exportStickersZip(ctx);
-      flash(path ? "已导出表情包 zip" : "已取消");
+      flash(path ? t("stickers.exportedZip") : t("stickers.cancel"));
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       console.error("[stickers] 导出失败:", e);
-      flash(`导出失败: ${detail}`);
+      flash(t("stickers.exportFailed", { detail }), "error");
     } finally {
       setBusy(false);
     }
@@ -81,11 +86,14 @@ function useStickerTransfer(ctx: PluginContext, reload: () => Promise<void>): {
     try {
       const res = await importStickersZip(ctx);
       await reload();
-      flash(`已导入 ${res.imported} 条${res.skipped > 0 ? `,跳过 ${res.skipped}` : ""}`);
+      // 文案走 i18n（此前是硬编码中文模板串，德/英/繁中用户看到简体）。
+      // 拆成两个键而不是一个带条件分支的键：原文案就是"跳过 0 条时不显示后半段"，
+      // 用两个键能原样保留这个行为，不必引入 i18next 的复数/上下文机制。
+      flash(`${t("stickers.importedCount", { count: res.imported })}${res.skipped > 0 ? t("stickers.skippedCount", { count: res.skipped }) : ""}`);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       console.error("[stickers] 导入失败:", e);
-      flash(`导入失败: ${detail}`);
+      flash(t("stickers.importFailed", { detail }), "error");
     } finally {
       setBusy(false);
     }
@@ -157,6 +165,7 @@ function sendSticker(ctx: PluginContext, sticker: LayeredSticker): void {
 
 /** 右面板:贴纸网格(随宽度自适应 2/3/4 列),点击发送,就地增删改,支持搜索/导入/导出。 */
 export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
+  const { t } = useTranslation();
   const ctx = usePluginContext();
   const { cwd, stickers, editing, setEditing, reload } = useStickers();
   const streaming = useSessionStore((s) => s.streaming);
@@ -201,9 +210,9 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <PanelToolbar title="表情包">
+      <PanelToolbar title={t("stickers.panelTitle")}>
         <div className="flex-1" />
-        <PanelIconButton title="新建贴纸" onClick={() => setEditing({ title: "", content: "" })}>
+        <PanelIconButton title={t("stickers.newSticker")} onClick={() => setEditing({ title: "", content: "" })}>
           <Plus className="size-4" />
         </PanelIconButton>
       </PanelToolbar>
@@ -214,7 +223,7 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索标题或内容…"
+            placeholder={t("stickers.searchPlaceholder")}
             className="flex-1 bg-transparent border-none outline-none py-1.5 text-xs text-[var(--color-fg)] placeholder:text-[var(--color-muted)]"
           />
         </div>
@@ -236,7 +245,7 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
               )}
               {matched.length === 0 && !editing && (
                 <div className="col-span-full p-4 text-[var(--color-muted)] text-[length:var(--font-size-sm)] text-center">
-                  暂无贴纸。点右上角 ＋ 新建,点卡片直接发送进会话。
+                  {t("stickers.emptyHint")}
                 </div>
               )}
               {matched.map((n) =>
@@ -257,7 +266,7 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
                     sticker={n}
                     dndDisabled={dndDisabled || n.layer === "builtin"}
                     onActivate={() => void send(n)}
-                    activateDisabledReason={streaming ? "等待当前回复完成" : !cwd ? "先打开文件夹" : null}
+                    activateDisabledReason={streaming ? t("stickers.waitForReply") : !cwd ? t("stickers.openFolderFirst") : null}
                     onFillComposer={() => void fillComposer(n)}
                     onEdit={n.layer === "builtin" ? undefined : () => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
                     onDelete={async () => {
@@ -477,14 +486,30 @@ export function StickersSettings(): ReactNode {
   };
 
   const saveNew = async (draft: StickerDraft): Promise<void> => {
-    await createSticker(ctx, draft, editing?.targetLayer ?? "project");
-    setEditing(null);
-    await reload();
+    await mutate(() => createSticker(ctx, draft, editing?.targetLayer ?? "project"), "stickers.saveFailed");
   };
+  /** 跑一次会写盘的变更操作，失败时**可见**（r83）。
+   *  此前 create/save/delete 都是裸 await：store 层的 `configFile.writeBinary`（写 banner 图）
+   *  或配置写盘抛错时，`setEditing(null)` 与 `reload()` 全走不到 ⇒ 编辑器不关、列表不刷新、
+   *  而且**一点提示都没有**（与 r80 的 install 卡死同类：静默失败 + 状态卡住）。
+   *  用本插件既有的 `flash(msg, "error")`（r59 给它加了严重级，错误走 role=alert 可打断）。 */
+  const mutate = async (op: () => Promise<void>, failKey: string): Promise<void> => {
+    try {
+      await op();
+      setEditing(null);
+      await reload();
+    } catch (err) {
+      // 用发布面的命令式原语（r82 为框架兜底而建）：本组件没有自己的瞬时提示态
+      // （flash/msg 那套住在 useStickerTransfer 里，作用域不通）。announceTransient
+      // 渲染出与 <Announce variant="error"> 相同的 DOM（role=alert，可打断），
+      // 所以读屏行为与本插件导入导出的失败提示一致。
+      announceTransient(t(failKey, { detail: (err as Error)?.message ?? String(err) }), "error");
+      await reload().catch(() => {});   // 失败也要尽量让列表回到真实状态，别显示半截
+    }
+  };
+
   const saveEdit = async (id: string, draft: StickerDraft): Promise<void> => {
-    await updateSticker(ctx, id, draft);
-    setEditing(null);
-    await reload();
+    await mutate(() => updateSticker(ctx, id, draft), "stickers.saveFailed");
   };
   const del = async (id: string): Promise<void> => {
     await removeSticker(ctx, id);
@@ -512,18 +537,18 @@ export function StickersSettings(): ReactNode {
         <button
           onClick={() => void transfer.doImport()}
           disabled={transfer.busy}
-          title="导入贴纸 zip(整体还原:数据 + banner 图)"
+          title={t("stickers.importTitle")}
           className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer disabled:opacity-40"
         >
-          <Download className="size-3.5" />导入
+          <Download className="size-3.5" />{t("stickers.import")}
         </button>
         <button
           onClick={() => void transfer.doExport()}
           disabled={transfer.busy}
-          title="导出贴纸 zip(整体打包:数据 + banner 图)"
+          title={t("stickers.exportTitle")}
           className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer disabled:opacity-40"
         >
-          <Upload className="size-3.5" />导出
+          <Upload className="size-3.5" />{t("stickers.export")}
         </button>
         <button
           onClick={() => setEditing({ title: "", content: "", targetLayer: "project" })}
@@ -532,9 +557,10 @@ export function StickersSettings(): ReactNode {
           <Plus className="size-3.5" />{t("stickers.newSticker")}
         </button>
       </div>
+      {transfer.msg && <Announce message={transfer.msg.text} variant={transfer.msg.kind} />}
       {transfer.msg && (
         <div className="mt-1.5 px-2 py-1 text-xs rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-muted)]">
-          {transfer.msg}
+          {transfer.msg.text}
         </div>
       )}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>

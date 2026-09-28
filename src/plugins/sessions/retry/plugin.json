@@ -4,24 +4,53 @@
   "tier": "official",
   "displayName": "重试",
   "description": "消息重试按钮:从任意 assistant/tool 节点 fork 并重新生成",
-  "tags": ["conversation"],
+  "tags": [
+    "conversation"
+  ],
   "renderer": "./renderer/index.tsx",
-  "dependsOn": ["timeline"],
+  "dependsOn": [
+    "timeline"
+  ],
   "contributes": {
     "messageActions": [
       {
         "id": "retry",
         "component": "RetryAction",
         "placement": "left",
-        "when": { "role": ["assistant"], "settled": true },
+        "when": {
+          "role": [
+            "assistant"
+          ],
+          "settled": true
+        },
         "order": 50
       }
     ],
     "languages": [
       {
-        "id": "retry.shell",
+        "id": "retry.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "retry.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "retry.plugin",
         "locale": "zh-CN",
-        "resources": "./locales/zh-CN/shell.json"
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "retry.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "retry.shell",
+        "locale": "de",
+        "resources": "./locales/de/shell.json"
       },
       {
         "id": "retry.shell",
@@ -30,13 +59,13 @@
       },
       {
         "id": "retry.shell",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/shell.json"
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/shell.json"
       },
       {
         "id": "retry.shell",
-        "locale": "de",
-        "resources": "./locales/de/shell.json"
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/shell.json"
       }
     ]
   }

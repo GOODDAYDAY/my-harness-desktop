@@ -1,0 +1,4 @@
+{
+  "plugin.goody-hao.displayName": "GoodyHao",
+  "plugin.goody-hao.description": "Injects die mitgelieferten Engineering-Prinzipien pro Sitzung: trägt den systemPrompts-Slot bei, den die Shell in den System-Prompt des Kernels einspeist, sofern dieser das Anhängen unterstützt. Deinstallieren beendet die Injektion."
+}

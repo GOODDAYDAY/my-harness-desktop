@@ -1,0 +1,4 @@
+{
+  "plugin.im-graph.displayName": "IM",
+  "plugin.im-graph.description": "Session Bus relationship graph — room members, spawn parent/child, and message flow visualized live"
+}

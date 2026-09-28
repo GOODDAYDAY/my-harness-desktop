@@ -8,7 +8,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
-import { createDshBackend } from "../../factories/kernel-factories";
+import { createDshBackend } from "./dsh-backend-factory";
+import type { DshBackend } from "./dsh-backend";
 import type { SessionEvent, NeutralEntry, NeutralSessionHeader } from "@my-harness-desktop/shared";
 
 const CLI = join(homedir(), ".my-harness-desktop-dev", "dsh", "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "lib", "bin.js");
@@ -157,7 +158,7 @@ describe.skipIf(skippable)("DshBackend 集成(真实 dsh 二进制)", () => {
       await r1;
       // 热切:同 provider 换模型——补丁(或原生)应答成功,不记缺面、能力位保持 true
       await backend.setModel("us-new", "bifrost/dashscope/kimi-k3");
-      expect(backend.capabilities.thinking?.missing.has("session/setModel")).toBe(false);
+      expect((backend as DshBackend).missingMethods.has("session/setModel")).toBe(false);
       expect(backend.supportsRuntimeSetModel).toBe(true);
       // 进程不死(热切不重启:桌面侧可观察的边界就是进程/传输不动)
       expect(backend.alive).toBe(true);

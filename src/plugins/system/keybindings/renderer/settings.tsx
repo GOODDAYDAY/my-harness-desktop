@@ -22,6 +22,15 @@ function modLabel(): string {
 
 export function KeybindingsSettings({ config, onChange }: SettingsComponentProps): React.ReactNode {
   const { t } = useTranslation();
+  /** channel 的可读文案：契约给的是 **i18n 键**（r55 改），这里统一解析。
+   *  缺键时回退到 channel 名本身——那是"增强而非门槛"的既有语义（契约注释里写着），
+   *  不能因为没声明文案就让列表项空白。
+   *  ⚠ 回退用的是 channel 名而**不是键名**：键名（如 `timeline.channel.scrollTo.label`）
+   *  对用户毫无意义，而 channel 名至少是他能在别处认出来的标识。 */
+  const chanLabel = (c: { channel: string; meta?: { labelKey?: string } }): string =>
+    c.meta?.labelKey ? t(c.meta.labelKey) : c.channel;
+  const chanDesc = (c: { meta?: { descriptionKey?: string } }): string =>
+    c.meta?.descriptionKey ? t(c.meta.descriptionKey) : "";
   const bindings = useMemo(
     () => (Array.isArray(config?.bindings) ? (config!.bindings as Binding[]) : DEFAULT_BINDINGS),
     [config],
@@ -42,8 +51,9 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
     if (!q) return channels;
     return channels.filter((c) =>
       c.channel.toLowerCase().includes(q)
-      || c.meta?.label?.toLowerCase().includes(q)
-      || c.meta?.description?.toLowerCase().includes(q),
+      // 搜索按**解析后的译文**匹配，不是按键名——用户搜的是他看到的字（r55）。
+      || chanLabel(c).toLowerCase().includes(q)
+      || chanDesc(c).toLowerCase().includes(q),
     );
   }, [channels, query]);
 
@@ -147,14 +157,14 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
           </span>
           <div className="flex gap-2">
             <button
-              className="px-2.5 py-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[length:var(--font-size-sm)] text-[var(--color-fg)] bg-[var(--color-surface)] cursor-pointer hover:border-[var(--color-accent)]"
+              className="px-2.5 py-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[length:var(--font-size-sm)] text-[var(--color-fg)] bg-[var(--color-surface)] cursor-pointer hover:border-[var(--color-primary)]"
               onClick={() => commit([...DEFAULT_BINDINGS])}
             >
               {t("keybindings.resetDefaults")}
             </button>
             {adding.phase === "idle" && (
               <button
-                className="px-2.5 py-1 rounded-[var(--radius-sm)] border border-[var(--color-accent)] text-[length:var(--font-size-sm)] text-[var(--color-accent)] bg-transparent cursor-pointer hover:bg-[var(--color-accent)]/10"
+                className="px-2.5 py-1 rounded-[var(--radius-sm)] border border-[var(--color-primary)] text-[length:var(--font-size-sm)] text-[var(--color-primary)] bg-transparent cursor-pointer hover:bg-[var(--color-primary)]/10"
                 onClick={() => setAdding({ phase: "recording" })}
               >
                 {t("keybindings.addBinding")}
@@ -174,12 +184,12 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
             const info = channels.find((c) => c.channel === b.channel);
             return (
               <div key={i} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-2 min-w-0">
-                <kbd className="flex-none rounded-[var(--radius-xs)] border border-[var(--color-border)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[length:var(--font-size-xs)] text-[var(--color-accent)]">
+                <kbd className="flex-none rounded-[var(--radius-xs)] border border-[var(--color-border)] bg-[var(--color-bg)] px-1.5 py-0.5 font-mono text-[length:var(--font-size-xs)] text-[var(--color-primary)]">
                   {b.combo.replace("mod", modLabel())}
                 </kbd>
                 <div className="flex-1 min-w-0">
                   <div className="truncate text-[length:var(--font-size-sm)] text-[var(--color-fg)]">
-                    {info?.meta?.label ?? b.channel}
+                    {info ? chanLabel(info) : b.channel}
                   </div>
                   <div className="truncate font-mono text-[length:var(--font-size-xs)] text-[var(--color-muted)]">
                     {b.channel}
@@ -192,7 +202,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
                   </span>
                 )}
                 <button
-                  className="flex-none size-6 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg)] cursor-pointer"
+                  className="flex-none size-6 flex items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-muted)] hover:text-[var(--color-primary)] hover:bg-[var(--color-bg)] cursor-pointer"
                   onClick={() => setAdding({ phase: "recording", editingIndex: i })}
                   title={t("keybindings.editBinding")}
                 >
@@ -211,7 +221,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
         </div>
 
         {adding.phase === "recording" && (
-          <div className="mt-3 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-accent)] px-3 py-4 text-center">
+          <div className="mt-3 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-primary)] px-3 py-4 text-center">
             <div className="text-[length:var(--font-size-sm)] text-[var(--color-fg)]">
               {adding.editingIndex !== undefined ? t("keybindings.recordingEdit") : t("keybindings.recording")}
             </div>
@@ -222,7 +232,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
         {adding.phase === "configuring" && (
           <div className="mt-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 flex flex-col gap-3">
             <div className="flex items-center gap-2">
-              <kbd className="rounded-[var(--radius-xs)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[length:var(--font-size-sm)] text-[var(--color-accent)]">
+              <kbd className="rounded-[var(--radius-xs)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2 py-1 font-mono text-[length:var(--font-size-sm)] text-[var(--color-primary)]">
                 {adding.combo.replace("mod", modLabel())}
               </kbd>
               <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t("keybindings.chooseEvent")}</span>
@@ -243,7 +253,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
             </div>
 
             <input
-              className="w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none focus:border-[var(--color-accent)]"
+              className="w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1.5 text-[length:var(--font-size-sm)] text-[var(--color-fg)] outline-none focus:border-[var(--color-primary)]"
               placeholder={t("keybindings.searchEvents")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -260,12 +270,12 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
                     return (
                       <button
                         key={c.channel}
-                        className={`w-full text-left flex flex-col gap-0.5 rounded-[var(--radius-sm)] px-2 py-1.5 cursor-pointer ${selected ? "bg-[var(--color-accent)]/10 border border-[var(--color-accent)]" : "border border-transparent hover:bg-[var(--color-bg)]"}`}
+                        className={`w-full text-left flex flex-col gap-0.5 rounded-[var(--radius-sm)] px-2 py-1.5 cursor-pointer ${selected ? "bg-[var(--color-primary)]/10 border border-[var(--color-primary)]" : "border border-transparent hover:bg-[var(--color-bg)]"}`}
                         onClick={() => selectChannel(c.channel)}
                       >
-                        <span className="font-mono text-[length:var(--font-size-xs)] text-[var(--color-accent)]">{c.channel}</span>
-                        {c.meta?.label && <span className="text-[length:var(--font-size-sm)] text-[var(--color-fg)]">{c.meta.label}</span>}
-                        {c.meta?.description && <span className="text-[length:var(--font-size-xs)] text-[var(--color-muted)]">{c.meta.description}</span>}
+                        <span className="font-mono text-[length:var(--font-size-xs)] text-[var(--color-primary)]">{c.channel}</span>
+                        {c.meta?.labelKey && <span className="text-[length:var(--font-size-sm)] text-[var(--color-fg)]">{chanLabel(c)}</span>}
+                        {c.meta?.descriptionKey && <span className="text-[length:var(--font-size-xs)] text-[var(--color-muted)]">{chanDesc(c)}</span>}
                       </button>
                     );
                   })}
@@ -292,7 +302,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
                 <div className="flex flex-col gap-1">
                   <span className="text-[length:var(--font-size-sm)] text-[var(--color-muted)]">{t("keybindings.payload")}</span>
                   <textarea
-                    className="w-full h-24 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1.5 font-mono text-[length:var(--font-size-xs)] text-[var(--color-fg)] outline-none resize-y focus:border-[var(--color-accent)]"
+                    className="w-full h-24 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1.5 font-mono text-[length:var(--font-size-xs)] text-[var(--color-fg)] outline-none resize-y focus:border-[var(--color-primary)]"
                     placeholder={t("keybindings.payloadPlaceholder")}
                     value={adding.payloadText}
                     onChange={(e) => setAdding({ ...adding, payloadText: e.target.value })}
@@ -301,7 +311,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
                 </div>
                 <div className="flex justify-end gap-2">
                   <button
-                    className="px-3 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-accent)] text-[length:var(--font-size-sm)] text-[var(--color-accent)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-primary)] text-[length:var(--font-size-sm)] text-[var(--color-primary)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     disabled={!adding.channel}
                     onClick={saveNew}
                   >

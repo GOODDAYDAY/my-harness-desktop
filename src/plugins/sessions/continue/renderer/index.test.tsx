@@ -5,12 +5,19 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const mocks = vi.hoisted(() => ({
   prompt: vi.fn(),
 }));
 
 vi.mock("@my-harness-desktop/react", () => ({
+  // Announce 是「把瞬时消息送进常驻 live region」的播报旁路（r37 新增）。
+  // 本文件测的是点击行为与**可见**错误文本，播报路径由 live-region 自己的测试覆盖，
+  // 所以这里给一个形状一致、不产内容的替身（真实实现是 portal，jsdom 里没必要建）。
+  Announce: () => null,
   usePluginContext: () => ({ messaging: { prompt: mocks.prompt } }),
   useSessionStore: (selector?: (s: unknown) => unknown) => {
     const state = { streaming: false };
@@ -18,16 +25,19 @@ vi.mock("@my-harness-desktop/react", () => ({
   },
   useArmConfirm: () => ({ armed: false, arm: vi.fn(), disarm: vi.fn() }),
 }));
+// i18n 给**真字典**（读该插件自己的 locale；r56 起续跑文案走 t()，
+// 若 mock 返回键本身，"prompt 发通用续跑文案"这条断言就会拿到键名而不是文案）。
+const __here = dirname(fileURLToPath(import.meta.url));
+const CONT_DICT = JSON.parse(readFileSync(join(__here, "../locales/zh-CN/shell.json"), "utf-8")) as Record<string, string>;
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (k: string, opts?: Record<string, unknown>) => {
-    if (opts?.defaultValue) return String(opts.defaultValue);
-    const dict: Record<string, string> = {
-      "shell.continue": "继续",
-      "shell.continueFailed": `继续失败：${opts?.error ?? ""}`,
-      "shell.continueStreamingBlocked": "生成进行中，无法继续",
-    };
-    return dict[k] ?? k;
-  } }),
+  useTranslation: () => ({
+    t: (k: string, vars?: Record<string, unknown>): string => {
+      let v = CONT_DICT[k] ?? k;
+      for (const [n, val] of Object.entries(vars ?? {})) v = v.split(`{{${n}}}`).join(String(val));
+      return v;
+    },
+    i18n: { exists: (k: string) => k in CONT_DICT, language: "zh-CN" },
+  }),
 }));
 
 import { ContinueAction } from "./index";

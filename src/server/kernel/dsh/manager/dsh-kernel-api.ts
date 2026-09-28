@@ -3,7 +3,8 @@
 // 把 dsh 的原生形状（settings.yaml 的 llm-pi-ai.providers 多路由 + cordis.yml 插件树）
 // 翻译成中性 KernelModelsApi。纯自定义 provider：apiKey 字面值经 DshConfigSource 写
 // dsh 凭证库（~/.dsh/.credentials.yaml），不落 settings.yaml、不注入进程 env。
-import type { KernelModelsApi, KernelModelConfig, NeutralProvider, DshConfigApi } from "@my-harness-desktop/shared";
+import type { KernelModelsApi, KernelModelConfig, NeutralProvider } from "@my-harness-desktop/shared";
+import type { DshConfigApi } from "../backend/dsh-config-contract";
 import { assertPiAiRouteServiceable } from "../backend/dsh-config-source";
 
 /** dsh 模型配置 → 中性 KernelModelsApi。 */

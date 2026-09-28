@@ -1,0 +1,4 @@
+{
+  "plugin.review.displayName": "Review",
+  "plugin.review.description": "Eine Textstelle im Sitzungsverlauf auswählen, einen Kommentar anhängen und alles mit der nächsten Nachricht ans Modell senden"
+}

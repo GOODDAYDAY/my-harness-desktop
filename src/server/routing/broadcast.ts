@@ -5,7 +5,7 @@ import type { Gateway } from "./gateway";
 
 // 配置写后广播(根因修复:此前仅 skills:* 广播,设置页保存后订阅方如 debug-bar 永远收不到)
 export function broadcastSettingsChanged(gateway: Gateway): void {
-  gateway.broadcast("settings:changed");
+  gateway.broadcast(IPC.settings.changed);
 }
 
 // 通用刷新信号广播(装/升/降级内核、自定义内核路径变更等操作完成):消费方(会话流)
@@ -20,9 +20,9 @@ let pluginsNonceCounter = 0;
 
 export function notifyPluginsChanged(gateway: Gateway): void {
   pluginsNonceCounter++;
-  gateway.broadcast("plugins:changed", pluginsNonceCounter);
+  gateway.broadcast(IPC.plugins.changed, pluginsNonceCounter);
 }
 
 export function notifyPluginUnloaded(gateway: Gateway, pluginId: string, components: string[]): void {
-  gateway.broadcast("plugin:unloaded", { pluginId, components });
+  gateway.broadcast(IPC.plugin.unloaded, { pluginId, components });
 }

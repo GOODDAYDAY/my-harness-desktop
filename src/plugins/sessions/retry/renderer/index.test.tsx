@@ -28,6 +28,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@my-harness-desktop/react", () => ({
+  // Announce 是「把瞬时消息送进常驻 live region」的播报旁路（r37 新增）。
+  // 本文件测的是点击行为与**可见**错误文本，播报路径由 live-region 自己的测试覆盖，
+  // 所以这里给一个形状一致、不产内容的替身（真实实现是 portal，jsdom 里没必要建）。
+  Announce: () => null,
   usePluginContext: () => ({
     messaging: { prompt: mocks.prompt },
     tree: { fork: mocks.fork },

@@ -9,5 +9,6 @@
   "settings.totalBytes": "Total size",
   "settings.cleanup": "Delete all records",
   "settings.cleanupConfirm": "Click again to confirm",
-  "settings.cleanupCancel": "Cancel"
+  "settings.cleanupCancel": "Cancel",
+  "settings.llm-recorder": "Request Log"
 }

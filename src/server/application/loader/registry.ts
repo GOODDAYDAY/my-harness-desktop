@@ -235,11 +235,10 @@ export class PluginRegistry {
   /** 列 sidebar 槽所有贡献项(左栏分组用,按 order 升序,缺省 100)。
    *  defaultSize 是组级高度提示——字段白名单在这里必须显式带上,漏了就是静默丢
    *  (壳侧只会看到 undefined,首屏退化成各组均分,没有任何报错)。 */
-  sidebarItems(): { id: string; title: string; component: string; pluginId: string; group?: string; defaultSize?: number }[] {
+  sidebarItems(): { id: string; component: string; pluginId: string; group?: string; defaultSize?: number }[] {
     return this.sidebar.all()
       .map((s) => ({
         id: s.contribution.id,
-        title: s.contribution.title,
         component: s.contribution.component,
         pluginId: s.pluginId,
         order: s.contribution.order ?? 100,

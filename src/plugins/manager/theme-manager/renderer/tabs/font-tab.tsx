@@ -168,8 +168,11 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
                   whiteSpace: "pre-wrap",
                 }}
               >
-{`const sessions = await pi.sessions.list({ cwd });
-for (const s of sessions) console.log(s.name);`}
+{/* ⚠ 走 locale 键，不硬编码：`settings.fontSampleCode` 四个语言包里一直都有，
+                  而这里把同一份文本又写死了一遍 —— 键成了死键、副本还带着某个内核的 CLI 名
+                  （`pi.sessions.list`，那也不是本仓插件的真实 API）。改为消费键，
+                  并把样本换成真实且中性的插件 API 形状（`ctx.sessions.list(cwd)`）。 */}
+                {t("settings.fontSampleCode")}
               </pre>
             </div>
             <div>

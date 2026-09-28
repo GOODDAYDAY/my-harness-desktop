@@ -55,8 +55,13 @@ async function httpJson(url, timeoutMs = 1500) {
 }
 
 // ---------- 0. 预检:端口必须空闲(避免误操作用户已开着的实例) ----------
-const CDP_PORT = 9222;
-const SVC_PORT = 8420;
+// 两个端口都可覆写(根因修复,勿回退成写死):应用侧 `assemble.ts` 早就支持 `MHD_PORT`
+// (注释明说"e2e/演示场景与开发实例并存时各占各的端口"),46 个 demo 剧本也都传
+// `MHD_PORT: "184xx"` + `port: args.port`;**只有本脚本把 8420/9222 写死**,于是用户开着
+// dev 实例时这条最全面的门永远跑不了(preflight 直接 exit 1)。现与剧本同一模式。
+//   MHD_PORT=18490 MHD_CDP_PORT=19222 npm run verify:e2e
+const SVC_PORT = Number(process.env["MHD_PORT"]) > 0 ? Number(process.env["MHD_PORT"]) : 8420;
+const CDP_PORT = Number(process.env["MHD_CDP_PORT"]) > 0 ? Number(process.env["MHD_CDP_PORT"]) : 9222;
 const cdpAlive = async () => (await httpJson(`http://127.0.0.1:${CDP_PORT}/json/version`)).status > 0;
 if (await cdpAlive()) {
   check("preflight: CDP 端口空闲", false, `${CDP_PORT} 已有实例在跑`);
@@ -65,7 +70,9 @@ if (await cdpAlive()) {
 }
 const svcStatus0 = await httpJson(`http://127.0.0.1:${SVC_PORT}/status.json`);
 if (svcStatus0.status > 0) {
-  check("preflight: 8420 端口空闲", false, `8420 已被占用: ${svcStatus0.body?.slice(0, 100)}`);
+  check(`preflight: ${SVC_PORT} 端口空闲`, false,
+    `${SVC_PORT} 已被占用: ${svcStatus0.body?.slice(0, 100)}` +
+    `(要与此实例并存,用 MHD_PORT=<空闲端口> MHD_CDP_PORT=<空闲端口> 重跑)`);
   saveReport();
   process.exit(1);
 }
@@ -78,6 +85,9 @@ log(`产物目录: ${OUT}`);
 const electronLogStream = createWriteStream(join(OUT, "electron.log"));
 const env = quietEnv(process.env);
 delete env.ELECTRON_RUN_AS_NODE;
+// 把服务端口传进被拉起的应用:否则它会绑默认 8420,与本脚本的 SVC_PORT 不一致,
+// 于是"等 renderer 页"永远等不到(页面 URL 里的端口对不上)。
+env.MHD_PORT = String(SVC_PORT);
 const child = DEV
   ? spawn(process.execPath, [
       join(ROOT, "node_modules/electron-vite/bin/electron-vite.js"),

@@ -1,0 +1,4 @@
+{
+  "plugin.retry.displayName": "Retry",
+  "plugin.retry.description": "Message retry button: fork from any assistant/tool node and regenerate"
+}

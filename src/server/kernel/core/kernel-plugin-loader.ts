@@ -32,6 +32,12 @@ export interface KernelPluginEntry {
   /** 宿主壳插件目录(内核与其对接面同属这里)。 */
   dir: string;
   manifest: KernelPluginManifest;
+  /** 宿主壳插件 manifest **顶层** version（不是 `kernel` 块里的）。
+   *  差量重载的判据之一：`(id, version)` 才认得出"同一个内核被改了"——只比 id 的话，
+   *  改了代码/manifest 的内核会落进"两边都有 → 不动"分支，工厂不重跑、改动不生效
+   *  （boot-surface.md §3.6.2）。缺 version 时退化为 `"0.0.0"`：宁可让差量判定偏保守
+   *  （认为没变），也不要因为读不到版本就把整个重载做成"全部重装"。 */
+  version: string;
 }
 
 /**
@@ -70,7 +76,12 @@ export function scanKernelPlugins(pluginRootDir: string): KernelPluginEntry[] {
       if (typeof parsed.id !== "string" || !parsed.id) continue; // locale 资源等同名文件：非 manifest
       if (!parsed.kernel) continue; // 普通壳插件，不是内核插件
       // 内核 id 单源 = 壳插件 manifest 的 id（内核面块里不再重复写一遍）
-      entries.push({ dir: sub, manifest: { ...parsed.kernel, id: parsed.id } });
+      entries.push({
+        dir: sub,
+        manifest: { ...parsed.kernel, id: parsed.id },
+        // 顶层 version：`plugin.json` 的 `version` 字段（pi 0.9.0 / dsh 0.1.0 / minimal 0.1.0）
+        version: typeof parsed.version === "string" && parsed.version ? parsed.version : "0.0.0",
+      });
     }
   };
   walk(pluginRootDir, 0);
@@ -119,5 +130,20 @@ export function loadKernelPlugin(
   if (typeof factory !== "function") {
     throw new Error(`内核插件 ${entry.manifest.id} 的工厂模块缺 default/${entry.manifest.id}KernelPlugin 导出: ${factoryPath}`);
   }
-  registry.register(factory(ctx));
+  const plugin = factory(ctx);
+  // ⚠ **内核 id 单源校验**（r17 补；此前无守卫）。id 有两个来源：扫描侧的
+  //   `entry.manifest.id`（宿主壳插件 manifest 顶层）与工厂返回的 `plugin.id`。
+  //   注册表按**后者**存键，而差量重载、设置页挂载、renderer 的 TAB 都按**前者**查——
+  //   两者不一致时：① 冷启动下内核"看起来没装载"（其实装载在另一个名字下）；
+  //   ② 暖重载下 `registry.has(entry.manifest.id)` 永远 false，于是每次都判为"新增"、
+  //     `register` 撞重复 id 抛错、进 errors —— **重载永远修不好自己**，且每点一次报一次。
+  //   这是典型的静默漂移（没有任何一处会主动报错），所以在这里 fail-fast。
+  //   依据：docs/design/kernel-plugin.md「内核 id 单源 = 壳插件 manifest 的 id」。
+  if (plugin.id !== entry.manifest.id) {
+    throw new Error(
+      `内核插件 id 不一致: manifest 声明 "${entry.manifest.id}"，工厂返回 "${plugin.id}"` +
+        `（${factoryPath}）。内核 id 以宿主 manifest 为单源，工厂不得另立一个 id。`,
+    );
+  }
+  registry.register(plugin, entry.version);
 }

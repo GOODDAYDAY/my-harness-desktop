@@ -1,0 +1,4 @@
+{
+  "plugin.review.displayName": "評論",
+  "plugin.review.description": "選取會話流裡的文字片段，附上意見，隨下一則訊息一次送給模型"
+}

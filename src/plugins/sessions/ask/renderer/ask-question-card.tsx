@@ -8,7 +8,8 @@
 // requestId + questions（服务端已按激活会话过滤，不跨 session），作答经 ctx.sessions.answerQuestion 回填。
 // 渲染纯函数：不出现 pi/dsh 内核身份分支——两侧差异由适配器在事件层抹平。
 import { useEffect, useState, type ReactNode } from "react";
-import { usePluginContext } from "@my-harness-desktop/react";
+import { usePluginContext, CollapsibleCardHeader, ExecutionStatus } from "@my-harness-desktop/react";
+import { useTranslation } from "react-i18next";
 import { MessageCircleQuestion, Check, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
 import type { ToolCallBlock } from "@my-harness-desktop/react";
 import type { Question, QuestionAnswer, QuestionRequestEvent } from "@my-harness-desktop/shared";
@@ -91,6 +92,7 @@ export function AskQuestionCard({ toolCall, collapseDefault = true }: { toolCall
 /** 运行中：订阅提问事件，在时间线内联渲染问题 + 选项 + 输入。
  *  initialRequest = 复活的挂起记录(重启后无新事件,从 store 直接起)。 */
 function RunningQuestion({ toolCall, initialRequest, onDone }: { toolCall: ToolCallBlock; initialRequest?: PendingRequest; onDone?: () => void }): ReactNode {
+  const { t } = useTranslation();
   const ctx = usePluginContext();
   const [pending, setPending] = useState<PendingRequest | null>(initialRequest ?? null);
   const [index, setIndex] = useState(0);
@@ -148,7 +150,7 @@ function RunningQuestion({ toolCall, initialRequest, onDone }: { toolCall: ToolC
     const missing = values.findIndex((item) => !completed(item));
     if (missing >= 0) {
       setIndex(missing);
-      setError("请选择一个选项或填写自定义答案。");
+      setError(t("ask.selectOrCustom"));
       return;
     }
     const answers: QuestionAnswer[] = pending.questions.map((q, i) => {
@@ -184,7 +186,7 @@ function RunningQuestion({ toolCall, initialRequest, onDone }: { toolCall: ToolC
 
   const continueFlow = (): void => {
     if (!draft || !pending) return;
-    if (!answered(draft)) { setError("请选择一个选项或填写自定义答案。"); return; }
+    if (!answered(draft)) { setError(t("ask.selectOrCustom")); return; }
     if (index < pending.questions.length - 1) { setIndex((c) => c + 1); setError(null); return; }
     submitDrafts(drafts);
   };
@@ -229,12 +231,12 @@ function RunningQuestion({ toolCall, initialRequest, onDone }: { toolCall: ToolC
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <button type="button" title={minimized ? "展开" : "收起"} aria-label={minimized ? "展开" : "收起"} aria-expanded={!minimized}
+          <button type="button" title={minimized ? t("ask.expand") : t("ask.collapse")} aria-label={minimized ? t("ask.expand") : t("ask.collapse")} aria-expanded={!minimized}
             disabled={busy !== null} onClick={() => setMinimized((c) => !c)}
             className="size-6 grid place-items-center rounded-full text-[var(--color-muted)] hover:bg-[var(--color-bg)] disabled:opacity-40">
             {minimized ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
           </button>
-          <button type="button" title="放弃整组问题" aria-label="放弃整组问题" disabled={busy !== null} onClick={cancelFlow}
+          <button type="button" title={t("ask.abandonGroup")} aria-label={t("ask.abandonGroup")} disabled={busy !== null} onClick={cancelFlow}
             className="size-6 grid place-items-center rounded-full text-[var(--color-muted)] hover:bg-[var(--color-bg)] disabled:opacity-40">
             <X className="size-4" />
           </button>
@@ -282,7 +284,7 @@ function RunningQuestion({ toolCall, initialRequest, onDone }: { toolCall: ToolC
                       {display.recommended && (
                         <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[length:var(--font-size-xs)] text-[var(--color-primary)] whitespace-nowrap"
                           style={{ background: "color-mix(in srgb, var(--color-primary) 16%, transparent)" }}>
-                          推荐
+                          {t("ask.recommended")}
                         </span>
                       )}
                       {option.description && (
@@ -304,8 +306,8 @@ function RunningQuestion({ toolCall, initialRequest, onDone }: { toolCall: ToolC
               disabled={busy !== null}
               autoFocus={!hasOptions}
               placeholder={hasOptions
-                ? (question.multi_select === true ? "自定义答案(可与已选共存)" : "自定义答案(键入即取代选项)")
-                : "输入你的答案"}
+                ? (question.multi_select === true ? t("ask.customWithOptions") : t("ask.customReplaces"))
+                : t("ask.customPlaceholder")}
               rows={2}
               onChange={(e) => updateDraft((cur) => ({
                 ...cur,
@@ -326,13 +328,13 @@ function RunningQuestion({ toolCall, initialRequest, onDone }: { toolCall: ToolC
           {/* 底部：分页 + 错误 + 跳过/提交 */}
           <div className="flex items-center gap-2 px-2.5 pb-2">
             <div className="flex items-center gap-1">
-              <button type="button" aria-label="上一题" disabled={index === 0 || busy !== null}
+              <button type="button" aria-label={t("ask.prevQuestion")} disabled={index === 0 || busy !== null}
                 onClick={() => { setIndex((c) => c - 1); setError(null); }}
                 className="size-6 grid place-items-center rounded-full text-[var(--color-muted)] hover:bg-[var(--color-bg)] disabled:opacity-40">
                 <ChevronLeft className="size-4" />
               </button>
               <span className="px-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] tabular-nums">{index + 1} / {total}</span>
-              <button type="button" aria-label="下一题" disabled={index === total - 1 || busy !== null}
+              <button type="button" aria-label={t("ask.nextQuestion")} disabled={index === total - 1 || busy !== null}
                 onClick={() => { setIndex((c) => c + 1); setError(null); }}
                 className="size-6 grid place-items-center rounded-full text-[var(--color-muted)] hover:bg-[var(--color-bg)] disabled:opacity-40">
                 <ChevronRight className="size-4" />
@@ -346,12 +348,12 @@ function RunningQuestion({ toolCall, initialRequest, onDone }: { toolCall: ToolC
 
             <button type="button" disabled={busy !== null} onClick={skipQuestion}
               className="rounded-[var(--radius-md)] px-2.5 py-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:bg-[var(--color-bg)] disabled:opacity-40">
-              跳过本题
+              {t("ask.skipQuestion")}
             </button>
             <button type="button" disabled={busy !== null || !answered(draft)} onClick={continueFlow}
               className="rounded-[var(--radius-md)] px-3 py-1 text-[length:var(--font-size-sm)] font-medium disabled:opacity-40"
               style={{ background: "var(--color-primary)", color: "var(--color-fg)" }}>
-              {busy === "answer" ? "提交中…" : index === total - 1 ? "提交" : "下一题"}
+              {busy === "answer" ? t("ask.submitting") : index === total - 1 ? t("ask.submit") : t("ask.nextQuestion")}
             </button>
           </div>
         </>
@@ -390,21 +392,20 @@ function SettledSummary({ toolCall, collapseDefault }: { toolCall: ToolCallBlock
 
   return (
     <div className="mb-1.5">
-      <div
-        className="flex items-center gap-2 text-[length:var(--font-size-sm)] font-[var(--font-family-mono)] cursor-pointer rounded-[var(--radius-md)]"
-        style={{ borderLeft: `3px solid ${borderColor}`, background: "color-mix(in srgb, var(--color-surface) 30%, transparent)", padding: "5px 12px" }}
-        onClick={() => setCollapsed((c) => !c)}
-        role="button" tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed((c) => !c); } }}
-      >
-        <span className="text-[var(--color-muted)]"><MessageCircleQuestion className="size-3.5" /></span>
-        <span className="text-[var(--color-fg)] flex-1 truncate">ask_user_question</span>
-        <span className="text-xs text-[var(--color-muted)]">{summary}</span>
-        {toolCall.isError ? <X className="size-3.5 text-[var(--color-accent-error)]" /> : <Check className="size-3.5 text-[var(--color-muted)]" />}
-        <span className="text-[var(--color-muted)]">
-          {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
-        </span>
-      </div>
+      {/* r57 收敛：这是可折叠卡片头的**第三份**逐字副本（前两份是 message-blocks 的
+          CardHeader 与 goal 的 GoalCard 内联头）。它带着同样的漂移：没有 aria-expanded、
+          成功/失败是**纯图标**（<X/> 与 <Check/>，无可访问名）⇒ 读屏用户展开了听不到、
+          也听不出这一步成功还是失败。改用共享的 CollapsibleCardHeader + ExecutionStatus
+          后两处一起消失，且以后语义修复只需改一处（防再分叉守卫会盯着）。 */}
+      <CollapsibleCardHeader
+        borderColor={borderColor}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((c) => !c)}
+        icon={<span className="text-[var(--color-muted)]"><MessageCircleQuestion className="size-3.5" /></span>}
+        summary="ask_user_question"
+        status={<ExecutionStatus state={toolCall.isError ? "error" : "success"} />}
+        trailing={<span className="text-xs text-[var(--color-muted)]">{summary}</span>}
+      />
       {!collapsed && rows.length > 0 && (
         <div className="mt-1 rounded-[var(--radius-md)] p-2.5 text-[length:var(--font-size-sm)] space-y-2.5"
           style={{ background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))" }}>

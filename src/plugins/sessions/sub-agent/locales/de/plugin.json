@@ -1,0 +1,4 @@
+{
+  "plugin.sub-agent.displayName": "Sub-Agent",
+  "plugin.sub-agent.description": "Sub-Agent-Orchestrierung: Aufträge verteilen, paralleler Fan-out, War Room sowie Eltern/Kind-Zuordnung und Lebenszyklus"
+}

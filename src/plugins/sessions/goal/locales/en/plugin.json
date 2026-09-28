@@ -1,0 +1,4 @@
+{
+  "plugin.goal.displayName": "Goal",
+  "plugin.goal.description": "goal capability: kernel-agnostic persistent goal within a session (set_goal/achieve_goal) plus a shell-side continuation driver"
+}

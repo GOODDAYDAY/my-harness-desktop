@@ -41,7 +41,6 @@ import { ChatRow } from "../ui/chat-row";
 
 interface SidebarItem {
   id: string;
-  title: string;
   component: string;
   pluginId: string;
   group?: string;
@@ -362,6 +361,11 @@ export function Sidebar(): React.ReactNode {
                 {!isLast && (
                   <PanelResizeHandle
                     onDragging={setHandleDragging}
+                    // 可访问名与朝向要自己给（库只给 role=separator / aria-valuenow / tabIndex）。
+                    // 左栏是**上下**堆叠的板块，手柄水平横置、垂直移动 ⇒ row-resize ⇒ orientation=horizontal
+                    // （这一处与 ARIA 默认值一致，但仍显式写出：默认值不是契约，库改版就可能变）。
+                    aria-label={t("shell.resizeSidebarSections")}
+                    aria-orientation="horizontal"
                     // 热区恒在(display:"flex"):风格差异只作用在内线,不再像旧版那样
                     // 用同一个 token 把热区一起 display:none —— 那会让"隐藏分割线"的
                     // card/minimal/glass 三种风格彻底拖不动(有手柄但点不到)。
@@ -399,7 +403,11 @@ export function Sidebar(): React.ReactNode {
       </div>
 
       <div className="border-t border-[var(--color-border)] shrink-0 px-2 py-2">
-        <ChatRow onClick={() => setActiveView("settings")} icon={<Settings className="size-4.5" />}>
+        {/* `data-sidebar-entry` 是稳定锚点：e2e 与 DOM 审计据此定位，**不按译文文案匹配**。
+            实测教训：审计剧本曾按 /^(设置|Settings)$/ 找入口，换成 zh-TW 就失效——
+            繁中的 `shell.settings` 是「設定」（正确的台式术语），不是「設置」。
+            按文案匹配等于把测试绑死在某一种语言上，每加一个 locale 就可能红一次。 */}
+        <ChatRow data-sidebar-entry="settings" onClick={() => setActiveView("settings")} icon={<Settings className="size-4.5" />}>
           {t("shell.settings")}
         </ChatRow>
       </div>

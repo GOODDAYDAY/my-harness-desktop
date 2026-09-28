@@ -35,6 +35,28 @@
           "divider.inset": "12px"
         }
       }
+    ],
+    "languages": [
+      {
+        "id": "theme-mocha.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "theme-mocha.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "theme-mocha.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "theme-mocha.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

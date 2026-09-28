@@ -14,7 +14,7 @@ export function DshModelsPage(props: SettingsComponentProps): React.ReactNode {
     <ModelConfigPage
       api={ctx.kernelModels.dsh}
       i18nPrefix="dshModels"
-      capabilities={{ reasoning: true }}
+      capabilities={{ reasoning: true, developerRole: false }}
       config={props.config}
       dirty={props.dirty ?? false}
       onChange={props.onChange}

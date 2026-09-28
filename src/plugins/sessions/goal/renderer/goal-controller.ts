@@ -36,6 +36,7 @@
 // 否则没有任何东西会触发 agentSettled,active 目标会静默停摆;忙时交给在飞回合的 agentSettled。
 // (/goal set 不装弹:目标正文消息本身就是 kickoff 回合,它的 agentSettled 自然接第一轮。)
 import { useCallback, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   usePluginContext, useUiStore, useSessionStore,
   useSessionScope, useSessionScopeAccess, useCurrentScopeKey,
@@ -46,9 +47,9 @@ import type { GoalState } from "../core/goal-state";
 import { createGoal, editGoal, GOAL_NOTE_ROLE, parseGoal, parseGoalCommand, pauseGoal, resumeGoal, setGoalMaxRounds, shouldContinue } from "../core/goal-state";
 import { applyGoalEvent, renderContinuationPrompt } from "./goal-reduce";
 
-export const GOAL_USAGE =
-  "/goal <目标> 设置目标并开始续跑\n"
-  + "/goal stop 暂停 · /goal resume 恢复 · /goal edit <新目标> 改 · /goal limit <n> 改上限 · /goal clear 删除 · /goal 查看状态";
+// ⚠ 此前这里是模块级常量 `GOAL_USAGE`，把 /goal 的用法说明**写死成中文**（r54 修）。
+//   模块级常量拿不到 hook，所以改为在使用点 `t("goal.usage")`（本文件只在两处用它，
+//   且都在 useGoalController 内部）。四个语言各一份译文，见 locales/<loc>/goal.json。
 
 /** 续跑发送的有界重试(设计 goal.md §6.4):首发 + 2 次退避重试,耗尽转 paused 显形。 */
 const MAX_SEND_ATTEMPTS = 3;
@@ -123,6 +124,7 @@ function lastAssistantTerminal(): "error" | "stopped" | null {
 
 /** goal 续跑 hook:返回当前目标 + 发送失败态 + 用户控制操作(停止/恢复/编辑/关闭)。 */
 export function useGoalController() {
+  const { t } = useTranslation();
   const { sessions, messaging, notify, events } = usePluginContext();
   const sessionPath = useUiStore((s) => s.currentSessionPath);
   // 中立 ns:openSession 的入参是中立会话 id,不是投影 sessionPath(投影路径经 neutralStore.get(ns)
@@ -210,7 +212,7 @@ export function useGoalController() {
               const cur = goalAccess.get();
               if (cur && cur.phase === "active") setGoal(pauseGoal(cur));
               setSendError(msg);
-              void notify.show({ title: "Goal", body: `续跑发送失败,目标已暂停:${msg}` });
+              void notify.show({ title: "Goal", body: t("goal.continueSendFailed", { msg }) });
               markNote({ action: "send_failed", detail: msg });
               return;
             }
@@ -315,7 +317,7 @@ export function useGoalController() {
           const cur = goalAccess.get();
           if (cur) setGoal(pauseGoal(cur));
           if (terminal === "error") {
-            const msg = "回合异常结束,目标已暂停(/goal resume 恢复)";
+            const msg = t("goal.roundAborted");
             setSendError(msg);
             void notify.show({ title: "Goal", body: msg });
             markNote({ action: "auto_pause_error" });
@@ -436,7 +438,7 @@ export function useGoalController() {
     if (!cmd) return false;
     const g = goalAccess.get();
     const notifyNoGoal = (): void => {
-      void notify.show({ title: "Goal", body: "当前没有目标。用 /goal <目标内容> 设置。", silent: true });
+      void notify.show({ title: "Goal", body: t("goal.noGoal"), silent: true });
     };
     switch (cmd.kind) {
       case "set": {
@@ -447,7 +449,7 @@ export function useGoalController() {
           setSendError(null);
           setGoal(createGoal({ ...cmd.request, maxRounds: configuredMaxRounds() }));
         } catch {
-          void notify.show({ title: "Goal", body: GOAL_USAGE, silent: true });
+          void notify.show({ title: "Goal", body: t("goal.usage"), silent: true });
           return true;
         }
         return { send: cmd.request.objective };
@@ -461,7 +463,7 @@ export function useGoalController() {
       case "edit":
         if (!g) { notifyNoGoal(); return true; }
         if (g.phase === "achieved") {
-          void notify.show({ title: "Goal", body: "目标已达成,不可编辑(/goal clear 删除后可设新目标)", silent: true });
+          void notify.show({ title: "Goal", body: t("goal.achievedNotEditable"), silent: true });
           return true;
         }
         edit(cmd.objective);
@@ -476,7 +478,7 @@ export function useGoalController() {
       case "status":
         void notify.show({
           title: "Goal",
-          body: g ? `[${g.phase}] ${g.round}/${g.maxRounds} · ${g.objective}` : GOAL_USAGE,
+          body: g ? `[${g.phase}] ${g.round}/${g.maxRounds} · ${g.objective}` : t("goal.usage"),
           silent: true,
         });
         return true;

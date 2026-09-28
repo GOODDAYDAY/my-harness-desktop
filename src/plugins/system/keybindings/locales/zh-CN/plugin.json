@@ -1,0 +1,4 @@
+{
+  "plugin.keybindings.displayName": "快捷键",
+  "plugin.keybindings.description": "把组合键绑定到事件总线 channel：按下即 invoke，手不离键盘触发任意插件动作"
+}

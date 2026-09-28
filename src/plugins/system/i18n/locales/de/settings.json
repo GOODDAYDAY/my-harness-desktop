@@ -1,4 +1,10 @@
 {
   "settings.language": "Sprache",
-  "settings.languageDesc": "Oberflächensprache wählen, wird sofort wirksam."
+  "settings.languageDesc": "Oberflächensprache wählen, wird sofort wirksam.",
+  "settings.otherFields": "Weitere Felder (Einträge in der Kernel-Konfiguration ohne voreingestellte Beschreibung, anhand ihrer Werte angezeigt)",
+  "settings.noSchemaFields": "Dieser Kernel liefert kein Feldschema und hat derzeit keine bearbeitbaren Einträge – seine Konfiguration wird möglicherweise vom Kernel selbst verwaltet.",
+  "settings.valueNotInOptions": "{{value}} (nicht unter den Optionen)",
+  "settings.ungrouped": "Ohne Gruppe",
+  "settings.listRemoveItem": "Diesen Eintrag entfernen",
+  "settings.unknownError": "unbekannter Fehler"
 }

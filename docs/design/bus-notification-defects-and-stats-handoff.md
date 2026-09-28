@@ -1,5 +1,13 @@
 # 交接：bus 通知缺陷四则 + 统计单源交付物 1
 
+> ⚠️ **本文为设计记录（快照），不是现行架构描述。** 其中提到的
+> `BackendExtensions` / `capabilities.extensions` / `asPi()` / `piSend()` / `kernel-factories`
+> 等符号**已退役**：opaque 扩展面桶已拆成圆心的**逐轴中性能力面** `BackendCapabilities`
+> （steering / retry / compaction / snapshot / stats / modelCycle / toolExec / busFrames /
+> questions / thinking + fileBacked），壳改为按轴探测（`SessionStore.faceOf` / `viaFace`），
+> `kernel/pi/backend/pi-backend-extensions.ts` 与 `kernel/factories/` 已删除。
+> 现行描述见 `CLAUDE.md` §6.2/§6.3 与 `docs/add-new-kernel.md` §1.3。
+
 这份文档是给"接手的人/会话"的完整交接，不是设计论证。读完它应该能直接开工，不需要回头翻聊天记录。
 
 > **进度更新**：§2 的四个 bus 缺陷（A/B/C/D）**已全部修复**，守卫测试已落地（`session-store.bus-frame.test.ts` + `session-bus.test.ts` 新增 6 条），typecheck + 全量测试（1649 passed）+ 依赖审计（0 违规）通过。缺陷 B 的最终修法比下文原计划更根本——不是"通知帧节流"，而是"watch 一次性交付"（见 §2.3 的实现说明）。**剩余待办是 §3 的统计交付物 1**（及其后的 2/3/4），那部分尚未开工。

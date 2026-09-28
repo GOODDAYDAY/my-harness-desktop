@@ -1,5 +1,35 @@
 // dsh-config-source cordis.yml 块编辑测试 —— addPluginBlock / removePluginBlock（dsh 内核插件随附通道的挂摘原语）。
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+// ⚠ r91：被测的两条错误消息已从硬编码中文改为**服务端 i18n 查表**（t("dsh.routeEmptyModels") 等），
+//   而 translator 的单例需要显式 init，否则 t() 退化成返回键名——那样断言就变成在断言一个键字符串。
+//   所以这里用**真实语言包**初始化（r54/r56/r78/r90 的纪律：给测试真字典，不软化断言）。
+//   语言包是带 ns 前缀的扁平键，而 merge 规则是「第一个 dot 前是 namespace」（r78 踩过），故需整形。
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { initTranslator } from "../../../application/i18n/translator";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DSH_FLAT = JSON.parse(
+  readFileSync(// ⚠ src/server/kernel/dsh/backend → 仓库根是 **5** 级（首版写 4 级 ⇒ 读到 src/src/… 报 ENOENT）
+  join(HERE, "../../../../../src/plugins/kernels/dsh/locales/zh-CN/dsh.json"), "utf-8"),
+) as Record<string, string>;
+const DSH_NS: Record<string, string> = {};
+for (const [k, v] of Object.entries(DSH_FLAT)) {
+  const dot = k.indexOf(".");
+  DSH_NS[dot > 0 ? k.slice(dot + 1) : k] = v;
+}
+/** 从真实字典取译文并做 {{var}} 插值（与 i18next 同语义），断言不再复制中文字面量。 */
+function dict(key: string, vars: Record<string, string>): string {
+  // ⚠ DSH_NS 已按 merge 规则**剥掉 ns 前缀**（"dsh.routeEmptyModels" → "routeEmptyModels"），
+  //   所以这里要先剥再查；首版直接拿全键去查，查不到就回落成键名，
+  //   于是断言变成"期望抛出字符串 dsh.routeEmptyModels"——看着像被测代码没翻译，实际是助手错了。
+  const dot = key.indexOf(".");
+  let out = DSH_NS[dot > 0 ? key.slice(dot + 1) : key] ?? key;
+  if (out === key) throw new Error(`字典里没有 ${key}（测试助手会静默回落成键名，必须先炸出来）`);
+  for (const [k, v] of Object.entries(vars)) out = out.split(`{{${k}}}`).join(v);
+  return out;
+}
+
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from "vitest";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -17,6 +47,15 @@ beforeEach(() => {
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
 
 describe("DshConfigSource resolveEntryPath(相对 cordis.yml 目录解析相对路径 entry)", () => {
+  beforeAll(async () => {
+    await initTranslator({
+      resources: { "zh-CN": { dsh: DSH_NS } },
+      lng: "zh-CN",
+      ns: ["dsh"],
+      supportedLngs: ["zh-CN"],
+    });
+  });
+
   it("相对路径 name 解析到 cordis.yml 同目录", () => {
     // cordisPath = <dir>/cordis.yml → 相对 name 落在 <dir> 下
     expect(src.resolveEntryPath("./.my-harness-desktop-plugins/ask/index.mjs"))
@@ -149,13 +188,13 @@ describe("assertPiAiRouteServiceable(根因:空路由毒化整段 llm-pi-ai)", (
   it("空 models 抛错(毒化整段的根因)", () => {
     expect(() =>
       assertPiAiRouteServiceable("provider-x", { models: [] }),
-    ).toThrow(/没有模型/);
+    ).toThrow(dict("dsh.routeEmptyModels", { provider: "provider-x" }));
   });
 
   it("空 model id 抛错", () => {
     expect(() =>
       assertPiAiRouteServiceable("provider-x", { models: [{ id: "" }] }),
-    ).toThrow(/空 model id/);
+    ).toThrow(dict("dsh.routeEmptyModelId", { provider: "provider-x" }));
   });
 });
 

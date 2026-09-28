@@ -59,7 +59,7 @@ sequenceDiagram
 - **六条核心意图**：消息（`sendMessage`）、中断（`abort`）、模型（`setModel`）、分支（`getTree`/`getEntries`/`bookmark`/`resume?`/`deleteBookmark`）、会话标识（`sessionId` 属性）、流式事件（`onEvent`）。这六条是换内核都不变的最小面。
 - **之上的四条**：命名（`setSessionName`，第七意图）、续跑（`continue?`，第八意图）、`seed`（跨内核/跨 lineage 投影，返回内核侧会话标识）、能力探测（`capabilities`）。
 - **四条缺面默认**（`AbstractBackend` 统一给默认实现）：`listTools?` 返回 null（壳走降级）、`answerQuestion?`/`continue?`/`setThinkingLevel` 抛错（不静默吞、不伪造成功）。缺面默认只是「子类不 override 时的兜底」，不等于「两个内核都不实现」：实际覆盖情况是——`listTools?` 只有 pi 覆盖（读 known-tools 播报文件），dsh 继承 null 默认；`answerQuestion?`/`continue?` 两个内核都覆盖（pi 走适配器翻译、dsh 走 RPC/侧车）；`resume?` 只有 dsh 覆盖、pi 不实现（pi 无此面，接口里带 `?`）；`setThinkingLevel` 是必实现但 pi 覆盖（set_thinking_level RPC）、dsh 继承抛错默认——dsh 无运行时切档面，显式降级。
-- **不进契约的**：pi 的 `steer`/`followUp`/`onExtensionUI`/`cycleModel`/`cycleThinkingLevel`/`getThinkingLevels`/`compact`/`exportHtml` 等，收在 `BackendExtensions`（`kernel/pi/backend/pi-backend-extensions.ts`），壳经 `capabilities.extensions` 探测"有则用、无则降级"——绝不按 `kernel === "pi"` 硬分支。
+- **不进契约的**：`steer`/`followUp`（多路并发）、`cycleModel`、`cycleThinkingLevel`/`getThinkingLevels`、`compact`、`bash` 等按**语义轴**收在圆心的 `BackendCapabilities` 各面里（steering / modelCycle / thinking / compaction / toolExec …），壳经 `capabilities.<轴>` 逐轴探测"有则用、无则降级"——绝不按 `kernel === "pi"` 硬分支。
 
 `BaseBackend.seed` 的签名值得单独记：`seed(lineage: NeutralEntry[], opts: SeedOptions): Promise<string>`。它收的是**单条 lineage 的完整线性内容**，不是整棵树。这是"内核是单线执行器、分叉归壳"这条纪律的直接落点——内核只物化当前活跃那条 lineage，分叉结构在壳的中立层（`session-neutral.ts` 的 `lineageContent` 纯函数负责沿 fork 链拼出完整线性前缀）。
 
@@ -149,7 +149,7 @@ flowchart TD
     G --> H{prefs.provider+modelId?}
     H -- 是 --> I[setModel → ensureForSend 起进程]
     H -- 否 --> J[读中立头偏好兜底]
-    I --> K{prefs.thinkingLevel 且 capabilities.extensions?}
+    I --> K{prefs.thinkingLevel 且 thinking 面有精确清单?}
     J --> K
     K -- 是 --> L[setThinkingLevel 差量执行]
     K -- 否 --> M[拿 proc + materializeActiveLineage]
@@ -170,7 +170,7 @@ flowchart TD
 `src/web/stores/session-store.ts` 的 `sendMessage(cwd, text, opts)` 是"发一条用户消息"的唯一受管写口——composer/rewind/notes 都经它，不各自复制发送序列。完整序列：
 
 - **模型/思考强度对齐（atomic-send）**：三级来源拼一个 `SessionModelPrefs`——`ui.sessionModelPending[pendingKey]`（用户刚选的，最高）> 会话头读回（`readHeaderPrefs`）> `getFallbackModel()`（新会话无 pending 时显式对齐默认/首项模型）。拼好后**一次传给 main 的 `prompt`**，不再 renderer 逐条 `setModel`/`setThinkingLevel`/`sync`。
-- **工具过滤**：读生效的 `toolConfig.enabledToolIds`，若 tool-gate 未装（`fitPiExtensionAvailable` 为假），把 `[System] 本次会话已限制可用工具...` 注入正文（`buildToolLimitNote`），`stripToolLimitNote` 在渲染层剥除。
+- **工具过滤**：读生效的 `toolConfig.enabledToolIds`，问**本次发送所用的那个内核**能否强制执行白名单（`kernels[prefs.kernel].toolFilterEnforced()`；旧名 `fitPiExtensionAvailable` 已退役并换轴——它问的是「桌面适配扩展装没装」，那只是某一个内核的实现手段，导致自带工具门控的内核被误判为不能过滤），若不能则把 `[System] 本次会话已限制可用工具...` 注入正文（`buildToolLimitNote`），`stripToolLimitNote` 在渲染层剥除。
 - **乐观回显 + assistant 占位**：`appendOptimisticUser`（带 `__sendText`/`__optimistic` 标记）→ `appendPendingAssistant`（`pending:true, content:""` 消除空窗）。
 - **发送**：`window.kernel.sessions.prompt(sendText, undefined, imageOpt?, prefs)`。
 - **失败诚实收尾**：prompt 抛错（回灌失败）时撤掉乐观回显和空占位，返回 `{ ok:false, reason:"modelPrefs", error }`——不留"已发出"假象，输入框未清可重发。
@@ -436,7 +436,7 @@ main 的事件推给 renderer 的通道在 `bootstrap/assemble.ts` 收口：
 
 `SessionStore.abort()`（`session-store.ts`）:
 
-- **顺序不能反**：先 `asPi(proc).abortBash()`（快速中断 bash），再 `proc.backend.abort()`。`agent.abort` 只中断 agent loop 内的工具（经 signal），会等 waitForIdle；`executeBash` 路径（`type:"bash"` 直接命令）持独立 abortController，`agent.abort` 不覆盖，需 `abort_bash` 单独中断。abort_bash 排在后面永远执行不到——所以先发。
+- **顺序不能反**：先经 `toolExec` 能力面调 `abortBash()`（快速中断 bash；旧写法 `asPi(proc).abortBash()` 已随能力面分轴退役），再 `proc.backend.abort()`。`agent.abort` 只中断 agent loop 内的工具（经 signal），会等 waitForIdle；`executeBash` 路径（`type:"bash"` 直接命令）持独立 abortController，`agent.abort` 不覆盖，需 `abort_bash` 单独中断。abort_bash 排在后面永远执行不到——所以先发。
 - **超时兜底**：`abort` 带 8 秒超时（`ABORT_TIMEOUT_MS`），工具不响应时 `stop()` 杀进程强制停止——进程死了工具必停；会话是文件，重启即恢复，不丢数据。
 
 `waitSettled`（switchKernel 用）：订阅 `agentSettled` / 带 stopped·error 的 `messageEnd` / `compactionEnd` / `autoRetryEnd(success!==true)`，超时兜底——事件驱动，不 sleep 不轮询。

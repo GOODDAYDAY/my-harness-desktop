@@ -1,0 +1,386 @@
+#!/usr/bin/env node
+// DOM 组装 + 文件格式对应 + 功能漂移 的实地审计 e2e。
+//
+// 为什么需要这个剧本：既有 46 个剧本都是「某个功能路径通不通」的正向验证，
+// 没有一个回答用户点名的三类问题——
+//   ① **DOM 是否混乱**：交互元素嵌套违规、锚点重复、空壳容器、i18n key 漏成可见文本、
+//      图标按钮无可访问名、图片无 alt、标题层级跳级；
+//   ② **文件是否对应 / 格式是否对应**：壳写出去的会话文件与配置，字段是否就是读它的那份代码所期望的；
+//   ③ **功能是否漂移**：DOM 呈现的能力与内核 `capabilities` 声明是否一致（缺面的内核不该长出控件）。
+//
+// 这三类的共同特征是**静默**：功能路径照样通、页面照样不报错，但结构已经坏了。
+// 正向剧本抓不到，所以单独立一个审计剧本，输出结构化发现清单。
+//
+// 用法: npm run build && node scripts/demo/dom-audit.e2e.mjs [--port 9350] [--keep]
+// 零 token：用 minimal 内核（echo），不花真实模型额度。
+import { parseArgs } from "node:util";
+import { mkdirSync, readFileSync, readdirSync, existsSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { launchApp, killApp } from "./lib/app.mjs";
+import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
+import { seedTestPlugins } from "./lib/test-plugins.mjs";
+import { waitForDomIdle } from "./lib/util.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, "..", "..");
+const { values: args } = parseArgs({ options: {
+  port: { type: "string", default: "9350" },
+  keep: { type: "boolean", default: false },
+  // 界面语言：本剧本要能在任一 locale 下跑——i18n 缺陷（裸 key / 简繁混排）是**按语言**出现的，
+  // 只测 zh-CN 会漏掉 zh-TW 的简体残留这类问题（实测就是这么漏的）。
+  locale: { type: "string", default: "zh-CN" },
+} });
+const LOCALE = args.locale;
+
+let passed = 0;
+const findings = [];          // { severity: "H"|"M"|"L", surface, kind, detail }
+function ok(cond, label) {
+  if (!cond) throw new Error(`断言失败: ${label}`);
+  passed += 1;
+  console.log(`  ✓ ${label}`);
+}
+function note(severity, surface, kind, detail) {
+  findings.push({ severity, surface, kind, detail });
+}
+
+// ---------- 隔离 HOME（与 minimal-smoke 同款：真内核经 symlink 借用，不 npm install） ----------
+const runRoot = makeRunRoot();
+const home = join(runRoot, LOCALE);
+mkdirSync(home, { recursive: true });
+const ctx = setupBaseline({ home, realHome: homedir(), locale: LOCALE });
+seedTestPlugins(ctx.dataRoot);
+const projectDir = join(home, "project");
+mkdirSync(projectDir, { recursive: true });
+const prefsFile = join(home, ".my-harness-desktop-dev", "config", "config.json");
+writeFileSync(prefsFile, JSON.stringify({ ...JSON.parse(readFileSync(prefsFile, "utf-8")), lastCwd: projectDir }, null, 2));
+
+const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18461" }, timeoutMs: 90000 });
+const page = app.page;
+const pageErrors = [];
+page.on("pageerror", (e) => pageErrors.push(e.message));
+
+// ---------- 页内审计器（在 renderer 上下文跑，返回发现清单） ----------
+const AUDIT_FN = `
+(() => {
+  const out = { nesting: [], dupAnchors: [], emptyAnchored: [], i18nLeak: [], unnamedIcons: [], imgNoAlt: [], headings: [], dupText: [], skippedHidden: 0 };
+  const INTERACTIVE = "button, a[href], input, select, textarea, [role=button], [role=link], [role=tab], [role=menuitem], [role=checkbox], [role=switch]";
+
+  // ⚠ 必须排除不可见子树（实测教训，勿删）：设置页是 keep-mounted 的——
+  //   src/web/components/settings-page.tsx:84 用 display: active ? flex : none，
+  //   其注释明写「激活过的组件才挂载,active 显示、其余 display:none(切 tab 不重 mount)」。
+  //   所以访问过的每个设置子页都常驻 DOM。不排除的话，同一批元素会在每次 auditSurface
+  //   里被重复计数：实测首版把 8 处 i18n 裸 key 报成了 112 处（8 × 14 个子页），
+  //   数字大得吓人但其实是同一批——审计结论因此失真（既夸大严重度，也掩盖到底几处）。
+  //   注：本段在模板字符串内，不能出现反引号（会提前终止模板字面量）。
+  const hiddenRoots = new Set();
+  for (const el of document.querySelectorAll("*")) {
+    const cs = getComputedStyle(el);
+    if (cs.display === "none" || cs.visibility === "hidden") hiddenRoots.add(el);
+  }
+  const hidden = (el) => {
+    for (let p = el; p && p !== document.body; p = p.parentElement) if (hiddenRoots.has(p)) return true;
+    return false;
+  };
+  const visible = (els) => { const arr = [...els]; out.skippedHidden += arr.filter(hidden).length; return arr.filter((e) => !hidden(e)); };
+
+  // ① 交互元素嵌套违规：可交互元素套可交互元素（HTML 规范禁止，且点击目标歧义）
+  for (const el of visible(document.querySelectorAll(INTERACTIVE))) {
+    const bad = el.querySelector(INTERACTIVE);
+    if (bad) {
+      out.nesting.push({
+        outer: el.tagName.toLowerCase() + (el.getAttribute("role") ? '[role=' + el.getAttribute("role") + ']' : ''),
+        inner: bad.tagName.toLowerCase() + (bad.getAttribute("role") ? '[role=' + bad.getAttribute("role") + ']' : ''),
+        outerLabel: (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 40),
+        anchor: [...el.attributes].filter(a => a.name.startsWith("data-")).map(a => a.name).join(",") || "",
+      });
+    }
+  }
+
+  // ② 锚点重复：带 id 语义的 data-* 锚点应当唯一（message-id / session-id / tab-id）
+  const anchorKinds = ["data-message-id", "data-session-id", "data-tab-id", "data-slot-id", "data-plugin-id"];
+  for (const kind of anchorKinds) {
+    const seen = new Map();
+    for (const el of visible(document.querySelectorAll("[" + kind + "]"))) {
+      const v = el.getAttribute(kind);
+      seen.set(v, (seen.get(v) || 0) + 1);
+    }
+    for (const [v, n] of seen) if (n > 1) out.dupAnchors.push({ kind, value: String(v).slice(0, 60), count: n });
+  }
+
+  // ③ 空壳容器：带 data-* 锚点但既无子元素也无文本（挂载点没被填，或渲染条件永假）。
+  // ⚠ 只用源码里真实存在的锚点：src/e2e-anchor-coverage.test.ts 会把 e2e 脚本里出现、
+  //   而 src/ 中不存在的 data-* 全部列为失败。首版凭空写了 data-slot/data-region/data-container
+  //   三个选择器，被那条守卫当场抓住——这正是它存在的意义（e2e 不该依赖想象中的锚点）。
+  for (const el of visible(document.querySelectorAll("[data-section], [data-panel]"))) {
+    const hasKids = el.children.length > 0;
+    const hasText = (el.textContent || "").trim().length > 0;
+    if (!hasKids && !hasText) {
+      out.emptyAnchored.push({ anchor: [...el.attributes].filter(a => a.name.startsWith("data-")).map(a => a.name + "=" + a.value).join(" ").slice(0, 80) });
+    }
+  }
+
+  // ④ i18n key 漏成可见文本（形如 ns.key.sub，或含 {{ 插值残留）
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const keyLike = /^[a-z][a-zA-Z0-9]*\\.[a-zA-Z0-9]+(\\.[a-zA-Z0-9]+)*$/;
+  let n;
+  while ((n = walker.nextNode())) {
+    const t = (n.nodeValue || "").trim();
+    if (!t) continue;
+    if (n.parentElement && hidden(n.parentElement)) { out.skippedHidden += 1; continue; }
+    if (t.includes("{{") || t.includes("}}")) out.i18nLeak.push({ text: t.slice(0, 60), why: "插值残留" });
+    else if (keyLike.test(t) && t.length < 48 && !/\\.(js|ts|json|md|png|svg|css)$/.test(t)) out.i18nLeak.push({ text: t.slice(0, 60), why: "疑似未翻译的 key" });
+  }
+
+  // ⑤ 图标按钮无可访问名（只有 svg、无 aria-label/title/文本）——屏幕阅读器读不出
+  for (const b of visible(document.querySelectorAll("button, [role=button]"))) {
+    const txt = (b.textContent || "").trim();
+    const name = b.getAttribute("aria-label") || b.getAttribute("title") || txt;
+    if (!name && b.querySelector("svg")) {
+      const svgClass = (b.querySelector("svg").getAttribute("class") || "").slice(0, 40);
+      out.unnamedIcons.push({ svgClass, html: b.outerHTML.slice(0, 100) });
+    }
+  }
+
+  // ⑥ 图片无 alt
+  for (const img of visible(document.querySelectorAll("img"))) {
+    if (!img.hasAttribute("alt")) out.imgNoAlt.push({ src: (img.getAttribute("src") || "").slice(0, 80) });
+  }
+
+  // ⑦ 标题层级：h1 数量、是否跳级
+  const hs = [...document.querySelectorAll("h1,h2,h3,h4,h5,h6")].map(h => Number(h.tagName[1]));
+  out.headings = { h1: hs.filter(x => x === 1).length, total: hs.length, seq: hs.slice(0, 24) };
+
+  return out;
+})()
+`;
+
+async function auditSurface(label) {
+  const r = await page.evaluate(AUDIT_FN);
+  const counts = {
+    nesting: r.nesting.length, dup: r.dupAnchors.length, empty: r.emptyAnchored.length,
+    i18n: r.i18nLeak.length, unnamed: r.unnamedIcons.length, imgNoAlt: r.imgNoAlt.length,
+  };
+  console.log(`  · [${label}] 嵌套违规=${counts.nesting} 锚点重复=${counts.dup} 空壳=${counts.empty} i18n漏=${counts.i18n} 无名图标=${counts.unnamed} 图无alt=${counts.imgNoAlt} 标题h1=${r.headings.h1}/共${r.headings.total} （跳过不可见元素 ${r.skippedHidden} 个）`);
+  for (const x of r.nesting.slice(0, 6)) note("H", label, "交互嵌套违规", `${x.outer} 套 ${x.inner}（外层可访问名「${x.outerLabel}」，锚点 ${x.anchor || "无"}）`);
+  for (const x of r.dupAnchors.slice(0, 6)) note("H", label, "锚点重复", `${x.kind}="${x.value}" 出现 ${x.count} 次`);
+  for (const x of r.emptyAnchored.slice(0, 6)) note("M", label, "空壳容器", x.anchor);
+  for (const x of r.i18nLeak.slice(0, 8)) note("H", label, "i18n key 漏成文本", `「${x.text}」（${x.why}）`);
+  for (const x of r.unnamedIcons.slice(0, 8)) note("M", label, "图标按钮无可访问名", x.html);
+  for (const x of r.imgNoAlt.slice(0, 4)) note("L", label, "图片无 alt", x.src);
+  return r;
+}
+
+try {
+  await page.waitForSelector("[data-timeline-composer]", { timeout: 30000 });
+  await waitForDomIdle(page, { quietMs: 900, timeoutMs: 25000 });
+  ok(true, "应用拉起，composer 就绪");
+
+  // 界面语言必须真的等于种入的 locale。这条守的是一个**已修的静默 bug**：
+  // `initI18n()` 与 `hydrateFromPrefs()` 并行（app-main.tsx:216），它原先读
+  // `store.currentLocale`——那个字段有非空默认值 "zh-CN"（ui-store.ts:178），于是
+  // ① 读到的是默认值而非用户选的，② `if (!lng)` 的浏览器语言检测兜底永不触发，
+  // ③ 自愈用的 `subscribeLocaleChange()` 在 `.finally()` 里才装（app-main.tsx:222），
+  //    那时水合早已完成、prev 初值就等于最终值，于是 `changeLanguage` 一次都不会被调用。
+  // 实测症状：prefs 存着 zh-TW、`window.kernel.prefs.get("currentLocale")` 也返回 zh-TW，
+  // 但 `document.documentElement.lang` 与整个界面都是 zh-CN。修法见 app/i18n-init.ts 的注释。
+  const langInfo = await page.evaluate(async () => ({
+    htmlLang: document.documentElement.lang,
+    prefsLocale: await window.kernel.prefs.get("currentLocale"),
+    sample: [...document.querySelectorAll('div[role="button"]')]
+      .map((x) => (x.textContent || "").trim()).find((t) => /^(设置|設置|Einstellungen|Settings)$/.test(t)) ?? "(未找到设置项)",
+  }));
+  ok(langInfo.prefsLocale === LOCALE, `prefs 里的语言偏好是种入的 ${LOCALE}（实际 ${langInfo.prefsLocale}）`);
+  ok(langInfo.htmlLang === LOCALE, `界面语言真的切到了 ${LOCALE}（document.documentElement.lang=${langInfo.htmlLang}；此前这里会停在 zh-CN）`);
+  console.log(`  · 设置入口文案实测为「${langInfo.sample}」（应与 locale 一致）`);
+
+  // ===== 阶段 A：首屏体检 =====
+  console.log("\n── 阶段 A：首屏 DOM 体检 ──");
+  await auditSurface("首屏");
+
+  // 记录全部 data-* 锚点清单（供「文件/DOM 是否对应」核对）
+  const anchors = await page.evaluate(() => {
+    const set = new Set();
+    for (const el of document.querySelectorAll("*")) {
+      for (const a of el.attributes) if (a.name.startsWith("data-")) set.add(a.name);
+    }
+    return [...set].sort();
+  });
+  console.log(`  · 首屏 data-* 锚点共 ${anchors.length} 种`);
+
+  // ===== 阶段 B：走到设置页与右面板各 Tab 再体检 =====
+  console.log("\n── 阶段 B：设置页 / 右面板 遍历体检 ──");
+  // 设置入口：找 aria-label 或文本含「设置」的按钮
+  // 设置入口是 `ChatRow`（div[role=button] + tabIndex=0 + Enter/Space 键处理，见 src/web/ui/chat-row.tsx）。
+  // ⚠ 它**没有 data-* 锚点**，所以只能按文案找——这本身是一条发现（记进清单）：主导航控件缺稳定锚点，
+  // 让 e2e 与 DOM 审计只能依赖 i18n 文案，换语言即失效。
+  const ROW_SEL = 'div[role="button"], button, [role="option"], [role="tab"]';
+  const labelOf = (x) => (x.getAttribute("aria-label") || x.textContent || "").trim();
+  // 按**稳定锚点**定位（src/web/components/sidebar.tsx 的 data-sidebar-entry="settings"），
+  // 不按译文文案匹配——后者每换一种语言就失效（zh-TW 是「設定」而非「設置」）。
+  const openedSettings = await page.evaluate(() => {
+    const b = document.querySelector('[data-sidebar-entry="settings"]');
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (!openedSettings) {
+    note("M", "设置页", "入口未找到", "没能按文案定位设置入口，设置页各 TAB 未被体检（审计覆盖不足）");
+  } else {
+    await waitForDomIdle(page, { quietMs: 700, timeoutMs: 15000 });
+    await auditSurface("设置页");
+    // 设置页左列表用 ListItem（不是 [role=tab]）——按"可点行"泛化查找，不猜具体控件类型。
+    const tabs = await page.evaluate(({ sel }) => {
+      const rows = [...document.querySelectorAll(sel)];
+      return rows
+        .map((el, i) => ({ i, label: (el.getAttribute("aria-label") || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 26), tag: el.tagName.toLowerCase() }))
+        .filter((r) => r.label && r.label.length <= 26);
+    }, { sel: ROW_SEL });
+    console.log(`  · 设置页可点行 ${tabs.length} 个：${tabs.map((t) => t.label).join(" / ").slice(0, 200)}`);
+    let visited = 0;
+    for (const t of tabs) {
+      // 每轮重新按**文案**定位（点击后 DOM 会重排，索引会失效——这是遍历动态列表的正确做法）
+      const clicked = await page.evaluate(({ sel, label }) => {
+        const el = [...document.querySelectorAll(sel)].find((x) => (x.getAttribute("aria-label") || x.textContent || "").trim().replace(/\s+/g, " ").slice(0, 26) === label);
+        if (!el) return false;
+        el.click();
+        return true;
+      }, { sel: ROW_SEL, label: t.label });
+      if (!clicked) continue;
+      await waitForDomIdle(page, { quietMs: 450, timeoutMs: 10000 }).catch(() => {});
+      await auditSurface(`设置页/${t.label}`);
+      visited += 1;
+      if (visited >= 14) break;
+    }
+    if (visited === 0) note("M", "设置页", "TAB 遍历失败", "找到了设置页但一个可点行都没能进入，设置页内部未被体检");
+    else ok(visited > 0, `设置页遍历了 ${visited} 个子页并逐个体检`);
+  }
+
+  // ===== 阶段 C：文件与格式对应 =====
+  console.log("\n── 阶段 C：文件格式对应（壳写出的 vs 代码读的）──");
+  const dataRoot = join(home, ".my-harness-desktop-dev");
+  const cfgDir = join(dataRoot, "config");
+  for (const f of ["config.json", "general.json"]) {
+    const p = join(cfgDir, f);
+    if (!existsSync(p)) { note("H", "配置文件", "缺失", `${f} 不存在于 ${cfgDir}`); continue; }
+    try {
+      const j = JSON.parse(readFileSync(p, "utf-8"));
+      console.log(`  · ${f} 字段：${Object.keys(j).join(", ").slice(0, 160)}`);
+      if (f === "general.json") {
+        // 壳读它的地方期望 defaultThinkingLevel / sidebarDefaultOpen（assemble 的种子写的就是这两个）
+        if (!("defaultThinkingLevel" in j)) note("H", "general.json", "字段缺失", "缺 defaultThinkingLevel（种子应写入）");
+        if (!("sidebarDefaultOpen" in j)) note("H", "general.json", "字段缺失", "缺 sidebarDefaultOpen（种子应写入）");
+        ok("defaultThinkingLevel" in j && "sidebarDefaultOpen" in j, "general.json 含壳期望的两个字段（写读对应）");
+      }
+    } catch (e) {
+      note("H", "配置文件", "JSON 解析失败", `${f}: ${e.message}`);
+    }
+  }
+  // 插件配置目录（ConfigStore 的全局层：一个插件一个文件）
+  const pluginCfgs = existsSync(cfgDir) ? readdirSync(cfgDir).filter((n) => n.endsWith(".json")) : [];
+  console.log(`  · config 目录下 ${pluginCfgs.length} 个 json：${pluginCfgs.join(", ").slice(0, 140)}`);
+
+  // ===== 阶段 D：功能漂移（DOM 呈现 vs 内核能力声明）=====
+  console.log("\n── 阶段 D：功能漂移（缺面内核不该长出控件）──");
+  const capsDump = await page.evaluate(async () => {
+    // 经 renderer 的 kernel 面读注册表事实：有哪些内核、各自能力
+    const k = window.kernel;
+    if (!k) return { error: "window.kernel 不存在" };
+    const ids = k.kernelIds ?? Object.keys(k.kernels ?? {});
+    const out = { ids, perKernel: {} };
+    for (const id of ids) {
+      const api = k.kernels?.[id];
+      out.perKernel[id] = {
+        hasToolFilterFace: typeof api?.toolFilterEnforced === "function",
+        toolFilterEnforced: typeof api?.toolFilterEnforced === "function" ? await api.toolFilterEnforced().catch(() => null) : null,
+        caps: (await api?.capabilities?.().catch(() => null)) ?? null,
+      };
+    }
+    return out;
+  });
+  console.log(`  · renderer 侧内核清单：${JSON.stringify(capsDump.ids)}`);
+  for (const [id, v] of Object.entries(capsDump.perKernel ?? {})) {
+    console.log(`    - ${id}: toolFilterEnforced 面=${v.hasToolFilterFace} 值=${v.toolFilterEnforced} capabilities=${JSON.stringify(v.caps)}`);
+    if (!v.hasToolFilterFace && v.toolFilterEnforced !== null) {
+      note("H", "能力面", "缺面却返回值", `${id} 未声明 toolFilterEnforced 却给出 ${v.toolFilterEnforced}`);
+    }
+  }
+  ok(Array.isArray(capsDump.ids) && capsDump.ids.length > 0, "renderer 能取到内核清单（注册表事实经 IPC 可达）");
+
+  // ===== 收尾 =====
+  // ── 常驻 live region 宿主（r37）：必须从**启动**就在 DOM 里 ──
+  //
+  // 为什么这条要在真机验：`aria-live` 的播报前提是**容器先于内容存在**。若宿主由第一条
+  // toast 惰性创建，则"建容器"与"填内容"同一次挂载，多数读屏不播报 —— 用户听不到的
+  // 恰好是最该听到的第一条（「附件类型不支持」「保存失败」）。单测能证明组件行为，
+  // 但"应用根真的挂了它"只有起真 app 才知道。
+  const liveRegion = await page.evaluate(() => {
+    const hosts = [...document.querySelectorAll("[data-toast-live-region]")];
+    return {
+      count: hosts.length,
+      ariaLive: hosts[0]?.getAttribute("aria-live") ?? null,
+      ariaAtomic: hosts[0]?.getAttribute("aria-atomic") ?? null,
+      role: hosts[0]?.getAttribute("role") ?? null,
+      text: (hosts[0]?.textContent ?? "").trim(),
+      box: hosts[0] ? { w: hosts[0].getBoundingClientRect().width, h: hosts[0].getBoundingClientRect().height } : null,
+    };
+  });
+  console.log(`  · 常驻 live region：${JSON.stringify(liveRegion)}`);
+  ok(liveRegion.count === 1, `启动即有且仅有 1 个常驻 live region 宿主（实际 ${liveRegion.count} 个；0 个 = 应用根没挂 LiveRegionHost，第一条 toast 播不出来）`);
+  ok(liveRegion.ariaLive === "polite", `宿主 aria-live=polite（toast 是告知不该抢占；实际 ${liveRegion.ariaLive}）`);
+  ok(liveRegion.ariaAtomic === "true", "宿主 aria-atomic=true（整条消息作为整体播报）");
+  ok(liveRegion.role === "status", `宿主 role=status（实际 ${liveRegion.role}）`);
+  ok(liveRegion.box !== null && liveRegion.box.w === 0 && liveRegion.box.h === 0,
+    `宿主不占可见空间（实际 ${JSON.stringify(liveRegion.box)}）——否则会影响布局`);
+
+  // ── 界面级语言不变量（把 locale 文件层的判据搬到**真实渲染结果**上复核）──
+  //
+  // 为什么要重复一遍：locale 文件全绿 ≠ 界面全绿。r29/r30 实测两种"文件对但界面错"：
+  //   ① 语言文件没在 manifest 的 `contributes.languages`（**显式清单**）里登记 → 静默不加载，
+  //      界面回落到 manifest 的中文字面量（守卫 `contribution-label-i18n.test.ts` 管这层）；
+  //   ② 文案压根不在语言包里，而是硬编码在组件/manifest 里。
+  // 两种都只有看**渲染出来的字**才抓得到。
+  const visible = await page.evaluate(() => document.body.innerText);
+  if (LOCALE === "en" || LOCALE === "de") {
+    // 非中文语言下，界面里出现任何 CJK 都是未本地化的串漏出来了
+    const cjk = [...new Set(visible.match(/[\u4e00-\u9fff]{2,}/g) ?? [])];
+    console.log(`  · [${LOCALE}] 界面里的中文串 ${cjk.length} 处${cjk.length ? ": " + JSON.stringify(cjk.slice(0, 8)) : ""}`);
+    ok(cjk.length === 0, `${LOCALE} 界面里不该出现任何中文串（未本地化的文案会这样漏出来）`);
+  }
+  if (LOCALE === "zh-TW") {
+    // 术语层：这些是**大陆专用词**（字形已是繁体也不对），与 src/locale-zhtw-terminology.test.ts 同源。
+    // 用词而不是字集判：字集里「默/加」这类简繁同形字会造成假阳性（r29 实踩过）。
+    const MAINLAND = ["插件", "內核", "配置", "默認", "加載", "存儲", "數據", "消息", "字符串", "硬件", "文件夾", "屏幕", "鼠標", "激活"];
+    const bad = MAINLAND.filter((w) => visible.includes(w));
+    console.log(`  · [zh-TW] 界面里的大陆术语 ${bad.length} 种${bad.length ? ": " + JSON.stringify(bad) : ""}`);
+    ok(bad.length === 0, `zh-TW 界面里不该出现大陆术语（应作 外掛/核心/設定/預設/載入/儲存/資料/訊息/字串/硬體/資料夾…）`);
+  }
+
+  ok(pageErrors.length === 0, `页面零报错（实际 ${pageErrors.length} 条${pageErrors.length ? ": " + pageErrors.slice(0, 2).join(" | ").slice(0, 160) : ""}）`);
+} finally {
+  await killApp(app);
+}
+
+// ---------- 发现清单 ----------
+console.log(`\n════ 审计发现（locale=${LOCALE}，共 ${findings.length} 条）════`);
+const bySev = { H: [], M: [], L: [] };
+for (const f of findings) bySev[f.severity].push(f);
+for (const sev of ["H", "M", "L"]) {
+  if (!bySev[sev].length) continue;
+  console.log(`\n【${sev === "H" ? "高（结构坏了/用户可见错误）" : sev === "M" ? "中（可访问性/空壳）" : "低（规范瑕疵）"}】${bySev[sev].length} 条`);
+  // 同类合并，避免刷屏
+  const grouped = new Map();
+  for (const f of bySev[sev]) {
+    const key = f.kind;
+    grouped.set(key, [...(grouped.get(key) ?? []), f]);
+  }
+  for (const [kind, list] of grouped) {
+    console.log(`  ▸ ${kind}（${list.length} 处）`);
+    for (const f of list.slice(0, 10)) console.log(`      [${f.surface}] ${f.detail}`);
+    if (list.length > 10) console.log(`      …另 ${list.length - 10} 处`);
+  }
+}
+console.log(`\n✅ 断言通过 ${passed} 项；审计发现 ${findings.length} 条（H=${bySev.H.length} M=${bySev.M.length} L=${bySev.L.length}）`);
+console.log(`   隔离 HOME: ${home}${args.keep ? "（--keep 保留）" : ""}`);
+if (bySev.H.length > 0) process.exitCode = 2;   // 高severity 发现 → 非零退出，便于 CI 拦

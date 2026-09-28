@@ -21,6 +21,48 @@
         ],
         "component": "AskQuestionCard"
       }
+    ],
+    "languages": [
+      {
+        "id": "ask.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "ask.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "ask.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "ask.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "ask.ask",
+        "locale": "de",
+        "resources": "./locales/de/ask.json"
+      },
+      {
+        "id": "ask.ask",
+        "locale": "en",
+        "resources": "./locales/en/ask.json"
+      },
+      {
+        "id": "ask.ask",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/ask.json"
+      },
+      {
+        "id": "ask.ask",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/ask.json"
+      }
     ]
   }
 }

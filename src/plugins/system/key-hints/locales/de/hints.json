@@ -6,5 +6,7 @@
   "keyhints.settings.backquoteHint": "Ausgeschaltet ist ` überall ein normales Zeichen; nur Tastenkombinationen bleiben.",
   "keyhints.settings.shortcut": "Tastenkombination als Auslöser",
   "keyhints.settings.shortcutDesc": "Der Führungsmodus lässt sich auch per Tastenkombination starten – umbindbar auf der Seite Tastenkürzel.",
-  "keyhints.settings.shortcutHint": "Event keyhints:toggle, Standardbindung mod+shift+'. Im Führungsmodus Buchstaben zum Klicken drücken, Esc zum Beenden."
+  "keyhints.settings.shortcutHint": "Event keyhints:toggle, Standardbindung mod+shift+'. Im Führungsmodus Buchstaben zum Klicken drücken, Esc zum Beenden.",
+  "keyhints.channel.toggle.label": "Tastenhinweis-Modus umschalten",
+  "keyhints.channel.toggle.desc": "Hinweismodus aktivieren/verlassen: alle klickbaren Elemente werden markiert und erhalten einen Buchstaben; dieser Buchstabe löst den Klick aus."
 }

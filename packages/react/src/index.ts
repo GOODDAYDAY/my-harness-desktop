@@ -1,13 +1,5 @@
 import type { ComponentType } from "react";
-import type {
-  Theme, PluginListItem, KernelExtensionInfo, SkillInfo, ManagedSkill, SkillCapabilities, SettingsItem, SettingsGroupContribution,
-  SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo, SessionRawFilePaths, PendingQuestionRecord, SessionHeaderChangedEvent,
-  NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage, ConnectionInfo,
-  GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo,
-  DshModelSpec, DshProvider, DshDefaultModel,
-  KernelModelsApi, KernelConfigApi, ModelProbeApi,
-  ForkOptions,
-} from "@my-harness-desktop/shared";
+import type { Theme, PluginListItem, KernelExtensionInfo, KernelExtensionCapabilities, SkillInfo, ManagedSkill, SkillCapabilities, SettingsItem, SettingsGroupContribution, SessionInfo, SessionEvent, SyncSnapshot, KernelEvent, QuestionRequestEvent, Question, QuestionAnswer, HeaderPatch, SessionToolConfig, SessionModelPrefs, KnownToolInfo, SessionRawFilePaths, PendingQuestionRecord, SessionHeaderChangedEvent, NeutralMessage, FileTreeNode, ReadDirTreeOptions, ProjectStats, SessionBusMessage, ConnectionInfo, GitStatusResult, GitLogEntry, KernelStatusView, KernelVersionApi, LineageTree, BookmarkSnapshot, ModelInfo, KernelId, KernelLogo, KernelModelsApi, KernelConfigApi, ModelProbeApi, ForkOptions, SessionCapabilities, ConcurrencyMode, KernelPluginReloadReport } from "@my-harness-desktop/shared";
 import { asReactComponent } from "./plugin-modules";
 
 export interface KernelApi {
@@ -37,15 +29,15 @@ export interface KernelApi {
   };
   slots: {
     sidePanel: () => Promise<{ id: string; label: string; icon: string; component: string; pluginId: string }[]>;
-    sidebar: () => Promise<{ id: string; title: string; component: string; pluginId: string }[]>;
+    sidebar: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     mainView: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     titlebar: () => Promise<{ id: string; component: string; pluginId: string }[]>;
     fileActions: () => Promise<{ id: string; labelKey: string; icon?: string; when?: { target?: "file" | "dir" | "both" }; pluginId: string }[]>;
     fileIcons: () => Promise<{ id: string; icon: string; extensions?: string[]; filenames?: string[]; color?: string; pluginId: string }[]>;
     messageActions: () => Promise<{ id: string; component: string; placement?: "left" | "right"; when?: { role?: string[] }; order?: number; pluginId: string }[]>;
     blockRenderers: () => Promise<{ id: string; block: string; names?: string[]; component: string; order?: number; pluginId: string }[]>;
-    sessionGroupings: () => Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]>;
-    composerPolicies: () => Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
+    sessionGroupings: () => Promise<{ id: string; parentPathField: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]>;
+    composerPolicies: () => Promise<{ id: string; customField: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]>;
     composerAttachments: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
     composerActions: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
     composerStats: () => Promise<{ id: string; component: string; order?: number; pluginId: string }[]>;
@@ -54,8 +46,23 @@ export interface KernelApi {
     codeBlockRenderers: () => Promise<{ id: string; languages: string[]; component: string; order?: number; pluginId: string }[]>;
     settingsGroups: () => Promise<(SettingsGroupContribution & { pluginId: string })[]>;
   };
-  /** 已注册内核 id 清单(运行时注册表顺序,boot 时从后端 kernel.list 拿,替代 KERNEL_IDS)。 */
+  /** 已注册内核 id 清单(运行时注册表顺序)。**是活的**：内核插件重载 / 装卸内核之后
+   *  壳会自动重拉（收到 `refresh.requested` 时），读它总能拿到当前清单。
+   *  ⚠ 但**解构出去就死了**：`const { kernelIds } = ctx.kernel` 拿到的是解构那一刻的数组
+   *  （JS 语义如此，getter 也救不了）。要新鲜就直接读 `ctx.kernel.kernelIds`。
+   *  同理，`kernels` / `kernelModels` / `kernelConfig` 三张映射是**引用恒定、内容原地重建**——
+   *  解构出引用仍然有效，重载后读到的是新内容。 */
   kernelIds: KernelId[];
+  /** 显式重拉内核清单并重建三张 per-id 映射（幂等）。
+   *  壳在收到刷新信号时会自动调它；这个入口是给"我知道内核刚变了、不想等广播"的调用方用的
+   *  （例如自己触发了某个内核装卸动作之后）。 */
+  reloadKernelIds: () => Promise<KernelId[]>;
+  /** **差量重载内核插件**（装/删/改内核插件目录后，不重启应用即生效）。
+   *  返回**两侧**的变化清单（`kernels` = 内核注册表侧、`shell` = 壳插件侧）；
+   *  任一侧 `errors` 非空表示某个插件装载失败但**其余照常可用**
+   *  （暖路径不把在跑的应用打回不可用状态）。
+   *  与 `plugins.reload` 分工：那条重载**壳插件**生命周期，这条重载**内核注册表**。 */
+  reloadKernels: () => Promise<KernelPluginReloadReport>;
   /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各一个 KernelVersionApi。 */
   kernels: Record<KernelId, KernelVersionApi>;
   /** 内核身份标(logo)取回:每个内核在自己适配器声明,壳经此取回渲染(不硬编码)。 */
@@ -116,7 +123,9 @@ export interface KernelApi {
     resume: (snapshotId: string) => Promise<string>;
     deleteBookmark: (snapshotId: string) => Promise<void>;
     switchKernel: (target: KernelId) => Promise<void>;
-    getCapabilities: () => Promise<{ kernel: KernelId | null; locked: boolean; extension: boolean; thinking: boolean }>;
+    // 类型从圆心 import,不在此内联重写(此前是第四份本地副本 —— 同一个形状在
+    // kernel-event.ts / web store / build-kernel.ts / 这里各写一遍,§1.3 契约单源违规)
+    getCapabilities: () => Promise<SessionCapabilities>;
     onEvent: (cb: (event: SessionEvent) => void) => () => void;
     /** 列表行变更推送(归档/置顶/改名/删除/复制,第 21 项):payload 自带补丁,本地打行不重拉(copy 例外)。 */
     onHeaderChanged: (cb: (info: SessionHeaderChangedEvent) => void) => () => void;
@@ -146,20 +155,22 @@ export interface KernelApi {
     clone: () => Promise<void>;
     /** 取分叉点的消息(中立层前缀截取)。 */
     getForkMessages: (entryId: string) => Promise<unknown[]>;
-    pi: {
-      steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
-      followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
-      abortRetry: () => Promise<void>;
-      cycleModel: () => Promise<void>;
-      getThinkingLevels: () => Promise<string[]>;
-      cycleThinkingLevel: () => Promise<void>;
-      compact: (customInstructions?: string) => Promise<void>;
-      setAutoCompaction: (enabled: boolean) => Promise<void>;
-      setAutoRetry: (enabled: boolean) => Promise<void>;
-      getLastAssistantText: () => Promise<string>;
-      setSteeringMode: (mode: "all" | "one-at-a-time") => Promise<void>;
-      setFollowUpMode: (mode: "all" | "one-at-a-time") => Promise<void>;
-    };
+    // ⚠ 此处曾是 `pi: { …12 个方法… }` 分组——**已平铺**。理由：这一层是**原始 IPC 面**，
+    // 每个方法本就有自己的 channel（`IPC.session.steer` 等），分组不提供任何信息，
+    // 只把内核名带进了发布面。语义分组发生在 `PluginContext`（messaging/models/sessions），
+    // 那才是插件看到的层；这一层保持平铺中性。
+    steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
+    followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]) => Promise<void>;
+    abortRetry: () => Promise<void>;
+    cycleModel: () => Promise<void>;
+    getThinkingLevels: () => Promise<string[]>;
+    cycleThinkingLevel: () => Promise<void>;
+    compact: (customInstructions?: string) => Promise<void>;
+    setAutoCompaction: (enabled: boolean) => Promise<void>;
+    setAutoRetry: (enabled: boolean) => Promise<void>;
+    getLastAssistantText: () => Promise<string>;
+    setSteeringMode: (mode: ConcurrencyMode) => Promise<void>;
+    setFollowUpMode: (mode: ConcurrencyMode) => Promise<void>;
     runBash: (command: string, excludeFromContext?: boolean) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
     abortBash: () => Promise<void>;
   };
@@ -223,6 +234,8 @@ export interface KernelApi {
    *  收到后重探挂载时探测的外部状态,不用重启。语义不绑具体资源。 */
   onRefreshRequested: (cb: () => void) => () => void;
   kernelExtensions: {
+    /** 该内核的扩展能力面（装/卸/更新/重排）。UI 据此显式降级，不做事后报错（r46）。 */
+    capabilities: (kernel: KernelId) => Promise<KernelExtensionCapabilities>;
     list: (kernel: KernelId) => Promise<KernelExtensionInfo[]>;
     enable: (kernel: KernelId, id: string) => Promise<void>;
     disable: (kernel: KernelId, id: string) => Promise<void>;
@@ -299,14 +312,14 @@ export type {
   SessionInfo, ImageInput, SessionEvent, SyncSnapshot, TreeNode,
   MessageEntry, SessionState, ModelInfo, CommandItem, NeutralMessage,
   PluginContext, PluginConfigApi, AppInfo,
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, ForkOptions, PiExtensions, BashApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, ForkOptions, BashApi,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi,
   GitChangedFile, GitStatusResult, GitLogEntry, ToolCallBlock, ThinkingContent,
   HeaderPatch, SessionToolConfig, BashResult,
   SessionStats, TokenUsage, ContextUsage, ProjectStats,
   KernelEvent, SessionMessageEvent, QuestionRequestEvent, Question, QuestionAnswer, ProcessExitEvent, RpcErrorEvent,
   PluginListItem, PluginState, PluginTier,
-  KernelExtensionInfo, SkillInfo, ManagedSkill, SkillCapabilities, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
+  KernelExtensionInfo, KernelExtensionCapabilities, SkillInfo, ManagedSkill, SkillCapabilities, SettingsItem, SettingsGroupContribution, SettingsFieldDecl,
   MessageRendererContribution, FileActionContribution, MessageActionContribution,
   AuxBlock, AuxBlockParser,
   LayoutNode, LayoutSplit, LayoutGroup, ViewInstance, OpenViewRequest, LayoutApi,
@@ -348,7 +361,10 @@ export { Section, type SectionProps } from "./widgets/section";
 export { Button, type ButtonProps, type ButtonVariant } from "./widgets/button";
 export { Select, type SelectProps } from "./widgets/select";
 export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
-export { Toast, type ToastProps } from "./widgets/toast";
+export { Toast, ensureToastHost, type ToastProps } from "./widgets/toast";
+// 常驻 live region 宿主：应用根挂载一次，让**第一条** toast 也能被读屏播报（见 live-region.tsx 的说明）。
+export { LiveRegionHost, Announce, announceTransient } from "./widgets/live-region";
+export { CollapsibleCardHeader, ExecutionStatus, type CollapsibleCardHeaderProps, type ExecStatus } from "./widgets/collapsible-card-header";
 export { FileTree } from "./widgets/file-tree";
 export { PluginIcon, resolvePluginIcon } from "./widgets/plugin-icon";
 export { KernelLogo, useKernelLogo } from "./widgets/kernel-logo";

@@ -1,6 +1,18 @@
 // wsTransport 单测(web-service-architecture.md §32.1)——invoke/result 配对 + push 派发 + off。
 // 用桩 WebSocket 模拟收帧,不碰真实网络。
 
+import { i18next } from "../app/i18n-init";
+// ⚠ r56：传输层的两条错误文案改走 i18n（它们经 failAll → reject 原因 → **浮到 UI**）。
+//   这里用**真实的 shell.json** 初始化 i18next，于是断言打的仍是真文案而不是键名——
+//   把断言改成"期望键名"是软化（那样界面显示裸键也照样绿）。CLAUDE.md §5.6。
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+const __here = dirname(fileURLToPath(import.meta.url));
+const SHELL_ZH = JSON.parse(readFileSync(join(__here, "../../plugins/system/i18n/locales/zh-CN/shell.json"), "utf-8")) as Record<string, string>;
+if (!i18next.isInitialized) {
+  void i18next.init({ lng: "zh-CN", resources: { "zh-CN": { translation: SHELL_ZH } }, returnEmptyString: false });
+}
 import { describe, it, expect, vi } from "vitest";
 import { wsTransport } from "./ws-transport";
 

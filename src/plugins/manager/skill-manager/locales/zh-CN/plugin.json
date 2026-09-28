@@ -1,4 +1,4 @@
 {
   "plugin.skill-manager.displayName": "Skill 管理",
-  "plugin.skill-manager.description": "管理 pi 底座 skill 的启用、禁用、路径"
+  "plugin.skill-manager.description": "管理 pi 内核 skill 的启用、禁用、路径"
 }

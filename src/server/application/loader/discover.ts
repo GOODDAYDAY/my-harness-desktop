@@ -59,5 +59,18 @@ export function discoverPlugins(rootDir: string, source: DiscoveredPlugin["sourc
     }
   };
   walk(rootDir, 0);
+  // ⚠ **必须排序**（r70）：注册顺序是有语义的——registry 的各 ArraySlot 保注册序，
+  //   而消费侧对 `order` 平手的裁决是「后注册者胜出」（查找型槽位）或「后注册者靠后」（列表型槽位）。
+  //   跨 source 的次序由调用方显式决定（builtin → installed → user → project，
+  //   见 bootstrap/boot/steps/40-shell-plugins.ts），但**同一 source 内部**此前直接沿用
+  //   `readdirSync` 的枚举序——那是文件系统实现细节（POSIX 不保证任何顺序，APFS/ext4 各不相同，
+  //   且增删文件后会变），于是：
+  //     · 查找型槽位的平手胜负**跨机器不可复现**；
+  //     · 列表型槽位里 `order` 相同的条目，其**显示先后**也是文件系统说了算。
+  //   实测（r70）有 6 组落在后一种情况：sidePanel 的 order=15/40/60、settings 的 order=1/2、
+  //   fileActions 的 order=100——这些组内谁先谁后，此前没有任何人决定过。
+  //   按 `manifest.id` 字典序排序后，同一 source 内的次序变成**确定、可复现、可写进文档**的：
+  //   「同 source、同 order ⇒ 插件 id 字典序小者在前」。跨 source 优先级不受影响。
+  out.sort((a, b) => (a.manifest.id < b.manifest.id ? -1 : a.manifest.id > b.manifest.id ? 1 : 0));
   return out;
 }

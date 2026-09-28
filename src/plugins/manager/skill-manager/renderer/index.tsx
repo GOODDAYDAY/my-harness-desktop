@@ -307,7 +307,7 @@ function SkillList({ skills, onSetEnabled, onSetModelInvocable, onOpenFolder, t 
           <SkillRow key={skill.filePath ?? skill.name} skill={skill} onSetEnabled={() => onSetEnabled(skill)} onSetModelInvocable={() => onSetModelInvocable(skill)} onOpenFolder={() => onOpenFolder(skill)} t={t} />
         ))}
       </div>
-      {page.totalPages > 1 && <Pagination currentPage={page.currentPage} totalPages={page.totalPages} onPageChange={page.setCurrentPage} />}
+      {page.totalPages > 1 && <Pagination prevLabel={t("shell.pagePrev")} nextLabel={t("shell.pageNext")} currentPage={page.currentPage} totalPages={page.totalPages} onPageChange={page.setCurrentPage} />}
     </>
   );
 }
@@ -329,7 +329,7 @@ function SkillRow({ skill, onSetEnabled, onSetModelInvocable, onOpenFolder, t }:
             {skill.source && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "1px 6px" }}>{skill.source}</span>}
             <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", padding: "1px 6px" }}>{scopeLabelOf(skill.scope, t)}</span>
           </div>
-          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", opacity: 0.6, fontFamily: "var(--font-family-mono)", wordBreak: "break-all", marginTop: "var(--spacing-xxs)" }}>
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", opacity: 0.6, fontFamily: "var(--font-family-mono)", wordBreak: "break-all", marginTop: "var(--spacing-xs)" }}>
             {skill.filePath}
           </div>
           <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", overflow: "hidden", maxHeight: expanded ? 200 : 20, transition: "max-height 0.3s ease", whiteSpace: expanded ? "normal" : "nowrap", textOverflow: expanded ? undefined : "ellipsis" }}>

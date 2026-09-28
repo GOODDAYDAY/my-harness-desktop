@@ -8,7 +8,7 @@
   "ext.installing": "安裝中...",
   "ext.installFailed": "安裝失敗",
   "ext.protected": "受保護",
-  "ext.pendingRestart": "個會話需要重載使配置生效",
+  "ext.pendingRestart": "個會話需要重載使設定生效",
   "ext.reload": "重載",
   "ext.reloadAll": "全部重載",
   "ext.filterReset": "重置篩選",
@@ -17,5 +17,10 @@
   "ext.tag.desktop": "桌面",
   "ext.tag.npm": "npm",
   "ext.tag.git": "Git",
-  "ext.tag.protected": "受保護"
+  "ext.tag.protected": "受保護",
+  "ext.installUnsupported": "該核心不支援安裝擴充",
+  "ext.installUnsupportedHint": "這個核心沒有提供擴充安裝能力，所以這裡不給安裝入口（而不是讓你填完來源再失敗）。",
+  "ext.uninstallUnsupported": "該核心不支援移除擴充",
+  "ext.toggleFailed": "切換拓展狀態失敗：{{detail}}",
+  "ext.restartFailed": "重啟失敗：{{detail}}"
 }

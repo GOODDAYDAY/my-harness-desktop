@@ -24,5 +24,7 @@
   "minimal.customCli.appliedWithPending": "Für einen eingebauten Kernel nicht verfügbar",
   "minimal.customCli.cleared": "Für einen eingebauten Kernel gibt es nichts zu leeren",
   "minimal.customCli.failed": "Fehlgeschlagen",
-  "minimal.noInstallHint": "minimal wird mit der Shell ausgeliefert: nichts zu installieren, zu aktualisieren oder anzugeben."
+  "minimal.noInstallHint": "minimal wird mit der Shell ausgeliefert: nichts zu installieren, zu aktualisieren oder anzugeben.",
+  "plugin.minimal.description": "Desktop-Anbindung des minimal-Kernels: Kernel-Version + Einstellungen + Erweiterungen + Modelle (ein Einstieg, drei Tabs, gleichrangig mit pi/dsh). Reines Test-Plugin: wird nur von Tests geladen und gehört nicht zur Produktions-Kernelliste.",
+  "settings.minimal-ext": "Minimal-Erweiterungen"
 }

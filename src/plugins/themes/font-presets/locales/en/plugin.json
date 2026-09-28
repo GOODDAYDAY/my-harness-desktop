@@ -1,0 +1,4 @@
+{
+  "plugin.font-presets.displayName": "Font Presets",
+  "plugin.font-presets.description": "Font presets: monospace, Latin and CJK option groups plus per-language copy. Font stacks are changing content, pushed out of the core into a plugin contribution — adding an option is a one-line manifest change."
+}

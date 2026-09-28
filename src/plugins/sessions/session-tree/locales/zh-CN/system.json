@@ -30,5 +30,7 @@
   "system.branchOverview": "分支概览",
   "system.branchOverviewLoading": "分支概览加载中…",
   "system.branchRoot": "根 {{id}}",
-  "system.branchFork": "分支 {{id}}（从 {{parent}} 第 {{boundary}} 分叉）"
+  "system.branchFork": "分支 {{id}}（从 {{parent}} 第 {{boundary}} 分叉）",
+  "system.expandNode": "展开子节点",
+  "system.collapseNode": "折叠子节点"
 }

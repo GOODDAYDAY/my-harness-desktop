@@ -85,6 +85,26 @@
         "id": "tool-manager.toolManager",
         "locale": "de",
         "resources": "./locales/de/toolManager.json"
+      },
+      {
+        "id": "tool-manager.sidePanel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sidePanel.json"
+      },
+      {
+        "id": "tool-manager.sidePanel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sidePanel.json"
+      },
+      {
+        "id": "tool-manager.sidePanel",
+        "locale": "en",
+        "resources": "./locales/en/sidePanel.json"
+      },
+      {
+        "id": "tool-manager.sidePanel",
+        "locale": "de",
+        "resources": "./locales/de/sidePanel.json"
       }
     ]
   }

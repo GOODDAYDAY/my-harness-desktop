@@ -1,6 +1,6 @@
 # retry 插件技术文档
 
-retry 是会话域里"重试"语义的壳插件承载者，但它实际牵涉**两个不同概念**，必须先分清再往下读：其一是 retry 插件自己贡献的 `RetryAction` 按钮——从任意 assistant/tool 节点分叉并重新生成，走 `ctx.tree.fork` + `ctx.messaging.prompt`，是"回退重跑"；其二是 `abortRetry`——pi 内核专属扩展面（`PiExtensions.abortRetry`）里"中止正在进行的自动重试"的方法，它**不是** retry 插件的代码，而是被 timeline 插件在"停止按钮"里消费（`ctx.pi.abortRetry()`）。两个概念共享"retry"这个词但语义相反：一个发起重试，一个终止重试。retry 插件的 `plugin.json` 只有 `messageActions` 一个槽位贡献，`abortRetry` 则是 pi 扩展面的投影，两者唯一的物理交集是 `session:abortRetry` 这个线通道名与 pi 31 命令里的 `abort_retry` 命令。
+retry 是会话域里"重试"语义的壳插件承载者，但它实际牵涉**两个不同概念**，必须先分清再往下读：其一是 retry 插件自己贡献的 `RetryAction` 按钮——从任意 assistant/tool 节点分叉并重新生成，走 `ctx.tree.fork` + `ctx.messaging.prompt`，是"回退重跑"；其二是 `abortRetry`——**重试能力轴**（`ctx.messaging.abortRetry`，可用性看 `capabilities.faces.retry`；此前挂在已退役的内核名袋子 `PiExtensions` 下）里"中止正在进行的自动重试"的方法，它**不是** retry 插件的代码，而是被 timeline 插件在"停止按钮"里消费（`ctx.pi.abortRetry()`）。两个概念共享"retry"这个词但语义相反：一个发起重试，一个终止重试。retry 插件的 `plugin.json` 只有 `messageActions` 一个槽位贡献，`abortRetry` 则是 pi 扩展面的投影，两者唯一的物理交集是 `session:abortRetry` 这个线通道名与 pi 31 命令里的 `abort_retry` 命令。
 
 ## 1 职责与边界
 

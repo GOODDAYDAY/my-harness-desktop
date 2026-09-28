@@ -147,7 +147,7 @@ async function selectModel(kernel, modelName) {
   await page.waitForSelector("[role='menu']", { timeout: 8000 }).catch(() => {});
   // 注意：page.evaluate 是跨进程序列化的，**闭包变量传不过去** —— 必须显式当参数传
   //（这条在本文件里踩了两次；见 skills 里"替身/探针的闭包"那条）。
-  const itemVisible = (n) => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes(n) && el.getBoundingClientRect().width > 0);
+  const itemVisible = (n) => [...document.querySelectorAll("[role^='menuitem']")].some((el) => (el.textContent || "").includes(n) && el.getBoundingClientRect().width > 0);
   if (!(await page.evaluate(itemVisible, modelName))) {
     // 多内核才有内核 TAB；点它，用有界重试（菜单动画未落定时坐标会打偏，见 skills §13.7）
     await clickPointUntil(
@@ -158,17 +158,17 @@ async function selectModel(kernel, modelName) {
         const r = tab.getBoundingClientRect();
         return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
       },
-      ({ modelName: n }) => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes(n) && el.getBoundingClientRect().width > 0),
+      ({ modelName: n }) => [...document.querySelectorAll("[role^='menuitem']")].some((el) => (el.textContent || "").includes(n) && el.getBoundingClientRect().width > 0),
       { tries: 5, settleMs: 250, arg: { kernel, modelName } },
     );
   }
   const ready = await page.waitForFunction(
-    (n) => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes(n) && el.getBoundingClientRect().width > 0),
+    (n) => [...document.querySelectorAll("[role^='menuitem']")].some((el) => (el.textContent || "").includes(n) && el.getBoundingClientRect().width > 0),
     { timeout: 15000, polling: 300 }, modelName,
   ).then(() => true).catch(() => false);
   if (!ready) throw new Error(`${kernel} 的模型项「${modelName}」没出现`);
   const item = await page.evaluate((n) => {
-    const el = [...document.querySelectorAll("[role='menuitem']")].find((x) => (x.textContent || "").includes(n) && x.getBoundingClientRect().width > 0);
+    const el = [...document.querySelectorAll("[role^='menuitem']")].find((x) => (x.textContent || "").includes(n) && x.getBoundingClientRect().width > 0);
     const r = el.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   }, modelName);

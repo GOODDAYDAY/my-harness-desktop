@@ -1,0 +1,4 @@
+{
+  "plugin.goal.displayName": "目標",
+  "plugin.goal.description": "goal 能力：核心無關的同會話持久目標（set_goal/achieve_goal）+ 殼層續跑驅動"
+}

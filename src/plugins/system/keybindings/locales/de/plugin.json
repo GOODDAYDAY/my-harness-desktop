@@ -1,0 +1,4 @@
+{
+  "plugin.keybindings.displayName": "Tastenkombinationen",
+  "plugin.keybindings.description": "Tastenkombinationen an Event-Bus-Channel binden: Drücken löst sofort ein invoke aus und startet beliebige Plugin-Aktionen ohne Maus"
+}

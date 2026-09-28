@@ -1,4 +1,10 @@
 {
   "settings.language": "語言",
-  "settings.languageDesc": "選擇介面語言,即時生效。"
+  "settings.languageDesc": "選擇介面語言,即時生效。",
+  "settings.otherFields": "其他欄位(核心設定中沒有預設說明的項目,依實際值自動顯示)",
+  "settings.noSchemaFields": "此核心未提供欄位清單,且目前沒有可編輯的設定項目——它的設定可能由核心自行管理。",
+  "settings.valueNotInOptions": "{{value}}（目前值不在可選項內）",
+  "settings.ungrouped": "未分組",
+  "settings.listRemoveItem": "移除此項",
+  "settings.unknownError": "未知錯誤"
 }

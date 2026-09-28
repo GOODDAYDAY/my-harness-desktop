@@ -1,0 +1,4 @@
+{
+  "plugin.stickers.displayName": "Sticker",
+  "plugin.stickers.description": "Sticker-Karten: Karte anklicken und in die Sitzung senden (Text geht ins Prompt, Banner-Bilder erscheinen im Verlauf). Mitgelieferte Pakete sind löschbar und auf globaler sowie Projektebene editierbar."
+}

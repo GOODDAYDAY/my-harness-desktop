@@ -5,5 +5,7 @@
   "settings.notifierCooldown": "Cooldown",
   "settings.notifierCooldownDesc": "Minimum interval between notifications (seconds) to avoid spam",
   "notify.title": "Turn complete",
-  "notify.body": "The assistant finished its answer"
+  "notify.body": "The assistant finished its answer",
+  "plugin.notifier.displayName": "Notifications",
+  "plugin.notifier.description": "Sends a system notification when a session turn finishes in the background (macOS / Windows / Linux)"
 }

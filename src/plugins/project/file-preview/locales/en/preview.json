@@ -7,5 +7,7 @@
   "preview.refresh": "Refresh",
   "preview.viewSource": "Source",
   "preview.viewRendered": "Rendered",
-  "preview.loadFailed": "Load Failed"
+  "preview.loadFailed": "Load Failed",
+  "preview.fsUnavailable": "File system access is not available",
+  "preview.noContent": "No content returned"
 }

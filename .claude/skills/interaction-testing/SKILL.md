@@ -1,6 +1,6 @@
 ---
 name: interaction-testing
-description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用。覆盖拉起应用、隔离 HOME、CDP 驱动、DOM 锚点清单、虚拟化/时序陷阱、数据层 vs 渲染层断言分工、双内核差异。触发词:交互测试、e2e、DOM 断言、CDP、puppeteer、冒烟、真实模型、会话流验证、写 e2e。
+description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)与全仓质量审计时使用。覆盖拉起应用、隔离 HOME、CDP 驱动、DOM 锚点清单、虚拟化/时序陷阱、数据层 vs 渲染层断言分工、多内核差异、DOM 组装/文件格式/功能漂移的审计范式、假绿识别、守卫反向注入。触发词:交互测试、e2e、DOM 断言、CDP、puppeteer、冒烟、真实模型、会话流验证、写 e2e、DOM 审计、格式对账、功能漂移、i18n 检查、可访问性、假绿、守卫。
 ---
 
 # 交互测试(my-harness-desktop)
@@ -29,6 +29,7 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 **in-mem harness(r19)**:Vite __vitePreload 相对 import 在 Node-ESM 挂起→直测预加载全 chunk 修复(87b072d5)
 **内核插件补面 + 实证纪律(§10)**:行契约不变/hook 不同名(llm-recorder 的 dsh 侧)|插桩改变时序→无插桩复跑定论|守卫要先证明能红|数据层对≠DOM 对(列表跨作用域 key 必带 cwd)
 **双内核「写半/读半」对齐怎么验(§16,r-hw1)**:钩子挂哪个面(构造面 vs 执行面)先自查|三级配方(假ctx驱动真钩子→假盘驱动真组件→真内核+mock模型真回合)|新 DOM 锚点(data-llm-log-row/state/detail)|判据用不变量不用魔法阈值|形状词典两套词汇并列认|`npm run e2e:dsh:recorder`
+**全仓审计范式(§17,r7–r105)**:审计剧本 vs 功能剧本(静默缺陷的正向盲区)|五个必查面(结构/文案/**语言维度**/文件格式/能力面↔DOM)|假绿九成因(作用域选到叶子·选择器取第一个·不可见子树重复计数·检测集手抄混同形字·类型 bug 让断言恒真·路径 off-by-one·**扫描范围空而判据对**·**自检与判据耦合**·**量词门槛放过整类**) + 判据要用第二种实现独立复核|锚点三纪律(不按译文定位·不依赖第三方库属性·不凭空发明)|文件↔DOM 用不变量不用等式(中立层是超集:4 vs 7 vs 7)|大批量债务走棘轮清单|CDP 四硬约束(字符串求值不传参·Set 序列化变空·模板内反引号·&& 链静默跳过 build)|静态守卫与行为测试不可互替|硬编码文案三形态(属性字面量·**属性内表达式**·**数据里嵌展示文案**)与正则字面量假阳性(§17.8)|剧本基建要共用而非内联·审计发现先排除剧本自身准备缺陷(§17.9)|**延迟求值≠活**(快照改 getter 的两种错误形态与「先构造再改源」判据,§17.10)|waitForFunction 的 options 在第二位·断言写不变量不写阶段值·判据用词要查真实格式(§17.11)|设置页表单审计要落到**磁盘种类**·受控 checkbox 用可信点击·交互前先 scrollIntoView·别猜控件形态(§17.12)|列表类审计:归档=移进分组而非消失·有条件菜单项要双向钉·锚点分清开关与输入框·别写死行号(§17.13)|跨作用域缺陷单作用域剧本结构上撞不到·对账键要先查清·数量不变量强于逐行匹配·dnd-kit 行要用合成 click(§17.14)|**驱动不了的交互要分层覆盖、别留恒真断言**(framer-motion 拖拽诊断留档)(§17.15)|锚点要覆盖所有渲染分支·对账 key 查实现别凭直觉·占位行让索引差一位·改完必须重新 build(§17.16)|能力旗标审计先数消费者再判性质(0 消费者有三种可能,处置完全不同)(§17.17)|合成事件驱动不了某路径时:留**成对对照观测**的证据链、可测的那半下沉单测、做不到的如实记录(§17.18)|选区驱动 UI 用**程序化选区**不用像素拖选(三个连环坑)(§17.19)|entries 文件真实形状 {neutralSessionId,lineages}(§17.20)|按名字抓模式的守卫必须枚举**整个同族**(§17.21)|CSS 类名与死 locale 键是 TS 审计扫不到的两类泄漏面(§17.22)|同一数据有两个来源时,错的那个通常更"顺手"(§17.23)|语言包审计四陷阱(繁体形搜术语·同形异义要账本·**语言文件必须登记否则静默不加载**·范围含夹具)(§17.24)|跨内核复制粘贴用「不得提到别的内核」当判据(§17.25)|「文件对但界面错」:语言包审计必须落到**真实渲染结果**(两种形态+两层判据)(§17.26)|守卫写太宽=逼合法改动绕过它,具名回归锚要窄而实(§17.27)
 **构建产物与测试基建的「假结果」(§11)**:|**三内核同场真回合**(§14)||**用 mock 模型给内核补零 token 真回合**(§13)||**全量 e2e 广扫抓到真 bug**(§12)|**先插桩再猜**(§12.2)改完 server 忘了 build→e2e 读旧代码|e2e 泄漏实例→下次连到旧进程|假守卫两副面孔(同实例 rerender / 行为对但机理不对)|静默 no-op 三例(缺关键帧/未声明变量/文档写的字段不存在)|常年红的门等于没有门|能力驱动渲染用 `=== true`|降级要成对验|断言写错"面"(同一件事两个投递口,11.9)|瞬态闪烁要录**序列**不是比两端(11.10)|重挂缺陷真 app 最短复现=切走再切回(11.11)|测试替身:身份要稳、形状要真(11.12)|运行态动效两条成因链,产物级守卫(11.13)|环境展不出该缺陷时守卫是假的(11.10)
 
 ## 1 基础设施(现成件,别重造)
@@ -41,6 +42,9 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)时使用�
 | `makeRunRoot` / `setupBaseline` | `scripts/demo/lib/home.mjs` | 一次性隔离 HOME(/tmp/pi-demo-\<uuid\>);pi 内核符号链接借真实 HOME,models.json/settings.json 拷贝防写回 |
 | `waitForDomIdle` | `scripts/demo/lib/util.mjs` | DOM 静默等待(事件驱动,不赌固定 sleep) |
 | 场景种子 | `scripts/demo/scenarios/*` | seed.json + index.mjs,`applySeed(ctx, ...)` 组装演示状态 |
+| **`dom-audit.e2e.mjs`** | `scripts/demo/` | **全仓审计**(非功能剧本):首屏 + 设置页逐子页 + 配置文件 + 能力面↔DOM 对账。`--locale zh-CN\|zh-TW\|en\|de` 逐语言跑(i18n 缺陷是**按语言**出现的);排除不可见子树并打印跳过数;H 级发现 → 退出码 2。详见 §17 |
+| **`timeline-panel-audit.e2e.mjs`** | `scripts/demo/` | 内容区审计:时间线消息卡结构 + **文件↔DOM 对账**(内核 jsonl vs 中立层 vs 卡片数)+ 右面板逐窗格。零 token(minimal echo)。详见 §17.4 |
+| `clickPointUntil` | `scripts/demo/lib/interact.mjs` | 可信点击 + 重试(每轮重算坐标,判据是"目标真的出现了"而不是"点过了")。切内核 TAB 这类"点了没反应就白等"的场景必须用它 |
 
 **静默开拉(默认,别绕过)**:`launchApp` 默认注入 `MHD_WINDOW=hidden`。根因:应用开窗代码曾无条件 `win.show()`,macOS 上 `show()` 即激活应用——**用户正在打字的窗口失焦、鼠标被夺走**,每跑一次 e2e 就打扰用户一次(CLAUDE.md §5.6「测试静默」,设计原则 38)。静默态 = 不 show、`focusable:false`、`skipTaskbar:true`、不设 dock 图标、不发系统通知(`src/server/bootstrap/window-visibility.ts` 是策略单源)。
 
@@ -75,12 +79,40 @@ writeFileSync(prefsFile, JSON.stringify({ ...JSON.parse(readFileSync(prefsFile, 
 | `button[aria-label^="发送"]` / `[aria-label*="停止"]` | 发送/停止钮(流式中发送变停止) |
 | `[data-message-id]` | 消息行(锚点 id = 中立 entryId `{lineageId}:{seq}`) |
 | `[data-session-path]` | 侧栏会话行(sessions-list) |
+| `[data-session-action="rename\|pin\|archive\|open-desktop-file\|open-kernel-file\|delete"]` | 会话行**右键菜单**的六个动作（r22 新增）。⚠ Radix ContextMenu 要**真实右键**（`page.mouse.click(x,y,{button:"right"})`），合成事件不弹；菜单在 Portal 里，用 `[role=menuitem]` 或本锚点查 |
+| `[data-session-rename]` | 会话行**重命名态**的输入框（r22 新增）。⚠ 它**不一定**是 `[data-session-path]` 的后代（SessionRow 与 ContextMenu.Trigger 是两层），别用 `[data-session-path] input` 这种层级猜测定位。它是 `defaultValue` + Enter 提交，替换前要先 `select()` 全选 |
+| `[data-session-search-input]` | **真正的搜索输入框**（仅展开时渲染）。⚠ 别与 `[data-session-search]` 混淆——后者是**展开/收起搜索的按钮**。往按钮上打字的症状是「搜索没生效」，看起来像过滤坏了 |
+| `[data-plugin-install="toggle|source|browse|submit"]` | 插件管理页的安装表单四件套（r96 新增）。**折叠开关与提交钮文本高度相似**（`pluginManager.install` vs `pluginManager.installBtn`），按文本匹配会反复点错——点开关等于把刚展开的表单又关上，症状是"提交没反应"（r95 白跑一轮）。提交钮另带 `data-installing="true|false"`，让"卡在 installing 态"这个 r80 的根因可被**直接断言**而不必靠推断按钮文案；开关另带 `aria-expanded` |
+| `[data-settings-pane="<条目 id>"]` / `[data-settings-pane-active="true|false"]` | 设置页**内容面板**（r93 新增）。此前 pane 根元素无任何锚点，自动化无法判断"当前激活的是哪个条目"——只能靠 `[role=tabpanel]` 猜，而**无 `tabs` 的条目根本不渲染 tabpanel**，于是判据永假、误判成"点击无效"（r88/r89 连续两轮踩坑）。判激活态用 `-active`，不要用可见性（两个视图可能同时在渲染树里，r92） |
+| `[data-settings-unsaved-dialog]` / `[data-settings-unsaved="cancel|discard|save"]` / `[data-settings-unsaved-title]` | 设置页「未保存修改」拦截对话框（r89 新增、r92 起被 `settings-controls-audit` 使用）。`guardNavigate` 在 `activeDirty` 时会**拦下导航**并弹此框；没有锚点时脚本无法区分"没点上"与"被拦了"（r88 的误诊源头之一） |
+| `[data-collapsible-header]` / `[data-exec-status="running|error|success"]` | 共享可折叠卡片头与执行状态块（r57 收敛三个调用方；`data-tool-status`/`data-goal-tool-status` 已统一为 `data-exec-status`） |
+| `[data-model-devrole]` / `[data-model-reasoning]` | 模型配置页里受**能力门控**的两个控件（r45 新增；只能按锚点验，按译文定位换语言就失效） |
+| `[data-pagination="prev|next"]` / `[data-pagination-page="<n>"]` | 共享分页部件的箭头与页码（r38 新增；箭头是纯图标，可访问名由**必填** props 提供） |
+| `[data-plugin-drag-handle]` | plugin-manager 每行的拖拽手柄（r38 新增；dnd-kit 给 role/tabIndex，可访问名要自己给） |
+| `[data-composer-model-item="<kernel>/<provider>/<id>"]` + `-selected` / `-locked` | 模型下拉里的模型项与其状态（r34 新增）。⚠ id 自身可含 `/`，所以段数是 >=3，别用 split 取段 |
+| `[data-composer-model-provider="<provider>"]` | 模型下拉的 provider 分组头（r34 新增；此前是裸 div） |
+| `[data-settings-tab="<tabId>"]` + `-tab-active` | 设置页条目内的 TAB（r33 新增）。此前 TAB 按钮只有 `key`，被改的 `kernelModels` 路径 e2e 走不到 |
+| `[data-kernel-custom-dir]` / `-browse` / `-apply` / `-clear` | 内核版本页的「自定义内核目录」输入框与三个按钮（r33 新增）。⚠ 按钮上的锚点能被 DOM 收到，是因为 r32 修了共享 `Button` 不透传 `data-*` 的缺陷（§17.31） |
+| `[data-project-path="<绝对路径>"]` + `[data-project-active="true\|false"]` | 侧栏项目行与其激活态（既有锚点，r23 开始用于跨项目审计）。⚠ 该行同时挂了 dnd-kit 拖拽 listeners，**坐标点击不触发 onClick**，要用合成 `el.click()`（见 §17.14） |
+| `[data-session-group="<groupId>"]` | 会话列表的**分组**（r22 新增）：`pinned`/`today`/`yesterday`/`last7days`/`earlier`/`archived`/`search`，另有 `data-session-group-open` 标折叠态。⚠ 归档不是「行从 DOM 消失」而是**移进 archived 组**（且该组默认折叠）——断言要查分组归属，不要断言行数变少 |
+| `[data-session-new]` / `[data-session-search]` / `[data-session-refresh]` | 会话列表工具条的三个控件（r22 新增）。⚠ 列表**首行是「新对话」乐观占位行**，不是会话——按内容找行，别用 `rows[0]` |
 | `[data-goal-phase]` | goal 目标条(active/paused/achieved) |
 | `[data-ask-question]` | ask 提问卡 |
 | `button[title]` | 图标按钮的唯一可达名(收藏/分叉/重试/复制/钉图钉/回退;侧栏图标条的 Review/Tree/统计 等) |
 | `[role=menu]` + `[role=menuitem]` | 模型下拉(Radix) |
 | `[role=menuitem]` | 右键菜单项(会话行右键:重命名/置顶/归档/打开两文件) |
 | `[data-sidepanel-style]` | 右侧面板(**有两个**:图标条 w-12 + 展开面板 h-full,DOM 序展开面板在前且空)——取页签按钮必须用后代选择器 `[data-sidepanel-style] button[aria-label]`(单元素 querySelector 命中空面板得 0 页签,2026-09-08 踩过) |
+| `[data-sidepanel-pane="<贡献项 id>"]` | **右面板的某个窗格**(r8 新增)。右面板是**多窗格 toggle** 语义(`toggleSidePanelTab`,`activeSidePanelTabs` 是数组),多个 Tab 可同时展开——没有窗格身份就没法判断"哪块内容属于哪个 Tab"。⚠ 别改用 react-resizable-panels 渲染出的 `data-panel-id`:那是**第三方库内部属性**(升级改名就全断),且不在本仓源码里,会被 `e2e-anchor-coverage.test.ts` 判红。⚠ 点**已开**的 Tab 会把它**关掉**(toggle),遍历前先读 `aria-pressed` |
+| `[data-composer-pending-files="<n>"]` / `[data-composer-pending-file="<绝对路径>"]` / `[data-composer-pending-file-remove="<路径>"]` | composer 上方的**待发送文件条**（r26 新增）。chip 的身份就是绝对路径（附件是路径引用、不读 base64），所以直接落成属性值，按路径定位而不是按下标 |
+| `[data-composer-pending-image="<src>"]` / `[data-composer-pending-image-remove]` | **待发送图片条**（r26 新增）。有 `dataUri` 才渲染 `<img>`（alt 取图片标题，无标题回落 `timeline.pendingImageAlt`），否则只显示 src 文本 |
+| `[data-composer-readonly="<reason>"]` | composer 被**只读条**替换（r19 新增）。四种成因即四个 reason 值：`policy`（会话策略只读）/ `kernel-not-loaded`（会话归属的内核没装载）/ `kernel-required`（内核未安装）/ `open-folder-first`（未打开文件夹）。⚠ 出现只读条时 `[data-timeline-composer]` **不存在**（整个 composer 被替换掉，不是"能输入但发送才报错"）。⚠ 别按译文找它：四条文案全经 i18n，按文案匹配等于把测试绑死在某一种语言上（§17.3）——reason 属性就是为此存在的 |
+| `[data-session-kernel-unloaded]` | 会话行的「内核未装载」角标（`session.kernelLoaded === false` 时渲染）。判据是**会话自己的** kernelLoaded，不是 `currentModel.kernel`：模型链只在"已装载内核的模型清单"里解析，孤儿会话的模型必然回落到默认内核的模型，按模型判会得出"内核可用" |
+| `[data-message-meta]` | 消息行右下角的时间/指标 span（r21 从 `aria-label="message-meta"` 改过来——把机器标识符塞进 aria-label 会**覆盖**内容作为可访问名，屏幕阅读器会念出 "message-meta"。锚点归 data-*，可访问名归内容） |
+| `[data-config-field="<字段 key>"]` | 内核配置表单里**某个字段**的行（r21 新增，key 是 dotted 形式如 `terminal.hyperlinks`）。字段清单由 parseSettingsSchema 从内核 .d.ts 动态解析，所以 key 是这里唯一稳定的身份——label/description 都是可缺译文的 i18n key，按译文定位不可靠 |
+| `[data-settings-save="confirm\|discard"]` | 设置页顶部「未保存改动」浮层的两个钮（r21 新增）；保存中态另有 `data-settings-saving="true"`。⚠ 改完配置**必须点 confirm 才落盘**，只改不点等于没改（skill §2 早记过这条） |
+| `[data-settings-back="chat"]` | 设置页左下角「返回对话」（r20 新增）。⚠ 此前只能按译文找，而它在四种语言下是四个不同字符串 |
+| `[data-sidebar-entry="settings"]` | 侧栏设置入口(r8 新增)。⚠ 别按文案找:zh-CN「设置」/ zh-TW「設定」/ en「Settings」/ de「Einstellungen」——按文案匹配等于把测试绑死在某一种语言上(§17.3) |
+| `button[data-composer-model]` | composer 的模型下拉触发器(值形如 `<kernel>:<provider>/<model>`)。⚠ 别用"带 svg 且文本长度>2 且不是思考档位"这类文案启发式:`closest("form")` 落空时会退回 `document.body`、点到页面上第一个符合条件的按钮(r8 实测 8s 等不到下拉)。**下拉是按内核分 TAB 的**,要先用 `clickPointUntil` 切到目标内核 TAB,否则菜单里只有当前内核的模型 |
 | `[data-settings-id="<入口 id>"]` | 设置页左侧导航入口(如 `pi`/`dsh`/`minimal`/`general`)。**本轮新增**——此前导航项只有文案(还经 i18n 查表、缺 key 回落 defaultValue),e2e 只能按文本猜,"某个插件在不在设置页里"这类断言因此写不可靠 |
 | `button[title="分支概览"]` | Tree 面板的 lineage 概览开关(**被 `nodes.length>0` 内核树门禁**——seed-only 会话无运行内核 → 空态 → 按钮不渲染;概览 UI 断言要真内核会话,投影纯逻辑走 getTree 单测 f37045eb) |
 
@@ -1226,3 +1258,4088 @@ for (const [stem, rec] of perStem) {
 写半改造 + 读侧对齐 + i18n 四语 + 设计文档（根因与终态）+ 插件技术文档（§13）+ 三级测试全绿
 + e2e 真回合 PASS + 截图留证 + 文档与代码同批提交（CLAUDE.md §5.5）。
 **没有"应该没问题"**：每一处结论后面都要跟一个能复现它的命令。
+
+## 17 全仓「DOM 组装 / 文件格式 / 功能漂移」审计范式（r7–r9）
+
+前 16 节都是**功能剧本**：验某条路径通不通。本节是另一类——**审计剧本**：不预设要验哪个功能，
+而是把整棵 DOM / 整批落盘文件扫一遍，找"功能照常、页面不报错、但结构已经坏了"的东西。
+两个成品：`scripts/demo/dom-audit.e2e.mjs`（首屏 + 设置页遍历 + 配置文件 + 能力面对账）、
+`scripts/demo/timeline-panel-audit.e2e.mjs`（时间线 + 文件↔DOM + 右面板逐窗格）。
+
+**为什么单立一类**：这类缺陷**静默**。r7–r9 实测抓到的 12+ 项里，没有一项会让任何既有剧本变红——
+112 处裸 i18n key、13 个 Tab 名从不翻译、语言偏好冷启动失效、212 条 zh-TW 是简体、
+图钉色块无可访问名……功能全通、页面零报错，只有换语言 / 开屏幕阅读器 / 逐条对文件才暴露。
+正向剧本的覆盖面对它们是**结构性盲区**，多写一百个功能剧本也抓不到。
+
+### 17.1 审计剧本的五个必查面
+
+| 面 | 查什么 | 实测抓到的例子 |
+|---|---|---|
+| **结构** | 交互元素嵌套违规、锚点重复、空壳容器、图片无 alt、图标按钮无可访问名、标题层级 | 图钉色块按钮只含 `<PinSVG>`、无 `aria-label`，未选中时 `background`/`border` 都 transparent |
+| **文案** | 裸 i18n key 上屏、插值残留 `{{}}`、硬编码中文（§7.1 铁律一） | `fieldDescs.terminal.hyperlinks` 直接显示在设置页 |
+| **语言维度** | **同一套审计要在每个 locale 下各跑一遍** | zh-TW 有 212 条是简体照抄；`shell.loading` 等 2 个共享组件的 key 住在 pi 插件里 |
+| **文件格式** | 落盘文件的 schema、字段、与读它的那份代码是否一致 | 中立层不是 jsonl，是 `<ns>.header.json` + `<ns>.entries.json` |
+| **能力面 ↔ DOM** | 内核声明的能力与界面呈现的控件是否一致（缺面不该长出控件） | minimal 自带工具门控却被判"不能过滤"，被拼上冗余散文说明 |
+
+**语言维度是最容易漏的一维**：审计剧本必须能 `--locale` 参数化。首版只跑 zh-CN，
+于是"zh-TW 全是简体""en/de 用户被强制显示中文"这两类整批漏掉。
+而且**语言切换本身要当断言**（`document.documentElement.lang === LOCALE`）——
+r7 正是这条断言暴露了「prefs 存着 zh-TW、renderer 也读得到 zh-TW、界面却是 zh-CN」的启动竞态。
+
+### 17.2 假绿的六种成因（本轮全部实踩，每种都有对策）
+
+审计剧本最大的风险不是漏报，是**看起来在查、其实什么都没查**。
+
+1. **作用域选到叶子元素** → 元素数 0，后续所有结构检查空转。
+   实例：用 `[data-timeline-composer]` 当时间线作用域，而它是 `<textarea>` 本身（无子元素）。
+   对策：作用域断言 `count > 0`，为 0 就红（"作用域又选错了"）。
+2. **选择器取"第一个匹配"而不是"当前那个"** → 10 个 Tab 全在审同一个面板。
+   实例：右面板是多窗格 toggle，`querySelector(".overflow-y-auto")` 恒返回 Review 的内容，
+   于是每个 Tab 都报"可见元素=14"。**数字全同就是空转的信号**。
+   对策：按窗格身份选（`data-sidepanel-pane`），并且打印每窗格的元素数——不同面板数字必然不同。
+3. **不可见子树被重复计数** → 结论失真（既夸大严重度，也掩盖"到底几处"）。
+   实例：设置页 keep-mounted（`settings-page.tsx:84` 用 `display:none` 不重 mount），
+   8 处裸 key 被报成 112 处（8 × 14 个子页）。
+   对策：先算出 `display:none`/`visibility:hidden` 的根集合，遍历时跳过其子树，
+   并**打印跳过了多少个**（透明度）。
+4. **检测集手抄 → 混进同形字 → 假阳性**。
+   实例：简繁检测集里混进「形」（简繁同形），把合法译文 `npm 命令 argv 形式` 判成违规。
+   对策：检测集**从已验证的映射表派生**，不手抄；假阳性比漏报更糟——它侵蚀守卫可信度，进而被绕过。
+5. **类型层 bug 让断言恒真**。
+   实例：`userFacingStrings` 返回元组数组，消费方按 `{key, value}` 解构 → 两个都 `undefined`
+   → `pattern.test(undefined)` 永不匹配 → **3 条断言全绿，而守卫是空的**。
+   是 `tsc` 的类型错误暴露的。对策：**每个审计/守卫都必须反向注入验一次**（§10.3），
+   而且 `tsc` 的错误不要当风格问题放过。
+6. **脚本自己的路径推导 off-by-one** → 全部 `continue`、报告"0 问题"。
+   实例：`dirname(dirname(p))` 少算一层，locale 目录变成 `…/locales/locales`。
+   **连续两轮犯了同一个错**。对策：脚本开头打印"扫到 N 个文件/目录"并对 N 断言下限；
+   路径推导后加 `assert "/locales" not in dir`。
+
+7. **判据逻辑对、但扫描范围空** → 守卫变装饰品，且**所有断言都绿**。
+   实例（r10，我自己写的守卫）：重写 `walk()` 时把"收集 .json 文件"那个 `else if` 分支整段丢了，
+   只剩 `if (!isDirectory()) continue`，于是 `walk` 恒返回空、`detect` 恒返回 0 条；
+   而"合成样本自检"照样通过、"没有清单外的新增"照样绿（0 条当然没有新增）。
+   同一轮里它报"德语债 0 条"，而真实 app 的德语设置页肉眼可见 `General` / `Compaction` /
+   `Last Changelog Version` 一片英文——实际是 **101 条**。
+   对策：防空转必须**同时**验两件事——① 判据能判（合成样本三向：能抓坏的、放过好的、放过豁免的）；
+   ② **真的扫到了东西**（`expect(文件数).toBeGreaterThanOrEqual(N)`）。只有 ① 不够。
+8. **自检与判据耦合，判据一改自检就失效（或反过来变成永真）**。
+   实例：自检原本是"拿 en 包跑同一判据，必然大量命中"。判据从"含英文虚词"换成
+   "de 与 en **逐字相同**"之后，en 包与 de 包本就不同 → 判据①不成立 → 命中 0 → 自检反而红。
+   对策：自检用**合成样本**（自己造三个输入：该抓的、该放的、该豁免的），与被测数据解耦。
+   另：合成样本里传的参数要能真的触发规则——首版给豁免规则的 file 参数传 `"x/y.json"`，
+   而豁免规则匹配的是 `themes/font-presets/`，于是"豁免生效"这条自检**永远是假通过**。
+
+9. **判据的门槛把整类条目放过**（量词型盲区）。
+   实例（r11）：德语未翻译判据里有一条"剥掉路径后**至少 2 个词**才判定"，理由是单词条目
+   （`Transport`/`IM`/`Tree`）无法判断该不该译。结果**所有单词条目被整批放过**，而其中
+   `General`/`Compaction`/`Retry`/`Images`/`Warnings`/`Cancel`/`When`/`Protected`/`Reload`
+   都是该译而未译的——德语界面实际显示英文，共 **95 条**盲区（比已知的 97 条还多）。
+   对策：不能用"词数"这种粗门槛一刀切，要**逐类表态**——建一张显式的
+   "语言中立术语表"（德语技术 UI 惯例保留英文原词的那些：Status/System/Debug/Prompt/Markdown/
+   Chat/Tree…），在表里的放过、不在表里的单词条目一律参与判定；表长打印出来，
+   防止靠"塞进中立表"把债务藏起来。并给盲区配自检：`General` 必须被抓到、`Status` 必须被放过。
+
+> **验证手法：判据要用第二种实现独立复核一遍。** r10 我据守卫的"0 条"报告"德语债清零"，
+> r11 在真机肉眼看到大片英文——守卫与结论都错。r11 改完判据后，除了跑守卫，还用 Python
+> **独立重写了一遍同样的判据**去数（TS 与 Python 两套实现给出同一个数字 0 才采信），
+> 并且回到真实 app 切到德语**肉眼看**设置页。三条独立证据一致，才敢说"清零"。
+> 单靠守卫自证是循环论证：守卫坏了的时候，它报告的正是"一切正常"。
+
+> 通则：**每条审计判据都要配"判据本身不空转"的断言**，而且那条断言要覆盖**两个维度**——
+> 判据逻辑（合成样本三向）+ 扫描范围（文件数/元素数 > 0）。本仓所有新守卫都带这两条。
+>
+> 还有一条更硬的通则：**"守卫绿了"永远不等于"问题没了"**。r10 的德语债就是完整反例——
+> 判据太弱（要求含英文虚词）→ 清单只收了 49 条 → 照单还清 → 守卫转绿 → 我据此报告"清零"，
+> 而真实债务是 101 条。**判据必须先在真实界面/真实数据上被证明能看见问题**（§10.3 的
+> "先证明能红"在这里要升级成"先证明能看见全貌"）：本轮的做法是把判据换成不依赖词表的
+> 硬对比（de 与 en 逐字相同），并在真实 app 里切到德语**肉眼抽查**设置页。
+
+### 17.3 锚点纪律（三条，都来自实测）
+
+1. **不按译文文案定位元素**。首版按 `/^(设置|Settings)$/` 找设置入口，换 zh-TW 就失效——
+   繁中是「設定」（正确的台式术语）。按文案匹配等于把测试绑死在某一种语言上。
+   正确做法：给需要的元素加稳定锚点（本轮加了 `data-sidebar-entry="settings"`）。
+2. **不依赖第三方库渲染出的属性**。右面板窗格的身份本来是 react-resizable-panels 的
+   `data-panel-id`——依赖它等于把 e2e 绑在库的实现细节上（升级改名就全断），
+   而且它不在本仓源码里，`src/e2e-anchor-coverage.test.ts` 会判"e2e 依赖了源码中不存在的锚点"。
+   正确做法：加自有锚点 `data-sidepanel-pane={id}`。
+3. **不凭空发明锚点名**。首版写了 `data-slot`/`data-region`/`data-container` 三个选择器，
+   源码里根本不存在，被 `e2e-anchor-coverage` 当场判红。那条守卫就是为此存在的。
+   （它也拒绝豁免清单——"手写清单会过期"，所以修的是剧本和产品，不是放宽守卫。）
+
+### 17.4 文件 ↔ DOM 对账：先问「哪一份是超集」
+
+跨存储对账最常写错的断言是"两边条数相等"。实测：2 轮发送 →
+内核侧 jsonl **4** 条 message、中立层 **7** 个 entry、DOM **7** 张卡。
+中立层是**超集**（多出的 3 个是壳侧事件：`role:"divider"` 的模型切换分隔卡、会话重命名卡）。
+
+正确的三条不变量：
+- 内核侧每条消息都能在中立层找到对应（**按抽取文本**比，不按原始 JSON——内核侧 content 是
+  内容块数组 `[{type:"text",text}]`，中立层形状不同，直接比 JSON 必然假红；
+  而且数组 `.toString()` 得到 `"[object Object]"`，r8 就这么假红过一次）；
+- 中立层 entry 数 ≥ 内核侧 message 数（超集关系）；
+- **中立层 entry 数 == DOM 卡片数**（7 == 7）← 这条才真正回答"文件与界面是否对应"，
+  任何一侧多算/漏算（折叠、去重、虚拟化窗口）都会在这里暴露。
+
+顺带钉住格式本身（连写审计的人都会记错，正说明值得钉）：`.header.json` 三字段
+（`neutralSessionId` / `rootLineageId` / `header`）、header 内 8 字段、header↔entries 一一对应、
+无遗留整树残留（`<ns>.json` 读到即懒迁移拆开）。
+
+### 17.5 大批量债务用**棘轮守卫**，不要要么全修要么不修
+
+实例：德语包 49 条其实是英文。翻译 49 条技术文案需要专门一轮——本轮已有一次教训：
+把 `Basis`(阴) 一刀切换成 `Kernel`(阳) 时写出 `eine dsh-Kernel`、`installiere sie`（应 `ihn`）
+等 6 处性数不一致。**赶工翻译的风险比不翻译更高**。
+
+正确处置：① 量化成清单落盘（`scripts/i18n-de-untranslated.json`）；② 上**棘轮守卫**两条断言——
+"当前检出必须都在清单里"（新增即红）+"清单里的必须都还没修"（修好了不删清单 = 清单失真，也红）。
+第二条是关键：没有它，清单会随修复逐渐失真，守卫慢慢变成空转。
+
+同一范式适用于：`dependency-audit` 的 allowlist（打印长度防悄悄变长）、
+`doc-drift-audit` 的 RETIRED 表、§6.1.3 的 `PENDING_WARM_TABLES`（由"文件是否存在"推导，
+文件一落地名单自动变空、下一条测试立刻开始要求真实调用点存在）。
+
+### 17.6 CDP / `page.evaluate` 的四条硬约束（每条都实测踩过）
+
+1. **`evaluate(字符串)` 是当表达式求值、且不传参**。写成 `evaluate(FN_STRING, sel)`
+   会返回函数对象本身（症状：`r.nesting` undefined）。要把参数 JSON 内联进 IIFE。
+2. **`Set` / `Map` 经 CDP 序列化会变成空对象**。跨边界只传数组/普通对象，回 Node 侧再 `new Set(…)`。
+3. **注入页内的代码若是模板字符串，注释里不能有反引号**（会提前终止模板字面量）。
+   两轮各犯一次，症状是 `SyntaxError: Unexpected identifier`。
+4. **`&&` 链里前一步失败会静默跳过后面的 build**，于是审的是旧产物。
+   实例：`node --check x.mjs && npm run build && node x.mjs`，`--check` 失败 → build 没跑 →
+   审计跑在旧产物上 → 一度以为修复没生效。改完产物必须**显式确认 build 跑过**。
+
+### 17.7 静态守卫与行为测试不可互相替代
+
+实例：验证"暖启动必经 `runOps`"时，用 `if (false) { await runOps(...) }` 做反向注入 →
+**纯文本静态扫描看不见不可达代码，没红**。改成真实回归形态（整段删除）→
+静态守卫 2 红 + 行为测试 2 红。
+
+结论：静态守卫防"声明腐烂"（字段没人读、key 没人译、锚点不存在），
+行为测试防"路径不通"（真的调了、真的生效）。两者判据不同、失效形态不同，**必须都写**。
+静态守卫还要在文件头**声明自己的局限**（抓不到中间变量/forEach/跨行 for 头/不可达代码），
+否则下一个人会误以为它覆盖了一切。
+
+### 17.8 「硬编码文案」这类缺陷的三种形态与判据演化（r12 实测）
+
+同一个违规（§7.1 铁律一：壳/插件不内嵌文案）在代码里有**三种形态**，判据必须分别覆盖，
+只覆盖一种就会大面积漏报。r12 实测：判据每扩宽一次都抓到新缺陷，共三轮。
+
+| 形态 | 例子 | 判据 |
+|---|---|---|
+| ① JSX 属性字面量 | `title="移除图片"` | `ATTR` 正则 |
+| ② **属性里的表达式**（三元 / `??` 兜底） | `title={copied ? "已复制" : "复制内容"}`、`alt={sticker.title ?? "贴纸图"}` | ATTR 必须允许 `{…}` 内含中文字符串——**首版只认 `attr="…"` 与 `attr={"…"}`，于是 5 处全放过**，直到在德语真机里看见「复制内容 / 删除」才发现 |
+| ③ **数据里嵌展示文案** | `core/types.ts` 的 `{ id:"readonly", name:"只读", description:"读取与搜索…"` | 单独一条守卫，只认展示字段名（`name`/`description`/`title`/`label`），且**有配套 `<field>Key` 就放过** |
+
+形态 ③ 的修法值得单独记：`name` 同时是**用户可改的数据**（重命名写回它）和**内置预设的默认文案**
+（该随语言变），两个身份都要留位置。所以加 `nameKey?`/`descriptionKey?`，渲染侧统一走
+`g.nameKey ? t(g.nameKey, { defaultValue: g.name }) : g.name`——**不按 `builtIn` 分支**
+（那是身份分支，CLAUDE.md §1.5 判别气味），内置预设与用户自建组走同一条路径；
+用户保存过之后清掉 key，让字面值优先（用户显式写下的值不该被任何翻译覆盖）。
+连带要修编辑框初始化：`useState(group.name)` 会把中文字面量填进德语用户的编辑框，
+一保存就把中文写进了他的配置——要用解析后的展示值初始化。
+
+**必须排除的假阳性**：正则字面量里的中文。`ask-question-card.tsx` 有
+`/\s*(?:\((?:recommended|推荐)\)|（(?:recommended|推荐)）)\s*$/i`，那是**剥掉内核回传选项标签里
+「(推荐)」后缀的匹配模式**，必须同时认中英文两种写法（内核可能回传任一种），
+把它改成 i18n key 反而是错的。判据里要先挖掉 `/…/flags` 再找中文。
+
+**i18n 改动会连带弄红既有测试**，修法按 CLAUDE.md §5.6：`useTranslation` 用 `vi.mock` 给**真字典**。
+最稳的做法是测试**直接读插件自己的 locale 文件**当字典（`readFileSync(../locales/zh-CN/ask.json)`），
+而不是在测试里另抄一份——另抄必然与真实文案漂移，于是"测试绿但界面是别的字"。
+mock 的 `t` 还要支持 `{{var}}` 插值，否则带变量的文案断言会假红。
+
+### 17.9 剧本基建也要"共用而非内联"——否则审计结论会假
+
+r13 新写的 `composer-session-audit.e2e.mjs` 报了一条 **H 级发现**：
+「注册表有内核 dsh，但模型下拉里找不到对应 TAB（现有 pi/minimal）」。查下去发现**是剧本自己的错**：
+
+- dsh 的准备**不在 `setupBaseline` 里**，是独立导出的 **`setupDshKernel(home, realHome)`**
+  （三件套：`<dataRoot>/dsh` 符号链接 + `settings.yaml`/`cordis.yml`/`.credentials.yaml` 拷贝 +
+  `~/.dsh/node_modules` 符号链接）。漏调它 → 隔离 HOME 没有 dsh 配置（app 运行时自建了一个空的）
+  → dsh 报 0 个模型 → 下拉没有 dsh TAB。**而"已注册但无模型的内核不出现 TAB"恰恰是正确行为**
+  （出现一个空 TAB 才是缺陷）。
+- 所以判据也写错了：不能断言"注册表里每个内核都要有 TAB"，只能断言"**有模型的**内核要有 TAB"，
+  且 dsh 那一条以 `setupDshKernel().available` 为前提——`home.mjs` 的注释早就规定了
+  「`available=false` 表示本机没装 dsh，**调用方应跳过而非伪造**」。
+
+顺带发现 `kernel-thinking-matrix.e2e.mjs` 把同一套 dsh 准备**内联复制**了一遍（逐项对比：7 个要素
+一个不缺，所以不是现存 bug，但是"将来抄漏"的机会）。已收敛到共用助手，并跑真实双内核剧本验证
+（18/18 通过、幕C `dsh 回复到达: true`）。`home.mjs` 对这件事的措辞值得抄下来当判据：
+**「少任何一件都不是"少一点功能"，是"内核起不来"——抄漏一件的排查成本远高于共用一份」**。
+
+> 通则：**审计剧本的"发现"必须先排除剧本自身的准备缺陷**。判据里凡涉及"某内核应当如何"，
+> 都要先确认该内核在这个隔离环境里**真的被完整准备了**；否则报出来的是环境缺件的影子，
+> 而不是产品缺陷。这类假阳性的代价很高——它会让人去"修"一个本来正确的行为。
+
+### 17.10 「延迟求值 ≠ 活」——把快照改成 getter 时的头号陷阱（r16）
+
+把构造参数从 `T[]` 改成 `() => T[]` 之后，**所有既有测试仍然全绿**：夹具是静态的
+（构造时给一个数组、之后再不改），所以"改了签名"这件事本身没有任何测试盯着。
+两种实现错误都能悄悄活下来：
+
+1. **getter 调一次就存下结果**：`constructor(get) { this.items = get(); }` —— 与快照无异；
+2. **getter 捕获了构造期的局部量**：`new ModelCatalog(() => plugins.map(...))`，
+   其中 `plugins` 是本函数早先算出的局部数组。签名对了、类型过了、测试全绿，
+   但重载造出的新实例与长期持有的旧实例各自捕获各自的数组，旧实例永远只看到旧数据。
+
+第 2 种是机械改造最容易产出的形态（把 `f(x)` 包成 `() => f(x)` 就交差），
+所以**必须审 getter 的闭包里读的是什么**：要读"当前的活源"（注册表 / `state.surfaces` /
+访问器），不能读构造期的局部变量。
+
+**判据写法**（三条消费者通用）：**先构造消费者 → 再改数据源 → 断言消费者看到新数据**。
+顺序反了（先改源再构造）就退化成静态夹具，什么也证明不了。
+并且**把错误写法本身写成一条"反例"测试**钉住它——它不是测产品，是防止有人再机械包一层。
+
+配套的一条：反向注入要注在**实现**上而不是测试上。本例注入
+`constructor(get) { this.sources = get(); }`（即错误形态 1），活性测试立刻红；还原即绿。
+
+### 17.11 两条 puppeteer/断言层面的实踩（r18，都会让断言**静默为假**）
+
+1. **`waitForFunction(pageFunction, options, ...args)`——options 在第二位**。
+   写成 `waitForFunction(fn, PROMPT, { timeout, polling })` 不会报错：options 收到字符串、
+   页内函数的参数收到那个 options 对象，于是匹配的是 `"[minimal echo] [object Object]"`。
+   症状是**回复明明在 DOM 里、断言却为假**（我先 `page.evaluate` 打印了卡片文本才看出来）。
+   与 §17.6 的 `evaluate(字符串)` 不传参是同一族陷阱：puppeteer 这几个 API 的"参数在哪一位"
+   都不可靠直觉，用之前先确认签名。
+2. **断言要写不变量，不要写某个阶段的具体值**。同一条断言（`reloadKernelIds()` 的返回）
+   在剧本只有"删"阶段时写的是"不含 minimal"；加了"增"阶段之后 minimal 又被还原，
+   断言就成了过期期望而报红。改成"与 `window.kernel.kernelIds` 一致"这类不变量后，
+   剧本再加阶段也不会失真。（同一原则见 §16.4：写不变量，不写魔法阈值。）
+
+顺带一条关于**判据用词**的：断言 echo 回复时不能凭印象写 `"[echo]"`——minimal 的真实格式是
+`[minimal echo] <原文>`（`kernel/minimal/backend/minimal-backend.test.ts:70` 有钉）。
+凭印象写判据的后果与凭印象写选择器一样：看起来在验，其实永远验不到。
+
+### 17.12 设置页表单类审计：判据要落到**磁盘上的种类**，交互要用可信点击（r21）
+
+新增 `scripts/demo/settings-controls-audit.e2e.mjs`（31 项断言，零 token）：逐类型走
+「UI 改 → 点保存 → **读那个配置文件** → 断言 JSON 里的种类」。为什么不能只靠单测：
+单测验的是 `onChange` 收到什么，落盘还要经过保存浮层 → `kernelConfig.set()` →
+**内核自己的写盘逻辑**，中间任何一环把种类改了单测都看不见。r9 那个 `"false"` 真值反转
+就是这样——单测能钉住 coerce，但"文件里到底是不是布尔"只有读文件才知道。
+
+实测的类型 ↔ 控件 ↔ 落盘对账（pi 的 70 个字段：string 11 / enum 14 / object 2 /
+boolean 18 / number 18 / string[] 7，全部有 `data-config-field` 锚点）：
+
+| 声明类型 | 控件 | 落盘种类（实测） |
+|---|---|---|
+| `boolean` | checkbox | 真布尔 |
+| `number` | number input | 真数字（`1234`，不是 `"1234"`） |
+| `string` | text input | 原样字符串 |
+| `enum`（含 boolean kind 选项） | select | 选 `false` → **布尔 false**；选 `auto` → **字符串 "auto"**（同一字段两种种类） |
+| `string[]` | 草稿框 + chip（**Enter 添加，没有添加钮**） | 真数组、元素都是字符串 |
+| `object` | JSON textarea（不透明类型的**正确**降级） | 真嵌套对象；非法 JSON 被挡住且不污染原值 |
+
+三条交互层面的实踩（都会让断言假红或假绿）：
+
+1. **受控 checkbox 要用可信点击**。首版用 `page.evaluate(el => el.click())`，三次跑里有一次
+   React 没收到 → 表单不 dirty → 保存浮层不出现 → 读文件得到 `undefined`，
+   看起来像"落盘种类错了"，其实是**点击没生效**。改 `page.mouse.click(x, y)`（skill §3.2）。
+2. **交互前先 `scrollIntoView`**。`page.select()` 对屏幕外/被遮挡的 select 偶发不生效，
+   症状是"选了但值没变 → 不 dirty → 读到旧值"。加滚动后连跑三次全绿。
+3. **不要猜控件形态，先读它**。`string[]` 的 `StringListInput` **没有添加按钮**
+   （草稿框 `onKeyDown` 里 Enter 即添加）；首版探针去找按钮，找不到就报"控件不可操作"。
+   行内确实有按钮，但那是每项的**移除**钮。探针对控件形态的错误假设会伪装成产品缺陷
+   （§17.9 的同一条通则）。
+
+顺带在这轮修掉两处产品缺陷：① `JsonInput` 原是 **onBlur 才提交**，于是键入合法 JSON 后
+**保存浮层根本不出现**（框架不知道有改动），用户以为编辑没生效，此时直接关窗/切页会
+**静默丢编辑且无提示**；改成边改边提交（解析成功即上报、失败只在行内报错不上报），
+并加 `lastReported` ref 防"自己上报的值回流后把草稿重排版"（否则每敲一个字符就被
+`JSON.stringify(…, null, 2)` 重排、光标跳末尾，功能通了但完全不可用）。
+② 移除钮的 `aria-label="remove"` 是**硬编码英文**——在 `packages/react` 发布面里，
+屏幕阅读器在任何语言下都念英文（§7.1）；已改走 `settings.listRemoveItem`。
+⚠ 注意它躲过了"硬编码中文"守卫：那条守卫只找 CJK，**英文硬编码同样是违规**，
+判据应当是"用户可见文案有没有走 i18n"，不是"有没有中文"。
+
+### 17.13 列表类交互审计：判据要落在「分组归属」和「文件」上（r22）
+
+新增 `scripts/demo/session-list-audit.e2e.mjs`（29 项断言，零 token，连跑三次稳定）。
+判据不是"点了有反应"，而是三件事**同时**成立：① DOM 显示了新状态；② 磁盘上的中立层
+header 真的写了那个字段；③ 两者一致。只验①会漏掉"界面改了但没落盘"（刷新就回退），
+只验②会漏掉"落盘了但界面不刷新"（用户看不到自己刚做的操作生效）——这类**半生效**缺陷
+在"乐观更新 + 广播补丁"的架构里特别容易出现（本仓列表行正是走本地补丁 `applyHeaderPatch`
+而不是全量重拉）。
+
+这一轮四条断言写错了，每条都对应一个容易踩的语义：
+
+1. **归档不是"行从 DOM 消失"，而是移进 `archived` 分组**（`buildGroups` 里
+   `items.filter((s) => s.archived)` 单独成组，且该组 `defaultOpen: false`）。
+   断言"离开活跃列表"会把正确行为判成缺陷。正确判据是**它现在属于哪个分组**
+   （`[data-session-group]` + `-open` 折叠态），并且要**对照**未被归档的那行不在该组。
+2. **有条件的菜单项要双向钉**。`delete` 只在**非当前活跃会话**上出现
+   （源码注释：「删除:不可恢复,仅 deletable」）。首版把它当无条件项断言 → 报了一条假缺陷。
+   正确写法是两条：活跃行**没有** delete、非活跃行**有** delete。
+3. **锚点要区分"开关"与"输入框"**。`[data-session-search]` 是**展开搜索的按钮**，
+   `[data-session-search-input]` 才是输入框（仅展开时渲染）。往按钮上打字的症状是
+   "搜索没生效"，看起来像过滤坏了——所以**打完字要回读输入框的值确认**，
+   再去断言过滤结果。同理适用于任何"折叠区里的输入框"。
+4. **别写死行号**。重命名可能改变排序（置顶/自定义序），而且上一步操作的可能不是第 0 行。
+   按**内容**定位（名字），不要按索引。
+
+另一条环境事实（不是缺陷，但剧本必须知道）：**新会话的 composer 不继承上一个会话的模型绑定**
+（内核跟随模型，新会话没有模型 → 落回兜底模型，实测是 pi）。所以"造第二个零 token 会话"
+必须在点新建之后**重新选一次 minimal**，否则发送会走 pi（花真 token）或因无可用模型而失败。
+
+### 17.14 跨项目/跨作用域类缺陷：单作用域剧本**结构上**撞不到（r23）
+
+新增 `scripts/demo/project-switch-audit.e2e.mjs`（21 项断言，零 token，连跑三次稳定）。
+它守的是一条已修根因的回潮：`sessions-list/renderer/index.tsx:505-512` 记着——
+分组键 `g.kind+g.label` **跨项目高度重复**（每个项目都有「今天」组），切项目时 React 复用同一
+`GroupBlock` 实例 + 拖拽库内部状态残留 → 旧项目的行不卸载 → **两个目录的会话叠加**
+（观感是「切项目后左侧根本不刷新」）。
+
+这类缺陷的特征是：功能"看起来能用"（列表有内容、能点、能发消息），但内容是**两个作用域混在一起的**。
+在单个项目里跑一百个正向剧本也撞不到——**必须跨作用域往返**。判据要三层，缺一不可：
+
+| 层 | 查什么 | 只验这层会漏掉什么 |
+|---|---|---|
+| ① 行数 | 切到空项目就该是 0 行 | 行数对但内容是别的项目的 |
+| ② 归属 | 每行的文件存在、且属于**当前**作用域 | 归属对但切走就丢 |
+| ③ 往返 | 切回来还能看到原来那些 | **叠加**（叠加时切回来也还在，①③都绿） |
+
+**对账的键必须先查清楚再写**。首版按 `header.sessionPath` 去匹配中立层 header，
+结果 5 行全部"找不到对应 header"、报出 5 条**假 M 级发现**——header 的真实字段是
+`kernel / cwd / createdAt / lastEntryId / updatedAt / custom / lastMessage / name`，
+**根本没有会话路径字段**，对应关系是靠 `cwd`。这又是 §17.9 那条通则的实例：
+审计发现必须先排除剧本自身的假设错误。
+
+改对之后判据反而更强：**「`cwd` == 当前项目的 header 份数」== 「当前可见行数」**。
+数量不变量比逐行匹配路径强，因为它同时抓住"多了"（串台/叠加）与"少了"（丢会话），
+而且不需要猜两侧用什么字段关联。第二条独立证据：内核侧路径里含当前项目目录的 slug
+（minimal 按 cwd 分子目录存会话），与 `header.cwd` 互不依赖。
+
+**一条交互层的实踩（与 §3.2 不冲突，要分清）**：项目行同时挂了 dnd-kit 的拖拽 listeners
+（`{...listeners}`，`PointerSensor` + `activationConstraint:{distance:4}`）与 React `onClick`。
+实测**坐标点击不触发切换**（无控制台错误、cwd 不变、active 标记不动）——pointerdown 被
+拖拽传感器接管后，后续 click 没走到 React 的 onClick。改用合成 `el.click()` 即可。
+⚠ 这不违反"优先可信点击"：§3.2 那条讲的是 **Radix 菜单这类依赖 `isTrusted` 的组件**；
+普通 React `onClick` 不看 `isTrusted`。判据是"这个组件的库实现有没有检查事件可信性"，
+不是"一律用坐标点击"。另：`clickPointUntil` 内部固定走 `page.mouse.click`，
+**没有改用合成点击的口子**——别用 `{x:0,y:0}` 之类的假坐标去骗它（会真点屏幕左上角），
+该写本地重试循环就写。
+
+### 17.15 驱动不了的交互怎么办：分层覆盖，别留恒真断言（r24）
+
+**实测结论：CDP 驱动不了 framer-motion 的拖拽重排。** 诊断留档（这些都验过，不是猜）：
+指针事件是**可信**的（`isTrusted:true, pointerId:1, isPrimary:true, pointerType:"mouse"`）、
+落点正确（`document.elementFromPoint` 命中行内图标 div，不在 `input,textarea,button,[contenteditable]`
+排除集里）、`Reorder.Item` 确实在祖先链上（`position:relative; cursor:grab; list-style:none`）、
+pointermove 序列也发出去了——但拖拽**没有启动**：拖拽中途元素的 `transform`/`zIndex`/
+`boxShadow`/`scale` 全是默认值（`whileDrag` 样式没生效），松手后顺序不变。
+本仓的排序控件是 `dragListener={false}` + 自定义 `onPointerDown` 里 `controls.start(e)`
+（`packages/react/src/widgets/sortable-list.tsx`），这条路径在 CDP 下走不通。
+
+**正确处置是分层覆盖，不是硬凑一个偶发剧本，更不是留一条恒真断言**：
+
+| 层 | 覆盖什么 | 手段 |
+|---|---|---|
+| 算法 | "顺序如何被重排" | 圆心纯函数单测（`domain/custom-order.test.ts`，8 条） |
+| 读回 | "文件里的顺序 → DOM 顺序" | **预置配置文件 + 重启 + 断言 DOM 顺序**（确定性，不依赖拖拽） |
+| 写入 | "拖拽 → 写文件" | 剧本**如实声明做不到**，需人工 `MHD_WINDOW=shown` 复核 |
+
+⚠ 顺带清掉一条**因交互做不到而变成恒真**的断言：原先写"搜索态拖一下、列表不变 ⇒ 禁拖生效"，
+但既然拖拽根本驱动不了，无论禁没禁结果都是"unchanged"——那是 §17.2 第 7 种假绿。
+改成验**结构**：`sortable-list.tsx` 里 `style={{ cursor: disabled ? undefined : "grab" }}`，
+所以"禁拖"在 DOM 上的可观测后果是 `Reorder.Item` 的 `cursor !== "grab"`。
+并且**成对验**（§11.7）：搜索态 `cursor:"auto"`、退出搜索后回到 `"grab"`——
+只验前者会把"一直禁着"也算通过。
+
+### 17.16 本轮另外四条实踩（都会伪装成产品缺陷或伪装成通过）
+
+1. **锚点必须覆盖组件的*所有*渲染分支**。`GroupBlock` 有条早退分支
+   `if (!group.label) return <motion.div …>`（搜索组的 `label` 是空串，走的正是它），
+   首版只给带标题的主分支加了 `data-session-group` → 搜索态查出 **0 个分组元素**，
+   而 `[].every(g => g === "search")` **恒真**，于是假绿通过。加锚点时要数一遍 return 分支。
+2. **对账的 key 要查实现，不要按直觉**。`customOrder` 的 key 是 `neutralSessionId ?? path`
+   （`ids = orderedItems.map((s) => s.neutralSessionId ?? s.path)`），而中立层 header 的字段是
+   `kernel/cwd/createdAt/lastEntryId/updatedAt/custom/lastMessage/name`——**没有内核侧路径**，
+   所以 path→ns **不能**从 header 文件反查，只能走 IPC 的 `sessions.list`（两个字段都带）。
+   首版拿 path 当 key 种进文件，一个都没匹配上 → 全部落进 `rest` → 顺序没变，
+   看起来像"落盘没被读回来"。
+3. **列表首行可能是「新对话」乐观占位行**（`path` 形如 `new:<cwd>`、`group` 为 null、不是会话）。
+   §2 早记过这条，r24 又踩了一次：拿过滤后数组的下标去索引**未过滤**的 `querySelectorAll` 结果，
+   **差一位**，于是"把排序乙拖向新对话"，症状是"拖拽没生效"。凡按索引操作 DOM 集合，
+   先确认手里的数组与那个集合是不是同一个过滤条件。
+4. **改完圆心/服务端必须重新 build 再跑 e2e**（§17.6 第 4 条，这是第三次踩）：
+   修完 `applyCustomOrder` 只跑了 tsc 与单测就去跑 e2e，产物还是旧的，
+   于是"重复行缺陷"看起来没修好。判据：**e2e 结论只在 `npm run build` 之后才有效**。
+
+### 17.17 能力旗标类审计：先问「投影出去的旗标谁在读」（r25）
+
+审"能力面 ↔ DOM 是否一致"时，第一步**不是**去界面上找控件，而是先数清
+**每一轴的消费者在哪一侧**。实测（`grep faces\.<轴>` 扫 `src/plugins` + `src/web` + `packages/react/src`）：
+11 轴投影到 renderer，**只有 2 轴被读**（`retry`、`thinking`），其余 9 轴零 renderer 消费者。
+
+这不是缺陷，而是**分工**：多数轴由**服务端强制**（后端不产数据 / `faceOf(轴)` 抛可行动错误），
+renderer 靠可选链与空数据隐式降级；只有"决定画不画某个控件"的轴才需要 renderer 门控。
+但这个分工原本是**隐含知识**，于是两种腐烂都可能发生：① 有人给某轴加了控件却忘了门控
+（控件对缺能力的内核照样长出来，点了才报错）；② 有人以为"投影了就有人用"，据此推理 UI 行为。
+
+处置：立一条守卫（`src/capability-axis-consumers.test.ts`，5 测，已双向反向注入验证）把分类
+**显式化**——轴清单从圆心源码 `BackendCapabilities` 接口**解析**（不硬编码，加第 12 轴会自动
+因"未分类"变红），两份清单（`RENDERER_GATED` / `SERVER_ENFORCED`）必须**恰好划分**全部轴，
+且与实际扫描结果**双向一致**：声明有门控的必须真扫到消费者、声明服务端强制的必须真扫不到。
+每条声明还要带理由（≥12 字），理由要能说清"缺面时用户看到什么"，否则就是静默缺面。
+
+顺带查出一处**文档与实际的漂移**：`ModelCycleCapabilities` 的契约注释写着
+「壳自行轮转属行为变更，本次不做（记录在案）」，而壳其实**早就在自行轮转**了——
+默认快捷键 `mod+shift+]`/`[` 走 `timeline:cycleModel`，在**跨内核合流清单**里推导下一个模型；
+内核那一面（`IPC.session.cycleModel` → `faceOf(proc,"modelCycle")`）**生产零消费者**。
+两者是**不同操作**（内核面 = 单内核内轮转、顺序是内核私有语义；快捷键 = 跨内核轮转，
+内核做不到因为它不知道别的内核），所以正确处置是**修注释**而不是"归位"——
+照旧注释去把快捷键改成走内核面，会**失去跨内核轮转**，是功能退化。
+已把对照表写进契约注释，并由上面那条守卫把"零消费者"钉成显式声明（不是被遗忘）。
+
+> 通则：审"某个声明/旗标/字段有没有用"时，**先数消费者、再判性质**。
+> 数出来是 0，有三种可能——字段腐烂（该删）、缺门控（该加）、分工在别处（该写下来）。
+> 三者的处置完全不同，靠猜必然做错其中两种。
+
+### 17.18 合成事件驱动不了某条路径时：留完整证据链，并把可测的那半下沉到单测（r26）
+
+目标本是审 composer 的附件态（拖拽/粘贴 → 待发送文件条）。**实测驱动不了**，而且证据链
+自相矛盾，值得把判别过程记下来——因为它示范了"怎么证明是环境限制而不是产品缺陷"：
+
+| 观测 | 结果 | 含义 |
+|---|---|---|
+| `new DataTransfer()` + `items.add(file)` | `files.length === 1`、name/type 正确 | 构造侧没问题 |
+| 在 form 上派发 `drop`，**文档级冒泡**监听 | `defaultPrevented === true` | 有人调了 preventDefault |
+| 同样事件派发到 **body** | `defaultPrevented === false` | ⇒ 不是全局/宿主层干的，是 form 上的 React `onDrop` |
+| `onDrop` 的实现 | `if (!onFiles \|\| files.length === 0) return;` **之后**才 `preventDefault()` | ⇒ 守卫通过了、`onFiles` 被调用了 |
+| 投一个**不可分类**的文件名（`blob.zip`） | **没有**"已跳过 N 个"的 toast | ⇒ `ingestFiles` 的 `rejected` 分支没走到 |
+| 投可分类的（`note.md`） | 没有 chip；全文档 `[data-composer-pending-files]` 为 0 | ⇒ `newFiles` 也是 0 |
+| `pageerror` / `console.error` / `console.warning` | **全空** | 没有异常被吞 |
+| `window.mhdFile.getPathForFile(合成 File)` | 返回 `""`（不抛） | 宿主桥可用，会回落到 `f.name` |
+
+矛盾点：无 toast ⇒ `rejected === 0`；无 chip ⇒ `newFiles.length === 0`；两者同时成立只能是
+**`files` 数组为空**，而 `files` 为空又与"`preventDefault` 被调用"（守卫要求 `files.length > 0`）
+直接冲突。加上 `classifyReferenceFile("note.md")` 按源码必然返回 `"file"`（`md` 在 `TEXT_EXTS` 里）、
+构建产物里确实有锚点（`grep out/renderer/assets/*.js` 验过）——**判定为合成事件在本环境驱动不了
+这条路径**，与 framer-motion 拖拽同类（§17.15），不再硬凑。
+
+处置（三条，缺一不可）：
+1. **把可确定性验证的那半下沉到单测**：两个提示条本来就是纯展示组件，从 1600+ 行的插件入口
+   抽成 `pending-bars.tsx`（与该插件既有惯例一致：`MessageMeta.tsx` / `phase-icon.tsx` 都是
+   独立文件 + 自带测试），补 8 条 DOM 交互测试（锚点值 = 路径、显示完整路径而非文件名、
+   每个移除钮各自回调且带自己的路径、可访问名是真译文不是裸 key、无 dataUri 不渲染 `<img>`）。
+2. **补锚点**（`data-composer-pending-file*` / `-image*`），这样将来人工或换驱动方式复核时有稳定抓手。
+3. **如实记录做不到的那半**：拖拽/粘贴 → `ingestFiles` → chip 这一段没有自动化覆盖，
+   需要人工用 `MHD_WINDOW=shown` 拖一个真文件复核。不写成"已覆盖"。
+
+> 通则：判别"环境限制 vs 产品缺陷"要靠**成对的对照观测**（同一事件在 form 上 vs body 上、
+> 可分类文件 vs 不可分类文件），单点观测几乎总能被另一种解释吃掉。以及——
+> **矛盾的证据比一致的失败更有信息量**：一致地失败只告诉你"没成"，矛盾才告诉你"哪一环的假设错了"。
+
+### 17.19 选区驱动的 UI：用**程序化选区**，不要像素拖选（r27）
+
+评论篮（划词 → 「评论」浮钮 → 入篮）这类交互由 `selectionchange` 驱动。像素拖选
+（`selectAcross`）在既有剧本里能用，但换个场景就连环踩坑，实测三个：
+
+1. **锚文本会命中侧栏会话行**：会话行文本形如 `<名字>[minimal echo] <末条消息>`，
+   与消息正文含同样字串。不限定搜索域时 `locate` 命中侧栏（返回 x=132，而 sidebarW=239），
+   拖选落在侧栏上 → `getSelection()` 为空 → 浮钮不出现，症状像"产品坏了"。
+2. **`within` 限定后反而 0 命中**：消息卡里 `[minimal echo]` 前缀与正文是**两个不同元素**，
+   没有单个元素含整串；`locate` 的两轮文本匹配（先直接文本节点、再叶子 textContent）
+   在这种嵌套下命中不到目标 `<p>`——而 `document.querySelector("[data-message-id] p")` 明确能找到它。
+3. **`fromFx`/`toFx` 是宽度比例（0..1）不是字符偏移**：传 2 和 9 会把拖选起点甩到元素矩形之外。
+
+可靠做法：直接建 Range + `addRange` + 派发 `selectionchange`——这与用户拖选**同构**
+（不是 mock 产品代码，而是模拟用户输入的那一侧），且完全绕开几何与文本匹配的坑：
+
+```js
+const range = document.createRange();
+range.setStart(node, Math.floor(len * 0.05));
+range.setEnd(node, Math.floor(len * 0.6));
+const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+document.dispatchEvent(new Event("selectionchange", { bubbles: true }));
+```
+
+判据要**回读选区**（`sel.toString()`）确认真的选上了，再去断言浮钮——否则又是"没选上"伪装成"功能坏了"。
+
+### 17.20 中立层 entries 文件的真实形状（对账前必须查清）
+
+`<dataRoot>/sessions/<ns>.entries.json` 的顶层是 **`{ neutralSessionId, lineages }`**——
+既不是扁平数组，也不是 `{ entries }`。按想象的形状读会得到 0 条，于是"落盘里没有 X"这条
+**假红**（r27 实踩）。稳妥写法是递归遍历找 `role === "user"` 的节点，而不是假定层级。
+这与 §17.16 第 2 条是同一个教训：**对账的结构要先查清再写**。
+
+同轮另一条：会话被**自动命名**为第一条消息的文本，所以"用消息正文当锚文本"时，
+侧栏行、标题栏都可能含它。凡用文本定位，先问一句"这段文本还会出现在哪里"。
+
+### 17.21 守卫的覆盖面：按**名字**抓模式的守卫，必须枚举整个同族（r28）
+
+本轮排查"通用壳插件里的内核名泄漏"，最有价值的一条不是找到的缺陷本身，而是**既有守卫为什么漏了它**：
+
+依赖审计的检验⑬（"不许用字面量键访问内核的面"）首版正则是
+`kernels\.(pi|dsh|minimal)|kernels\["(pi|dsh|minimal)"\]`——只盯 `kernels` 这**一个**注册表名。
+于是 `ctx.kernelConfig["pi"].get()` 从旁边溜了过去（真实缺陷：通用插件 `timeline` 用它取
+`retry.maxRetries` 当重试折叠条的展示分母，导致 dsh/minimal 会话也按 pi 的设置显示，
+且 pi 未装时抛 TypeError 被 `Promise.allSettled` 吞掉）。而按内核键控的面**同族还有六个**：
+`kernelModels` / `kernelConfig` / `kernelVersionApis` / `kernelExtensions` / `kernelLogos` / `kernelOneshots`。
+
+> 通则：**凡是"按名字匹配"的守卫，第一件要做的事是枚举同族名字**。写守卫时问一句
+> "这个概念在仓里还有几个同形状的名字？"——`kernels` 有，`kernelConfig` 就有；
+> `fitExtensionAvailable` 有，`toolFilterEnforced` 就有。只守一个名字 = 守了个样本，不是守了个规则。
+
+同轮还修了守卫的两个附带缺陷：
+
+1. **注释过滤只看行首是不够的**。首版 `if (/^\s*(\/\/|\*|\/\*)/.test(text)) continue;`
+   漏掉了**块注释的中间行**（既不以 `/*` 也不以 `*` 开头），于是把 `kernel-config-form.tsx`
+   里一句提到旧写法的说明文字判成违规。正确做法是按文件**剥离块注释后再判**：
+   把 `/* … */` 整段挖空（保留换行以维持行号），再对行注释按"引号计数为偶数"判断 `//` 是否真在字符串外。
+2. **shell 引号里不要试图同时匹配两种引号**。`execSync` 交给 `/bin/sh -c` 的字符串里，
+   模式既要含 `"` 又要含 `'` 时，JS 模板 → shell → grep 三层转义实测**三次都没写对**
+   （关键陷阱：shell 双引号里 `\'` **不是**转义，反斜杠只转义 `$ \ ` " \` 与换行，
+   写 `\'` 反而让那个引号开启一个新的单引号串）。绕开办法：用 `.` 代指引号字符
+   （`["pi"]` 与 `['pi']` 都能命中，误报面可忽略），从根上不需要引号。
+
+### 17.22 两类"审计扫不到"的泄漏面（r28）
+
+依赖审计扫的是 **TS 源码**。本轮找到两类它结构上扫不到的泄漏：
+
+1. **CSS 类名**。`.pi-collapsible` 定义在 `src/web/index.css`（壳机制层！），
+   被发布面 `packages/react/src/widgets/section.tsx` 与两个通用插件共用；
+   另有 `.pi-composer-command-chip`。壳层的样式钩子以某个内核命名，
+   而检验⑤（壳机制层不许出现内核名字面量）只扫 `.ts`/`.tsx`，CSS 从不在扫描范围里。
+   已改名为 `.shell-collapsible` / `.shell-composer-command-chip`（12 处，零残留，
+   折叠动画由 session-list-audit 29 项复验）。
+   > 通则：改判据之前先问"**这个概念还能以什么载体存在**"——标识符之外还有
+   > CSS 类名、i18n key、DOM 属性、存储键、事件名、prompt 文本（r27 的 `<pi-review>` 就是最后这种）。
+2. **死 locale 键 + 硬编码副本**。`settings.fontSampleCode` 在 4 个语言包里都有，
+   而组件把同一份文本**又硬编码了一遍**（`{\`const sessions = await pi.sessions.list(...)\`}`）——
+   键零消费者、副本里还带内核名，而且那个 API 形状根本不是本仓插件的真实 API。
+   两头一起修：组件改为消费键，样本内容换成真实且中性的 `ctx.sessions.list(cwd)`。
+   > 判据：**locale 键要有消费者**。有键无用 = 死键（改文案时改了个没人读的地方）；
+   > 有用无键 = 硬编码（换语言不变）。两者常常成对出现，因为硬编码副本一出现，键就死了。
+
+### 17.23 同一份数据有两个来源时，错的那个通常更"顺手"（r28）
+
+重试上限这个数，仓里有两个来源：
+
+| 来源 | 中性? | 准确? | 谁在用 |
+|---|---|---|---|
+| `autoRetryStart` 事件的 `maxAttempts` | ✅ 内核自己报的 | ✅ 逐会话逐内核 | **在飞**的重试横幅 |
+| `ctx.kernelConfig["pi"].get().retry.maxRetries` | ❌ 写死 pi | ❌ 对非 pi 会话给错值；pi 未装则抛错被吞 | **历史**折叠分隔条 |
+
+同一个 UI 概念（"重试 N/max"）的两处呈现，用了两个来源，错的那个是"顺手刮配置"。
+修法不是把配置读取写得更好，而是**删掉这个来源**：分母改由事件提供（`RetryState` 是纯内存态、
+不落盘，所以上一次运行遗留的历史行没有对应事件，回落契约注释里写明的默认值 3——
+这是展示层的细微差别，且比"给 dsh 会话显示 pi 的配置"更正确，已如实写进注释）。
+
+> 通则：发现某处"刮"了一个数据时，先全仓搜这个数据的**其它来源**。
+> 若已有一个中性来源在用（尤其就在同一个组件里），那基本可以确定刮的这个是历史残留。
+
+### 17.24 语言包审计的四个陷阱（r29：zh-TW 术语层 + 插件元数据本地化）
+
+本轮从"zh-TW 界面里出现简体字"一路查到四类缺陷，每类都对应一个容易踩的陷阱。
+
+**陷阱一：审已转字形的语言包，要用大陆术语的「繁体形」去搜。**
+zh-TW 早已过简→繁转换，所以要找的是 `內核`（不是 `内核`）、`視頻`（不是 `视频`）、`網絡`（不是 `网络`）。
+首版用简体形去搜，`內核` 32 处、`默認` 15 处、`數據` 5 处**全部漏计**，量出来的债务只有真实的一半。
+字形层与术语层是**两件不同的事**：字形守卫（`locale-zhtw-simplified.test.ts`，判据是
+"zh-TW 值 === zh-CN 值 且 含简体专用字"）对这批文案**结构上抓不到**——它们已是繁体字形、
+且与 zh-CN 不同形。新守卫 `locale-zhtw-terminology.test.ts` 的第 ⑤ 条测试就是**盲区自检**：
+构造 `zhCN="加载失败" / zhTW="加載失敗"`，断言字形守卫的两个条件都不成立、而术语守卫抓得到，
+以此证明两条守卫互补而非重复。
+
+**陷阱二：同形异义词不能一刀切替换。**
+`項目` 作 item 解时台语也说「項目」（`拖曳列表項目時`），只有作 project 解才写「專案」；
+`用戶端` 是 client 的台语标准词，改成「使用者端」反而错；台语的「文件」= document、
+「信息」= message。所以判据分两层：**HARD**（大陆专用词，硬零，19 个）与
+**LEDGER**（同形异义词，按 (插件, key, 词) 精确登记 + 理由，双向检查：
+账本里的必须仍存在、账本外的一律违规）。r10 批量替换把德语性数一致弄坏过，同一个教训。
+
+**陷阱三（最阴）：语言包文件必须在 manifest 的 `contributes.languages` 里登记，否则静默不加载。**
+`contributes.languages` 是**显式文件清单**（`[{id, locale, resources}]`），不是"扫目录"。
+本轮新建/补写了 `plugin.json` 后界面毫无变化、**也没有任何报错**——因为文件没被登记。
+实测全仓有 **72 个 `plugin.json` 从未登记**（历史遗留 + 本轮新建），全部补登记后才生效。
+> 通则：**加了语言文件却没生效、且不报错** ⇒ 先查注册表/清单，别怀疑译文内容。
+> 同款形态在别处也出现过（内核插件的 `factory` 路径、槽位贡献的静态声明）。
+
+**陷阱四：守卫的扫描范围要包含"会到达 UI 的夹具目录"。**
+minimal 内核插件住在 `test-plugins/`（不在生产扫描根里），但测试剧本把它种进隔离 HOME 后
+**设置页就有 Minimal 页签**，它的语言包一样显示给用户。术语守卫首版只扫 `src/plugins`，
+于是 minimal 的 16 处大陆术语从旁边溜了过去。已扩到 `test-plugins`。
+> 而且夹具是**模板**：`test-plugins/kernels/minimal/` 就是"第四个内核插件长什么样"的样板，
+> 模板错 = 之后每个新内核都从这里抄错。
+
+### 17.25 跨内核复制粘贴：用「不得提到别的内核」当判据（r29）
+
+实测缺陷：`test-plugins/kernels/minimal/locales/*/minimal-models.json` 里
+`minimalModels.title` 在**四个语言全部**是 "DSH 模型配置" / "DSH model config" /
+"DSH-Modellkonfiguration"；`minimalModels.apiKeyDesc` 还写着"密钥写入 **dsh** 凭证库
+(`~/.dsh/.credentials.yaml`)、**dsh** 运行时读取、不写进 models.json/**cordis.yml**"
+——cordis.yml 是 dsh 的配置格式，而 minimal 的凭证实际落在 `<agentDir>/.credentials.json`
+（`src/server/kernel/minimal/manager/minimal-config-source.ts:44`，已核实源码）。
+整份文件是从 dsh 插件**复制后没适配**：用户配置 minimal 内核时，标题写着 DSH、
+说明文字教他把密钥写进 dsh 的凭证库。功能不报错、页面不崩，只有读界面上的字才会发现。
+
+判据：**内核插件的语言包不得提到别的内核 id**（词边界匹配）。但直接判违规会产出 20 条假阳性，
+实测三种合法形态，所以配账本（按 (own, key, other) 登记 + 理由，双向检查）：
+① **包名**——dsh 的 `dshModels.desc` 提到 `llm-pi-ai`（npm 包名，不是对 pi 内核的指称）；
+② **有意的对等性陈述**——`plugin.dsh.description` 写"与 PI 同级"（§1.4 无特权差异的正面表达，
+   删掉反而丢信息）；③ **同形异义**——pi 的 `thinkingBudgets.minimal` 里 `minimal` 是
+   **思考档位名**（off/minimal/low/medium/high/xhigh）。
+另加一条**具名回归锚**（不依赖账本）：minimal 的语言包一个 dsh 字都不该有，
+且标题必须含 "Minimal"。反向注入验证：把标题改回 "DSH 模型配置" → 通用检查与回归锚**两条**同时变红。
+
+> 这类守卫的价值不在"抓到多少"（当前账本外命中为 0），而在
+> **新增的跨内核提及必须当场解释**——上面那个缺陷正是因为从来没人被要求解释过
+> "minimal 的语言包为什么在说 dsh"。
+
+### 17.26 「文件对但界面错」：语言包审计必须落到真实渲染结果（r30）
+
+**locale 文件全绿 ≠ 界面全绿。** r29/r30 实测两种形态：
+
+1. **语言文件没登记 → 静默不加载**。`contributes.languages` 是**显式文件清单**
+   （`[{id, locale, resources}]`）而不是"扫目录"。新建/补写了 `plugin.json` 之后界面毫无变化、
+   **也没有任何报错**——文件根本没被加载，`t()` 回落到 manifest 的中文字面量。
+   实测全仓有 **72 个 `plugin.json` 从未登记**（历史遗留 + 新建），补登记后才生效。
+2. **键名与派生公式不同源 → "看起来已经有键了"**。manifest 的贡献标签没有 `titleKey` 字段，
+   渲染方是**按 id 派生键**、把字面量当 defaultValue：设置侧栏 `settings.<entryId>`、
+   设置 TAB `settings.<tabId>`、右面板 `sidePanel.<id>`、插件名 `plugin.<id>.displayName`。
+   pi 的语言包里确实有 `settings.extensions` / `settings.models` 两个键——但**名字与派生公式对不上**
+   （那是页面组件内部自用的标题），所以 TAB 标题一直回落到 manifest 里的 "PI 拓展"/"模型"，
+   四个语言全都显示简体中文。这种缺陷靠"grep 有没有 i18n 键"永远查不出来，
+   必须**把派生公式本身写进判据**。
+
+处置有两层，缺一不可：
+
+| 层 | 判据 | 守卫 |
+|---|---|---|
+| 文件层 | 含 CJK 字面量的贡献项，其**派生键**必须四语言齐全；派生公式**从渲染方源码核对**（公式一改守卫就红） | `contribution-label-i18n.test.ts`（4 测） |
+| 界面层 | 真实 app 在 en/de 下**可见文本零 CJK**；在 zh-TW 下**零大陆术语** | `dom-audit.e2e.mjs --locale <L>`（本轮加的 2 条断言） |
+
+界面层那条特别值：**任何**未本地化的串（硬编码在组件里、manifest 字面量兜底、键没登记）
+都会以"英文界面里冒出中文"的形式暴露，一条断言覆盖三类成因。实测四语言全绿：
+en/de 各 0 处中文串、zh-TW 0 种大陆术语（可见文本 11022 字）。
+
+⚠ zh-TW 那条判据要用**词**而不是**字集**：字集里「默」「加」这类**简繁同形**字会造成假阳性
+（r29 实踩：把"前提不成立"的自检判反了）。
+
+### 17.27 守卫写太宽 = 逼合法改动绕过它（r30）
+
+r29 给跨内核守卫写了一条具名回归锚：「minimal 的语言包一个 dsh 字都不该有」。
+r30 给 minimal 补 `plugin.minimal.description` 时写了「与 pi/dsh 同级」——
+那是 §1.4「无特权差异」的**正面陈述**，合法且已入账本——这条锚立刻变红。
+
+锚**写太宽**的后果不是"多报一个错"，而是**逼着合法改动去绕过守卫**（删断言、加豁免、改判据），
+守卫一旦被绕过就失去信任，之后所有真报警都会被当成噪音。这与 §17.2 的假阳性教训同源。
+
+修法是把锚**收窄到它真正要保护的东西**：那条锚要防的从来不是"任何提及 dsh"，
+而是"模型页那份被整体抄自 dsh 的文案回潮"。所以改成扫 `minimal-models.json` 一个文件，
+并换成**更实质**的断言（不只是"不提 dsh"）：`apiKeyDesc` 不得含 `cordis`（dsh 的配置格式）、
+必须含 `.credentials.json`（minimal 自己的凭证路径，源码事实 `minimal-config-source.ts:44`）、
+`title` 必须含 `Minimal`。反向注入验证：把 dsh 凭证库那句塞回去 → 通用检查与回归锚**两条同时红**。
+
+> 通则：**具名回归锚的范围 = 缺陷实际发生的那个位置**，不是"这个模块里所有可能出现的地方"。
+> 宁可窄而实（断到具体字段的具体值），不要宽而虚（断"任何地方都不许出现某个词"）。
+
+### 17.28 把"手工扫过一遍"固化成守卫，否则每轮重新发明判据（r31）
+
+r27–r31 我连续**四轮**用临时 Python 脚本扫同一件事（通用层里的内核名泄漏），每次都要重新
+处理同一批坑：词边界、注释剥离、豁免清单、载体分类。临时脚本用完就扔，于是**判据 never 沉淀**。
+按 §3.7「根因修复的闭环是留下守卫」，r31 把它固化成 `src/kernel-name-carriers.test.ts`（6 测）。
+
+固化的价值立刻显出来：**同一份判据写严一点，就多查出 51 处**（此前手工扫只报 0～5 处）。
+差别全在两个规则细节上：
+
+| 规则 | 首版（漏） | 修好（准） |
+|---|---|---|
+| 词边界 | `(?<![A-Za-z0-9_./-])` —— 把 `- . / _` 也算进"不是边界" | `(?<![A-Za-z0-9])` —— 标点/引号/连字符/点/下划线**都算边界** |
+| 复合名前缀 | 无 | 另加一条 `(?=[A-Z_-])`：`piLayout` / `dshManager` / `pi_collapsible` |
+
+首版漏掉的正是**已经抓到过真实缺陷的那些形态**：`.pi-collapsible`（CSS 类名，r28 的真实缺陷）、
+`config.set("piLayout")`（存储键的驼峰前缀）。而 `picker`/`pins`/`ping`/`sessionGroupings`/`api`/`pixel`
+在新规则下**仍然不误报**（pi 前后接字母），所以放宽是安全的。
+
+⚠ **这个假绿是反向注入抓出来的，不是靠读代码**：守卫 5/5 全绿、自检也过，
+但我把 `.dsh-legacy-panel` 与 `config.set("piLayout")` 注进去，它**依然全绿**。
+自检断言当时只写了 `BOUND.test('kernels["pi"]')`（独立词形态），恰好没覆盖前缀形态——
+**自检样本必须包含"你声称能抓的每一种形态"**，只测最典型的那一种等于没测。
+
+### 17.29 账本要分「永久合法」与「架构债」两类，后者必须带棘轮（r31）
+
+扫出来的 51 处不是一类东西，混在一个豁免清单里会**把债洗白**：
+
+- **同形异义（homonym，永久合法，5 条）**：`minimal` 既是内核 id，又是**思考档位**名
+  （`off/minimal/low/medium/high/xhigh`），又是**视觉风格预设**名（`StylePresetId = default|card|minimal|outline|glass`，
+  实测 `[data-sidebar-style="minimal"]`）；`pi-review` 是**历史线格式**，解析方必须继续认。
+  这些不是债，改名反而是错的。
+- **架构债（debt，必须只减不增，4 条）**：`MODELS_CONFIG_PATH = "~/.pi/agent/models.json"`（在**发布面**里）、
+  壳设置页的 `AGENT_PREFIX`/`DSH_PREFIX`（靠路径前缀反推内核归属）、
+  application 层 MainContext 的 `dshCustomCliDir`（按内核名分字段 = §6.3 检验④ 禁的形态）。
+
+两条纪律：
+1. **架构债的理由里必须写"正确修法"**（守卫强制检查这个词），且不能只写"同上一条"——
+   每条自包含。我自己的第一条 `DSH_PREFIX` 就写了"与上一条同源"，被守卫③ 挡下来（该挡）。
+2. **棘轮**：`DEBT_CEILING = 4`，涨了就红。意义不在数字，在于**让债可见**——
+   没有它，"通用层零内核名"这个目标会在一次次"就这一处、下轮再收"里悄悄退化成"到处都有"。
+
+⚠ **架构债不能"顺手改名"**。这四条的正确修法都是"让内核自报自己的配置目录/路径"
+（经注册表或 `KernelPlugin` 面），而不是把常量改成中性名——改名只是把泄漏藏得更深，
+数据流里壳照样在按内核身份分支，属 §3.7 禁止的补丁式修复。所以本轮只做了**能真修的**：
+CSS 动画家族 `pi-composer-*`/`pi-menu-*` → `shell-*`（49 处）、`piAlive` → `snapshotAlive`（7 处，
+它的语义本来就是 `snapshot !== null`，与 pi 无关）、以及 `skills.ts` 那条特判尾巴。
+
+### 17.30 「修复留下的特判尾巴」比原缺陷更难发现（r31）
+
+`src/server/controllers/skills.ts` 的注释写着：「监视哪些文件由各内核自报…**此前这里写死了 pi 的三个路径**，
+现在从注册表收集，加内核自动纳入」。看起来那次修复很干净。但同一行还挂着：
+
+```js
+.filter((p) => existsSync(p) || p.endsWith(".pi" + join("", "settings.json")))
+```
+
+两个问题叠在一起：
+1. **特判尾巴**：意图是合法的（清单文件还不存在时也要监视，好让用户创建它的那一刻触发刷新），
+   但被写死在 pi 的路径上 → dsh/minimal/第四个内核的清单若尚未创建就**不会**被监视
+   （症状：装了内核、建了清单，技能列表不刷新，要重启才行）。
+2. **字符串被拆开拼接**（`".pi" + join("", "settings.json")`）：无论初衷是什么，
+   这种形态在效果上就是**躲开按字面量搜索的审计**。它躲过了 r28 之前的所有手工 grep，
+   直到本轮的多载体守卫用词边界才抓到。
+
+中性修法：存在的直接监视，不存在的改监视其**父目录**（创建事件同样能捕获），不点名任何内核。
+
+> 通则：看到「此处曾经写死 X，现已改为通用」这类注释时，**别信注释，读同一行的剩余部分**。
+> 修复常常留下一个 `|| 特例` 的尾巴，而注释只描述了被修掉的那一半。
+
+### 17.31 共享控件不透传 `data-*` ＝ 锚点纪律在按钮上落不了地（r32）
+
+给"自定义内核目录"的输入框和三个按钮加锚点时，输入框生效、**按钮的锚点在 DOM 里根本不存在**
+——而 `grep` 构建产物能看到那 4 个锚点字符串，tsc 也全绿。根因：共享 `Button`
+（`packages/react/src/widgets/button.tsx`）的 `ButtonProps` 是**封闭接口**，
+既不声明 rest props 也不 spread，于是写在 `<Button data-foo="">` 上的属性被**静默丢弃**。
+
+为什么这个缺陷特别隐蔽：**TypeScript 对 `data-*` 属性不报错**（JSX 的连字符属性被放行），
+所以编译期一声不响；产物里字符串还在（因为源码里写了）；只有真去 DOM 里查才发现没有。
+
+影响面不是"某个测试失败"，而是**全仓任何用 `Button` 的控件都挂不上稳定锚点**——
+e2e 与 DOM 审计只能退回"按译文定位"，换语言就失效。等于 §17.3 的锚点纪律在所有按钮上作废。
+
+修法（按根因，不是绕开）：`ButtonProps` 加 `[key: \`data-${string}\`]: string | undefined`
+索引签名 + 函数签名收集 `...anchors` + 在 `<button>` 上 `{...anchors}`（放在 `type`/`onClick`
+之前，避免锚点覆盖行为属性）。并补 DOM 级单测（3 条）钉住：锚点必须出现在真实 DOM、
+多个锚点与既有 props 共存且 `disabled` 重渲染后仍在、不传 data-* 时默认形状不变。
+
+> 通则：**共享控件必须透传锚点**（`data-*`）。审一个组件库时，先写一个
+> "挂 data-x 然后去 DOM 里查"的最小测试——封闭接口 + TS 对 `data-*` 不报错，
+> 这个组合会让缺陷在编译期与产物层都隐形。
+
+### 17.32 消内核名的两个正确姿势（r32：把架构债真修掉，不是改名）
+
+r31 记下 4 条架构债并写明"不能顺手改名"。r32 真修掉 3 条，两个姿势值得记：
+
+**姿势一：反转判据，让内核名根本不出现。**
+壳设置页原有 `AGENT_PREFIX = "~/.pi/agent/"` / `DSH_PREFIX = "~/.dsh/"`，
+用"路径以哪个内核目录开头"判断某配置项是否内核自留地（决定分不分层）。
+正确修法不是把常量搬走，而是**反转判据**：分层只属于壳自己的配置空间
+`~/.my-harness-desktop/`，**不在里面的一律扁平**（`isOutsideLayeredSpace(f) = !f.startsWith(DESKTOP_PREFIX)`）。
+判据里没有任何内核名，且对第四个内核**自动成立**。
+
+顺带修掉一个潜在真 bug：旧判据对 `~/.minimal/agent/config.json` 返回 false（判成分层项），
+于是 `relPathOf` 用 `slice(DESKTOP_PREFIX.length)` 去切一个不以该前缀开头的路径，
+得到垃圾（实测 `'g.json'`）——壳会去读写一个错误的分层路径。当前 minimal 的 TAB 都声明
+`configFile: null` 所以没踩到，但任何声明了内核原生 configFile 的**第四个内核**会立刻踩中。
+已补 8 条纯函数单测，其中一条是显式的"第四内核"回归锚
+（`~/.minimal/agent/…`、`~/.fourth-kernel/…`、绝对路径都必须判为扁平）。
+
+**姿势二：契约与类型自相矛盾时，按契约改类型。**
+圆心 `kernel-plugin.ts` 写着「偏好读写；内核插件读写自己的 customCliDir 等 key
+（**核心不硬编码 key 名，key 由插件自定**）」，而 `KernelPluginContext.prefs` 的契约形状也确实是
+`get<T>(key: string)`。但 application 层的 `Prefs` 接口把 `customCliDir`（隐式 pi 的）
+与 `dshCustomCliDir` **枚举**了进去——加内核就要改中层类型（§6.3 检验④ 禁的形态），
+而且 `customCliDir` 不带前缀本身就是"默认就是 pi"的残留特权（§1.4）。
+
+**发现它的信号是装配点那句 cast**：`prefsStore.get(key as keyof Prefs)`。
+契约要泛型键、实现只接受 `keyof Prefs`，中间靠强转糊上——强转存在的地方，
+就是"契约与类型对不上"的地方。
+
+修法：给 `JsonPrefsStore` 加**动态键** API（`getDynamic`/`setDynamic`/`removeDynamic`，
+不进 `T`、不需强转、照样持久化，因为 `data = {...defaults, ...raw}` 且写盘整份 dump），
+装配点改用它，然后把两个字段从 `Prefs`/`DEFAULT_PREFS` 删掉。
+**持久化格式没变**（盘上仍是那两个键名，由各内核插件自己声明），所以无需迁移；
+未设置时读到 `undefined`，消费方本就按 falsy 处理（`?? ""` / `if (custom)`）。
+
+⚠ 类型层重构**照样要验行为**，否则是纸面正确。已补 e2e `kernel-custom-dir.e2e.mjs`（9 项，零 token）
+走完 ① UI 填入能通过校验的目录并应用 → ② 盘上出现**插件自定键名**（壳不认识它）与正确的值 →
+③ **重启后**输入框显示同一目录（读回走同一条动态键路径）→ ④ 清除后盘上回到空串。
+只验①会漏"界面改了没落盘"，只验②会漏"落盘了读不回"——而后者正是换 API 最容易断的地方。
+（另注：apply 会先校验目录，pi 找 `dist/cli.js`、dsh 找 `apps/cli/lib/bin.js`，
+所以剧本要造一个能通过校验的假目录，否则拿到的是"校验失败"而不是"写入成功"，看起来像 prefs 坏了。）
+
+### 17.33 事件 payload 要带**语义**，别让消费方从路径反推（r33）
+
+`system:configFileSaved` 原本只带 `{ path }`，消费方自己判断"这是不是我关心的文件"。
+timeline 的写法是 `payload.path === MODELS_CONFIG_PATH`，而那个常量在**发布面**里、
+值是 `"~/.pi/agent/models.json"`。两个问题叠在一起：
+
+1. 通用插件靠**某个内核的私有路径**做判断（内核名泄漏，r31 记的架构债）；
+2. 加内核时这条链对新内核**静默失效**：路径不匹配 → 不重探模型清单 →
+   用户改了模型配置却看不到变化、要重启才行，**全程无报错**。
+
+正确做法是**语义由声明方给出**：设置页手里就有被保存项的贡献声明
+（`kernelModels` / `kernelConfig`，类型都是 `KernelId`），它知道"这次保存的是内核模型配置"，
+不需要消费方拿路径反推。于是 payload 变成 `{ path, kind }`，`kind` 由圆心纯函数
+`configSavedKind(item)` 派生，消费方只认 `kind === "kernelModels"`。
+
+三条落地纪律：
+
+- **派生函数放圆心、收发双方共用**（§1.3 契约单源）。两端各写一遍判断，语义必然漂移；
+  共用一个纯函数，它还可裸单测（7 条，含"任何内核 id 都同样派生"与"派生不依赖路径"两条★）。
+- **`path` 保留**。它是日志/调试信息，也可能有按路径精确匹配的老消费方；
+  加语义字段而不是替换，改动面最小。
+- ⚠ **这类重构最容易断在"声明挂在哪一层"**。`kernelModels` 声明在设置**TAB** 上，
+  不在 entry 上；如果 emit 点传的是 entry，`kind` 会静默派生成 `pluginConfig`、缺陷照旧，
+  而且 tsc 与单测**都不会红**（纯函数没错，是喂进去的对象错了）。
+  必须核到具体那一行：`activeItem = activeEntry?.tabs?.[activeTabIndex] ?? activeEntry`（取的是 tab ✓）。
+  这正是"纯函数两端都有单测"仍然不够、必须补一条真机 e2e 的理由。
+
+配套补的两件事：设置页 TAB 按钮此前**没有锚点**（只有 `key={tab.id}`），
+被改的那条路径 e2e 根本走不到 → 补 `data-settings-tab` / `-tab-active`；
+新剧本 `models-config-save.e2e.mjs`（6 项，零 token）走完
+「切到模型 TAB → 改开关 → 保存浮层出现 → **模型配置文件真的变了** → 回聊天页 composer 仍有绑定模型 → 零报错」。
+
+> 通则：看到消费方在用**路径/名字字面量**判断"这是哪一类东西"，先问一句
+> "**发送方是不是本来就知道？**"。通常都知道——那就把语义放进 payload，
+> 而不是让每个消费方各自反推一遍（反推规则一旦不同，行为就开始分叉）。
+
+### 17.34 高密度控件的组装审计：叠放/分组/状态三件事要**成对**验（r34）
+
+模型下拉是全应用信息密度最高的控件之一：内核 TAB 条 + provider 两级分组 + 模型项 + 选中态 +
+锁定降级态，而且为了"切内核时下拉宽度不跳动"用了 **grid 叠放**——所有内核的清单叠在同一
+grid 单元格，非激活的 `height:0 + visibility:hidden + aria-hidden + pointer-events:none`。
+
+这种结构最容易出的问题不是"渲染不出来"，而是**渲染出来了但组装错了**。新剧本
+`model-dropdown-audit.e2e.mjs`（24 项，零 token，连跑稳定）按五组判据审，其中三组是**成对**的：
+
+| 判据 | 成对的另一半 | 只验一半会漏掉什么 |
+|---|---|---|
+| 项在 `aria-hidden` 里 | 项**同时**不可见 | 只藏可读性不藏视觉（读屏与眼睛看到的不一样），或反之 |
+| 分组头有对应可见项 | 可见项都有对应分组头 | "有头无项"（空分组）与"有项无头"（游离项）是两种不同的混乱 |
+| 置灰的 TAB 带 title | 置灰的**模型行**也带 title | 同一组件内两种标准 —— 本轮的真实缺陷 |
+
+**本轮修的真缺陷**：会话锁定内核后，其它内核的模型行只是 `opacity: 0.4`，
+**没有任何解释**；而同一个下拉里的内核 TAB 却有 `title={t("shell.kernelLocked")}`。
+用户看到一排灰的模型，不知道是坏了、没装、还是因为会话已锁定 —— 这就是 §7.6 说的
+"置灰但静默"。timeline 早有正确范式（`thinkingUnavailableHint` = 置灰 + 悬浮真实原因），
+对齐它即可（复用同一个 i18n key，不新造文案）。修完实测 52 个置灰行全部带原因
+「当前会话已使用 minimal 内核，跨内核切换后续支持」，且是真译文不是裸 key。
+
+顺带补的锚点（此前 e2e 只能按文本/透明度反推状态）：
+`data-composer-model-item="<kernel>/<provider>/<id>"`、`-selected`、`-locked`、`data-composer-model-provider`。
+以及一处**单一事实源**收敛：Check 图标与 `data-composer-model-selected` 共用同一个
+`selected` 判据，避免两处各写一遍三段比较而漂移。
+
+### 17.35 剧本编写陷阱两则（同一轮各踩一次，都很像产品缺陷）
+
+1. **id 里可能含分隔符，就不能靠 `split` 取段。** 模型 id 实测形如
+   `bifrost/dashscope/qwen3.8-max`，而锚点值是 `kernel/provider/id` 拼出来的 —— `split("/")`
+   会得到 5 段。我在**同一个剧本里犯了两次**：先是断言"段数 === 3"把正确行为判成缺陷，
+   再是比较选中项时 `const [sk, , sid] = key.split("/")` 取错了 id，
+   于是"打勾的项与按钮显示的不是同一个模型"这条假红。
+   正解：**整体比对**，或 `startsWith(kernel + "/") && endsWith("/" + id)`。
+2. **`clickPointUntil(page, locate, predicate, {arg})` 的 `arg` 会传给两个函数，两个都是页面内执行的。**
+   我的 predicate 改对了（内联 DOM 查询），但 **locate 仍在用 Node 侧闭包变量** `otherTab` ——
+   它在页面里是 undefined，locate 抛错后被内部的 `.catch(() => null)` 吞掉，
+   `pt` 为 null ⇒ **一次都没点**。症状却是"切了 TAB 但清单没换"，看起来像产品坏了。
+   > 通则：凡是被 `.catch(() => null)` 兜住的定位函数，**失败与"元素不存在"不可区分**。
+   > 诊断这类问题时，先打印 `elementFromPoint` 与按钮 rect 确认"到底点没点、点在谁身上"，
+   > 别先去怀疑被测功能。
+
+### 17.36 改一个 ARIA role 是**横切**改动：先 grep 测试语料（r35）
+
+缺陷：模型清单是**单选**语义，但用的是 `DropdownMenu.Item`（`role="menuitem"`），
+选中态只有一个 Check 图标 —— 读屏用户听不出哪个是当前模型（**视觉信息与可访问信息不对等**）。
+
+正确修法是用语义正确的部件：`DropdownMenu.RadioGroup` + `RadioItem`，由 Radix 自动给出
+`role="menuitemradio"` 与 `aria-checked`。**不要**直接在 `Item` 上覆盖 `role` ——
+手改 role 会与 Radix 内部的键盘导航/typeahead/焦点管理不一致，得到"属性对了但行为不对"的更坏结果。
+
+改完的连带面比改动本身大得多：`grep -rl "menuitem" scripts/demo/*.e2e.mjs` 命中 **27 个剧本**，
+其中 24 个用 `[role='menuitem']` 定位**模型项**，共 53 处选择器全部失效（症状是"切不到 minimal 模型"，
+看起来像产品坏了）。处置：
+
+- 把选择器统一放宽成 `[role^='menuitem']`（同时匹配 `menuitem` / `menuitemradio` / `menuitemcheckbox`）。
+  对**其它**菜单（右键菜单、思考档位下拉仍是 `menuitem`）是等价放宽 —— 那里没有 radio 项。
+- 但**严格相等**的断言不能用选择器放宽糊过去，要逐个判断：
+  `session-list-audit` 断言右键菜单项 `role === "menuitem"` 是对的（不动）；
+  我自己那条"锁定行形态"断言必须改成 `menuitemradio`。
+- 还有一处容易漏：`composer-session-audit` 里统计**可交互元素**的选择器清单
+  （`button, a[href], …, [role=menuitem], [role=checkbox], [role=switch]`）——
+  `menuitemradio` 同样可聚焦，漏了会让"可交互元素计数"少数，而这类计数断言通常是 `>=`，
+  **少数不会红**，只会让判据悄悄变松。
+- 花真 token 的剧本（`kernel-thinking-matrix`：真实 pi+dsh 三条 tiny prompt）不为了验证而跑，
+  改为**逐处静态核验**并如实记录：模型选择处本就要求"可见+未禁用"（RadioItem 的 disabled
+  同样渲染成 `data-disabled`/`aria-disabled`），档位选择处按精确文本 `"低"`/`low` 匹配
+  （模型名不可能撞上）。
+
+重构后新增 6 条 a11y 断言（剧本从 24 项增至 **30 项**）：每个可见模型项都是 `menuitemradio`、
+都有明确的 `aria-checked`（不能缺失）、**恰好一个** `aria-checked=true`、
+且它与 `data-composer-model-selected` 是同一项（可访问态与视觉态同源）、
+以及被叠放隐藏的那份清单里**没有** `menuitemradio`（否则键盘会走到看不见的项上 ——
+这正是 `renderKernelList` 的 `interactive` 参数存在的理由，重构不能把它丢掉）。
+
+> 通则：**改 role / 改标签名 / 改锚点名之前，先 grep 整个测试语料**。
+> 这类改动的连带面几乎总是比改动本身大，而且失效症状一律长得像"产品坏了"。
+> 顺带一条：放宽判据时要检查它是否因此**变松**（`>=` 型计数断言在元素变少时不会红）。
+
+### 17.37 「视觉态有、可访问态无」的系统性查法（r36）
+
+r35 修的那个缺陷（模型清单用 `menuitem` 表达单选）不是孤例，它属一类：
+**状态只用颜色/图标表达，没有对应的 ARIA 状态**。查法是可自动化的：
+
+1. 扫出所有**带状态语义的 `data-*` 属性**（`-open` / `-active` / `-selected` / `-pinned` /
+   `-collapsed` / `-checked` / `-current` …），实测通用层 13 处；
+2. 对每一处问：这个状态**同时**有没有暴露给辅助技术（`aria-expanded` / `aria-selected` /
+   `aria-current` / `aria-checked` / `aria-pressed`）？
+3. 顺带统计整个通用层的 aria 覆盖面当基线：实测 `aria-expanded` 6、`aria-checked` 2、
+   `aria-pressed` 3、`aria-current` 1、`aria-selected` 1、**`aria-disabled` 0**。
+   数字低不等于都有缺陷（Radix 会自动给一部分），但它告诉你**手写控件**是重点怀疑对象。
+
+⚠ 这个扫描**必然有假阳性**，结果要逐个核实而不是照单修：
+· 状态属性挂在**容器**上、开关在子元素上（共享 `Section` 的 `data-section-collapsed` 在根 div，
+  而 `<button aria-expanded={open}>` 在里面 —— 已经是对的）；
+· aria 由**组件库自动给**（模型项的 `aria-checked` 来自 Radix RadioItem，源码里搜不到字面量）；
+· 该文件只是**读**这些锚点（`sidebar.tsx` 用 MutationObserver 观察 `data-section-collapsed`）。
+本轮 13 处里，真缺陷只有 2 处，其余 11 处核实为合法 —— 但**核实本身**就是产出：
+它把"哪些已经做对了"变成已知事实，下一轮不必重扫。
+
+**查出的两处真缺陷：**
+
+1. **设置页的 TAB 条是一排裸 `<button>`**：无 `role="tablist"` / `role="tab"` / `aria-selected` /
+   `aria-controls`，面板也没有 `role="tabpanel"`。读屏只会念成"按钮"，既听不出这是一组互斥 TAB，
+   也听不出哪个是当前选中的（选中态只用 `borderBottom` 颜色 + `color` 表达）。
+   手写 TAB 条要自己补齐 ARIA APG 的**全套**：容器 `role=tablist` + `aria-label`、
+   每项 `role=tab` + `aria-selected` + `aria-controls`（**tab[i] → panel[i]**，别指向 entry 级 id）、
+   面板 `role=tabpanel` + `id` + `aria-labelledby`、**roving tabindex**（只有选中项 `tabIndex=0`，
+   其余 `-1`）、以及 **ArrowLeft/ArrowRight** 在同组内移动焦点并激活
+   （Radix Tabs 自带这些，手写的一条都不会自动有）。
+2. **项目行的激活态只有颜色**：dnd-kit 的 `attributes` 已给了 `role="button"` 与 `tabIndex`，
+   缺的是"当前项"语义 → 补 `aria-current={active ? "true" : undefined}`
+   （注意非激活时要给 `undefined` 而不是 `"false"`，否则每行都带一个 aria-current）。
+
+⚠ **惰性挂载的取舍要写出来**：从未访问过的 TAB，其面板还没 mount，`aria-controls` 会指向
+暂不存在的 id。这是 lazy-mount UI 的常见取舍（点开即建立），比"整条 TAB 无语义"好；
+而 `role=tab` 与 `aria-selected` 这两个**关键**语义不依赖面板存在，始终有效。
+把取舍写进注释，而不是假装没有断链。
+
+新行为必须验：方向键导航是新写的逻辑，补了 3 条断言（ArrowRight 后选中态移到下一个 TAB、
+**焦点跟着选中态走**、ArrowLeft 回到起始 TAB）。`settings-controls-audit` 从 31 项增至 **42 项**，
+`project-switch-audit` 从 21 项增至 **23 项**，全绿。
+
+> 通则：审 a11y 不要从"ARIA 属性够不够多"入手（那会产出一堆装饰性属性），
+> 而从**"这个状态在界面上怎么被看见的"**入手 —— 颜色、图标、勾选、位置，
+> 每一种视觉表达都问一句"不用眼睛能不能得到同一个信息"。
+
+### 17.38 瞬时提示的 a11y：**容器必须先于内容存在**（r37）
+
+实测：通用层 `aria-live` **0 处**、`role="status"` 1 处、`role="alert"` 1 处、`aria-atomic` 0 处。
+而应用里有 **6 处** toast 状态源，其中共享 `Toast` 部件（`packages/react/src/widgets/toast.tsx`，
+fixed 定位、2.5s 自动消失）**完全没有 live region 语义**——读屏用户一条都收不到。
+toast 承载的恰恰是**一次性告知**（「附件类型不支持」「已跳过 N 个不可参考的文件」「保存失败」
+「重试失败」），错过就没有第二次机会；而"重试失败"这类甚至**没有其它可见后果**。
+
+⚠ **最容易做错的一步**：给条件挂载的元素直接加 `aria-live` 是**不够的**。
+消费方的写法一律是 `{toast && <Toast … />}` —— 元素与文本**同一次挂载**，
+而 `aria-live` 的播报前提是**容器在内容变化之前就已经在 DOM 里**。
+（`role="alert"` 因为是"插入即播报"的特例，可靠性稍好，但 success/info 用的 `status` 基本听不到。）
+
+正确结构是**常驻宿主 + 内容进出**：
+
+```tsx
+// 单例、常驻、0×0、pointer-events:none 的宿主，带 aria-live/aria-atomic/role
+export function ensureToastHost(): HTMLElement { /* 幂等；脱离文档时重建 */ }
+// 应用根挂一次 → 宿主从启动就存在 → 连**第一条**也能播报
+export function LiveRegionHost(): ReactNode { useEffect(() => { ensureToastHost(); }, []); return null; }
+```
+
+三条设计取舍，每条都有理由、都写进了注释与断言：
+
+| 取舍 | 理由 |
+|---|---|
+| 宿主用 `polite` + `role="status"` | toast 是"告知"不是"打断"，自动消失、非阻塞，不该抢占用户当前朗读 |
+| `aria-atomic="true"` | 整条消息作为一个整体播报（里面可能有图标 + 文本），不逐节点念 |
+| **error 变体**在内容元素上另给 `role="alert"` | 出错要立刻知道，可打断；**嵌套** alert 有效，且不需要再写 `aria-live`（嵌套 live region 会互相干扰） |
+
+还有一条通用原语 `Announce`（只补"被读到"、不改视觉）：应用里并非所有瞬时提示都走共享 `Toast`
+——timeline 的提示条锚在输入框附近（带图标、非 fixed 顶部），retry/continue 的报错是行内一个
+`<span>`。把它们全迁到 `Toast` 会改变视觉位置与既有交互，**代价与收益不对等**；
+它们缺的只是"被读到"这一件事，所以用 `<Announce message={…} variant="error" />` 与原有视觉元素**并存**。
+
+单测 13 条（`live-region.test.tsx`）钉住：宿主语义正确、**幂等**（文档里只能有一个，
+多个 live region 会互相干扰/重复播报）、脱离文档后能重建、0×0 不占位；
+`LiveRegionHost` 挂载即建宿主且自身不渲染可见内容；`Toast` portal 进宿主内部（不是 body 直挂）、
+error 带 alert 而 success 不额外声明 role；`Announce` 送进宿主、空消息不产生节点、自身不渲染可见内容。
+真机侧补进 `dom-audit`（5 条）：**启动即有且仅有 1 个**宿主、aria 三件套正确、0×0——
+"应用根真的挂了它"这件事只有起真 app 才知道（实测 `{count:1, ariaLive:"polite", ariaAtomic:"true", role:"status", box:{w:0,h:0}}`）。
+
+⚠ 一处连带：retry/continue 的既有测试用 `vi.mock("@my-harness-desktop/react")` 给了替身，
+新增导出后 mock 里没有 `Announce` → 3 条测试报 `No "Announce" export is defined on the mock`。
+这是 §11.12「测试替身必须与真实形状一致」的又一次实例：**给发布面加导出时，
+要顺带查有哪些测试 mock 了这个模块**。
+
+### 17.39 有些缺陷只能靠**面级普查**，不能靠点级单测（r38）
+
+图标按钮缺可访问名这类缺陷的特点是：**看不见也点不出来**（按钮照常显示、照常能点、
+视觉完全正常），正向功能剧本永远撞不到；而逐个组件写单测又**覆盖不全**——
+新增一个图标按钮就多一个洞，且没人会记得给它补测试。
+
+所以用**普查**：起真 app、走遍所有视图、把每个可交互元素的可访问名按 ARIA 计算顺序算出来
+（`aria-labelledby` → `aria-label` → 元素文本 → 内部 `img[alt]`/`svg title` → `title`），
+全部落空即缺陷。剧本 `a11y-names-audit.e2e.mjs` 首跑实测：**23 个视图 / 1379 个可交互元素**，
+无名 **12 处、去重后仅 3 种**：
+
+| 处 | 形态 | 为什么漏 |
+|---|---|---|
+| 共享 `Pagination` 的左右箭头 ×2 | 纯 `ChevronLeft`/`ChevronRight` 图标 | 部件在发布面里，不能写死文案，于是干脆没给名字 |
+| plugin-manager 每行的拖拽手柄 ×10 | dnd-kit 的 `attributes` 给了 `role="button"` 与 `tabIndex`，但**可访问名要自己给** | 误以为"库给了 role 就等于给了语义" |
+
+三条可直接复用的结论：
+
+1. **共享部件的缺陷会被所有消费方复制一遍**（3 种里 2 种出自同一个部件）。
+   普查报告要**去重后按出现次数排序**，次数最高的那个往往就在共享层。
+2. **库给的 `role`/`tabIndex` 不等于可访问名**。dnd-kit、Radix 这类库会把角色和键盘可达性
+   给你，但"这个控件叫什么"永远是内容层的责任。
+3. **让漏传在编译期暴露，比事后审计强**：把 `prevLabel`/`nextLabel` 设成**必填 props**
+   （而不是可选 + 默认文案），改完 tsc 立刻在两个消费方各报一条
+   `TS2739: missing the following properties`。这比 lint 规则或测试都硬——
+   因为它不可能被"忘了跑测试"绕过。发布面不能写死文案（§1.2），
+   文案落在壳的 `shell.*` 命名空间（一处、四语言、两个消费方共用）。
+
+顺带修了页码按钮缺 `aria-current="page"`：它有数字文本所以"有名字"，
+但光念"3"听不出这是**当前页**——这是"有可访问名"与"可访问名**够用**"的区别，
+普查只能查前者，后者要靠对具体控件的语义判断。
+
+**两层守卫**：普查（真机、慢、完整、能抓到任何新洞）+ 部件单测（快、提交前就拦住，
+`pagination.test.tsx` 6 条）。并对普查本身做了反向注入：删掉 prev 的 `aria-label` →
+普查 FAIL，且现场信息精确到 `data-pagination=prev` 与图标类名（能直接定位）。
+
+> 通则：**"每个 X 都必须有 Y"这类全称命题，用普查而不是抽样**。
+> 抽样只能证明"我看过的那些是对的"，普查才能证明"没有漏的"；
+> 而普查的产出是一份**去重后的种类清单**，通常比原始命中数小一个数量级（12 → 3），
+> 修起来是完全可行的工作量。
+
+### 17.40 库给的 ARIA 是**半成品**，且运行时普查看不见未渲染的元素（r39）
+
+r38 查"有没有名字"，本轮查"**状态有没有语义**"。三条可复用的结论：
+
+**① 组件库给的 ARIA 往往只给一半。** `react-resizable-panels` 的 `PanelResizeHandle`
+渲染出 `role="separator"`、`aria-valuenow/min/max`、`tabIndex=0`、`aria-controls`——看起来很完备。
+但实测 4 处手柄**全部** `aria-label=null`、`aria-orientation=null`。两个后果：
+读屏只念"分隔条 19"，不知道它分隔的是什么；而 `aria-orientation` 缺省时按 ARIA 落到
+**默认值 `horizontal`**，对 `col-resize` 的手柄（竖向分隔条、水平移动）是**错的**——
+读屏会给出相反的方向提示，用户按 ↑↓ 调而实际要按 ←→。
+
+> 通则：**"库已经处理了 a11y"这个假设要用运行时探针证伪**，不能靠读文档或看有没有 `role`。
+> 探针要打印的是**完整属性集**（label / orientation / valuenow / tabIndex / controls / cursor），
+> 只打印 `role` 会让你以为已经完备。
+
+而且朝向**不能写死**：`layout-engine.tsx` 的手柄朝向取决于 `split.direction`
+（horizontal 布局 ⇒ 手柄是竖条 ⇒ `vertical`），必须按方向算。
+即便某处的值恰好等于 ARIA 默认值，也要**显式写出**——默认值不是契约，库改版就可能变。
+
+**② 运行时普查看不见"当时没渲染"的元素，必须配一条静态守卫。**
+右面板的分隔条只在"2 个以上堆叠 TAB"时才渲染（`i < renderIds.length - 1`），
+默认布局下根本不出现 ⇒ 普查只看到 3 个，而全仓有 **4 个**站点。
+未被渲染 ≠ 无缺陷：用户把右面板拉成堆叠布局时它就在，而那时没人测过。
+所以补 `src/resize-handle-a11y.test.ts`（4 测）扫**源码里全部站点**，
+要求同一元素上同时出现 `aria-label` 与 `aria-orientation`，外加一条"名字必须走 i18n 不许写死"。
+**反向注入验证过分工**：删掉右面板那处（普查够不到的）的 `aria-label` → 静态守卫红、普查不红；
+这正好证明两者不是重复而是互补。
+
+**③ 源码 grep 会低报运行时属性。** `aria-disabled` 在源码里 grep 是 **0 处**，
+但真机探针数出 **11 处**——因为它是 Radix 在运行时根据 `disabled` prop 设置的。
+所以"某属性全仓 0 处"这个结论**只对显式书写成立**，判缺陷前必须再用运行时探针对一遍，
+否则会去"修"一个根本不存在的问题（我差点就这么干了）。
+
+**两条判据写法上的细节：**
+
+- **同源性**：不能只断言"有某一行带 `aria-current`"，要断言**带 `aria-current` 的那一行 ==
+  视觉上有激活底色的那一行**。否则可能各说各话（可访问态指 A、视觉态指 B），
+  而两条单独的断言都会绿。
+- **`aria-current="false"` 是噪音**：非激活项要给 `undefined`（属性不出现），
+  不是 `"false"`。给 `"false"` 等于每个元素都挂一个状态属性，部分读屏会念出来。
+
+### 17.41 「有名字」≠「名字**够用**」：状态要进可访问名，不是给图标加 label（r40）
+
+r38 的普查查的是"每个可交互元素有没有可访问名"，归零了。但**另一类缺陷普查结构上查不到**：
+元素有名字，名字却**不承载状态**。
+
+实例：会话列表的行。它的可访问名是标题文本（所以普查判它合格），而"置顶""归档"
+"正在思考/执行工具/重试/压缩"这六种工作阶段，全部只靠**图标形态与颜色**表达
+（`Pin` / `Archive` / `PhaseIcon` 的六种形状与配色）。读屏用户听得到"排序甲"，
+听不到"已置顶、思考中"——视觉信息与可访问信息不对等，而且这一行是用户导航的主入口。
+
+**修法的关键选择**：补一段**视觉隐藏的状态文本**到行内（于是它自然并入行的可访问名），
+而**不是**给每个图标加 `aria-label`。理由：图标是装饰性的，语义应由文本承担；
+给每个图标单独加名字会让读屏念出一串碎片（"图钉 图片方块 脑"），比没有更糟。
+配套地，与状态文本重复的装饰图标要标 `aria-hidden="true"`（避免重复播报）。
+
+断言要落在**行的可访问文本**上，不能只断"某处有这个文本"：
+
+```js
+ok(rowAccessibleText.includes("已置顶"), "状态文本必须在行的内容里，否则读屏念行时听不到");
+```
+
+实测修完行的可访问文本是「审计改名甲**已置顶**[minimal echo] 甲会话的提问」。
+
+**三条配套纪律：**
+
+1. **复用既有译文，不另造一份**（§1.3 契约单源）。阶段文案直接用 timeline 底部指示器
+   那套 `shell.*` 键（`shell.thinking` / `shell.requesting` / …）。查的过程中发现
+   `shell.retrying` **四个语言全缺**——但那是**有意的**：timeline 的注释写明
+   「idle/retrying 不在此表：前者不显示指示，后者由重试横幅承担」。
+   而会话行的图标确实画了 retrying 的红色转圈，所以这个键对**行**是必需的。
+   > 教训：发现"缺一个键"时先查它**为什么**缺。可能是遗漏，也可能是有意分工；
+   > 前者补上，后者要判断"我这个消费方是否属于原设计没考虑到的场景"。
+2. **首次使用某个工具类，要断言它真的生成了**。这里第一次在本仓用 Tailwind 的 `sr-only`，
+   而本仓有过 `@source` 扫描漂移的历史（CLAUDE.md §3.7：7/29 修过、8/27 原样复发）。
+   类没生成的后果**比不加更糟**——那串"已置顶"会直接显示在界面上。
+   所以断言的是**计算样式**而不是类名存在：`position === "absolute" && w<=1 && h<=1 && overflow==="hidden"`。
+   （顺带一条：验证类是否生成时，`grep "sr-only{"` 会漏——产物是 `.sr-only {` 带空格的未压缩形态。）
+3. **状态文本要在行内，不在行的兄弟节点**。读屏念的是行这个可聚焦单元；
+   放在行外面（比如放在分组头上）等于没放。
+
+### 17.42 折叠控件的三件套要么全给要么全撤；重复实现才是根因（r41）
+
+审消息流里的折叠块（工具卡 / 思考链 / 分隔条详情），过程里有两步值得单独记：
+
+**第一步差点报了一个不存在的缺陷。** 看到 `tool-cards.tsx` 的 `CardHeader` 里有一堆 span，
+我判断"根元素大概是 `<div onClick>`，那键盘就完全不可达"。**去读了才知道它是错的**：
+`CardHeader` 有 `role="button"` + `tabIndex={0}` + Enter/Space 的 `onKeyDown`，键盘本来就可达。
+如果按猜测写进报告，就是一条假缺陷（而且是"看起来很专业"的那种，最难被质疑）。
+
+**真缺陷在它的重复实现里。** 同一个文件的 `DefaultCard`（兜底卡，承载 custom_message 与未知工具）
+**自己内联了一份卡头**，而那一份比 `CardHeader` 差三处，且三处都是"看不见"的：
+
+| | `CardHeader`（Bash/Edit/Read 卡在用） | `DefaultCard` 内联的那份 |
+|---|---|---|
+| 键盘 | `role=button` + `tabIndex=0` + Enter/Space | `onClick` 挂在 div 上，**三者全无** ⇒ 键盘完全不可达 |
+| 状态文案 | i18n | 硬编码英文 `running` / `error` |
+| 展开态 | （本轮补）`aria-expanded` | 无 |
+
+而兜底卡恰恰是**最需要能被展开看内容**的那一种（未知工具的 args/result 只能在这里看到）。
+根因是 §3.5 的重复实现，所以修法是**收敛**而不是三处各打一个补丁：给 `CardHeader` 加
+`expandable?: boolean`，`DefaultCard` 改用它。三个问题一次消失，且以后不会再分叉。
+
+**收敛时定的一条纪律：折叠语义三件套要么全给、要么全撤。**
+`role="button"` / `tabIndex` / `aria-expanded` 必须成套：
+
+- 只给 `role` 不给 `tabIndex`+键处理 ⇒ 读屏能发现但键盘到不了；
+- 只给 `tabIndex` 不给 `role` ⇒ 键盘能到但读屏不知道它是按钮；
+- **给一个点了不动的元素挂 `aria-expanded="false"` ⇒ 错误承诺**：读屏用户会一直试着展开，
+  而什么都不会发生。所以"无详情可展开"时三者全撤（它就是个静态标题，不是控件）。
+
+这条写成了两条对照测试（无详情 ⇒ 三者全无；有详情 ⇒ 三者齐全），
+只写前一条会把实现推向"一律不给"。
+
+**图标态改文本态的同一套做法**（与 r40 一致）：工具卡的成功/失败此前是纯 `<Check/>` / `<X/>`
+（无可访问名）——而"这个工具成功还是失败"恰恰是工具卡最该被听到的一条信息。
+修法：图标标 `aria-hidden` 保留视觉锚，语义由 `sr-only` 文本承担；顺带把硬编码的
+`running` / `error` 收进 i18n（新增 `timeline.toolRunning/toolFailed/toolSucceeded` × 4 语言）。
+分隔条的 `aria-expanded` 也**只在有 detail 时声明**（同一个"错误承诺"理由）。
+
+⚠ 本轮的工具卡/思考链断言落在**单测**（渲染真实组件 + 真实 DOM），没有进 e2e：
+零 token 的 minimal 会话不产生工具调用，而 seed 引擎的场景 spec 里没有现成的工具调用剧本。
+这些是纯渲染件（无集成风险），单测覆盖是合适的层级——但要**如实标注覆盖到哪一层**，
+不能因为"测了"就当成全链路验过。
+
+### 17.43 硬编码文案守卫的两个盲区：**语言**与**文件扩展名**（r42）
+
+既有的 `shell-no-hardcoded-copy.test.ts` 有三个探测器（ATTR / JSX_TEXT / 括号内 CJK），
+但它们**全部以 `[\u4e00-\u9fff]` 为判据**——只认中文。于是两个盲区：
+
+**盲区一：硬编码英文完全不设防。** 而这是个**四语言**产品，硬编码英文对 de/zh-CN/zh-TW
+用户同样是缺陷。实测漏网的有：工具卡的 `running` / `error` / `lines collapsed` / `exit {code}`、
+模型配置页的 `unknown error`、文件预览的 `File system access is not available` / `No content returned`、
+transport 的 `remote error`。已补英文探测器（判据刻意收紧：字面量**整体**形如
+"2 个以上纯英文单词、单空格分隔、无任何标点符号"，以避开专名/类名/路径/i18n 键造成的大片假阳性；
+CSS 声明上下文整行跳过——否则 `font-family:…,'Segoe UI',…,'PingFang SC'` 会被当成文案）。
+
+⚠ **最糟的形态不是整句英文，而是一句话里两种语言**：file-preview 把
+`throw new Error("File system access is not available")` 的消息经 `setError(err.message)` 存下、
+再按 `${t("preview.loadFailed")}: ${error}` 显示 ⇒ 用户看到
+「加载失败: File system access is not available」。前缀翻译了、原因没翻译——
+这种混合串比纯英文更难被发现，因为**看起来已经 i18n 了**。
+
+**盲区二：`walk()` 的默认 exts 是 `[".tsx"]`**，所以 `src/web` 与 `packages/react/src` 里的
+**`.ts` 文件从不被扫**。实测那一片有 34 处中文字符串，其中确有用户可见的
+（`build-kernel.ts` 的安装超时 `error:` 字段、`bootstrap.ts` 的断连浮层 `textContent`、
+`login-gate.ts` 的整个登录闸文案）。这与 r28「守卫只覆盖一个名字而非同族」、
+r31「扫描范围要含会到达 UI 的夹具」是**同一类缺陷：判据的覆盖面小于它声称的覆盖面**。
+
+**但不能简单把 exts 放宽到 `.ts`**：那 34 处里大多数是**开发者可见的不变量违规**
+（`throw new Error("setLayout 的树根必须…")`、`warnOnce("装配顺序被破坏")`），
+只进 console、只给开发者看，翻译它们反而有害（报错原文是排查线索）。
+
+⚠ 而且**"是不是 throw 出来的"不能当判据**——上面 file-preview 那两处正是 `throw new Error(...)`，
+却被 catch 后显示给用户。正确判据是**静态可判的"必然被显示的汇点"**：
+`.textContent =` / `.innerText =`（直接写进 DOM 文本）、对象字面量的 `error:` 字段
+（本仓 API 结果形状，UI 会渲染它）。这三类出现字面量即缺陷；throw / warn / console 不在判据内。
+自检要**双向**：三个汇点形态都要能识别，且 `throw new Error(...)` / `warnOnce(...)` 必须**不**被识别。
+
+**三条配套纪律（都是本轮实踩）：**
+
+1. **账本的语义是"当前存在且合法的豁免"**，不能拿账本条目当回归锚。
+   我曾想留一条 `remote error` 作"若它再出现就说明回退了"的对照——修好之后
+   ② 的腐烂检查立刻（正确地）红了：源码里已经没有这个串，豁免就该删。
+   **回归保护要写成独立断言**，不要塞进豁免清单。
+2. **守卫要判代码，不判原文**：修复说明的注释里必然会引用旧字面量
+   （"此前写死中文 `安装超时`"），按原文判会被**自己的注释**绊倒。探针一律先过 `stripComments`。
+3. **非组件的壳代码也能 i18n**：`src/web/kernel/build-kernel.ts` 与 `src/web/transport/ws-transport.ts`
+   拿不到 `useTranslation`，但可以 import `i18next` 单例（`src/web/app/i18n-init.ts` 导出）。
+   注意时序：只有"必然在 i18n 初始化之后才执行"的路径能这么用（安装超时是 300 秒后触发，安全）；
+   模块加载期就要用的文案不行——那种情况（登录闸、断连浮层）恰恰是 i18n **可能拉不到**的时候，
+   所以它们自带文案且刻意做成双语，已作为**文件级豁免**登记并写明理由。
+
+守卫从 8 测扩到 **17 测**；反向注入（把安装超时改回硬编码中文）让 **3 条**同时变红
+（汇点判据 + 两个回归锚）。
+
+### 17.44 最隐蔽的一类：`aria-label` 挂在**无 role** 的元素上（r43）
+
+这是"视觉态有、可访问态无"里最难发现的一种——因为**代码看起来已经做了 a11y**。
+实测三处同型：
+
+```tsx
+// 未读圆点：无内容、无 role，只有 title + aria-label
+{unread && !hovered && <span title={t("sessions.unread")} aria-label={t("sessions.unread")} className="size-2 rounded-full …" />}
+// 内核未装载角标：同样形态（span 里只有一个 svg）
+<span title={…} aria-label={…}><TriangleAlert /></span>
+```
+
+问题：**ARIA 1.2 不支持在 `role=generic` 上使用 `aria-label`**，各浏览器/读屏实现不一，
+很可能被忽略。靠 `title` 兜底也脆——`title` 同时是悬浮提示，且部分读屏/浏览器组合
+不会把**后代**的 title 并入父级可访问名。所以这两处的状态在 AT 侧大概率是**空的**。
+
+还叠了第二个隐患：未读圆点的渲染条件是 `unread && !hovered`——**hover 时徽标整个从 DOM 消失**，
+状态跟着消失。这与命名无关，是"把状态挂在一个会被交互态移除的节点上"。
+
+**根治办法与 r40 一致**：状态搬进行内**常驻的 sr-only 文本**，徽标改 `aria-hidden="true"`
+（视觉锚保留、`title` 保留给明眼人做悬浮解释）。这样一举解决三件事：
+命名可靠（真文本一定进可访问名）、不依赖 hover、不会重复播报。
+
+**需要给非交互元素一个名字时，用 `role="img"`**：`stats-titlebar` 的四个统计项
+（`↑ 1.2k` 这类"符号 + 文本"）原先也是 `<span aria-label>`。`role="img"` 是
+"整块作为一个整体朗读"的既定模式，且它的子节点对 AT **完全不透明**（内层符号本来就已 aria-hidden），
+于是可访问名稳定等于 `aria-label`。注意这里**保留了上一轮的两条正确判断**：
+仍修在缺名的调用点而不是一刀切进共享的 `HoverTip`（另一个消费者有可见文本 `45%`，
+覆盖它会违反 WCAG 2.5.3「Label in Name」）。
+
+**可自动化的通用不变量**（比逐个组件查更划算）：
+"行内不得有『无 role 却挂 aria-label』的元素"——一条 `querySelectorAll("[aria-label]")` 过滤
+`!getAttribute("role") && !/^(BUTTON|A|INPUT)$/.test(tagName)` 就能扫，实测稳定通过（0 个）。
+全仓扫下来这种形态只有 3 处，其中 2 处是正则误报（`{...attributes}` 展开提供的 role 静态看不见、
+对象字面量里的 `aria-labelledby`），所以**这个判据适合做成断言、不适合做成硬守卫**（假阳性要人工分辨）。
+
+### 17.45 造不出来的状态：如实降级为"只有代码级证据"，不要凑成通过（r43）
+
+未读态在隔离环境里**造不出来**，两条路都试过：
+① 改 header 的 `lastEntryId` → 刷新后行里仍没有未读（说明 `lastEntryByPath` 不是直接读我改的那个字段）；
+② 改插件配置里的 `readState[ns]` 为陈旧值 → 仍然没有：`readState` 是插件在**挂载时读一次**，
+点刷新不重读配置；而且活跃会话会"自动跟随已读"把它写回。
+要真造出未读需要"另一个会话在后台收到新 entry"——那是生产路径（真实内核推送），零 token 剧本复刻不了。
+
+处置（三条，缺一不可）：
+1. **能验的照验**：那条通用不变量（行内无"无 role 却挂 aria-label"的元素）与未读无关，稳定通过；
+2. **造不出的写成条件断言**：`if (isUnread) { …断言… } else { …打印为什么没验到… }`，
+   并且**不计入通过项**——不能因为"跑绿了"就让它冒充覆盖；
+3. **在剧本里写清替代证据的强度**：`unread ? t("sessions.unread") : null` 这一支与
+   **已真机验证过**的 `pinned`/`archived` 两支在**同一个 `stateText` 数组、同一条渲染路径**上
+   （那两条实测行的可访问文本确实带上了「已置顶」/「已归档」）。所以它有代码级 + 同构级证据，
+   但没有端到端证据——这个区别要写出来，不能含糊成"已覆盖"。
+
+> 通则：**"验不了"是一个合法结论，"假装验了"不是。** 剧本里出现
+> `if (能造出该状态) { 断言 } else { 打印原因 }` 比一条恒真断言有价值得多——
+> 前者告诉下一个人"这里缺什么、为什么缺、替代证据有多强"，后者只会让人误以为已覆盖。
+
+### 17.46 共享组件的能力门控：**空页面的负结果不是证据**（r44）
+
+`ModelConfigPage` 是 pi / dsh / minimal **三个内核共用**的（各自只填 `i18nPrefix` 与
+`capabilities`）。这类组件有一种**独有的缺陷形态**：某个控件对声明了该能力的内核完全正常，
+只在**另一个**内核上错——所以在"有那个能力"的内核上跑一百遍正向剧本也撞不到。
+
+r44 的实例：「developer role 不兼容」勾选框写的是 `supportsDeveloperRole`，而这个字段
+**只有 pi 消费**（`kernel/pi/model/models-config.ts` 的 `compat.supportsDeveloperRole`），
+dsh / minimal 都没有消费者，控件却**无条件渲染** ⇒ 它们的模型页上有一个勾了也没任何作用的开关
+（§7.6 该显式降级却没降级）。
+
+⚠ **文案中性化 ≠ 能力门控，两件事都要做。** 上一轮已把这个控件的措辞中性化
+（原文写「pi-ai 对 reasoning 模型默认发 developer」，共享组件里不该出现某个内核的专属措辞）。
+但只做中性化，dsh 用户看到的是一个**措辞中性、对自己却毫无作用**的开关——那仍然是缺陷。
+前者管"不出现专属措辞"，后者管"没有这一维的内核根本不该看到这个控件"。
+
+修法（§1.5 先抽象后实现）：中立契约 `KernelModelsCapabilities` 加一轴 `developerRole: boolean`
+**且设为必填**，三个内核各自声明（pi `true`，dsh / minimal `false`），控件按它门控。
+必填的意义：新内核接入时**必须当场表态**（漏声明 = TS2739 编译错），
+不会静默等同于 false——与 r38 给分页部件的 `prevLabel`/`nextLabel` 设必填是同一个手法。
+
+**两条实测踩到的判据陷阱：**
+
+1. **空页面的负结果不是证据。** 真机跑三个内核的模型页，dsh 与 minimal 都报
+   `devRole=false`——看着像验证通过。但同一份探针数据里它们的**复选框数是 0、文案量只有
+   154/130 字**：隔离环境里这两个内核**没有配置任何模型**，页面基本是空的。
+   页面空 ⇒ 任何控件都不会出现 ⇒ "没看到 devRole" 什么也证明不了。
+   > 通则：断言"X 不存在"之前，先断言**这个页面确实渲染了内容**（有兄弟控件、有非空文案量）。
+   > 否则空页面会让所有"不存在"断言恒真。
+   真正严格的证据来自单测：用**真实 provider 数据**渲染同一个组件，
+   `capabilities={reasoning:true, developerRole:false}` ⇒ 控件不在、`true` ⇒ 在（4 条，含两轴互相独立）。
+2. **设置页的 pane 挂载后不卸载**（非激活的只是 `display:none`），所以 document 级的
+   `querySelectorAll` 会被**之前访问过的 pane 污染**：首版探针就是这么把 minimal 的
+   `reasoning` 判成 `true` 的（那其实是 pi 的隐藏 pane）。
+   修法：限定到当前可见的 `[role=tabpanel]`。注意 `innerText` **尊重可见性**（不受污染），
+   而 `querySelectorAll` 不尊重——两者结论可能相反，混用会得出自相矛盾的结果。
+
+顺带记录一个**有意为之**、不按缺陷处理的现状：`reasoning` / `contextWindow` / `maxTokens`
+这三个 API/schema 字段名在四个语言里都照原样显示（没有 locale 键），而通用 UI 词
+（`name`、`devRoleIncompatible`）走 i18n。这是可辩护的策略——用户要拿字段名去对照服务商文档，
+翻译反而对不上。但它也暴露了 r42 那个英文探测器的**已知边界**：判据要求"2 个以上单词"，
+所以单词级字面量（`reasoning`）不在覆盖面内；那是刻意收紧以避免大片假阳性的代价，
+不是漏配，写在这里以免下一轮又去"修"它。
+
+### 17.47 播种夹具要**从真实写入方导出**，而反空转探针自己也会错（r45）
+
+r44 如实记了一条覆盖缺口："dsh/minimal 的门控只有单测级证据，真机页是空的"。
+本轮把它补上，过程里两条教训都值得单记。
+
+**① 播种数据的形状不能手猜，要从真实写入方导出来。**
+dsh 的 `settings.yaml` 是嵌套 YAML（`llm-pi-ai.providers.<id>` + `apiKeyEnv` 引用，
+明文密钥另落 `.credentials.yaml` 的 `refs`）。手写这种结构极易写出"看着像但解析不出"的东西，
+而症状会是"页面还是空的"——与"播种没生效"完全无法区分。
+做法：写一个**一次性测试**调用真实的 `DshConfigSource.setProvider()`，把它写出的文件 dump 出来，
+再照着做播种助手。minimal 同理（形状取自 `MinimalModelsDocument` 类型：
+`{ providers: [{id, baseURL, models:[{id,name?}]}], default }`，provider 记录**不含 apiKey**）。
+助手落在 `scripts/demo/lib/seed/kernel-models.mjs`（共享基础设施，§17.9），
+用 `yaml` 库 **parse → merge → dump**，不覆盖 `setupBaseline` 从真实 HOME 复制来的其它命名空间。
+
+> 命名也跟着职责走：文件原叫 `dsh-models.mjs`，加了 minimal 播种后改名 `kernel-models.mjs`——
+> 名字说谎的助手，下一个人不会想到用它。
+
+**② 反空转探针自己也会给出假结果。**
+剧本里有一条"先证明页面真的渲染了播种的模型，再断言控件不存在"（r44 的教训）。
+它报了假红：dsh 页面明明有 `Audit Seed (2)`、2 个复选框、2 个 reasoning 控件，
+探针却说"播种的模型名一个都没找到"。根因：**模型名是渲染成 `<input value=…>` 的，
+而 `innerText` 不包含 input 的值**。修法是把 input 值一起并入检索串。
+
+> 通则：反空转断言是"用来防止假绿的"，所以它一旦报红，**先怀疑探针的取样面**，
+> 再怀疑被测功能。取样面常见的漏项：`input/textarea` 的 value、`placeholder`、
+> `title`/`aria-label` 等属性、被 `display:none` 的兄弟 pane、canvas/svg 里的文本。
+
+**③ 受门控的控件要有锚点。** `devRole` 与 `reasoning` 两个控件原先只能按译文定位
+（`devRole 不兼容` / 裸字面量 `reasoning`），换语言就失效。已补 `data-model-devrole` /
+`data-model-reasoning`，单测与 e2e 都改用锚点（单测里原先按 `label.textContent === "reasoning"`
+精确匹配，那也是在赌字面量）。
+
+补完后的真机证据（`kernel-capability-gating.e2e.mjs`（r45 时名为 model-capability-gating），14 项，零 token，连跑两次稳定）：
+
+| 内核 | 播种 | 页面非空证据 | devRole | reasoning | 与声明一致 |
+|---|---|---|---|---|---|
+| pi | 用 `setupBaseline` 复制的真实 `~/.pi` | 42 个复选框 | **21** | 21 | ✓（true/true） |
+| dsh | `seedDshModels` 2 个模型 | 两个模型名都在（含 input 值） | **0** | 2 | ✓（false/true） |
+| minimal | `seedMinimalModels` 2 个模型 | 两个模型名都在 | 0 | **0** | ✓（false/false） |
+
+外加一条**跨内核对照**：同一个共享组件在 pi 与 dsh 下呈现不同（21 vs 0）⇒ 门控真的按
+各内核的声明生效，而不是写死成"全开"或"全关"。这条比逐个内核断言更强，
+因为"全关"也能让 dsh/minimal 的断言通过。
+
+### 17.48 注释可以描述一个**不存在的行为**；能力轴必须与消费者同批落地（r46）
+
+r45 结尾记了一个问题："其它共享组件是否也有『对某内核无意义却无条件渲染』的控件"。
+系统排查后答案是**有**，而且现场比 r44 那处更值得记。
+
+**排查方法**：先列出被**全部三个内核插件**共用的共享组件（`ModelConfigPage` /
+`KernelVersionPage` / `KernelExtensionsPage` / `KernelConfigForm`），再逐个问
+"它渲染的每个控件，底层字段是不是每个内核都有消费者"。结果：
+`KernelVersionPage` 门控正确（`caps?.install` / `caps?.customDir`，false 时还有显式降级文案）；
+`KernelConfigForm` 是数据驱动（字段来自内核自己的 schema，没有写死控件）；
+**`KernelExtensionsPage` 完全不读能力面** ⇒ 缺陷在这里。
+
+**最刺眼的一点：注释描述了一个不存在的行为。** `minimal-extension.ts` 的文件头写着
+「不支持装/卸，能力缝 update/reorder 均 false。**壳据此置灰入口**，不伪造扩展列表」——
+而共享页从来没读过 `capabilities`。minimal 的扩展页上是一个**完整可用的安装表单**：
+用户填完来源、点安装、等一轮，才在事后看到「不支持安装拓展」。
+注释说的降级、契约里声明的能力、UI 的实际行为，三者互相不一致。
+
+> 通则：读到"壳据此降级"这类注释时，**去查壳到底读没读**。注释是意图，不是事实；
+> 而这类注释因为写得很具体（点名了机制），反而最容易让人跳过验证。
+
+**顺带查出的死契约面**：`KernelExtensionCapabilities` 原有的 `update` / `reorder` 两轴，
+三个内核都老老实实声明了 `false`，但全仓**零消费者**（UI 与 controller 都不读）。
+死轴不是"无害的冗余"，它**有害**：读到 `{update:false, reorder:false}` 的人会以为
+UI 据此做了降级，实际什么也没发生（与 r25 查出的"声明了没人读的能力轴"同型）。已删除。
+
+⚠ **而且我在同一轮里差点亲手造一条新的死轴**：一开始给契约加了 `install` **和** `uninstall`
+两轴，随后发现页面里**根本没有卸载按钮**（`grep uninstall` 只命中我自己刚加的两行）⇒
+`uninstall` 会立刻变成新的死面。已收回。
+
+> 纪律：**能力轴与它的消费者必须同一批落地**。不加"为将来准备"的轴——
+> 将来真要加时，轴和 UI 一起加，成本一样，而中间不存在"声明了但没人读"的窗口。
+
+**降级的要点是"用户什么时候知道"，不是"有没有报错"。** 事后报错在功能上不算静默失败，
+但它把成本转嫁给了用户（填表 → 等待 → 失败）。§7.6 的"显式降级"要的是**动手之前就知道**。
+两个实现细节：
+- **保留区块标题**，只把表单换成一句说明（整块静默消失会让人以为功能坏了或自己找错页面）；
+- 说明要**讲清原因**（"这个内核没有提供扩展安装能力"），不是只说"不支持"。
+
+**改动是一条完整的链，少一环 tsc 就红**（这正是把新轴设为**必填**的价值）：
+圆心契约 → `channel-contract` 加 IPC 名 → controller 注册 handler → **`packages/react/src/index.ts`
+里那份独立的 `window.kernel` 类型声明**（容易漏：它不是从 `build-kernel.ts` 推导的）→
+`build-kernel.ts` 接线 → 共享页消费 → 三个内核各自声明。
+必填让"漏声明"在编译期变成 TS2739（本轮三个内核同时报），而不是运行时静默当 false。
+
+**验证层级选 e2e 而不是 jsdom 单测**：这条链跨了 IPC 与进程边界，jsdom 测不到
+"controller 忘了注册"或"`window.kernel` 类型漏了方法"。剧本 `kernel-capability-gating.e2e.mjs`
+（由 `model-capability-gating` 扩名而来，14 → **27 项**）三内核真机对照两个面：
+pi/dsh 有安装表单且无降级说明、minimal 无表单且降级说明含原因；模型页那面沿用 r45 的
+播种 + 反空转 + 跨内核对照。实测 minimal 扩展页文案量 66 字（只有降级说明），
+pi 1248 / dsh 1073（完整表单 + 列表）。
+
+### 17.49 普查判据漏了一种消费形态，就会**指认活代码为死代码**（r47）
+
+把 r46 的发现推广成全仓普查：所有 `*Capabilities` 契约里还有没有别的"声明了却零消费者"的死轴。
+结论是**没有**（15 个契约、44 个字段、死轴 0），但过程比结论更值得记——因为**首版判据指认了两条活轴为死轴**。
+
+**陷阱：能力轴有两种消费语法，只认一种就会误杀。**
+
+| 形态 | 谁在用 | 例子 |
+|---|---|---|
+| 点访问 `capabilities.<轴>` / `caps?.<轴>` | renderer、投影层 | `caps?.install === false` |
+| **字符串字面量轴名** | application 层的"按轴取面"助手 | `viaFace("modelCycle", "模型轮转", f => …)`、`faceOf(proc, "toolExec", "命令直投")` |
+
+首版只认点访问，于是把 `BackendCapabilities.modelCycle` 与 `.toolExec` 报成"0 消费者的死轴"。
+手工核实后：`modelCycle` 撑着 `cycleModel()`（模型轮转，还有默认键位）、
+`toolExec` 撑着 `bash()` / `abortBash()`（命令直投）。**信了自动结果就会删掉两条活轴、
+打断两个功能**——而且删完 tsc 不会报错（字符串轴名不是类型引用），只会在运行时炸。
+
+这正是 CLAUDE.md §1.5 描述的形态（「现为按轴取面的 `faceOf(proc, 轴, 标签)` /
+`viaFace(轴, 标签, fn)`」）：**轴名是字符串参数**。所以判据必须是
+「点访问 **或** 引号字面量」。而"声明"是冒号形态（`modelCycle: this`），
+既不是点也不是引号，天然不计入消费——这条区分要写成**自检**（否则判据一旦放宽到把声明也算消费，
+"死轴 0"就恒真、守卫失效）。
+
+**第二个陷阱：成员语法也有两种，解析器漏一种就会低报规模。**
+属性式 `fileBacked: boolean;` 与方法式 `steer(text: string): Promise<void>;`
+（`SteeringCapabilities` / `RetryCapabilities` / `CompactionCapabilities` / `SnapshotCapabilities`
+等整批都是方法式）。首版字段正则只认 `^(\w+)\??\s*:`，于是 15 个契约只解析到 7 个、
+44 个字段只数到 26 个——**漏掉的恰恰是方法式那批，而它们同样可能变成死轴**（声明了却没人调）。
+
+⚠ 连带一条：**守卫的反空转阈值必须按真实规模卡死，不能用"当前解析器数出来的值"倒推一个宽松下限。**
+首版写的是 `>= 24`（因为坏解析器数到 26），那样即使解析器再次退化也照样绿。
+改成 `toBe(15)` 与 `>= 44` 之后，解析器漏任何一种成员语法都会立刻红。
+
+> 通则：**"死代码/死契约"这类判定的假阳性代价极高**（删掉的是活功能），
+> 所以判据必须先穷举该概念在本仓的**全部表达形态**（这里是两种消费语法 + 两种成员语法），
+> 并为每种形态写一条自检。宁可判据复杂一点，也不要让"看起来干净"的结果骗过自己。
+
+**第三条是工具自身的**：本轮一个 Python 改文件脚本忘了 `write()` 回文件，
+三个 `✓` 全打在内存里，tsc 与 vitest 自然照旧报错。我一度以为改动没生效去查语法，
+实际是**根本没落盘**。教训：脚本自己打印的 ✓ 不算证据，**改完要重新读文件**（或直接看 tsc/测试的变化）。
+
+产出：`src/capability-axis-consumers.test.ts` 加 3 条（普查 + 两条自检），5 → 9 测；
+反向注入（往 `KernelExtensionCapabilities` 加一条无消费者的 `reorder`）让 ① 立刻变红，
+并给出可执行的处置建议（"要么补上消费者，要么删掉这条轴"）。
+
+### 17.50 架构承诺要**造出来**验，不是读代码验；成本在验证层（r48）
+
+「加第四个内核 = 加一个目录（含 `plugin.ts`），壳零改动」这条承诺写在两个地方
+（`electron.vite.config.ts` 的注释、`docs/design/kernel-plugin.md` §1），但**从未被实测过**。
+本轮真的造了一个第四内核 `probe4`（`minimal` 的整体克隆 + 改名），结论分两半：
+
+**壳机制层：承诺成立。** 以 probe4 的创建时刻为界用 mtime 核过——
+`src/web`、`src/server/{application,bootstrap,controllers,kernel/core,transport,routing}`、
+`packages/{shared,react}/src` **零文件改动**；圆心也零改动（`KernelId = string`，
+身份早已去字面量化、`KERNEL_IDS` 已删）。构建自动产出 `out/main/server/kernel/probe4/plugin.js`
+与三个 renderer chunk（两侧都是 glob，没有白名单）。本轮为接入它改的只有 **2 个验证侧文件**。
+
+**验证层：承诺不成立，而这才是真正的成本。** 加 probe4 打红了 4 处，全是守卫在正确工作：
+
+| 打红处 | 根因 | 修法 |
+|---|---|---|
+| `kernel-registry-n.test.ts` 3 处 + 卸载矩阵 | 写死 `["pi","dsh","minimal"]` 与三行矩阵 | 从文件系统**派生**（`TEST_KERNEL_IDS`/`ALL_KERNEL_IDS`）；矩阵改成 `ALL_KERNEL_IDS.map(gone => [gone, 其余])`，**内核越多用例越多**，比写死三行更强 |
+| `locale-kernel-identity.test.ts` | 同样写死清单 | 派生自插件 manifest 目录 |
+| `plugin-doc-coverage.test.ts` | 每个插件要有同名文档 | 补 `docs/plugins/kernels/probe4.md` |
+| 文档交叉引用门 12 处断链 | **blanket 改名把文档路径也改了**（`minimal-kernel.md` → 不存在的 `probe4-kernel.md`） | 指回 minimal 的那份（克隆体的设计依据本来就是它） |
+
+> **可复用的缺陷类**：*测试里写死"扩展点恰好有 N 个实例"*。它守的不是被测不变量
+> （存在性 / 卸载语义 / 语言包一一对应），而是"实例个数"——那是扩展点的**反面**。
+> 修法一律是**派生期望值**，而不是往清单里再加一个名字。
+
+⚠ 其中一处比"打红"更危险：`locale-kernel-identity` 的**跨内核提及检测循环**也在遍历那份写死清单
+（`for (const other of KERNEL_IDS)`）。这意味着**清单里没有的内核名，永远不会被当成"跨内核提及"**
+——新内核被别的内核语言包提到时，守卫会**静默放过**。写死清单不只是"加东西时会红"，
+它还会让守卫在别的方向上失效。查这类守卫时要问：**这份清单是"期望值"还是"检测范围"？**
+是检测范围的，写死就等于给自己挖盲区。
+
+**两条方法论：**
+
+1. **参数化剧本 > 复制剧本。** 要证明的命题是"第四内核与 minimal **同等地位、同等功能**"。
+   复制一份 probe4 剧本只能证明"probe4 也跑得通"；**同一个剧本、同一组 24 条判据、只换一个 id**
+   才证明两者走同一条路径、享受同一套契约。实测 `--kernel minimal` 与 `--kernel probe4` 双双 24/24。
+   参数化时踩到一个老坑的变体：页内闭包读不到 Node 侧变量，改成一次性
+   `page.evaluate((k) => { window.__K = k; }, K)` 注入，比逐个 evaluate 传 arg 更省也更不易漏。
+2. **被截断的工具输出会造出自信的错误判断。** 本轮我先断定"minimal 不 spawn 进程、是纯进程内的"，
+   依据是一次 `grep spawn | head -5` ——而 `head` 把真正的 `import { spawn }` 截掉了。
+   后来 clone 出的 probe4 在续跑那步失败，我才回头查到 `subprocess-lifecycle.ts` 确实 spawn 一个 CLI。
+   > 通则：**用 `head`/`tail` 截断过的 grep 结果不能支撑"不存在"这类全称结论**；
+   > 要下这种结论就用 `grep -c` 或不截断地看全。
+
+另外本轮又一次自伤：probe4 冒烟第一次失败是剧本里漏改的 `"[minimal echo] 第三条续跑"`
+（我的替换清单只列了两条 echo 文本，漏了第三条）——**先排除剧本自身的问题**（§17.9），
+确认不是产品缺陷后再改剧本。
+
+### 17.51 历史审计文档要**回写结论**；回写过程会挖出活缺陷（r49）
+
+`docs/add-new-kernel.md` 是一份"抽象体检"，正文列了五处「不合理/需要补」。
+它头部有诚实的历史声明（说清 `KERNEL_IDS` 已删、`KernelId` 不再是字面量联合），
+但**五条断言的现状从未回写**——于是每个读者都要自己去代码里对一遍。
+本轮逐条取证复核，结果是 4 条已修、1 条仍成立：
+
+| § | 断言 | 现状 | 取证方式 |
+|---|---|---|---|
+| 4.1 | `capabilities` 只有 pi/dsh 两个硬桶 | ✅ 已修 | `backend.ts:156` 现为 `BackendCapabilities`（十一轴 + `fileBacked`）；r47 普查死轴 0 |
+| 4.2 | `BackendCreateOptions` 三字段各服务一个内核 | ⚠️ **仍成立** | 逐字段 grep 消费点（见下） |
+| 4.3 | 内核身份在圆心外被复制字面量 | ✅ 已修 | `asPi`/`piSend`/`KERNEL_IDS`/`newPiSessionPath` **只出现在说明其退役的注释里** |
+| 4.4 | pi 特权残留在 application 层 | ✅ 已修 | 现为 `faceOf(proc, 轴, 标签)` / `viaFace(轴, …)` |
+| 4.5 | manifest 的 `piExtension`/`dshExtension` | ✅ 已修 | 两个字段名只存在于解释性注释；实际是按内核 id 的映射 |
+
+⚠ 复核这类"某符号是否已退役"的断言时，**grep 命中不等于仍在用**：4.3/4.4/4.5 的符号
+都能 grep 到，但全在注释里（解释"为什么不再这么写"）。要区分**代码命中**与**注释命中**
+（先剥注释再判，与 r31 的 `stripComments` 同一手法），否则会把已修好的断言误判成仍成立。
+
+**§1.1 的判定被实验推翻，而推翻的理由值得写进文档。** 当时写「不要改成 `string`
+（那会丢掉编译期穷尽检查）」。r48 造 probe4 的实测给出了答案：圆心与壳机制层零改动即可接入。
+取舍的结论是：`string` + 运行时注册表换来"加内核不动圆心"，代价是失去穷尽检查——
+而这个代价在本仓**可接受**，因为内核身份早就不该出现在 `switch` 里
+（§6.3 检验⑤：机制层不许出现内核名字面量，已归零）；**既然没有穷尽分支，穷尽检查也就无从失去**。
+§1.1 当初的前提（存在大量 `switch(kernel)`）已经不成立了。
+> 通则：推翻一条旧建议时，要写清**它的哪个前提失效了**，而不是只写"现在不这样了"——
+> 否则下一个人无从判断这条建议在别的场景是否仍然适用。
+
+**回写过程挖出了一个活缺陷**（这才是本轮的主要产出）：
+`systemPromptPaths` / `systemPromptTexts` 由 application 层**中性地**注入给每个内核
+（`session-store.ts` 无内核分支），但**只有 pi 的 backend-factory 消费**；
+dsh / minimal / probe4 对 `systemPrompt*` **零匹配**。而 `systemPromptPaths` 的来源是
+`registry.systemPromptPaths()` = 壳插件贡献的 `systemPrompts` 槽，`goody-hao` 插件正在用它
+——于是该插件在 pi 下真注入、在另外三个内核下**静默不注入**，而它的 manifest 描述
+向用户承诺「随会话注入……卸载即停止注入」，还写死了 pi 的 CLI 旗标 `--append-system-prompt`。
+这是 §1.5 唯一禁止的状态「**静默缺面**」（既不翻译、也不补面、也不降级）。
+
+**处置分两层，且刻意不越界：**
+
+1. **立即修掉"说谎的部分"**（有据、无争议）：manifest + 四语言描述改为
+   「由壳在内核支持『追加系统 prompt』时注入」；圆心 `roleToPrompt` 的注释去掉 pi 的 CLI 旗标
+   （圆心出现某内核专属机制 = §7.1 铁律一违规）。
+2. **根因不顺手修**，因为它需要一个设计决定：正确修法是加一轴能力（如 `systemPrompt`）
+   再在 renderer 明示降级，但**轴必须有生产消费者**，否则就是 r46/r47 刚清掉的"死轴"
+   （`capability-axis-consumers` 的普查语料**排除测试文件**，只被测试读的轴同样算死轴）；
+   而消费者该落在哪一层还没定——插件管理页是**全局页**，用"当前会话的内核"去判一份
+   全局插件列表并不贴切；静态描述里列举内核名又违反内核中性。
+   > **宁可延后并写清设计依据，也不要为了"这轮有产出"而加一条没有消费者的轴。**
+
+**延后 ≠ 放着不管：加棘轮守卫**（`src/system-prompt-asymmetry.test.ts`，5 测）。
+根因未修时，守卫的职责是**让不对称无法静默变化**：支持面变宽（某内核补上了翻译）→ 红，
+并给出要同步更新的清单；变窄（连唯一支持者也没了）→ 红，因为那意味着整个 `systemPrompts`
+槽失效而插件仍在承诺；新增第五个内核 → 必须显式登记进 `SUPPORTING`/`IGNORING` 之一，
+不许默默漏。反向注入验过（让 dsh 也消费 → ① 立刻红）。
+
+⚠ **判据只扫各内核的 backend-factory（消费点），不扫 application 层（生产点）**：
+生产点对所有内核一视同仁，扫它只会得到"人人都有"的**假对称**，恰好掩盖缺陷。
+这条"扫消费侧不扫生产侧"的选择，是本守卫唯一容易写反的地方。
+
+### 17.52 把上一轮**刻意延后**的设计决定做完（r50）
+
+r49 查出 `systemPrompt*` 的契约不对称（application 层中性注入、只有一个内核消费、
+其余静默忽略），当轮只修了"说谎的文案"并加了棘轮守卫，**根因刻意没修**——因为正确修法
+需要一条能力轴，而轴必须有**生产消费者**，否则就是 r46/r47 刚清掉的死轴；消费者落在哪一层
+当时还没想清。本轮把它做完，过程里四条经验：
+
+**① 走既有通路，别自己新开一条。** 我先写了 `ctx.sessions.getCapabilities()`——tsc 立刻报
+`Property 'getCapabilities' does not exist on type 'SessionsApi'`。那是 `window.kernel.sessions`
+的形状；**插件侧的既定入口是 store**（timeline 就是 `useSessionStore(s => s.capabilities)`）。
+> 通则：要在插件里取某个运行时事实时，先看**同类插件怎么取的**。自己新开一条 API 通路
+> 即使能编译过，也会造出第二份获取路径（§1.3 契约单源的反面）。
+
+**② 三态，不是布尔。** 提示条件是 `caps.kernel != null ? caps.faces?.systemPrompt !== true : null`：
+`null` = 还不知道（没有会话 / 能力面尚未就绪）⇒ **不显示**。
+把"没取到"当成"不支持"会**误伤真正支持的内核**——用户会在 pi 下看到"此插件不生效"的假警告。
+这类"信息不足"的分支必须显式建模，不能靠 falsy 兜底。
+
+**③ 守卫的判据又一次漏了表达形态。** `rendererConsumers` 只认 `faces.x` 与 `faces["x"]`，
+不认**可选链** `faces?.x`，于是我按 ③ 写的合法消费者被判成"空头声明"。与 r47 的
+`viaFace("轴")` 完全同一类错误。修法是补形态 + **三形态自检**（点 / 下标 / 可选链，
+且钉在真实轴名上——用合成轴名测不出正则里 `${axis}` 插值那段写没写对）。
+
+**④ 自检的反向用例会替你收紧判据。** 我给三形态自检写了反向用例，其中 `myfaces?.retry`
+当场暴露正则**缺左边界**（同后缀标识符会被误判成消费点）。此时正确动作是**收紧判据**
+（加 `(?<![\w$])`）而不是删掉那条用例——判据过宽 ⇒ "有消费者"更容易恒真 ⇒ 守卫变松。
+> 只有正向用例的自检，抓不到"判据过宽"这半边。两边都要写。
+
+**归类为 renderer 门控而不是服务端强制，理由要写进清单**：注入发生在 **spawn 期**、
+且**没有任何用户可见的反馈**，所以"服务端不产数据"在这里等于**什么都不发生**
+——那正是本轴要消灭的静默缺面本身。必须由 renderer 主动说出来。
+（`capability-axis-consumers` 的守卫要求每条声明写清"缺面时用户看到什么"，
+这条恰好是"用户什么也看不到"，所以只能走 renderer。）
+
+**验证放哪儿：不要调一次性探针，把断言放进前置条件已具备的常驻剧本。**
+我先写了个独立探针去驱动模型下拉选 minimal，反复失败（`evaluate(() => el.click())`
+对 Radix 菜单无效——合成 click 不带指针序列）；而 `minimal-smoke` **已经**能稳定建起
+minimal 会话。把断言加进去后一次通过，而且从此常驻（28 项，minimal 与 probe4 双双通过）。
+实测输出：`提示条数=1 文案="当前内核不承接追加系统 prompt，此插件贡献的 systemPrompts 暂不生效"`，
+且反空转断言先确认了 `GoodyHao 在场=true`（否则"有提示"可能只是页面恰好别的插件触发）。
+
+顺带：`e2e-anchor-coverage` 守卫抓到我在选择器里**凭空发明**的 `data-plugin-id`
+（源码里不存在）——它把 e2e 用到的每个 `data-*` 与源码对账，这条防线本轮真的拦下一次。
+
+### 17.53 疑似缺陷要先验**交互模型**；回归锚要按缺陷的真实形态写（r51）
+
+**① 挂了五轮的"疑似 a11y 缺陷"其实是对的。** 待办里长期记着"右面板堆叠 TAB 的当前项
+（缺 `aria-selected`/`aria-current`）"。真去读代码才发现那个按钮有
+`title` + `aria-label` + **`aria-pressed={isActive}`** ——它用的是 **toggle button** 语义，
+不是 tab。而且这**更正确**：那些图标是开关（`toggleSidePanelTab`），堆叠布局下可以
+**同时多个激活**，实测点开第二个后 `["收藏","Review"]` 两个同时 `pressed=true`；
+而 `role=tab` + `aria-selected` 隐含**单选**（tablist 语义），套上去反而是错的。
+
+> 通则：判"某个控件缺 ARIA"之前，先确定它的**交互模型**——单选（tab/radio）、
+> 多选开关（`aria-pressed`）、还是展开 disclosure（`aria-expanded`）。
+> 三者用的属性互不通用，套错比不套更糟（会给读屏用户错误的心智模型）。
+> 而"能不能同时激活多个"这种事实**要点一下才知道**，读代码只能猜。
+
+**② 回归锚必须按缺陷的真实形态写，否则会钉出一条恒绿的假锚。**
+r51 修掉了 `tool-cards.tsx` 里给用户看的硬编码英文 `truncated`。我顺手把它加进
+r42 那条英文守卫的回归锚清单——而那份清单的探针查的是**带引号的字面量**
+（`src.includes('"' + needle + '"')`）。可原缺陷是 **JSX 文本节点**（`>truncated<`，不带引号），
+所以那条锚**回潮了也照样绿**。是自己复核探针形态时发现的。修法：单立一条判据用
+`/>\s*truncated\s*</` 匹配真实形态，并配**双向自检**（认得出缺陷形态、且不会把已修好的
+`{t("timeline.outputTruncated")}` 误判成缺陷）。
+
+> 通则：写完回归锚，**问一句"如果缺陷原样回来，这条会红吗"**。
+> 锚的判据形态与缺陷的实际形态不一致，是假守卫最常见的成因之一
+> （另一常见成因是 r45 那次：反空转探针的取样面漏了 `input.value`）。
+
+**③ 单词级英文字面量是 r42 判据的已知盲区，只能靠人工看 DOM。**
+`truncated` 能存在这么久，是因为 r42 的英文判据**刻意**要求"2 个以上英文单词"
+（否则专名、CSS 值、类名会产出大片假阳性）。所以 `>truncated<`、`>error<`、`>running<`
+这类**一个词的界面提示**扫不出来。本轮是逐个组件看 JSX 文本节点才发现的。
+> 收紧判据换取低假阳性，代价就是留出盲区——**盲区要写进守卫的注释里**（r42 已写），
+> 这样下一轮知道该用人工审而不是再调判据。
+
+### 17.54 重复实现会**各自漂移**；共享文案要住在始终装载的插件里（r52）
+
+**① 修一处漏一处，而漏掉的那处不会报错。** r41 给 message-blocks 的 `CardHeader`
+补齐了 `aria-expanded`、把硬编码英文 `running`/`error` 收进 i18n、把纯图标的成功/失败
+改成 sr-only 文本。r52 扫到 goal 插件的 `GoalCard` ——它与 `CardHeader` 是
+**两份近乎相同的可折叠头实现**（图标 + 摘要 + 状态 + chevron + 可折叠正文），
+而**三个缺陷一个不少地都还在**：`running` 硬编码英文、`<Check/>`/`<X/>` 纯图标无可访问名、
+没有 `aria-expanded`（`role`/`tabIndex`/`onKeyDown` 倒是有——三件套缺了第三件）。
+
+> 这是 §3.5「重复实现」的代价被具体化的样子：不是"多写一遍"这么抽象，
+> 而是**修一处漏一处，且漏掉的那处不会报错、不会红、不会被任何人提起**。
+> 所以每次修一个组件级缺陷，要顺手问一句：**还有谁长得像它？**
+> 本轮的查法是全仓扫 JSX 文本节点（见 ③），而不是靠记忆。
+>
+> 收敛成一份是更好的修法，但那是带视觉风险的跨插件重构（两者的图标与状态语义并不完全相同），
+> 本轮选择先补齐语义 + 立守卫 + 把"两份实现"记入待办——**不为了消除重复而顺手改视觉**。
+
+**② 共享文案要住在"始终装载"的插件里。** r41 我把三个状态词加在了 message-blocks 的
+`timeline.json`。当 goal 插件也要用同一组词时，就出现了选择：跨插件引用另一个**业务**插件的
+语言包 —— 那是**脆的**（用户禁用 message-blocks，goal 卡的状态词就丢，`t()` 回落到裸 key）。
+正确做法是挪到 `shell.*`（由 `system/i18n` 插件贡献，属核心、始终装载），
+并**删掉原来那一份**（§1.3 契约单源：两份定义必然漂移）。
+
+⚠ 挪键之后有个隐蔽的假绿：**测试字典若只读自己插件的 locale，`DICT[k] ?? k` 会回落到 key**，
+于是断言变成"key === key"——**界面显示裸 key 时测试照样绿**。修法是让测试字典
+**像真实 i18n 那样合并多个来源**，并单立一条断言"这个键必须真在合并后的字典里、且不等于 key 本身"。
+
+**③ 单词级英文界面提示的扫法（r42 判据的已知盲区）。** r42 的英文判据刻意要求
+"2 个以上英文单词"（否则专名/CSS 值/类名会产出大片假阳性），所以 `>running<`、`>truncated<`
+这类**一个词的提示**扫不出来。本轮的扫法与收敛过程值得复用：
+
+- 判据：JSX 文本节点（`>([^<>{}]{1,60})<`）里出现**单个纯英文单词**；
+- 首扫 27 处，其中 **24 处是 TypeScript 泛型假阳性**（`Promise<void>` 的尖括号被当成 JSX）——
+  加一条**行级**跳过（行里出现 `=>`/`:`/`type`/`interface` 且带 `标识符<` 的，整行不算）后收敛到 **3 处**；
+- 3 处里 2 处**合法**：`model`（payload 视图里的 schema 字段名，按 r44 记录的策略照原样显示）、
+  `core`（在 `<code>` 里，是代码样例）；1 处是真缺陷（`GoalCard` 的 `running`）。
+
+> 通则：这类"判据刻意留盲区"的扫描，**产出要连假阳性的收敛过程一起记**——
+> 下一个人重扫时会得到同样的 27 处，若不知道那 24 处是泛型，就会以为守卫失效或重新调判据。
+
+本轮顺带发现 `GoalCard` **根本没有测试文件**（goal 插件有 90 条测试，无一条覆盖它），
+已补 `goal-card.test.tsx`（3 条：折叠三件套齐全且 `aria-expanded` 随 Enter/Space 翻转、
+运行中显示译文而非硬编码英文、成功/失败由 sr-only 文本承担且图标 `aria-hidden`）。
+
+### 17.55 守卫的**机制性**盲区：判据在检测前就把证据抹掉了（r53）
+
+r52 修 `GoalCard` 时发现它有硬编码中文 `"目标达成"`。奇怪的是：中文守卫（r21 建，
+三个探测器）本该抓到它。读判据才看清机制：
+
+| 探测器 | 覆盖 | 为什么漏 |
+|---|---|---|
+| `ATTR` | `title`/`aria-label`/`aria-description`/`placeholder`/`alt` 五个属性（含三元形态） | 只认这五个属性名 |
+| `JSX_TEXT` | `>…中文…<` 裸文本节点 | `"目标达成"` 在 JS 三元里，不是文本节点 |
+| `bare` | 走 `jsxTextOf(line)` | ⚠ **那个函数会先把所有 `{…}` 块与所有字符串字面量剥掉再判** |
+
+第三条是关键：`jsxTextOf` 是**为了"只看裸文本"而设计**的，它 `.replace(/\{[^{}]*\}/g, "{}")`
+再把引号内容清空——于是中文在判定之前就被抹掉了。这不是"判据写得松"，
+而是**判据的预处理步骤主动销毁了要检测的证据**。这类盲区靠读判据的**实现**才看得见，
+光看它声称覆盖什么（"用户可见位置不得硬编码中文"）完全看不出来。
+
+漏网的形态（实测 **37 处**真债务）都是用户可见的：
+`flash("已导出表情包 zip")`（toast）、`activateDisabledReason={streaming ? "等待当前回复完成" : …}`
+（传给组件去显示的 prop）、`{copied ? "已复制" : "复制"}`（在 JSX 里但**在花括号内**，
+所以 `JSX_TEXT` 也匹配不到）、`notify.show({ body: \`续跑发送失败…\` })`（系统通知正文）、
+`label: "打开设置"`（键位绑定的显示名）。
+
+**⚠ 先收敛判据，再钉棘轮上限。** 首版粗判据数出 56 处，其中混着假阳性；
+若直接把上限钉在 56，将来"债务减少"就分不清是真修了还是判据漂了。收敛过程：
+
+- 56 → **40**：① `login-gate.ts` 文件级豁免（React/i18n 之前的登录闸，与 r42 的显示汇点守卫
+  共用同一份理由）；② **上下文回看 3 行**——`throw new Error(\n "消息"\n)` 是跨行写的，
+  只看当前行会把开发者可见的错误消息误算成用户文案债务（实测 `plugins-host.ts:9-11`）。
+- 40 → **37**：③ 用 `new Error\(` 而不是 `throw new Error\(`（错误对象也常被**构造后交给别处**，
+  如 `reject(new Error("保存超时…"))`）；④ 加 `warnOnce\(`（r42 已定性为**开发者可见**的
+  不变量违规，只进 console，翻译它反而有害）。
+
+判据每收紧一次，**自检的反向用例要跟着补**（否则收紧本身没人守）：
+`reject(new Error("…"))` 与 `warnOnce("…")` 两种形态都已钉进"不该算债务"那一侧。
+
+**债务棘轮要配一条具体锚点。** 只有"总数 ≤ 37"的话，回潮时你不知道是哪一处；
+所以另加一条 `② r53 修掉的那处不得回潮（goal-card 的「目标达成」）`。
+反向注入（把它改回硬编码中文）时**两条同时红**：棘轮报 `38 > 37`，锚点报具体文件与修法。
+这正是想要的分工——棘轮管"总量不许涨"，锚点管"已修的不许退回"。
+
+> 与 r31–r33 清架构债（4 → 3 → 2 → 1 → 0）同一手法：**上限只能降不能升**，
+> 每修一处就调低一格，上限本身就成了进度条。
+
+⚠ 工具纪律（本轮第 **4** 次踩）：Python 改文件的脚本里 `sub()` 打印了 ✓ 但**忘了 `write()`**，
+两处改动全丢在内存里，而 tsc/测试照旧报错让我以为判据没生效。
+> 脚本自己打印的 ✓ 不算证据。改完必须**重新读文件**或直接看 tsc/测试的变化。
+
+本轮未做（已记入待办）：37 处债务的实际清理（每处要补 4 个语言的键），
+以及 r52 记下的 `GoalCard` 与 `CardHeader` 收敛——后者本轮原计划做，
+但扫出守卫盲区后优先级改了：**守卫的盲区会让后续所有同类修复漏掉一半**，先补判据更值。
+
+### 17.56 清债务时的四个坑：取清单、判据精度、既有键、测试替身（r54）
+
+按 r53 的棘轮开始清 37 处中文债务（实清 8 处，上限 37 → **29**）。过程里四个坑都值得记：
+
+**① 别在一次性脚本里重新实现守卫的逻辑——去问守卫本身。**
+我先写了个 Python 复扫想拿到清单，得到 **239** 处，而守卫说 37。差 6 倍的原因是
+我的脚本**没有剥 `//` 行注释**（守卫用 `stripComments`），于是注释里被引号夹住的中文
+全被当成了字面量。做法改成：临时给守卫加一个 `it("DUMP", …)` 把命中逐条打印，
+跑一次拿到权威清单，然后还原守卫。
+> 通则：**清单要从判据本身取**。自己重写一遍判据必然发散（剥注释、上下文回看、
+> 豁免清单……每一处细节都会漂），而发散的结果会让你要么白修一堆假阳性、
+> 要么以为债务比实际多得多。
+
+**② 判据用 `exec` 只取每行第一个匹配 ⇒ 债务数低报，而低报的棘轮更危险。**
+`flash(path ? "已导出表情包 zip" : "已取消")` 一行有两个中文字面量，首版只算 1 处。
+改成 `matchAll` 后基线从 37 变 36（同时我修掉了 5 处，所以净变化看不出来——
+这正是低报的害处：**修掉一处后总数可能不变**，看起来"没进度"；
+反过来新增一处也可能被同行的既有命中掩盖）。
+> 棘轮类判据要先确认**计数单位**与直觉一致（"处"是字面量数还是行数？），
+> 否则进度条本身就是错的。
+
+**③ 先查有没有现成的键，再决定要不要新造。**
+stickers 那批 6 处里，**5 处的译文四个语言早就齐了**：`stickers.openFolderFirst`（先打开文件夹）、
+`waitForReply`（等待当前回复完成）、`moveToGlobal`（设为全局）、`moveToProject`（移到项目）、
+`cancel`（取消）——代码却写死中文。这是 r28/r30 那个「**死键 + 硬编码副本**」模式的又一实例，
+而且修法几乎零成本（改用既有键即可），只有 3 个键需要新造。
+> 通则：清 i18n 债务时，**第一步是在该插件的 locale 文件里搜现成键**（按值搜，不是按键名搜）。
+> 直接新造键会造出第二份译文，两份必然漂移（§1.3）。
+
+**④ 文案一走 i18n，测试替身的形状问题就暴露了。**
+`goal-controller.test.tsx` 原本**没有** mock `react-i18next`，于是 `t(k)` 返回 `k` 本身。
+在文案全是硬编码中文时这件事看不出来；把通知正文改走 `t()` 之后，
+断言"正文含 `/goal`"拿到的是 `goal.usage`，立刻红。
+修法是给测试**真字典**（读插件自己的 `locales/zh-CN/goal.json`），
+**不是**把断言软化成"含 goal.usage"。
+> 这与 r37 那次（给发布面加导出后 mock 里没有 `Announce`）同型：
+> **测试替身与真实形状的差别，只在被测代码开始真正依赖它时才暴露。**
+
+另外两条实现细节：
+- **模块级常量拿不到 hook**：`GOAL_USAGE` 是 `export const`，改法是删掉它、
+  在使用点 `t("goal.usage")`（本文件只有两处用，都在 hook 内部）。
+- **跨插件键依赖又差点犯一次**：给 timeline 的 `pending-bars` 加兜底名时我先用了
+  `stickers.stickerFallback`——那是依赖另一个**业务**插件的语言包（用户禁用 stickers 就丢文案）。
+  已按 r52 定的原则搬到 `shell.*`（始终装载），并把理由写进注释。
+
+**本轮未做（记入待办）**：剩下 29 处里最大的一块是 `ChannelMeta` 的 `label`/`description`
+（timeline 12 + goal 3 + key-hints 2 + app-main 4 ≈ 21 处，全是命令/键位绑定的显示名与说明）。
+正确修法是照本仓既有的 **`labelKey` 形态**（`ThemeContribution` / `FontPresetContribution` /
+enum options 都这么做）把契约从 `label` 改成 `labelKey`，由消费方 `t()` 解析——
+但那是**契约变更 + 38 个条目 × 4 语言**的量级，一轮做完风险太高，所以留作专轮。
+
+### 17.57 债务的批准书往往写在**契约注释**里（r55）
+
+r54 结束时剩 29 处中文债务，其中 **20 处**是同一个来源：`ChannelMeta` 的 `label`/`description`
+（8 个通道 × 2 + 壳的 2 个导航通道 × 2，显示在键位绑定页）。读契约才发现根因不在调用点：
+
+```ts
+/** 人类可读的短名(列表展示)。文案归插件自持有,直接写文本或走 i18n 均可。 */
+label?: string;
+```
+
+**那句"均可"就是债务的批准书。** 8 个通道无一例外都选了"直接写文本"——不是因为疏忽，
+而是因为契约明确允许。所以只改调用点是打地鼠：下一个新通道照样会写中文，而且它合规。
+
+修法是改契约：`label` → `labelKey`、`description` → `descriptionKey`（与本仓既有的
+`ThemeContribution.labelKey` / `FontPresetContribution.labelKey` 同形态），
+注释里写清"文案字段是 **i18n 键**，不是文本"，并记下那句"均可"造成过什么。
+改名的两个直接收益：
+
+1. **"直接写文本"在字段名上就说不通**（消费方一律 `t(key)`），新人不会误用；
+2. **改完 tsc 立刻在 5 个文件报 12 个错**——消费方一个都漏不掉。
+   若只是加一个可选的 `labelKey` 而保留 `label`，就会长期两套并存（§1.3 两份定义必漂移）。
+
+**改成键之后出现一个新的失败模式，必须配守卫**：键写错或某语言漏译 ⇒ 界面显示裸键
+（`timeline.channel.scrollTo.label`），而 **tsc 不会报错**（键是字符串）。
+所以补 `src/channel-meta-i18n.test.ts`（4 测）：① 每个声明的键在**四个语言**里都存在；
+② 译文非空且不等于键名本身（挡"占位式假翻译"）；③ 语言包里的通道键不能是**死键**
+（声明侧删了而译文还在 = 漂移）。反向注入已验（删掉 de 的一条 → ①③ 同时红，
+报错精确到"缺哪个键、哪个语言、声明在哪个文件哪一行"）。
+
+**三个容易漏的语义细节**（都不是编译错，只能靠想清楚）：
+
+- **回退要用 channel 名，不能用键名**：缺译文时 `chanLabel()` 回退到 `c.channel`
+  （如 `timeline:scrollTo`）——键名对用户毫无意义，而 channel 名至少是他能在别处认出来的标识。
+  契约原有语义是"增强而非门槛"（不声明文案就回退显示 channel 名），改键之后要保住这条。
+- **搜索要匹配解析后的译文，不是键**：键位绑定页有过滤框，原先按 `meta.label` 文本匹配；
+  改键之后若直接拿 `labelKey` 去匹配，用户搜"聚焦"就什么都搜不到（他看到的是译文）。
+- **`payloadExample` 与 `scope` 不动**：它们是数据不是文案（payload 形状在各语言里必须
+  逐字一致，翻译它就坏了）。写译文时 description 里的 `payload: { position: "top" | "bottom" }`
+  也保持代码原样，只译说明部分。
+
+**验证要能区分"翻译对了"与"页面是空的"**：en 语言下实测
+`中文字符=0、裸键=0`，但这两个数字**单独看没有意义**（空页面同样满足）。
+所以另加**点名查**：6 条已知英文译文（Focus composer / Cycle model / Scroll timeline /
+Open settings / Back to chat / Toggle key-hint mode）必须真的出现在页面上，
+且页面上能数出 10 个 channel 名。zh-CN 侧对照：`中文字符=165、裸键=0`。
+
+**债务上限 29 → 9**，并把剩下 9 处的**性质**写进守卫注释（它们不是同类，不能顺手清）：
+4× `session-store.ts` + 1× `continue/renderer` 是**送进模型的正文**（工具限制前缀、续跑提示），
+本地化会改变**模型行为**而不只是显示 ⇒ 需先定设计；2× `ws-transport.ts` 是壳侧传输错误，
+可用 `i18next` 单例（同 r42 的 build-kernel）；其余 2 处待逐个核。
+
+> 通则：清一批债务之后，**剩下的要按性质重新分组**，不要继续用同一个上限数字笼统管着。
+> "送进模型的文本"和"给用户看的文案"是两类东西，混在一个棘轮里会导致
+> 要么为了降数字去改模型行为，要么因为不敢改而让整个棘轮停摆。
+
+### 17.58 债务归零：最后 9 处要**按性质分别处置**，一种办法处理必错（r56）
+
+r55 结束时剩 9 处，我在守卫注释里写了"性质不同、不能顺手清"。本轮把它做完，
+结论是这 9 处分成**三类**，每类的正确动作都不一样：
+
+**① 修掉 4 处**（真该本地化）：
+- `ws-transport` 的 2 条传输错误：经 `failAll` → reject 原因 → **浮到 UI**，
+  用 `i18next` 单例（非组件的壳代码，同 r42 的 `build-kernel`）；
+- `continue` 的续跑文案：它是经 `messaging.prompt()` **发出去的用户消息**，
+  会原样出现在时间线的用户气泡里 ⇒ 属"用户说的话"，英文界面里冒出一句中文是错的；
+- `goal` 的斜杠命令说明：契约字段 `ComposerCommand.description` → **`descriptionKey`**
+  （与 r55 的 `ChannelMeta.labelKey` 同批同理）。
+
+**② 豁免 4 处**（本地化会造成**真实回归**）：`session-store` 的工具白名单注入。
+判据不是"我觉得不该译"，而是源码注释里已有的定性 + 一条更硬的技术理由：
+
+```ts
+// 注入文本是发往内核的协议指令(渲染层经 stripToolLimitNote 剥除,用户气泡不可见),
+// 非 UI 文案——演进:内核提供工具白名单 RPC 后整体移除(勿 i18n,勿当界面文案改)。
+const TOOL_LIMIT_PREFIX = "[System] 本次会话已限制可用工具。";
+export function stripToolLimitNote(text: string): string {
+  if (!text.startsWith(TOOL_LIMIT_PREFIX)) return text;   // ← 字面比对
+```
+
+⚠ **`startsWith` 那行是关键**：前缀一旦被本地化，**此前已发送并落盘的消息**（带旧语言前缀）
+就不再被剥除 ⇒ 老会话的用户气泡里会突然露出协议原文。所以本地化它不是"改文案"，是**制造回归**。
+
+> 可复用的判据：**这段文本会不会作为「用户可见的消息内容」出现？**
+> 会（`CONTINUE_PROMPT`）→ 本地化，那是用户说的话；
+> 不会（协议注入 + 渲染层剥除）→ 豁免，且理由要写进代码注释**和**守卫的豁免清单。
+> 这个判据比"是不是中文"有用得多——它同时解释了为什么同一批债务要分成两类处置。
+
+**③ 豁免 1 处**（本地化会**降低**可用性）：`stt-engine` 的 `label: "中文"`。
+那是转写语言选择器，与它并列的是 `"English"` / `"Deutsch"` ——**endonym 惯例**：
+各语言用自己的文字书写自身，让用户无论界面是什么语言都能找到自己的语言。
+把"中文"在中文界面译成"Chinese"、在德语界面译成"Chinesisch"，用户反而要再做一次翻译。
+
+**处置完之后上限归零，判据的性质就变了**：从"棘轮"（只许减少）变成**硬门禁**
+（任何新增的 JS 表达式硬编码中文当场红）。要新增合法形态时走 `CJK_EXPR_EXEMPT`
+（逐条写理由 + 腐烂检查盯着），**不要调高上限**——调高就是把新债合法化。
+
+**一个契约设计细节：来源不同就要两个字段，不能合成一个。**
+`CommandItem` 是内核 `RpcSlashCommand` 的中性投影，`source` 可以是
+`extension`/`prompt`/`skill`（文案来自**内核**，已经是文本，壳无权也不该替内核翻译）
+或 `plugin`（文案来自**壳插件**，必须是键）。若把两者合成一个 `description` 字段，
+就会逼其中一方撒谎：要么插件写死文本（债务），要么把内核文本当键去 `t()`
+（查不到 ⇒ 界面显示一整句英文/中文当键名）。所以 `description`（文本）与
+`descriptionKey`（键）**并存**，渲染时优先解析键。
+
+**验证要覆盖两条不同的显示路径**（它们由不同代码渲染，一条通不代表另一条通）：
+键位绑定页（`ChannelMeta`，r55）与斜杠弹窗（`ComposerCommand`，r56）。实测 en 下
+两者都 `中文字符=0、裸键=0`，且点名查到 `/goal` 的英文说明；zh-CN 下照常显示中文。
+
+⚠ 实现细节（踩了一次）：豁免清单里存的是**源码字面文本**，所以 `\n` 要写成
+TS 里的 `"\\n"`（两个字符：反斜杠 + n）。首版写成 `"\n"`（被 TS 解析成真换行），
+于是过滤与腐烂检查都匹配不上——报错信息是"豁免已失效"，看起来像源码变了，其实是转义反了。
+
+### 17.59 收敛重复实现时，全仓签名扫描会挖出**你不知道的第三份**（r57）
+
+r52 记下"`GoalCard` 与 `CardHeader` 是两份近乎相同的可折叠头，应收敛"。r57 做这件事时，
+先抽共享组件、再写**防再分叉守卫**（扫全仓找内联特征签名）——守卫第一次跑就查出
+**第三份逐字副本**：`ask-question-card.tsx`，而且它带着**同样的漂移**
+（没有 `aria-expanded`、成功/失败是纯 `<X/>`/`<Check/>` 无可访问名）。
+
+> 这印证了 r52 那条通则（"修一个组件级缺陷要问：还有谁长得像它？"），
+> 但把答案的来源从**记忆**换成了**签名扫描**。记忆里只有两份，仓库里其实有三份。
+
+**抽取边界：只抽"壳"，内容一律走插槽。** 两份（后来是三份）实现逐字相同的部分是
+容器样式（`borderLeft: 3px solid` + `color-mix(…surface 30%…)` + `padding: 5px 12px` +
+`flex items-center gap-2 …font-mono…rounded-md`）、交互语义（role/tabIndex/Enter·Space/
+`aria-expanded`）、以及「图标 → 摘要 → 状态 → 尾随 → chevron」的四段布局。
+差异全在**内容**上，所以组件只负责壳，内容经 `icon` / `summary` / `status` / `trailing` 传入。
+
+⚠ **刻意不加业务旗标**（`isToolCard` / `variant: "tool" | "goal" | "ask"`）——
+那会把三个调用方的差异重新焊回共享层，等于把"三份重复"换成"一个更难读的分叉组件"。
+唯一的布尔是 `livePulse`（流式呼吸条），它是**视觉机制**不是业务分支。
+
+**特征签名要够具体，否则误报。** 首版签名只写 `borderLeft: \`3px solid`，
+结果把 `goal-bar.tsx` 也报了出来——那是个状态条，同样用了这条样式，但**不是**可折叠头。
+收紧成"两个特征同时命中"（左边条 + 那句 `color-mix(in srgb, var(--color-surface) 30%` 背景）后
+只匹配这一族容器。
+> 与 r45 那次同型：判据太宽会产出假阳性，而假阳性多了守卫就会被人绕过。
+
+**测试替身要展开真实模块，不要手抄导出清单。** 收敛后 `ask-question-card.test.tsx` 的 3 条测试报
+`No "CollapsibleCardHeader" export is defined on the "@my-harness-desktop/react" mock`
+——与 r37 给发布面加 `Announce` 后 retry/continue 的 mock 报错**同型**。
+可持续的修法是 `vi.mock(…, async (importOriginal) => ({ ...await importOriginal(), usePluginContext: … }))`：
+先展开真实模块、再覆盖要打桩的成员。这样**发布面以后再加导出，所有 mock 都不会破**。
+（手抄清单的做法注定每加一个导出就要改 N 个测试文件。）
+
+**两处如实记录的取舍：**
+1. **小的视觉归一化**：`GoalCard` 与 ask 卡此前没有 `transition-colors`，运行态文案也没有
+   shimmer；收敛后三者一致。这与 r41 收敛 `DefaultCard` 时的左边条颜色归一同类——
+   是"三份实现该长一样"的修正，不是顺手改设计，已在注释里写明。
+2. **状态锚点统一**：`data-tool-status` / `data-goal-tool-status` → **`data-exec-status`**
+   （同一个概念一个名字）。改前确认过没有 e2e 依赖，只有两个单测引用，一并更新。
+
+⚠ 实现教训：我用"找起点/终点索引再切片"的方式替换 `CardHeader` 函数体，
+结果把夹在它与 `BashCard` 之间的 `interface BashArgs` / `interface BashResult` 一起删了
+（tsc 报 `Cannot find name 'BashArgs'` 才发现）。
+> **索引切片替换要确认边界之间没有别的声明**；用 `git diff` 复核删掉的行是最快的兜底。
+
+产出：`packages/react/src/widgets/collapsible-card-header.tsx`（`CollapsibleCardHeader` +
+`ExecutionStatus`）+ 9 条测试（折叠三件套全给/全撤、插槽顺序、三态译文与 sr-only、
+防再分叉三条）。反向注入已验（把 ask 卡换回内联容器 → ② 立刻红并点名文件）。
+全量 240 文件 / 2118 测试、5 项审计 0、e2e 全绿。
+
+### 17.60 「扫描返回 0」是危险信号，不是合格证（r59）
+
+r37 建立了瞬时提示的 live region 机制（常驻宿主 + `<Announce>` 原语），当时接了 5 处，
+但**没有做全仓普查**。r59 补普查，扫出还有 **3 处**漏网：
+`plugin-manager` 的 `feedback`（安装/启用/卸载结果）、`session-bookmarks/message-actions`
+的 `toast`（错误提示）、`stickers` 的 `transfer.msg`（导入导出结果，含失败原因）。
+共同后果：用户点了按钮、界面闪一下就没了，而读屏**一个字都没念**——
+从 AT 侧看这次操作"没有任何反应"。
+
+**但本轮真正的教训是普查判据自己坏了两次，而两次都表现为"扫出 0 个文件"：**
+
+| # | 坏在哪 | 症状 |
+|---|---|---|
+| ① | `setTimeout\([^)]*?set(\w+)\(null\)` —— `[^)]*` **跨不过箭头函数里的 `)`** | `setTimeout(() => setMsg(null), 3000)` 匹配不上 |
+| ② | 从 `setMsg` 提取出的名字是 `Msg`，而状态变量是 `msg`（**首字母大小写没换算**） | "是否被渲染成文本"那一步永远为假 |
+
+两次都返回 0，而 0 看起来像"仓库很干净"。**如果没有自检，我会带着一个坏判据宣布普查通过。**
+
+> 通则（本仓已踩三次的同一类）：**扫描类判据必须在已知正例上自检**。
+> r45 是"反空转探针自己给假结果"（`innerText` 不含 `input.value`）、
+> r47 是"判据漏一种消费形态就指认活代码为死代码"、本轮是"判据坏了返回 0"。
+> 三次的共同解法：把**已知正例清单**写进守卫，命中数不足就直接红。
+> 判据的"零违规"只有在"自检通过"的前提下才有意义。
+
+**判据的边界要如实写出来，不能假装全覆盖。** 单文件正则能覆盖
+"`setTimeout` 自动清空 + 同文件里渲染成文本"；覆盖不到的是**状态由自定义 hook 产出、
+经 `obj.prop` 在另一个组件渲染**（stickers 正是这样：`useStickerTransfer` 返回 `msg`，
+组件里写 `transfer.msg`）。这类走 `CROSS_FILE_LEDGER` 显式登记 + 腐烂检查兜住，
+并在守卫注释里写明"不假装能自动发现"。
+
+**修法本身沿用 r37 定的形态**：`<Announce message={…} variant={…}/>` 与原有视觉元素**并存**
+（只补"被读到"，不改位置与样式）；错误态用 `variant="error"`（⇒ `role=alert`，可打断）。
+其中 stickers 需要**先给状态加严重级**才能正确区分——原本 `flash(m: string)` 只有文本，
+无法判断该用 polite 还是 alert，于是把状态从 `string | null` 扩成
+`{ text: string; kind: "info" | "error" } | null`，`flash(m, kind = "info")`，
+两处失败调用（导出失败/导入失败）显式传 `"error"`。
+> 这是个可复用的判断：**播报强度是语义的一部分**，不是渲染细节。
+> 若瞬态状态里没有严重级，就先补上，别一律用 polite（错误被"礼貌地排队播报"等于听不到）。
+
+产出：`src/transient-message-live-region.test.ts`（5 测：已知正例自检 + ① 未接站点归零 +
+② 账本理由 + ③ 账本腐烂 + ④ 三处回归锚）。反向注入已验（移除 message-actions 的
+`<Announce>` → ①④ 同时红）。全量 241 文件 / 2123 测试、5 项审计 0、e2e 全绿。
+
+### 17.61 把"推断过的结论"升级为"取证过的结论"，顺手会挖出别的缺陷（r61）
+
+r37 当时判断"timeline 自己的 toast 与共享 `Toast` 部件不该收敛，因为位置语义不同"，
+并把它记成待办。这条判断在待办里挂了 20 多轮——因为它是**推断**，没人去比对过两份实现。
+r61 逐份读了两者的样式块：
+
+| | 共享 `Toast` 部件 | timeline 的 `toastStyle` |
+|---|---|---|
+| 定位 | `position: fixed`，顶部居中，从 `top:-60px` 滑入，`zIndex:200` | **文档流内**，`width:fit-content` + `margin:0 auto 8px`，锚在输入框上方 |
+| 宽度 | `maxWidth:480` + 单行省略 | 随内容 |
+| 边框 | 按 variant 着色 | 恒中性 `--color-border` |
+
+结论：**放置模型确实不同**（浮层 vs 就地提示），r37 的判断成立，这条待办可以关闭。
+> 通则：长期挂在待办里的"已判断但未做"项，要么去**取证**、要么删掉。
+> 推断被反复转述多轮之后，会被当成既有事实，从而挡住真正的检查——
+> 而取证的成本往往比想象低（这里就是读两个样式块）。
+
+**而比对过程挖出了一个更实的缺陷**：timeline 的 toast **完全没有严重级**。
+它有 15 个调用点，其中 **11 个是失败**（`modelApplyFailed` ×3 / `thinkingApplyFailed` /
+`rewindFailed` ×2 / `attachmentUnsupported` / `attachSkipped` / `openFolderFirst` /
+`sessionKernelNotLoaded` / `kernelRequired`），但一律：
+① 视觉上与告知**长得一样**（恒中性边框 + `--color-fg`）；
+② 读屏侧一律 `polite`（排队播报）。
+按 r59 自己定的原则——**播报强度属于语义，不是渲染细节**——失败被"礼貌地排队"等于听不到。
+
+修法：状态从 `{key,text}` 扩成 `{key,text,kind}`，`showToast(text, kind = "info")`，
+样式按 kind 着色（错误走 `--color-accent-error` 的边框与文字），
+`<Announce variant={kind}>` 让错误走 `role=alert`（可打断）；11 处失败调用点显式传 `"error"`，
+4 处告知类（`queue.enqueued` / `queue.mergedSent` / `queue.interruptedSent` / `toolsFilter*`）保持 info。
+
+**⚠ 缺省参数会把"漏分类"变成静默的。** `kind = "info"` 意味着将来新增一条失败路径时
+忘传 `"error"`——编译器不报错、界面不报错、测试不红，只是失败又一次"看不出来、听不到"。
+所以补了一条**分类守卫**（`src/transient-severity-classification.test.ts`，4 测），
+判据是**文案键的语义**而不是"所有 showToast 都要 error"：
+
+- `FAILURE_HINT = /(Failed|Unsupported|Skipped|Required|NotLoaded|Unavailable|Rejected|First$)/`
+  命中的键，调用时必须显式传 `"error"`；
+- **反向也要守**：已知的告知类键（`queue.enqueued` 等）**不得**被标 error——
+  否则它们会打断用户，且红色边框制造虚假紧迫感；
+- 自检钉住 `FAILURE_HINT` 两边：认得 7 个已知失败键、且不会把 5 个告知键误判成失败。
+
+反向注入已验（去掉 `rewindFailed` 两处的 `"error"` → ① 立刻报"2 处失败提示没标严重级"）。
+
+> 通则：**任何"缺省值是安全的那一侧"的参数，都需要一条守卫盯着显式标注**。
+> 因为缺省的意义就是"不写也能过"，而这里"不写"恰恰是缺陷。
+> 同类形态：r44 的 `developerRole` 设为**必填**（让漏声明编译期就红）是另一种解法——
+> 能改必填就改必填，改不了（会破坏既有调用方）才用守卫。
+
+### 17.62 做"声明 ↔ 实际"对账前，先确认被测对象**处于启用态**（r62）
+
+本轮目标是查一类还没系统查过的对应关系：manifest 声明的贡献，界面上是否真的能到达。
+第一跑就"查出"一个像是功能漂移的缺陷：`sub-agent` 声明了两个 sidePanel
+（`sub-agents-panel` / `sub-agent-dialog`），而右面板只有 11 个开关 ⇒ 用户永远打不开子 Agent 面板。
+
+**它是假缺陷。** 排查链走了四层才落地：
+
+| 层 | 查到什么 |
+|---|---|
+| 真机 dump 开关 | 13 声明 vs 11 渲染，差的正是 sub-agent 那两个 |
+| 壳 `slots.sidePanel()` | 返回里**没有** sub-agent 的项 ⇒ 不是右面板漏画 |
+| `plugins.list()` 的 `state` | 其它插件全 `active`，只有 sub-agent 是 **`inactive`** |
+| `lifecycle/index.ts` 的 `getPluginState` | `inactive` = 在 `disabledPlugins` 里 |
+| **`scripts/demo/lib/home.mjs:132`** | 隔离基线**自己**写了 `disabledPlugins: ["goody-hao", "sub-agent"]` |
+
+启用后重跑：**声明 13 = 渲染 13，两侧差集均为 0**；设置页同样 18 = 18。
+
+> 通则：做"声明 ↔ 实际"对账前，**先确认被测对象处于启用态**。
+> 测试基线为了别的用途（例如让某插件不干扰冒烟）而禁用插件是完全合理的，
+> 但复用那个基线做可达性对账，就会把**基线的选择**误读成**产品的缺陷**。
+> 所以剧本里要有一条**前置断言**：`所有插件都处于 active`——它不通过时，
+> 后面的"不可达"结论一律无效。这条断言现在常驻在剧本里。
+
+**本轮我自己还错了两次，都值得记：**
+
+1. **被截断的工具输出造出一个自信的错误结论。** 我看到 `ls sub-agent/ sub-agent/renderer/ | head -12`
+   只列出 3 个文件，就断定"manifest 声明的 `renderer/index.tsx` 根本不存在"。
+   实际是 `head` 把**两个目录的合并输出**截断了，`index.tsx`、`panel.tsx`、`settings.tsx`
+   等 12 个文件都在。与 r48 那次（`grep spawn | head -5` 让我断定"minimal 不 spawn"）
+   **完全同一类**：
+   > `head`/`tail` 截断过的输出**不能支撑"不存在"这种全称结论**。要下这种结论，
+   > 用 `ls | wc -l`、`grep -c`，或不截断地看全。
+2. **把一个字段读成了它不是的意思。** 我看到 `sub-agent-dialog` 有 `"revealOn": "subagent:dialog"`，
+   就判断它"有意隐藏，合法"。但 `bookmarks` 也有 `revealOn`（`bookmarks:addRequested`）
+   而它**有**开关 ⇒ `revealOn` 的语义是"事件触发时自动展开"，不是"隐藏"。
+   > 判一个字段语义时，找一个**反例**对照最快：同一字段在别处的行为若与你的解读矛盾，
+   > 你的解读就是错的。
+
+**顺带核实了一个"看着像缺陷其实合法"的形态**：22 处 manifest 里写死中文的展示字段
+（12 个 `settings.title` + 10 个 `sidePanel.label`）。它们是 r30/r35 确立的**派生键**形态的
+`defaultValue` 兜底（`t("sidePanel.<id>", { defaultValue: <manifest 字面量> })`），
+真译文来自插件语言包；而 `contribution-label-i18n.test.ts` **已经覆盖**这三个槽位
+（`settings[].title` / `tabs[].title` / `sidePanel[].label`）并核对四语言。
+所以不是缺陷——**先查有没有守卫覆盖，再决定要不要动手**（r51 的教训）。
+
+产出：`scripts/demo/contribution-reachability.e2e.mjs`（8 项断言）——解除基线禁用 →
+前置断言"全部插件 active" → sidePanel 与 settings 两个槽位各做**双向差集**
+（声明了没渲染 = 不可达；渲染了没声明 = 幽灵贡献）+ 页面零报错。实测 13/13 与 18/18 全对齐。
+
+### 17.63 静默失败模式值得**预防性**守卫；自检样本要挑最难的那条路径（r63）
+
+r62 那次误判（以为 `renderer/index.tsx` 不存在）反而指出了一个值得守的方向：
+壳解析贡献组件的方式是**按字符串查模块导出**——
+
+```ts
+const comp = asReactComponent(module[item.component]);
+if (comp) registry.set(item.component, comp);
+else console.warn(`[registerPluginComponents] 组件 ${item.component} 未在 module exports 中找到 …`);
+```
+
+manifest 里写错一个组件名（打字错、重命名组件时忘了改 manifest、或组件存在但**没从
+`renderer/index.tsx` 导出**），后果是：**只有一条 console.warn，那个槽位静默空白**。
+不抛错、不变红、正向剧本也撞不到（没人会去点一个不存在的面板）。
+
+实测：32 个声明的 component，错配 **0** 个 —— 当前没有缺陷。
+**但仍然值得立守卫**，判据是"失败模式是否静默"而不是"现在有没有缺陷"：
+
+> 通则：**静默失败模式（只 warn / 只回落 / 只留空）优先配预防性守卫**。
+> 会抛错的缺陷迟早被人撞上，静默的缺陷可以潜伏到用户报障才被发现——
+> 而那时现场早已丢失。r53 的债务棘轮、r57 的防再分叉、本条的组件名对账都是这一类。
+
+**这条守卫自己的判据坏了两次，都是被它的自检抓出来的：**
+
+1. **没有递归 re-export**。插件的 `renderer/index.tsx` 通常只是**汇出口**
+   （sub-agent 的就是 `export { SubAgentPanel } from "./panel"`），
+   只扫入口文件自身的 `export function` 会把绝大多数组件判成"缺失"。
+   修法：解析 `export { A } from "./x"` 与 `export * from "./x"` 并递归进被引用模块。
+2. **只认 `./` 前缀的说明符**。`system/i18n` 的 manifest 写的是 `"renderer/index.tsx"`
+   （没有 `./`），于是入口解析成 null、"导出 0 个名字"。
+
+⚠ **自检样本要挑最难的那条路径。** 第 1 个 bug 之所以被发现，是因为自检样本故意选了
+sub-agent 的 `index.tsx`——它**全是 re-export**。若当时随手挑一个直接写
+`export function` 的插件做样本，这个 bug 会一直藏着，而守卫看起来是绿的。
+> 写自检时问一句：**哪个真实文件会让这个判据最难通过？** 用它当样本。
+> 同类：r59 的已知正例清单要包含"状态由 hook 产出、跨文件渲染"那种最刁的形态。
+
+**顺带查出一处真的不一致（虽小）**：43 个 manifest 里只有 `system/i18n` 的 `renderer`
+字段缺 `./` 前缀。对**内置**插件是装饰性的（`plugins-host.ts` 的 glob 按路径约定找它们，
+不读这个字段），但 `manifest.renderer` 确实**有人读**——只对第三方插件
+（`loadThirdParty(p.id, p.path!, p.renderer!)`，与 `path` 拼 URL）。
+所以它是一颗"哪天这个插件被当第三方装载才会炸"的种子，已统一成 `./renderer/index.tsx`。
+> 查这类"字段写法不一致"时，别停在"看起来没人用"：要 grep 出**读取点**，
+> 看它在**哪条路径**上被读（内置 vs 第三方、dev vs packaged），再判断是不是隐患。
+
+产出：`src/manifest-component-exports.test.ts`（4 测：反空转 + re-export 自检 +
+① 组件名对账 + ② renderer 入口存在 + ③ 故意写错的名字必须被抓到）。
+反向注入已验（把 `SubAgentPanel` 改成 `SubAgentPanelX` → ① 报出精确现场：
+哪个 manifest、哪个槽位、该模块导出了几个名字、以及"静默空白"的后果）。
+
+### 17.64 先枚举契约，再拿守卫的覆盖面去对——以及对应关系的**两个方向**都要守（r64）
+
+**① 守卫的覆盖面要和契约对账，不能和"我记得有哪些"对账。**
+把契约里全部 **21 种贡献**的字段逐个提取出来后发现：带 `component` 字段的有 **14 种**，
+而 r63 那条守卫只查了 **5 种**（照抄 `registerPluginComponents` 里的槽位清单）。
+扩面之后声明数从 **32 → 64**（`blockRenderers` 一种就有 14 个，此前完全没查）。
+守卫一直是绿的，但它只守了三分之一的面——**r42 那类缺陷的又一次实例**
+（判据的覆盖面小于它声称的覆盖面）。
+
+扩面时还查出**静默是分档的**，而报错文案必须说对档位，否则会误导下一个人：
+
+| 槽位 | 解析入口 | 组件名对不上时 |
+|---|---|---|
+| settings / sidePanel / sidebar / mainView / titlebar | `registerPluginComponents` | `console.warn` 一句，槽位空白 |
+| messageRenderers | `registerPluginMessageRenderers` | 同上（另一处 warn） |
+| blockRenderers / codeBlockRenderers / messageActions / composer{Stats,Top,Actions,Attachments,Voice} | `getPluginComponent()` | **直接 `return undefined`，连 warn 都没有** |
+
+首版报错文案统一写"壳只 console.warn 一句"，对第三档是**错的**（它比 warn 更静默）。
+已按档位改写。
+> 通则：描述缺陷后果时，要按**真实代码路径**分档，不要用一个笼统说法盖住差异——
+> 下一个人是按这句话判断严重性的。
+
+另外补了一条**覆盖面自检**：断言 `SLOTS` 里必须含 `messageRenderers` / `blockRenderers` /
+`composerStats` / `messageActions`，并把反空转阈值按真实规模钉住（≥50 个声明、≥8 种槽位）。
+这样"某个槽位从清单里掉了"会立刻红，而不是让覆盖面悄悄缩回去。
+
+**② 对应关系的两个方向都要守，而历史缺陷往往在没人守的那一半。**
+`contribution-i18n.test.ts` 早就有一条「声明了 locale 文件 → 路径必须存在」（manifest 指向空气）。
+但**反方向**「磁盘上有 locale 文件 → 必须被 `contributes.languages` 登记」一直没有守卫——
+而那恰恰是 r29/r30 真出过事的一半：当时查出 **72 个**语言文件躺在 `locales/` 里没登记，
+于是**静默不加载**（文件在、内容对、键也齐，界面却永远显示 fallback 或裸键，且不报错）。
+根因是 `contributes.languages` 是**显式文件清单**而不是目录扫描 ⇒ "忘记登记"没有任何信号。
+
+§3.7 说「没有守卫的修复只是"这次对了"」——那 72 个修完之后**三十多轮都没有守卫**，
+本轮补上（实测 504 个文件 / 504 条登记 / 未登记 0；反向注入放一个 `orphan.json` 进去立刻红，
+报错精确到 `sessions/goal: locales/en/orphan.json 未登记进 contributes.languages`）。
+
+> 通则：做"A ↔ B 对应"类守卫时，**先问两个方向各有没有守**。
+> 单向守卫给人的安全感是假的：它证明"声明的都有效"，
+> 却对"有效的都没声明"（也就是**静默失效**的那一半）一无所知。
+
+**③ 先测量再决定要不要立守卫，并如实说明是预防还是纠错。**
+本轮两处测量都是干净的：505 条路径型声明（`systemPrompts.file` + `languages.resources`）
+指向不存在的文件 **0** 处；504 个 locale 文件未登记 **0** 个。
+所以这两条守卫是**预防性**的（当前无缺陷）。这与 r63 的组件名对账同理——
+判据是"失败模式是否静默"，不是"现在有没有缺陷"；但报告里必须写清是哪一种，
+否则会把"没查出问题"说成"修了问题"。
+
+产出：`manifest-component-exports.test.ts` 扩到 14 种槽位 / 64 个声明（+ 覆盖面自检），
+`contribution-i18n.test.ts` 加反方向守卫（5 测）。反向注入两条都验过。
+全量 243 文件 / 2132 测试、5 项审计 0、`contribution-reachability` 8/8。
+
+### 17.65 命名歧义会让**自动化审计本身**出错；先改名，守卫才立得起来（r65）
+
+本轮想给 manifest 里的 i18n 键引用做四语言存在性对账。第一次扫出"4 条缺失译文"
+（`subagent.parent_session` 缺 zh-CN/zh-TW/en/de）——**是假阳性**：那个字段
+（`sessionGroupings[].parentPathKey`）根本不是文案键，而是 `session.custom` 里的**数据字段名**
+（证据：消费方 `sessions-list/renderer/index.tsx` 写的是 `s.custom[g.parentPathKey]`，
+以及 `sub-agent/core/orchestrator.ts:15` 的注释「平铺 … 键(sessionGroupings 槽是平铺直接访问)」）。
+
+根因是**契约的命名歧义**：`*Key` 后缀在这份契约里有两种含义——
+
+| 含义 | 字段 |
+|---|---|
+| i18n 键 | `labelKey` / `titleKey` / `descKey` / `childLabelKey` / `readonlyMessageKey` |
+| **数据键** | `customKey`（`session.custom` 域字段）、`parentPathKey`（同） |
+
+这个歧义在**一轮里骗了我两次**（先 `customKey`、后 `parentPathKey`）。
+而它不只骗人：任何按字段名做的自动化审计/工具都会在这里产假阳性，
+假阳性多了，守卫就会被人加豁免绕过去——歧义于是长期留存。
+
+**所以先改名，守卫才立得起来**：`customKey` → `customField`、`parentPathKey` → `parentPathField`
+（契约 + 发布面类型 + `build-kernel` + 两个消费方 + manifest 共 12 处，tsc 全程兜底），
+规则变干净：**契约里 `*Key` 一律指 i18n 键，数据字段一律 `*Field`**。
+之后才写守卫 `src/manifest-i18n-keys.test.ts`（4 测）：
+① 契约的 `*Contribution` 接口里不得再出现语义不明的 `*Key`（**守规则本身**，
+防止有人新加一个数据字段又叫 `xxxKey`，把歧义带回来）；
+② 每个 `*Key` 引用在四语言里都存在；③ 嵌套形态自检。
+
+> 通则：**当一条守卫必须靠豁免清单才能通过时，先怀疑命名而不是先加豁免。**
+> 命名歧义的修复成本是一次机械重命名（编译器兜底），而歧义留存的成本是
+> 每一轮审计都要重新踩一次、且每次都可能踩出不同的假结论。
+
+**本轮 grep 的"找不到"错了三次**，都值得记（与 r48 / r62 同一类）：
+
+| # | 结论 | 实际 |
+|---|---|---|
+| ① | `customKey` 是 i18n 键 | 是 `session.custom` 的数据字段名 |
+| ② | `parentPathKey` 是 i18n 键 | 同上 |
+| ③ | `customKey='subagent'` **没有写入方** | 有：`spawn-subagent.ts:123` 的 `custom: { subagent: domain, … }` |
+
+第 ③ 次最能说明问题：我只 grep 了带引号的 `"subagent"`，而写入方用的是
+**不带引号的对象字面量键**。
+> 通则：下"不存在"结论前，先枚举这个东西**可能以哪些形态出现**
+> （带引号字符串 / 对象字面量键 / 模板串 / 计算属性 / 类型位置），
+> 每种形态都要搜一遍。只搜一种形态得到的"0 处"没有意义。
+
+**自检样本必须来自实测分布，不能凭想象写。** ③ 首版断言
+`contributes.settings[].titleKey` 与 `contributes.sidePanel[].labelKey` 两种形态存在——
+**两个都不存在**（那两个槽用的是 `title`/`label` 字面量 + 派生键，见 `contribution-label-i18n`）。
+实测真实分布是：`fontPresets[].labelKey` 18、`settingsGroups[].fields[].titleKey`/`descKey` 各 12、
+**三层嵌套**的 `settingsGroups[].fields[].options[].labelKey` 8、`settingsGroups[].titleKey` 5、
+`fileActions[].labelKey` 2、`sessionGroupings[].childLabelKey` 1、`composerPolicies[].readonlyMessageKey` 1
+（合计 59）。改用实测分布后，自检样本里特意保留了**三层嵌套**那条——按 r63 的教训，
+样本要挑判据最难通过的形态。自检当场红了，这正是它的作用。
+
+**还有一处判据边界要收窄**：① 首版扫整个 `contributions.ts`，把 `sessionKey`
+（运行时会话标识，属别的接口、不是 manifest 字段）报成"语义不明的 `*Key`"。
+已收窄到只扫 `*Contribution` 接口体内部。
+
+**守卫替我抓到了我自己的 sloppy 还原**：反向注入时我删掉了 de 包的 `review.fileAction`，
+还原时却把**英文值**追加到文件末尾（原值是 `"Datei-Blind-Review"`），
+`locale-de-coverage` 的棘轮立刻报"新增未翻译条目"。
+> 教训：**还原用 `git checkout -- <file>`，不要靠重新输入值**——
+> 手输的还原既可能值错、也可能位置错（键序变化会让 diff 噪声变大），
+> 而这类错误恰好会被别的守卫抓到，浪费一轮排查。
+
+**本轮的四个"已验证的否定结论"**（都写进报告，避免下一轮重复劳动）：
+59 个 `*Key` 引用四语言缺失 **0**；两个数据键都有写入方；505 条路径型声明指向不存在的文件 **0**；
+504 个 locale 文件未登记 **0**。
+
+### 17.66 manifest 是字符串世界、契约是类型世界，中间没有自动检查（r66）
+
+把 r63–r65 三条守卫放在一起看，它们守的其实是**同一条缝**：
+
+| 轮 | 缝的哪一半 | 写错的后果 |
+|---|---|---|
+| r63 | `component` 名 ↔ renderer 导出 | 槽位静默空白（`getPluginComponent` 连 warn 都没有） |
+| r64 | locale 文件 ↔ `contributes.languages` 登记 | 语言包静默不加载 |
+| r65 | `*Key` 字段 ↔ 四语言译文 | 界面显示裸键或回落 |
+| **r66** | **枚举字段的取值 ↔ 契约允许值**、**`icon` 名 ↔ 图标表** | **静默落到默认分支 / 回落 Puzzle 图标** |
+
+根因是一句话：**`plugin.json` 是 JSON，tsc 不检查它**。契约把字段定义成
+`saveMode?: "framework" | "manual"`、`when?: { target?: "file" | "dir" | "both" }`、
+`placement?: "left" | "right"`，但 manifest 里写成 `"Manual"`（大小写）、`"files"`（多个 s）、
+`"manual "`（多个空格）**都不会有任何编译期信号**，运行时表现为静默失效：
+`saveMode` 错 ⇒ 保存行为与预期不符；`when.target` 错 ⇒ 文件动作在错误的目标类型上出现/消失；
+`placement` 错 ⇒ 按钮跑到另一侧；`icon` 错 ⇒ 回落 Puzzle（这个至少**看得见**，其余三个都看不见）。
+
+**判据的一个关键选择：允许值从契约源码解析，不在守卫里另抄一份。**
+否则契约加了新取值而守卫不知道 ⇒ 合法写法被判违规（假阳性），或新取值没人校验（假阴性）——
+两种都是 §1.3 契约单源的反面。实测解析出 **8 个**枚举字段
+（`configMerge` / `saveMode` / `type` / `target` / `placement` / `category` / `generic` / `source`），
+其中 `type` / `category` / `source` 是我手工枚举时**漏掉的**——这就是"解析胜过硬编码"的直接证据。
+
+**图标名的合法集要按真实解析路径来定**，不能只看图标表：`PluginIcon` 的实现是
+
+```tsx
+if (window.kernel.kernelIds.includes(name)) return <KernelLogo kernel={name} … />;  // 内核 id → 内核自己的 logo
+const Icon = ICONS[name] ?? Puzzle;                                                  // 其余 → 图标表，未知回落 Puzzle
+```
+
+所以合法集 = `ICONS` 表的键 **∪ 内核插件的 id**（§6.1：logo 由内核自己声明、不进静态表，
+判据用运行时注册表清单而不是写死 `name === "pi"`）。首版只查 `ICONS`，
+于是把 `pi`/`dsh`/`minimal`/`probe4` 四个合法值报成"图标名解析不到"——
+**又一次假阳性**，而它恰好证明了内核 logo 那条路径是按注册表驱动的（加第四个内核不用改这里）。
+
+**解析器又被自检修了两次**（与 r63/r65 同一类）：
+① 首版正则锚在行首（`^\s*`），于是 `when?: { target?: … }` 这种**行内嵌套对象**里的 `target`
+整个漏掉；② 改了锚点仍不行，因为值后面的结束符是 `};` 而不是 `;`。
+两次都是 ③ 的自检（拿契约里**真实存在**的字段名当样本）当场抓出来的。
+> 自检样本要用"已知应该被解析到的真实字段"，而不是"我随手编一个字段名"——
+> 后者只能证明正则能匹配自己编的形态。
+
+反向注入两条判据都验过：`saveMode: "manual"` → `"Manual"` 报出
+`src/plugins/kernels/dsh/plugin.json .contributes.settings[0].tabs[1].saveMode = "Manual"（契约允许：framework | manual）`；
+`icon: "folder-open"` → `"folder-open-typo"` 同样精确报出。
+
+**本轮同时核实了两个"看着像缺陷其实合法"的形态**（都写了证据，不是推断）：
+① `revealOn` 的两个取值（`subagent:dialog` / `bookmarks:addRequested`）都在各自插件的
+`export const channels` 里真实声明；② `resolvePluginIcon` 对未知名返回 `null`
+（把回退决定权交给调用方），而 `PluginIcon` 自己回落 Puzzle——**两种行为不同是有意的**，
+源码注释里写着"消费方自己定回退，不吃 PluginIcon 的 Puzzle 兜底"。
+
+### 17.67 `git checkout --` 会抹掉**往轮的未提交工作**；"0 违规"必须报出比对基数（r67）
+
+本轮补上 manifest 对账的最后一半（**字段名**与 **theme token 名**），但过程里犯了两个
+方法论错误，都比被查的缺陷更值得记。
+
+**① 我用 `git checkout --` 还原文件，抹掉了早轮的合法工作。**
+r66 的反向注入把 `file-tree/plugin.json` 重排了格式（42 行 → 438 行），我想清掉这个噪声，
+就跑了 `git checkout -- <file>`。但**本仓是跨轮累积、不逐轮提交的**——HEAD 里根本没有
+r29/r30 给这个文件加的 4 条 `sidePanel` 语言登记。于是 checkout 把它们一起抹了，
+而 r64 那条"磁盘上的 locale 文件必须被登记"的反方向守卫**当场就红了**（这是它的价值）。
+
+修法：从**本轮注入前**的备份（`/tmp/ft2.bak`）里取出那 4 条，用**字符串插入**合回当前文件
+（不再 json round-trip），并验证与备份**语义完全一致**（`json.load(a) == json.load(b)` 为 True），
+最终 diff 是干净的 +20/-0。
+
+> 铁律：**撤销自己这一轮的手误，只能用本轮的备份或反向施加同一处编辑**；
+> 绝不能对"往轮改过的文件"用 `git checkout --`——在这个仓库里 HEAD 不是安全还原点。
+> 配套动作：动 JSON 前后都看一眼 `git diff --numstat`（行数暴涨 = 被重排了）。
+
+**② 改 manifest 用字符串替换，不用 json round-trip。** `json.dumps(…, indent=2)` 会
+重排整个文件（缩进、键序、数组展开方式全变），制造几百行噪声 diff，
+把真正的改动埋掉——上面那次重排就是这么来的。
+
+**③ 两次"0 违规"其实是空转，靠基数自检才发现。**
+token 名那条判据我写了两个版本的提取器，两版都返回 **0 个 token 路径**：
+第一版用"TS 对象字面量 → JSON"的粗转换（遇到 `color-mix(…)` 这类含逗号的值就崩）；
+第二版手写扫描器，但 `pos` 停在空白处导致键正则匹配失败。
+两次下游都得到"manifest 里 0 种未知 token"——**看起来是干净结论，实际是拿空集在比对**。
+发现方式是打印比对基数（`THEME_TOKEN_DEFAULTS` 应有 48 条路径）。
+
+> 通则：**任何"0 违规"的结论都必须同时报出比对基数**（扫了多少个字段/多少个 token/多少个文件）。
+> 基数为 0 或远小于预期时，"0 违规"是判据坏了，不是仓库干净。
+> 这条已写进守卫的反空转断言（`tokens.size >= 40`、`checked > 2000`、`total > 200`）。
+
+**判据本身的两个决定：**
+
+- **`themes[].tokens` 子树在字段名校验里整棵豁免**：它不是固定形状的 record，而是
+  **自由 token 字典**（键就是 token 路径本身，如 `"color.bg"`）。首版没豁免，
+  报出 307 处"未知字段名"（`bg`/`sm`/`fg`/`surface-fg`… 全是 token 路径的分段）——全假阳性。
+  它的合法性由**另一条判据**单独守（token 路径必须存在于 `THEME_TOKEN_DEFAULTS`）。
+  > 一个字段"名字不固定"不代表它没法校验，只是**校验维度不同**：
+  > 结构型字段查"名字在不在契约里"，字典型字段查"键在不在值域里"。
+- **字段名拼错比枚举值写错更隐蔽**：枚举值错还会落到默认分支（行为可观察），
+  字段名错等于**那个字段根本不存在**——壳读不到、也不报错，贡献项带着缺省形状渲染。
+
+实测（都是干净的否定结论，且基数非空）：契约字段名 211 个、manifest 里检查 2727 个
+（排除 tokens 子树）未知 **0**；`THEME_TOKEN_DEFAULTS` 48 条路径、manifest 声明 307 个 token、
+未知 **0**。守卫 `src/manifest-field-names.test.ts`（4 测），两条判据都反向注入验过
+（`"label"` → `"labell"` 报出 `sidePanel[0].labell`；`"color.bg"` → `"color.bgTypo"`
+报出 `color.bgTypo ← theme-chatgpt/plugin.json theme=chatgpt-dark`）。
+
+至此 r63–r67 把"manifest 是字符串世界、契约是类型世界"这条缝**四面都封上了**：
+组件名（r63）、locale 登记双向（r64）、i18n 键（r65）、枚举值与图标名（r66）、
+字段名与 token 名（r67）。
+
+### 17.68 「碰巧对」的决定也是缺陷：顺序裁决要变成被测试钉住的决定（r68）
+
+圆心的图标裁决语义是「同 key 后注册者胜出」（`buildFileIconIndex` 里
+`for (const c of contributions) … byExt.set(ext, c)`，迭代中后者覆盖前者）。
+这条语义本身没问题——它让高优先级 source 能覆盖内置。但它有个副作用：
+**同一个插件内部**两个条目争抢同一扩展名时，胜负完全由 **manifest 里的数组顺序**决定，
+而这个顺序从来没人显式决定过，也没有任何提示。
+
+实测的唯一一处就很典型：`.key` 同时被
+
+- `file-tree:slides`（Keynote 演示文稿：`ppt/pptx/**key**/odp`，图标 `file-pie-chart`）
+- `file-tree:key`（私钥与证书：`pem/**key**/crt/cer/p12/pfx`，图标 `file-key`）
+
+声明。两种含义在现实里都成立，当前胜出的是 `key`（私钥图标）——**因为它在数组里靠后**。
+
+对开发工具来说这个结果**恰好是对的**（工作区里的 `.key` 极大概率是私钥），
+但它是**偶然的**：把两个条目换个顺序，`.key` 就静默变成"演示文稿"图标——
+不报错、不变红、没有任何测试会发现。而这不是纯观感问题：
+**把私钥显示成幻灯片图标，会误导用户对敏感文件的处理判断。**
+
+> 通则：**"碰巧对"的决定也是缺陷**，因为没有任何东西阻止它翻掉。
+> 判据不是"现在的行为对不对"，而是"这个行为是**被决定的**还是**碰上的**"。
+> 凡是靠顺序/字典序/文件系统枚举序/对象键序决定的行为，都要问一句：
+> 换个顺序会怎样？谁会发现？——如果答案是"没人会发现"，就需要一条守卫。
+
+修法不是改裁决语义（它是对的），而是把偶然变成**被登记、被测试的决定**
+（`src/file-icon-collisions.test.ts`，5 测）：
+① 找出全部争抢；② 每处必须在 `RESOLVED` 里登记**期望胜出者 + 理由**
+（理由要写清冲突的两侧与选择依据，不是只写结论）；
+③ 按圆心语义算出**实际胜出者**，必须与登记一致 ⇒ 有人重排数组立刻红；
+④ **跨插件**的争抢不由本条断言胜负——那取决于运行时的 source 优先级
+（project > user > installed > builtin），静态算不准——但必须登记并写明
+"由 source 优先级决定"，避免它变成没人知道的暗坑。
+
+> ④ 是这条守卫里最值得抄的一点：**把"我能静态验证的"与"我不能"分开处理**，
+> 不能验的那部分也要显式登记 + 说明为什么不能验，而不是悄悄跳过。
+> 悄悄跳过 = 守卫的覆盖面又小于它声称的覆盖面（r42/r64 那类）。
+
+**反向注入的手法本身也有讲究。** 第一次注入我用正则去匹配条目对象，
+`\{ "id": "slides"[^\n]*` 只匹配到半截，写回去之后 JSON 非法 ⇒ 测试报 "no tests"
+（收集失败）。那不是"守卫抓到了缺陷"，而是"我把文件弄坏了"。
+改用**花括号配对**取出完整对象再对调，并在注入后**先验证**：
+`json.loads` 能解析、id 多重集不变、顺序确实变了——三条都成立才算注入成功。
+
+> 通则：做反向注入时，**先断言注入后的文件仍然合法**（能解析、只改了你打算改的那一点），
+> 再去看守卫红不红。否则你测的是"守卫在坏文件上的行为"，而不是"守卫能不能抓到这个缺陷"。
+
+还原按 r67 定的铁律做：用**本轮的备份**（不是 `git checkout --`），
+并验证 `json.load(备份) == json.load(当前)` 为 True，最后确认 `git diff --numstat`
+回到本轮之前那份合法的 +20/-0。
+
+本轮另一处测量是干净的：`settingsGroups[].fields` 共 12 个，`type: enum` 都配了 `options`、
+`type` 取值都在契约允许集内，**0 处不自洽**（基数非空，所以是有意义的否定结论）。
+
+### 17.69 把一处发现推广成"这一类"时，先分清**查找型**与**列表型**槽位（r69）
+
+r68 查出 `.key` 的胜出者由 manifest 数组顺序偶然决定。按 r57 的通则（"修一个组件级缺陷要问：
+还有谁长得像它？"）本轮把它推广到全部贡献槽位。第一次扫描报出 8 处"争抢"，
+**逐个辨真伪后全是误报**——而辨真伪的过程恰好把这一类问题的结构讲清楚了：
+
+| 槽位 | 首扫报告 | 真相 |
+|---|---|---|
+| `blockRenderers` | `toolcall` 被 6 条争抢、`auxblock` 被 3 条 | **有意设计的特异性分层**：`resolveBlockRenderer` 先取特化层（`names` 精确命中）、无特化才落通用层（未声明 `names` 的兜底）。6 条里 5 条是特化（bash/edit/read/…）、1 条是通用兜底 |
+| `codeBlockRenderers` | `dot`/`gv`/`mermaid`/`plantuml`/`puml` 各被"同一条目"争抢两次 | **两个独立键空间**：`languages` 与 `fileExtensions` 由 `resolveCodeBlockRenderer` / `resolveCodeBlockRendererByExtension` **两个函数**分别解析。首扫把两个列表合并成一个键空间，于是每条自己和自己"冲突" |
+| `messageActions` | `assistant\|left` 被 5 条争抢 | **列表型槽位**：5 条全部渲染，`order` 只定先后；且 registry 已按 `order ?? 100` 排序 |
+
+**关键区分（这才是本轮的产出）：**
+
+| 类型 | 槽位 | 消费方式 | order 平手意味着 |
+|---|---|---|---|
+| **查找型** | `fileIcons`、`blockRenderers`、`codeBlockRenderers` | 一个 key 只能有**一个胜出者** | **谁生效**由注册序决定 ⇒ r68 那一类 |
+| 列表型 | `messageActions`、`fileActions`、`sidePanel`、`settings`、`sidebar`、`mainView`、`titlebar` | 全部渲染，order 只定先后 | 两个条目的相对次序由注册序决定（影响小得多） |
+
+> 推广一处发现时，**先按"消费方式"给对象分类**，再决定判据。
+> 首扫把两类混在一起、又把两个键空间合并，于是 8 处报告全是噪声。
+> 若照着噪声去"修"，就会把 blockRenderers 的分层设计当成缺陷拆掉——
+> **误报不只是浪费时间，它会诱使人破坏正确的设计。**
+
+**同时要修正 r68 的一处表述（准确性优先于叙事连贯）：** r68 说"顺序裁决没有文档"，
+这话说重了。registry 侧其实写了：`fileIconItems()` / `blockRendererItems()` 的注释都标明
+"按 order 升序、缺省 100、**保注册序**（同 order 时先注册的 builtin 在前）——
+消费侧按 key 合并时后注册者胜出"；`resolveBlockRenderer` 更写了三层规则**加一句不可能性论证**
+（"同插件同 id 贡献在注册时已被 `removeById` 整项替换，再平手不可能"）。
+所以缺的不是"规则没写"，而是**这一处具体争抢没有被显式决定过、且没有守卫**。
+> 报告里描述缺陷时要区分三种情况：规则没写 / 规则写了但这一例没按规则决定过 / 规则和决定都有但没守卫。
+> 三者的修法完全不同（分别是补文档、补登记、补测试），混为一谈就会修错地方。
+
+**跨插件平手不报，同插件内平手才报**——因为跨插件的注册序**就是** source 优先级
+（project > user > installed > builtin，高优先级后注册故胜出），那是有语义的、已文档化的；
+而**同一插件内**的数组顺序不承载任何优先级语义，纯粹是书写次序。
+
+实测（基数都非空）：三个查找型槽位共 **195** 个查找键，同插件内平手 **1** 处（就是 `.key`，
+已由 r68 登记）；跨插件平手 **0** 处。守卫 `src/lookup-slot-order-ties.test.ts`（4 测）含：
+键空间不得混淆的自检（只用 `filenames` 的 `docker` 条目不得产生 `ext:` 键）、
+已知争抢必须被识别、登记腐烂检查。
+反向注入两件事都验过：① 造一处新的同插件平手（把 `ts` 加进 `js` 条目）⇒ 报出
+`fileIcons ext:ts ← file-tree:ts(order=100,idx=0) vs file-tree:js(order=100,idx=1)`；
+② **守卫建议的修法①（写明确 order）真的能消除违规**（给 `js` 条目加 `order: 101` ⇒ 转绿）。
+> ②这一步值得抄：**守卫给出的修法建议要真的验一次**。只验"能变红"不验"建议的修法能变绿"，
+> 就可能留一条"红了但按建议改也不绿"的死路（那会逼人绕过守卫）。
+
+### 17.70 顺着"注册顺序有语义"往上追，会追到文件系统枚举序（r70）
+
+r68/r69 确立了一件事：**注册顺序是有语义的**——registry 的各 `ArraySlot` 保注册序，
+消费侧对 `order` 平手的裁决是「后注册者胜出」（查找型）或「后注册者靠后」（列表型）。
+顺着这条往上追一层就是本轮的问题：**注册顺序本身从哪来？**
+
+- **跨 source 是显式的**：`bootstrap/boot/steps/40-shell-plugins.ts` 按
+  `builtin → installed → user → project` 的固定次序逐个 `registerAll`，
+  与文档的 source 优先级（project > user > installed > builtin）一致 ✅
+- **同一 source 内部是偶然的**：`discoverPlugins` 直接沿用 `readdirSync(dir)` 的枚举序，
+  没有任何排序。而 POSIX **不保证** readdir 的顺序，APFS / ext4 各不相同，
+  且增删文件后还会变。
+
+后果分两档，第二档是用户可见的：
+
+1. 查找型槽位的平手胜负**跨机器不可复现**；
+2. 列表型槽位里 `order` 相同的条目，其**显示先后**由文件系统说了算。
+
+实测有 **6 组**落在第 2 档：`sidePanel` 的 order=15（blind-review vs tool-manager）、
+order=40（im-graph vs session-tree）、order=60（stickers vs sub-agent）、
+`settings` 的 order=1（dsh vs general-config）与 order=2（theme-manager vs minimal vs probe4）、
+`fileActions` 的 order=100（blind-review vs file-preview）。
+这些组内谁先谁后，此前**没有任何人决定过**。
+
+修法（根因，不是补丁）：在 `discoverPlugins` 里 `walk` 之后按 `manifest.id` 字典序排序。
+于是同一 source 内的次序变成**确定、可复现、可写进文档**的规则：
+「同 source、同 order ⇒ 插件 id 字典序小者在前」；跨 source 优先级不受影响。
+`shell-reload.ts` 也走同一个 `discoverPlugins`，一处修两处生效。
+
+⚠ 本机验证时观感**没有变化**（原枚举序恰好与字典序相同）——这正是这类缺陷难发现的原因：
+它在开发机上"看起来是对的"，换一台机器/换个文件系统/装一个新插件就可能翻。
+> 判据不是"我看到的顺序对不对"，而是"这个顺序是**被规则决定的**还是**被环境碰巧决定的**"。
+> 与 r68 的"碰巧对也是缺陷"同一条通则，只是这次的决定者是文件系统而不是数组书写次序。
+
+**本轮又一次踩到"扫描显示什么都没有"**：第一版用花括号配对提取每个 `xxxItems()` 的方法体，
+提取失败（19 个方法里 17 个报"未提及 order"），而 r69 明明读过 `messageActionItems()` 里有 sort。
+改成"按方法起始行号取到下一个方法之间的行窗口"后，得到正确结果：**19 个 Items 方法里 18 个排序**，
+唯一没排序的 `fontPresetsItems` 是因为 `FontPresetContribution` 契约里**根本没有 `order` 字段**（合法）。
+> 与 r59 同一条铁律：**扫描返回"全都没有"时，先怀疑扫描器**。
+> 尤其当它与本轮之前亲眼读过的事实矛盾时——矛盾就是扫描器坏了的证据。
+
+产出：`discoverPlugins` 排序 + `src/server/application/loader/discover.test.ts`（3 测：
+乱序创建仍按 id 升序、递归下降不聚簇、排序只改次序不改集合）。
+真机确认三组 sidePanel 平手都按 id 字典序呈现。全量 249 文件 / 2156 测试、
+5 项审计 0、e2e 全绿（reachability 8 / minimal-smoke 28 / settings-controls-audit 42）。
+
+### 17.71 「声明了却不兑现」：字段存在比字段缺失更骗人（r71）
+
+把 r46/r47 对**能力轴**做的"声明 ⇔ 消费"普查，换到 **manifest 字段**上重做一遍。
+判据：契约里声明、且至少一个 manifest 真在用的字段，必须有**至少一个消费方读取**它。
+
+实测查出 **2 个死字段**：`sessionGroupings[].childIcon` 与 `sessionGroupings[].childLabelKey`。
+sub-agent 的 manifest 明明白白写着
+
+```json
+{ "id": "subagent", "parentPathField": "subagent.parent_session",
+  "childLabelKey": "sub-agent.childLabel", "childIcon": "git-fork" }
+```
+
+而唯一的消费方 `sessions-list` 只读了 `parentPathField`——于是子 agent 会话在列表里
+与普通会话**长得一模一样**（写死的 `MessageSquare` 图标、没有子分组标题）。
+契约注释还写着回落语义（"不提供则用默认缩进图标"/"不提供则不显子分组标题"），
+说明设计是打算兑现的，只是消费侧漏了。已按契约兑现（声明优先、缺省回落原默认）。
+
+> **死字段比缺字段更骗人**：字段不存在，插件作者会立刻发现声明不生效；
+> 字段存在（还带注释、还进了契约），作者会合理地相信它生效，
+> 而界面无反应、不报错、不警告、不变红。这类缺陷只能靠**全仓对账**发现，
+> 靠"用一下看看"永远撞不到——因为没人会去验一个自己以为生效的声明。
+
+**语料范围本身必须被断言。** 首版语料漏了 `packages/shared/src`，
+于是把 `fileIcons[].filenames` 报成"无人读取"——而它的消费方正是**圆心**的
+`buildFileIconIndex`（`for (const name of c.filenames ?? []) byName.set(…)`）。
+这个假阳性的价值在于它证明了一件事：
+
+> 判"死代码/死字段"时，**语料范围是判据的一部分**，要和判据一起被自检。
+> 现在守卫里有一条 `expect(files.some(f => f.file.startsWith("packages/shared/src/domain/")))`，
+> 语料一旦漏掉圆心层就立刻红。与 r48 那次（三个守卫硬编码"恰好三个内核"，
+> 导致未列出的内核名永远不会被检测）是同一类盲区：**扫描范围写死 ⇒ 范围外的东西永远绿**。
+
+**反向注入要做"彻底"，否则测的是自己的注入而不是守卫。** 第一次注入我只删了
+分组循环里的赋值（`childIcon: g.childIcon`），守卫**仍然全绿**——因为
+`ChildSessionRow` 里的 `child.childIcon` 还在，`.childIcon` 这个读取形态依然命中。
+这不是守卫失效，是**注入没打中判据**。重做时把三处（接口字段、赋值、渲染分支）全删掉，
+`.childIcon` 读取点 3 → 0，守卫立刻红并点名 `sessionGroupings[].childIcon`。
+
+> 通则：反向注入后**先确认注入本身生效**（数一下目标形态的出现次数：3 → 0），
+> 再去看守卫红不红。"注入没生效"和"守卫没抓到"在结果上都是绿的，
+> 但前者是你的操作失误、后者才是缺陷——不区分就会得出"守卫没用"的错误结论，
+> 或者更糟：得出"守卫有用"的假信心（本次若只看第一次注入，我会以为守卫失效并去改它）。
+
+产出：`sessions-list` 兑现 `childIcon`（经 `PluginIcon` 解析，不在插件里自己映射图标名——
+图标解析是机制，只该有一份实现）+ `childLabelKey`（声明了才显子分组标题，不编默认标题）；
+`src/manifest-field-consumers.test.ts`（3 测：语料范围与已知正例自检、① 死字段归零、
+② r71 兑现的回归锚含"缺省必须回落"）。全量 250 文件 / 2159 测试、5 项审计 0、
+e2e 全绿（reachability 8 / session-list-audit 41）。
+
+### 17.72 死契约成员：注释声称的消费方不存在（r72）
+
+把 r71 的"声明 ⇔ 兑现"普查从 manifest 字段推到**中立契约的可选成员**。
+`BaseBackend` 的可选成员表达的是 §1.5 的「缺面」：某内核可以没有这个面，
+壳探测后走三条出路之一（适配器翻译 / 内核插件补面 / 显式降级）。
+**这套机制成立的前提是壳真的去探测。**
+
+实测 5 个可选成员里查出 1 个死的——`resume?`：
+
+| 证据 | 内容 |
+|---|---|
+| 契约注释 | 「pi 无此面（现场 fork 由 session-store 编排），**壳经 `backend.resume?` 探测**」 |
+| 全仓搜索 | `backend.resume` / `resume?.(` / `resume &&` / `.resume?.` **全部形态**，唯一命中是**这句注释自己** |
+| 壳的实际做法 | `SessionStore.resume(snapshotId)` 用快照的 lineage entries 在**中立层**派生新会话（`deriveSession`），对所有内核一律适用，不需要任何内核提供"服务端回切"面 |
+| 实现分布 | 只有 dsh 实现（走 `DSH_METHODS.sessionResume`）⇒ 同时是死代码与**内核间功能不对称** |
+
+处置：**删除**（契约成员 + dsh 实现 + 协议常量三处），并在契约里留下带证据的退役说明。
+
+> 为什么不是"改注释说明它没用"：死契约成员**有害**——与 r46/r47 的死能力轴同理，
+> 读者（以及**第五个内核的实现者**）会以为必须实现它、以为壳会探测它。
+> **没有消费方的抽象不是抽象，是猜测**；§1.5「内核先抽象后实现」的前提是壳真的需要这个面。
+> 若将来真需要（例如中立层派生无法表达某内核的语义），按 §1.5 重走一遍：
+> 先落契约、再各内核实现或显式降级，并**同时**接上消费方。
+
+**顺带修好一个被我的退役说明暴露出来的扫描器缺陷。** 删掉 `sessionResume` 后，
+`dsh-sdk-method-coverage.test.ts` 报「DSH_METHODS.sessionResume 在单源表里不存在」——
+看起来像我删错了。真因：那个测试的 `scanCalledMembers()` **不剥离注释**，
+而我在 `dsh-backend.ts` 写的退役说明里提到了 `DSH_METHODS.sessionResume`，被当成了调用点。
+
+本仓的纪律恰恰是"退役符号可以留在代码里，但要带标注"（文档漂移审计就是按"有标注即合法"工作的），
+所以**注释里提到旧符号是合法且会反复出现的形态**。已给扫描器加上剥离块注释与行注释
+（与 `audit:deps` 检验⑬ 同一教训）。
+> 通则：**写退役说明时，你正在给所有"不剥注释的扫描器"埋假阳性**。
+> 与其要求注释避开符号名（那会让说明变得含糊），不如修扫描器——
+> 这类扫描器通常不止一个，修一个就少一类长期噪声。
+
+**判据收紧的两处（都被自检修出来）：**
+1. 语料范围判据用 `/kernel/` 粗匹配，把 `src/server/bootstrap/kernel/`（**组装根的内核注册表**，
+   属壳侧装配层）也算成"实现侧"⇒ 自检假红。已精确到 `startsWith("src/server/kernel/")`。
+2. 探测形态里有一条 `\.name\s*\?`（想抓三元），结果把注释散文「壳经 backend.resume? 探测」
+   也算成探测 ⇒ **死成员会被判成活的**（正是本条守卫要防的假绿）。
+   已改成只认带探测语义的形态：`?.name(` / `.name?.` / `.name &&` / `typeof ….name` /
+   `if (….name` / `!….name`，并把"散文提及不得算探测"写成显式反例断言。
+
+> 这两处合起来是一条通则：**"有消费方"类判据的两个失败方向都要自检**——
+> 判据太松 ⇒ 死成员判成活的（假绿，守卫失效）；判据太严 ⇒ 活成员判成死的（假阳性，逼人加豁免）。
+> 所以自检里必须**同时**有正例（真实探测写法要认得）与反例（散文提及不得算探测）。
+
+产出：契约/dsh/协议三处删除 + `src/contract-optional-members.test.ts`（3 测：
+语料范围与已知成员自检、① 死成员归零、② 探测判据正反例自检）。
+反向注入已验（往契约加一个无人探测的 `deadFaceForTest?` ⇒ ① 立刻点名它）。
+全量 251 文件 / 2162 测试、5 项审计 0、构建通过；e2e：minimal 28 / probe4 28 /
+kernel-capability-gating 27（本轮动了契约与 dsh 后端，所以三个内核相关的剧本都跑了）。
+
+### 17.73 动态键存储的特有缺陷：只写不读 ⇒ 重启后设置丢失（r73）
+
+把"声明 ⇔ 兑现"普查推到两个新面，结果都是干净的，但过程中挖出一条**值得单独立守卫**的缺陷类。
+
+**① `KernelSpec` 的 8 个字段全都有消费方**（`pkg` 6 处、`distTag`/`extraPackages` 各 1、
+其余各 2）——干净。
+
+**② prefs 的 17 个键全部既写又读**——但这是**修好判据之后**的结论。首版判据报了
+`lastSessionByCwd` "只写不读"，实际读取点是：
+
+```ts
+window.kernel.prefs.get<Record<string, string>>(PREF_KEYS.lastSessionByCwd)
+```
+
+首版正则写的是 `prefs\s*\.\s*get\s*(?:<[^>]*>)?\s*\(\s*PREF_KEYS\.x` ——
+`Record<string, string>` 里**嵌套了 `>`**，`[^>]*` 提前截断，于是这个读取点匹配不上。
+
+> 通则（与 r59 同源）：**遇到嵌套语法就别用正则解析它**。
+> 改成"定位 `prefs.get` / `prefs.set`，再在其后 N 字符**窗口**里找 `PREF_KEYS.<name>`"，
+> 对泛型、换行、注释全都不敏感。代价是窗口太大可能把邻近的键算进来，
+> 所以窗口要小（本处用 80），并且**把窗口上限本身写成断言**（`expect(WINDOW).toBeLessThanOrEqual(120)`），
+> 防止有人为了让某条通过而把窗口放大到失去意义。
+
+**为什么 prefs 这类"动态键存储"值得单独立守卫**——它有一个静态类型帮不上忙的失败模式：
+
+> 新增一个偏好 → 在 setter 里 `prefs.set(PREF_KEYS.x, v)` 落盘 → **忘了在启动水合里 `prefs.get`**
+
+症状极其隐蔽：**当次会话里一切正常**（值就在 zustand store 里，UI 立刻响应），
+只有**重启之后**才发现设置没保存。而"重启"恰恰是开发中最不会反复做的动作，
+所以这类缺陷常常活到用户报障。反过来"只读不写"同样有害：那个键永远 undefined，
+只能靠回落默认值，用户改了不生效。
+
+产出 `src/prefs-keys-readwrite.test.ts`（4 测）：
+① 每个键既有 `set` 又有 `get`（三种不平衡分别给不同修法：死键删掉 / 只读不写补落盘 / 只写不读补水合）；
+② 自检认得**嵌套泛型**的读取形态（就是首版翻车的那处）+ 窗口上限断言；
+③ **单源里成员名与字面量必须一致**（`lastCwd: "lastCwd"`）——若不一致，改成员名会让
+**用户已保存的偏好静默失联**（落盘键名变了，旧数据读不到），要改就必须同时写迁移。
+反向注入已验：删掉 `lastSessionByCwd` 的启动回读 ⇒ ①② 同时红并点名该键与症状。
+
+**顺带记下普查 prefs 时第一次扫描的错**：我按"字符串字面量"去扫 `prefs.get("x")`，
+只扫到 5 个键、0 处写入——因为真实代码用的是 `PREF_KEYS.<name>` **常量单源**（§1.3 的好设计）。
+> 教训：**扫一个 API 的用法前，先看它有没有单源常量**。有单源时按字面量扫必然漏
+> （而且漏得"看起来很干净"：0 处写入像是没人写，实际是全走了常量）。
+> 结果少得可疑就是扫描器坏了——这条铁律本轮又应验一次（r59/r67/r70/r71 之后第五次）。
+
+### 17.74 "会抛错"不等于"能被发现"：路径相关的运行时错误值得静态守卫（r74）
+
+普查事件总线 channel 的注册 ⇔ 收发。`EventBus` 对未注册频道是**抛错**的
+（`plugin X emit 未声明的 channel Y` / `invoke 的 channel Y 未被任何已加载插件注册`），
+听起来够响亮，但：
+
+> **抛错只在用户走到那条路径时才发生**——某个快捷键组合、某个文件动作、某个面板的 revealOn。
+> 而这类路径恰恰是自动化最容易漏的（r26 就记着"附件链的拖拽/粘贴没有自动化覆盖"）。
+> 所以"运行时会抛错"不构成"不需要静态守卫"的理由；**路径相关的运行时错误正是静态对账的主场**。
+
+实测结果是干净的（注册 17 个 + 路由 7 + 约定频道 2；死声明 0、未注册发送 0、未注册监听 0），
+但**得到这个结论之前，我的判据错了三次**，每次都表现为"报出一批假阳性"：
+
+| # | 判据缺陷 | 假阳性 |
+|---|---|---|
+| ① | 只认 `.emit(` / `.on(`，漏了 **`invoke`** 这个动词 | 9 个频道被判"只听无人发"（其实是 `ctx.events.invoke(...)` 发的） |
+| ② | 正则写 `\.\s*emit`，匹配不到 **`?.emit`**（可选链） | `subagent:dialog` 被判"只发无人听"（真实代码是 `ctx.events?.emit(...)`） |
+| ③ | 按**任意对象**的 `.on("…")` 匹配，没限定到事件总线 | **17 个 WS transport 频道**（`transport.on("session:event")`、`"plugins:changed"`、`"restart:state"`…）被判"监听了但未注册" |
+
+③ 最能说明问题：**两套频道名字空间被混算了**。transport 的频道走 WS 传输、
+事件总线的频道走 `registerChannels`，注册机制完全不同。混算必然产假阳性，
+而假阳性一多，人就会去加豁免——豁免一加，守卫就废了。
+
+**注册来源有四个，少算一个就产假阳性**（这也是 ①②③ 之外的第四类坑）：
+1. 插件的 `export const channels = [...]`（框架经 `plugins-host.ts` 自动注册）
+2. **壳侧自己注册**：`eventBus.registerChannels("shell", ["shell:openSettings", "shell:backToChat"], …)`
+   —— 壳不是插件，所以它不会出现在任何 `channels` 导出里（首版就漏了这两个）
+3. **约定频道**：`<pluginId>:fileActionInvoke`（契约里写明是约定频道，由
+   `fileActionInvokeChannel(pluginId)` **动态拼名**后 invoke，全仓找不到这个字符串的发送点）
+4. **manifest 的 `revealOn`**（框架订阅它来自动展开面板）——⚠ 它在 `plugin.json` 里，
+   而语料只收了 `.ts/.tsx`，首版就这么漏了；是 ③ 的自检样本（`subagent:dialog`）抓出来的
+
+**还查出一个签名陷阱**（反向注入时暴露）：两个对象的 `invoke` **实参位置不同**——
+`ctx.events.invoke(channel, payload)`（pluginId 已绑定，频道在第 1 位）vs
+`eventBus.invoke(callerId, channel, payload)`（频道在第 2 位）。
+首版用一条交替式 `(?:"([^"]+)"|[^,)]*,\s*"([^"]+)")` 兜两种，而交替式**总是先试第 1 个分支**，
+于是 `eventBus.invoke("timeline", "x:y")` 会把 callerId `"timeline"` 当成频道名报出来——
+碰巧它也不是注册频道，所以看着像"抓到了"，其实报错了对象。
+> 通则：**一条正则兜两种签名时，先确认两种签名的目标位置是否相同**。
+> 不同的话必须按接收者分开写；否则错误会被"碰巧也是违规"掩盖掉。
+
+**本轮反向注入失败了三次，前两次都是注入没打中判据**（r71 之后又犯）：
+第一次用形参 `e.invoke(...)`（不是总线对象，判据正确地不匹配）；
+第二次把 `eventBus` 起了别名 `__ebR74`（判据按字面接收者匹配，同样不匹配）。
+第三次用 `ctx.events.invoke("未注册频道", {})` 才让 ① 变红。
+> 教训（第二次写进 skill）：**注入要用被测代码的真实形态**——真实的接收者名字、真实的动词、
+> 真实的实参位置。注入前先问"判据是按什么模式匹配的"，照着那个模式写注入。
+> 而"注入没打中"与"守卫没抓到"在结果上都是绿的，**不区分就会去改一条正确的守卫**。
+> 另外：当注入难以构造时，**单元级自检**（直接断言判据函数对给定代码片段的行为）
+> 往往比端到端注入更精确——本轮 arity 修复就是靠 ③ 的
+> `sends('eventBus.invoke("timeline", "blind-review:fileActionInvoke", p)') === ["blind-review:fileActionInvoke"]`
+> 钉住的。
+
+产出：`src/event-bus-channels.test.ts`（4 测：四个注册来源的自检、① 未注册收发归零、
+② 死声明归零、③ 收发形态正反例自检含"transport 频道不得算进来"）。
+全量 253 文件 / 2170 测试、5 项审计 0、构建通过、e2e 全绿（reachability 8 / minimal-smoke 28）。
+
+### 17.75 单源表只有在**所有调用点都走常量**时才是单源（r75）
+
+把 r74 的纪律推到 **IPC 频道表**（跨进程：renderer 调用、server 注册）。
+`packages/shared/src/channel/channel-contract.ts` 的 `IPC` 表有 **210 条**
+`IPC.<组>.<名> = "<wire 字符串>"`，是频道名单源（§1.3）。
+
+三方对账时发现"21 条声明了但无注册点、10 条无调用点"——追下去真因不是漏注册，而是
+**34 处传输调用点用了裸字面量**（分布在 5 个文件），所以按 `IPC.` 引用去扫当然扫不到。
+其中最要命的是核心会话推送：
+
+```ts
+sessionStore.onEvent((event) => { gateway.broadcast("session:event", event); });   // 推送侧字面量
+transport.on("session:event", listener);                                           // 接收侧字面量
+```
+
+还有 `broadcast("settings:changed")` / `"plugins:changed"` / `"plugin:unloaded"` /
+`"skills:changed"`（3 处）/ `"window:maximizedChanged"`。已全部改成走 `IPC.*` 常量
+（34 处，tsc 全程兜底；改完 e2e 真跑：minimal 28 / probe4 28 / kernel-reload 46 /
+timeline-panel-audit 39——因为这动的是 WS 装配这条最关键的运行时路径）。
+
+**为什么这是缺陷而不只是风格问题**——两种失败模式都**静默**：
+
+1. 改表里的 wire 字符串 ⇒ 走常量的调用点跟着变、走字面量的**留在旧名字上** ⇒
+   推送方与接收方名字不再一致：**消息发出去没人收**，不报错、不警告；
+2. 字面量拼错一个字符 ⇒ 同上，且 tsc 完全不报（字符串字面量没有类型约束）。
+
+反过来，走常量时这两种情况都变成**编译期错误**（`IPC.session.evet` 不存在）。
+
+> 通则：**单源表的价值 = 定义只有一处 × 引用全部走它**。只满足前半句时，
+> 表看起来是单源、实际是"一份权威定义 + 若干平行副本"，而副本不会跟着定义变。
+> 这类违反**必须靠静态守卫**，因为字面量与常量都能编译、都能跑，没有别的机制会拦。
+> 同类：r65 的 `*Key` 命名歧义、r66 的 manifest 枚举值、r73 的 `PREF_KEYS`——
+> 都是"字符串世界与类型世界之间没有自动检查"这一条缝的不同侧面。
+
+**判据的一个正则坑（自检修出来）**：首版给 `\.` 加了左边界 `(?:^|[^\w$])`，
+而真实形态是 `gateway.broadcast("…")`——`.` 前面是 `y`（属 `\w`），
+于是**所有正常调用点都匹配不上**。症状是两条自检同时报"一个走常量的调用点都没扫到"
+与"裸字面量没被抓到"。`\.` 本身已经要求一个点，左边界既多余又有害。
+> 写"匹配某个方法调用"的正则时，**不要给点号加左边界**；要限定接收者就写明接收者
+> （像 r74 那样写 `ctx\.events|eventBus`），那是有意义的限定，而 `[^\w$]` 不是。
+
+产出：`src/ipc-channel-single-source.test.ts`（3 测：表解析与"确实有走常量的调用点"自检、
+① 裸字面量归零、② 正反例自检含"表外字面量不由本条管"——避免把日志文案与测试夹具算进来）。
+阈值按实测钉（走常量的调用点正好 20 个文件 ⇒ `>= 20`，首版凭想象写 `> 20` 直接假红）。
+
+### 17.76 引用未定义的 CSS 变量是**纯静默**失败，只能靠静态对账 + 真机取值双证（r76）
+
+`var(--未定义)` 且无回落值时，该声明在计算值阶段无效 ⇒ 属性被丢弃、元素回落继承值/初始值。
+**不报错、不警告、控制台干净、tsc 无关**——只是界面某处颜色/间距/圆角"不太对"，
+而这类偏差最容易被人当成"设计如此"。
+
+实测查出 **5 个变量、27 处引用**（已修，分布在 10 个文件）：
+
+| 变量 | 引用 | 真相与修法 |
+|---|---|---|
+| `--color-accent` | **21** | token 表里**没有**裸 `color.accent`（只有 `color.accent.success/warning/error/danger`）；本设计系统的强调色是 `color.primary`（证据：`index.css` 里 `--sidepanel-icon-active-indicator: 3px solid var(--color-primary)`）⇒ 改 `--color-primary` |
+| `--color-danger` | 2 | 表里叫 `color.accent.danger` ⇒ `--color-accent-danger` |
+| `--color-error` | 2 | 表里叫 `color.accent.error` ⇒ `--color-accent-error` |
+| `--color-bg-secondary` | 1 | 表里叫 `color.surface` ⇒ `--color-surface` |
+| `--spacing-xxs` | 1 | 表里最小是 `spacing.xs`（没有 xxs）⇒ `--spacing-xs` |
+
+那 21 处 `--color-accent` 分布在 skill-manager 的图标、keybindings 的边框等**装饰性强调**位置，
+因为无回落值，实际渲染成继承色——观感"淡得看不出强调"。
+
+**判据要有三类合法例外，且例外必须显式登记而不是放宽判据：**
+
+1. token 单源 `THEME_TOKEN_DEFAULTS`（`color.bg` → `--color-bg`）；
+2. CSS/TS 里的 `--x:` 声明（含 `src/web/index.css` 的壳级布局变量 `--sidebar-*` / `--sidepanel-*`，
+   共 100+ 个，它们**不在** token 表里——首版只拿 token 表比对，报了 103 个假阳性）；
+3. **动态注入**：`injectThemeCssVars` 对 `font.size.*` 额外注入 `-raw` 基值
+   （`element.style.setProperty(\`${cssVar}-raw\`, value)`——**模板拼名，静态扫不到**）。
+   本轮 `--font-size-{xs,sm,base,lg}-raw` 共 24 处引用全靠这条豁免。
+
+框架提供的变量走 `EXTERNAL` 账本（Tailwind v4 默认主题的 `--radius-xs` 等、Radix 的 `--radix-*`），
+每条写清来源与**真机验证方式**。
+
+**两个"看着像缺陷其实合法"的判定，都靠额外取证才没误修：**
+
+- `--sidepanel-divider-display`：静态扫说未定义、真机取值也为空。但查引用点发现它**只出现在注释里**
+  （`right-panel.tsx` 用它解释"旧名为什么被改名成 `--sidepanel-divider-visual-display`"），
+  代码里手柄用的是硬编码 `display:"flex"`（那正是当年的修复）。
+  > 所以判据只统计**代码行**里的 `var(...)`，注释里的退役说明不算引用。
+- `--radius-xs`（8 处）：我们源码里确实没有定义处，但真机 `getComputedStyle` 取到 `.125rem`
+  ——正是 Tailwind v4 默认主题的值 ⇒ 归入 `EXTERNAL` 账本，不是缺陷。
+
+**真机取证是对账的另一半，且必须带对照组。** 用
+`getComputedStyle(document.documentElement).getPropertyValue(v)` 逐个取值时，
+同时取 `--color-primary` / `--radius-sm` 作对照：它们有值（`#ececec` / `8px`）才说明取法有效。
+> 没有对照组的"全空"结果毫无意义——可能是取法错了（r45 的教训：反空转探针自己也会给假结果）。
+> 本轮正是靠对照组把"12 个未定义"缩小到"6 个真空 + 6 个假阳性"。
+
+**一个环境坑（不是产品缺陷，但会误判）**：连跑多个 e2e 剧本后，
+`settings-controls-audit` 崩在 `EADDRINUSE: 127.0.0.1:18465`——前几轮残留的 electron 进程
+仍占着 `MHD_PORT`。清掉残留（`lsof -ti:18465 | xargs kill -9`）后 42/42 通过。
+> 通则：**e2e 崩溃先分辨"产品坏了"还是"端口/进程残留"**。看错误类型：
+> `EADDRINUSE` / `Failed to fetch browser webSocket URL` 基本是环境问题；
+> 断言失败才是产品问题。把环境错误当成产品缺陷去查，会白跑一整轮。
+
+产出：27 处引用改成真实 token 名 + `src/css-var-definitions.test.ts`（4 测：
+反空转与对照组自检、① 未定义变量归零、② EXTERNAL 账本理由与腐烂检查、③ r76 的回归锚）。
+反向注入已验（把一处改回 `var(--color-accent)` ⇒ ①③ 同时红）。
+全量 255 文件 / 2177 测试、5 项审计 0、构建通过；e2e：settings-controls-audit 42 /
+a11y-names-audit 12 / minimal-smoke 28。
+
+### 17.77 键写错 ⇒ 界面显示裸键：i18n 对账的最后一块面（r77）
+
+r55/r65 守的是 **manifest 与 ChannelMeta 里的键**；本轮补上最大的一块面：**代码里的 `t("…")`**。
+i18next 查不到键时**不报错**，而是把键名本身当译文返回，于是界面上直接出现
+`sessions.collapse` 这样的字符串——显眼但不崩溃、不进控制台、tsc 也不管（键是普通字符串）。
+
+实测规模：**911 处静态调用、749 种键**（动态形态 34 处另计），其中 **5 种四语言全缺**：
+
+| 键 | 用处 | 修法 |
+|---|---|---|
+| `sessions.collapse` / `sessions.expand` | 子会话分组开关的 `title`（既是 tooltip 也是**可访问名**） | 改用**已存在**的 `shell.collapse` / `shell.expand` |
+| `sessions.dragToReorder` | 拖拽手柄 tooltip | 改用已存在的 `shell.dragToReorder` |
+| `dsh.extTitle` | DSH 内核扩展页标题 | 补四语言（`minimal.extTitle`="Minimal 拓展"、`probe4.extTitle`="Probe4 拓展" 已确立范式） |
+| `shell.composerReadonly` | 输入框只读条的**默认**文案（策略未声明 `readonlyMessageKey` 时用） | 补四语言 |
+
+**三个是"另造了一份不存在的键"，两个是"该有却没有"——修法完全不同。**
+
+> 前者的正确修法**不是补译文**，而是改用既有共享键。补译文会让同一句文案在语言包里有两份，
+> 将来必然漂移（§1.3 契约单源）。所以查到"键不存在"时，**第一步是搜同义的既有键**
+> （本轮 `shell.collapse`/`shell.expand`/`shell.dragToReorder` 三个都现成，四语言齐全），
+> 第二步才是决定要不要新增。
+> 判断"该新增"的依据是**没有同义键**（`dsh.extTitle` 的两个兄弟内核都有、它独缺；
+> `shell.composerReadonly` 是壳级默认文案，只有 sub-agent 自己那条策略专属的）。
+
+**判据边界要写清（本轮显式排除了动态形态）**：覆盖 `t("字面量")` 与
+`i18next.t("字面量")`（r56 起非组件的壳代码走 i18next 单例）；
+**不覆盖**模板串 `` t(`shell.greeting.${n}`) ``、变量 `t(key)`、
+以及经 manifest / `registerChannels` 传入的 `labelKey`（后两类由
+`manifest-i18n-keys.test.ts` 与 `channel-meta-i18n.test.ts` 各自负责）。
+把动态形态算进来会产假阳性（无法静态求出键名），所以 ③ 的自检里明确断言
+"模板串与变量键**不得**被提取"——这条反例和正例一样重要。
+
+**反方向（死键）本轮刻意没做**，并说明原因：粗扫 `shell.*`/`sessions.*` 两族得到 41 个"无引用"键，
+但抽查即知多为假阳性——`shell.channel.*` 是经 `registerChannels` 的 meta 对象传入（不是 `t()` 调用）、
+`shell.greeting.1` / `sessions.today` 等是**动态拼键**。要做反方向必须先按"前缀族"匹配动态形态，
+否则会把一批活键判死（r47 的教训：判据漏一种消费形态就会指认活代码为死代码）。
+> 通则：**一个方向的判据没把握时，不要顺手把反方向也做了**。
+> 宁可如实写"反方向未做 + 为什么 + 要做什么才能做"，也不要交一条会产假阳性的守卫
+> ——假阳性会逼人加豁免，豁免一加，两个方向都废了。
+
+产出：`src/code-i18n-keys.test.ts`（4 测：规模与已知键自检、① 四语言缺失归零、
+② 被引用的键译文非空且不等于键名、③ 提取器正反例自检含 `i18next.t` 形态与
+"不存在的键必须被判缺失"）。反向注入已验（`shell.dragToReorder` → `…Typo` ⇒ ① 点名该键、
+缺哪四语言、在哪个文件）。全量 256 文件 / 2181 测试、5 项审计 0、构建通过；
+e2e：kernel-capability-gating 27（覆盖 dsh 扩展页）/ session-list-audit 41 / settings-controls-audit 42。
+
+### 17.78 跨十轮悬而未决的设计题，答案可能是"机制早已建好、只是没接线"（r78）
+
+"服务端错误消息要不要国际化"这道题从 r42 起被推迟了 **10+ 轮**，每轮的理由都是
+"需要先定设计"。r78 真去查，发现：
+
+**`src/server/application/i18n/translator.ts` 早已按 `docs/plugins/05-plugin-i18n §6.2`
+（「main 端持单例(init 一次)」）实现好了** —— `initTranslator` / `t(key, vars)` /
+`changeLocale` / `currentLocale` / `detectLocale` / fallback 链（当前 locale → en → manifest 字面值 → 键名）
+一应俱全，94 行。而 **`initTranslator` 全仓零调用点** ⇒ 单例从未初始化 ⇒
+`t()` 恒走 `if (!initialized) return key` 的退化路径 ⇒ 服务端只能写死中文。
+
+> 所以这道题不是"设计未定"，而是**机制齐全、没人启动**。
+> 与 r72 删掉的死契约成员同类、方向相反：那次是"契约有面没人调"（删），
+> 这次是"实现有机制没人接"（接）。两者的共同点是**编译期与运行期都不报错**。
+>
+> 通则：**一道设计题被反复推迟时，先去看它依赖的机制是不是已经存在**。
+> "需要先定设计"常常是"没去查现状"的委婉说法——而查现状的成本通常是一两个 grep
+> （本轮就是 `grep -rn "initTranslator" src/server`）。
+> 反复推迟的代价是：每轮都要重新想起它、重新判断要不要做，而它一直在那儿。
+
+**接线**（依据充分：文档写了 main 端持单例；§1.2 说文案归语言插件——这里查的仍是
+**插件贡献的语言包**，服务端不持有文案，只按当前 locale 查表）：
+在 `50-wiring.ts` 拿到 `i18nResources` 之后调用
+`initTranslator({ resources: i18nResources, lng: prefsStore.get("currentLocale") || DEFAULT_LOCALE, ns, supportedLngs })`。
+
+**迁移第一批**（只迁真正面向用户的，判据沿用 r56 那条：*这段文本会不会作为用户可见内容出现？*）：
+`controllers/kernel.ts` 与 `controllers/extensions.ts` 的两条缺面错误——它们含
+**用户操作指引**（"在设置页重载内核插件后重试"），会经 IPC 浮到 UI。
+改成 `t("shell.kernelFaceMissing", { kernel, face })` / `t("shell.kernelExtensionFaceMissing", { kernel })`
++ 2 键 × 4 语言（落在 system/i18n 的 shell.json，符合"跨插件壳文案归 shell.*"的既有约定）。
+
+**为什么不全迁**：实测 `src/server` 里 `throw new Error(含中文)` 共 **153 处 / 21 个目录**，
+但绝大多数是**开发者可见的不变量**（启动顺序、插件重复注册、路径越界、"已在运行"），
+按 r42 的定性它们该留中文（进日志与开发控制台，不是 UI 文案）。
+所以本轮的守卫守的是"**接线不能断** + **已迁移的不能退回**"，不是"全部迁完"。
+
+**真机双证**（这类跨进程改动必须真跑）：
+- `LOCALE=en`：`Kernel ghost-kernel has no extension management capability (it may be unloaded; reload kernel plugins in Settings and retry)` —— 中文字符 **0**、无裸键；
+- `LOCALE=zh-CN`：`内核 ghost-kernel 没有拓展管理面（…在设置页重载内核插件后重试）` —— 照常中文，无回归。
+> 只验 en 不够：那只能证明"变成了英文"，证明不了"按 locale 走"。
+> **两种语言都验**才说明是查表而不是把文案换了一份写死的。
+
+**测试怎么改（沿用 r54/r56 的纪律：给真字典，不软化断言）**：
+`kernel-live-accessors.test.ts` 原本断言消息含 "ghost" / "模型配置" / 匹配 `/重载|装载|卸载/`。
+迁移后 `t()` 在单测里未初始化会返回键名，于是断言收到 `"kernelFaceMissing"`。
+修法是**在测试里用真实语言包初始化 translator**，断言原样保留。
+⚠ 这里还踩了一个资源形状的坑：语言包文件是**带 ns 前缀的扁平键**（`"shell.kernelFaceMissing"`），
+而 merge 的规则是「第一个 dot 前是 namespace、其余按 dot 分层嵌套」，
+i18next 要的形状是 `{ "zh-CN": { shell: { kernelFaceMissing: … } } }`。
+首版把扁平对象直接当 resources 传，于是查 `shell.kernelFaceMissing` 在 ns=shell 里找
+key=`kernelFaceMissing` 落空、`t()` 返回**键尾**（症状：断言收到 `"kernelFaceMissing"` 而不是译文）。
+> 通则：**给测试喂字典时，形状要按生产的合并规则来**，不能直接把语言包文件当 resources。
+> 症状"收到了键名的一部分"就是形状不对的信号（全键名=没初始化，键尾=ns/分隔符错配）。
+
+产出：接线 + 2 键 × 4 语言 + `src/server-i18n-wiring.test.ts`（4 测：文件在场、
+① 必须调用 initTranslator 且喂真实 resources 与 prefs 的 currentLocale、
+② 已迁移消息不得写回中文字面量、③ 迁移键四语言齐全非空）。
+全量 257 文件 / 2185 测试、5 项审计 0、构建通过、kernel-capability-gating 27。
+
+### 17.79 分类账本 + 棘轮：153 处里先做完"最可能面向用户的那一层"（r79）
+
+r78 把服务端 i18n 单例接上线之后，"服务端中文错误消息"这件事从"做不到"变成了"能做"。
+但全仓 `src/server` 里含中文的 `throw` 有 **153 处 / 21 个目录**——全迁既无收益
+（绝大多数是启动顺序、插件重复注册、路径越界这类不变量，用户永远看不到），
+又会把 153 条开发信息塞进语言包（污染翻译面、四语言维护成本翻倍）。
+
+所以本轮的做法是：**只对最可能面向用户的一层（`src/server/controllers/`，IPC handler 所在层）
+做完逐条分类**，其余层留待按同一判据逐层推进。实测该层 9 处含中文的 throw：
+
+- **1 处面向用户 ⇒ 迁移**：`kernel.ts` 的 `无内核提供 llm:oneshot 能力`。
+  判定依据不是"它在 controllers 里"，而是**查了调用方的 catch**：
+  git-review 的 `setActionError(t("review.generateFailed", { error: (err as Error).message }))`
+  把服务端消息**插进用户可见文案** ⇒ 英文界面里会出现
+  `Generation failed: 无内核提供 llm:oneshot 能力`。改成 `t("shell.noOneshotCapability")` + 四语言。
+- **8 处开发者可见 ⇒ 登记入账本**，每条写清「**谁会看到它** + **为什么不该 i18n**」：
+  插件作者（`未知插件` / `未声明权限 sessions:bus` / `configFile 路径越界`）、
+  调用方开发者（`relPath 不能是绝对路径` / `不能含 ..`）、
+  安全审计（`fs:project 越界` / `session 文件路径越界`）、
+  以及"UI 侧已有用户提示、服务端只是兜底"的那条（`fs:project 拒绝:无激活项目目录`——
+  renderer 侧本就有 `shell.openFolderFirst` 的用户提示，r61 给它标过 error 严重级）。
+
+> 判断"会不会浮到 UI"**不能只看抛出点在哪一层**，要**查调用方的 catch**：
+> 同一条服务端消息，被 `console.error` 吞掉就是开发者可见，
+> 被插进 `t("…", { error: err.message })` 就是用户可见。
+> 这条判据比"按目录分类"准，也是本轮唯一那处迁移能被识别出来的原因。
+
+**守卫形态：账本 + 棘轮**（`src/server-error-copy-classification.test.ts`，5 测）：
+① 该层每一处中文 throw 都必须在 `DEV_FACING` 账本里登记（未登记 = 没人判断过它是否面向用户）；
+② **棘轮**：数量只许减少（基线 8），新增的大概率是面向用户的消息；
+③ 账本腐烂检查（needle 还在不在、理由是否够长、有没有写清"谁会看到"）；
+④ 已迁移的那条不得写回中文字面量。
+
+**两处被自检修出来的判据问题（都是老熟人）：**
+
+1. ④ 首版不剥注释 ⇒ 我在迁移时写的说明里引用了旧字面量
+   （"于是英文界面里会出现 Generation failed: 无内核提供 llm:oneshot 能力"），
+   被判成"写回了硬编码中文"。**这就是 r74 那条通则的第二次应验**：
+   > 写退役/迁移说明时，你正在给所有"不剥注释的扫描器"埋假阳性。修扫描器，别改说明。
+2. ③ 的理由长度阈值（>20 字）抓出我两条偷懒的 `"同上：…"`。
+   修法是**扩写理由**而不是降低阈值——降阈值等于削弱守卫（r53 的债务棘轮同理：
+   上限只许降不许升，理由只许写清不许含糊）。
+
+**测试断言的改法沿用 r54/r56/r78 的纪律**：`kernel-live-accessors.test.ts` 原本断言
+`msg` 含 `"无内核提供"` 且不含 `"没有"`（用字面量当"聚合错误 vs per-id 错误"的区分器）。
+迁移后改成**从真字典取文案**来断言：`expect(msg).toBe(SHELL_ZH["noOneshotCapability"])`
+——整句相等既证明是聚合错误、又天然排除 per-id 那条（后者含 `{{kernel}}`/`{{face}}` 插值）。
+> 通则：**断言文案时从字典取，不要在测试里复制字面量**。复制一份就等于把文案存了第二遍，
+> 将来必然漂移；而且"从字典取"会让"字典里没这条"直接暴露（本轮就靠 `expect(aggregate).toBeTruthy()` 兜住）。
+
+**如实说明验证边界**：本轮对 oneshot 那条的验证是**单测级**（断言消息等于真字典的译文）
++ r78 已证的接线端到端有效（同一套 `t()` 机制、同一份 shell.json）。
+**没有**真机触发 git-review 的 AI 生成失败路径去看那句英文——那需要让 oneshot 真的失败
+（无内核提供该能力），零 token 剧本里构造不出来。这条边界记入待办，不当成"已真机验证"。
+
+### 17.80 一个 i18n 追查牵出**UI 卡死**：失败有两种形态，传输路径不同（r80）
+
+本轮目标本来是继续 r79 的分类（把 installer 的「ZIP 格式暂不支持，请使用 .tar.gz」判成面向用户并迁移）。
+追它的调用链时发现了更严重的东西。
+
+**服务端 → renderer 的失败有两种形态，走的是不同的传输路径：**
+
+| 形态 | 服务端 | gateway | transport | renderer 侧 |
+|---|---|---|---|---|
+| ① 返回值 | `return { ok:false, error:"plugin.error.notLoaded" }` | 原样回传 | **resolve** | `await` 得到对象 |
+| ② **抛错** | `throw new Error("ZIP 格式暂不支持…")` | 转成 `{ok:false, error:{code:"HANDLER_ERROR", message}}`（`routing/gateway.ts:61-66`） | **reject**（`ws-transport.ts:102`） | `await` **throw** |
+
+plugin-manager 的 **5 个 handler**（enable / disable / uninstall / reload / install）此前都写成
+`showFeedback(await ctx.plugins.X(…))` 且**没有 try/catch**，只处理了形态①。于是形态②的后果是：
+
+- `showFeedback` 根本走不到 ⇒ **一点错误提示都没有**（§7.6 禁止的静默失败）；
+- install 那条还会让后续的 `setInstalling(false)` / `setInstallOpen(false)` / `setInstallUrl("")`
+  全部走不到 ⇒ **按钮永久停在 installing 态、对话框不关、输入不清**，用户只能刷新页面。
+
+而 `ctx.plugins.install` 的返回类型标称 `Promise<{ ok, error }>`——**对抛错路径这个类型是假的**
+（类型承诺"总会拿到对象"，运行时却可能 reject）。触发形态②的现实场景很多：
+安装源是 `.zip`（installer 明确 throw）、npm 安装失败、URL 不可达、controllers 里的路径越界安全 throw。
+
+> 通则：**追一条错误消息的去向时，要把"抛错"与"返回错误对象"当成两条不同的路径分别追**。
+> 只追一条就会得出"已经处理了"的错误结论——本例里形态①确实处理得很完善
+> （token-key 协议 + `errorArgs` 插值 + 非 token 原样显示），恰恰因此掩盖了形态②完全没处理。
+> 而**类型签名在这里帮不上忙**：它描述的是形态①，形态②在类型上是不可见的（Promise 当然可以 reject）。
+
+**修法（根因，不是给 install 单加一个 catch）**：抽 `runOp(op)` 把两种形态**收敛到一处**——
+成功走 `showFeedback(r)`，抛错则把 `err.message` 交给同一个 `showFeedback`
+（它内部先按 i18n 键翻译、不是键就原样显示），并返回 `boolean` 供调用方决定后续动作；
+5 个 handler 全部改走它（§3.3：同一逻辑在 5 处复制，该收进一处）。
+install 另用 `try/finally` 保证**无论成败都解除 installing 态**，且只在成功时关对话框/清输入
+（失败时保留，方便改完 URL 直接重试）。
+
+**守卫与如实说明的边界**：`src/plugin-op-rejection-handling.test.ts`（5 测：
+① 裸形态 `showFeedback(await ctx.plugins.…)` 归零、② 必须存在 runOp 且其 catch 里真的调了 showFeedback、
+③ install 必须 try/finally 且 finally 里有 setInstalling(false)、④ **五个操作都要走收敛点**
+——只修 install 是不够的）。反向注入已验（把 handleEnable 改回裸形态 ⇒ ①④ 同时红）。
+
+⚠ **本轮没有真机验证这个修复**，原因如实记下：构造真实失败路径需要在插件管理页的安装框里
+填一个 `.zip` 路径并提交，而**设置面板是常驻挂载、非激活时 `display:none`**（早轮已知的形态），
+探针虽能找到那个 input（占位符「输入 URL 或选择本地文件」）却无法与隐藏面板里的提交按钮交互。
+所以本轮的证据是：**静态守卫 + 三个文件的代码级证据链**（gateway 转错误 → transport reject →
+handler 无 catch）。这足以确立缺陷存在与修法的正确性，但**不等于运行时已验证**——
+待办里记着"补 DOM 级测试或让探针先激活插件页"。
+> 通则：**验不了就写"验不了"，并写清为什么、以及要什么才能验**（本轮缺的是"先点进插件设置页"这一步）。
+> 这比含糊地说"已验证"有用得多——下一个人能接着做完。
+
+### 17.81 把一个点的缺陷推广成普查时：分类账本要写"失败后果"，不是写"可接受"（r81）
+
+r80 在 plugin-manager 上查出"只处理返回错误对象、不处理抛错/reject"这一类缺陷。
+本轮把它推广到全部 renderer：实测 `await ctx.*(` 共 **72** 处——
+在 try 块内 39 处、带行内 `.catch(` 4 处、**两者都没有的 29 处**。
+按 API 分布：`ctx.config.set` 9、`ctx.configFile.readBinary` 4、`ctx.config.all` 3、
+`ctx.dialog.openDirectory` 2，其余各 1（plugins.list / window.isFocused / sessions.openSession /
+sessions.setContext / sessions.getLastAssistantText / configFile.{writeBinary,get} /
+config.getScope / dialog.{writeImages,openImages,openZip}）。
+
+**判据的一个必要细节**：必须认**行内 `.catch(`** 这种保护形态。首版只看 try 块，
+于是把 sub-agent 的 `await ctx.sessions.openSession(…).catch(() => null)`、
+timeline 的 `await ctx.dialog.openFiles().catch(() => {…})` 等 4 处**已保护**的算成未保护。
+现在这两处被写成显式自检反例（它们**不得**出现在结果里）。
+
+**为什么是账本 + 棘轮而不是一次改 29 处**：29 处的影响面差别很大——
+`ctx.config.set` 失败 = 用户的设置**静默不生效**（界面上开关已翻、实际没落盘，§7.6 禁止，该修）；
+`ctx.dialog.openDirectory` 失败 ≈ 用户取消选择（无需提示）；
+`ctx.window.isFocused` 失败 = 通知策略退化成"当作未聚焦"（可接受）。
+一次全改会把"可接受的静默"也变成弹提示，反而更吵。所以先分类登记、棘轮钉住总数（基线 29），
+把高影响的三条（`config.set` 9 处、`configFile.writeBinary` 1 处、`plugins.list` 1 处）标 `todo` 逐轮消化。
+
+**账本条目的质量比数量重要——本轮被自己的守卫抓了四次。**
+④ 那条断言要求每条 `consequence` 写清"用户会看到什么/看不到什么"（阈值 >12 字），
+结果我先后写了 **4 条 `"同上"`**（`configFile.get` / `dialog.openImages` / `dialog.openZip` /
+`sessions.getLastAssistantText`）被逐条抓出来。修法是**扩写理由，不是降低阈值**
+（与 r79 那次同款处置）。
+
+> 通则：**账本/豁免清单的条目必须自证**。写"同上"等于把判断留给读者，
+> 而账本的价值恰恰是"三年后有人问为什么这里不处理错误，答案就在这一行"。
+> 所以给账本加一条**理由长度与内容判据**（本轮是 >12 字 + todo 项必须含"静默/以为"字样）
+> 比加更多条目有用——它逼着登记的人真的想清楚。
+> 附带好处：`"同上"` 这种偷懒写法会被当场抓住，而它往往正是"其实没想清楚"的信号。
+
+产出：`src/unprotected-ctx-await.test.ts`（5 测：反空转 + 行内 `.catch` 反例自检、
+① 每个未保护 API 都已分类、② 账本条数与实际扫到的**逐 API 数量**一致（不得有失效条目）、
+③ 棘轮 ≤29、④ 每条理由自证 + todo 项判据）。
+全量 260 文件 / 2200 测试、5 项审计 0、构建通过、minimal-smoke 28。
+
+### 17.82 消化账本 todo 时：9 个调用点的同款缺陷该收进**框架一处**（r82）
+
+r81 的账本里最高影响的一条是 `ctx.config.set`（9 处未保护）：失败时用户的设置
+**界面上已翻、实际没落盘，且一点提示都没有**。本轮消化它。
+
+9 处分布在 5 个文件、上下文各异（llm-recorder 的录制开关、tool-manager 的分组保存、
+session-bookmarks 的迁移与收藏写入 ×3、stickers 的表情包持久化 ×2、voice-input 的模型与语言选择 ×2），
+但**失败时的正确处理逻辑是完全一样的**。按 §3.3（多个调用方的逻辑大同小异、差别只在参数 ⇒
+它是一个逻辑的多次复制，该收进框架一个实现），修法是**在框架一处兜底**，不是改 9 处：
+
+```ts
+// packages/react/src/plugin-context.ts
+set: (key, value, opts) =>
+  window.kernel.config.set(pluginId, key, value, opts).catch((err) => {
+    announceTransient(i18next.t("shell.configWriteFailed", { detail: err?.message ?? String(err) }), "error");
+    throw err;                       // ← 保持 reject 语义
+  }),
+```
+
+三个设计决定都值得记：
+
+1. **重新抛出，不吞掉**。吞掉会让"已经自己 try/catch 的调用方"以为成功了
+   （它们的 catch 分支永不触发）。兜底只负责"让用户看见"，不改变控制流语义。
+2. **用 `i18next` 单例而不是 hook 的 `t`**。这段在 `useMemo(…, [pluginId])` 里构造，
+   把 `t` 塞进来就得加进依赖数组 ⇒ 每次切换语言都会重建整个 config 面（以及所有持有它的组件重新订阅）。
+   与 r42/r56 的先例一致：非组件路径用单例。
+3. **命令式提示不另造一套 DOM**。`Announce` 是组件、必须被渲染，框架兜底发生在普通函数里，
+   所以给 `live-region.tsx` 加了 `announceTransient(message, variant, ttl)`——
+   它渲染出与 `Announce` **完全相同的结构**（`<span role="alert"?>[data-announced]`，
+   插进同一个 `ensureToastHost()` 宿主），并在 ttl 后移除节点
+   （宿主是常驻 live region，节点留着会让后续播报重复念旧内容）。
+   > 通则：给非组件代码补能力时，**照着既有组件的 DOM 形态写孪生**，不要另发明一套
+   > （否则读屏行为、样式、主题响应都会与组件版漂移——又造出一份 r57 那种重复实现）。
+
+**账本要怎么更新（这一步容易做错）**：`ctx.config.set` 那 9 处在**语法上仍然**没有 try/catch，
+所以扫描结果不变（还是 9 处）。变的是**后果**：不再静默。于是账本条目从 `todo` 改成
+`acceptable` 并把 consequence 改写成"框架级兜底播报 …；不再静默"，
+而**没有**去改判据把这 9 处算成"已保护"——判据守的是"调用点自身有没有处理"，
+框架兜底是另一层；把它算进来会让判据失去发现"框架兜底被删"的能力。
+所以另加了一条 **⑤ 回归锚**：`plugin-context` 里必须同时有 `announceTransient`、
+`config.set(…).catch(`、`shell.configWriteFailed`、`throw err`，且 `announceTransient` 仍存在。
+
+> 通则：**当修复发生在"比调用点更高的一层"时，调用点级判据不要放水**。
+> 正确做法是：调用点判据照旧（它反映语法事实）+ 账本更新后果描述 + 给高层修复单独加回归锚。
+> 三者合起来才既不误报、也不会在高层修复被回退时失明。
+
+**过程失误（如实记）**：首次用正则做替换时把 `.catch(` 插错了位置——挂到了 `opts` 参数上
+（`config.set(pluginId, key, value, opts.catch(…))`）而不是挂到 `config.set(…)` 返回的 promise 上。
+tsc 报了错才发现。教训与 r57 那次索引切片同类：**用正则/索引改写多行表达式后，必须立刻 tsc + 目视那几行**，
+不能只看"替换成功"的打印。
+
+产出：框架兜底 + `announceTransient` + `shell.configWriteFailed` × 4 语言 + 账本更新 + ⑤ 回归锚
+（守卫 6 测全绿）。全量 260 文件 / 2201 测试、5 项审计 0、构建通过、
+e2e：settings-controls-audit 42 / minimal-smoke 28。
+
+### 17.83 账本 todo 清零：单点缺陷局部修，且**守卫会提醒你删条目**（r83）
+
+消化 r81 账本剩下的两条 todo。它们各只有 1 处，与 r82 的 `config.set`（9 处同款）不同，
+所以**局部修**而不是收进框架（§3.3 的判据是"多个调用方逻辑大同小异"，单个调用方不满足）。
+
+**① `plugin-manager` 的 `refresh()`**：此前是三段裸 await 串起来
+（`ctx.plugins.list()` → 读 customOrder → 读 tagFilter），任一段抛错就**静默中止后面的段**：
+列表停在旧数据、用户以为操作没生效、且没有任何提示。修成**分段兜底**：
+list 失败走 `showFeedback`（error 严重级，r59 已接 live region）；
+偏好读取失败静默用默认值——**这不是"用户以为成功了"的那类静默**，打扰用户反而更差。
+分段还保证一段失败不影响另一段的恢复。
+
+**② `stickers` 的 create/save**：追调用链才发现真问题不在被扫到的那一行。
+`ctx.configFile.writeBinary` 在 store 层的 `writeBanner()` 里，它被 store 的 add/update 调用，
+再被 UI 的 `onSave` / `create` 调用——**这三层全都没有 try/catch**。后果与 r80 的 install 卡死同类：
+`setEditing(null)` 与 `reload()` 全走不到 ⇒ 编辑器不关、列表不刷新、且无提示。
+修法：加 `mutate(op, failKey)` 助手，失败时播报 + **仍尝试 `reload()`** 让列表回到真实状态
+（否则界面会显示"半截"：编辑器关了但列表没更新，或反之）。
+
+> 通则：**扫描命中的那一行往往不是该修的那一层**。`writeBinary` 那行在 store 里是对的
+> （store 就该把失败抛给调用方），真正缺兜底的是**最外层的用户动作 handler**。
+> 追调用链到"用户动作"那一层再决定修哪里，否则会修错层（在 store 里吞掉错误，
+> UI 就永远不知道失败了）。
+
+**一个作用域坑**：stickers 有现成的 `flash(msg, "error")`（r59 给它加了严重级），
+但它住在 `useStickerTransfer` hook 里，主组件作用域**取不到**。
+所以改用 r82 为框架兜底建的命令式原语 `announceTransient`——它渲染出与
+`<Announce variant="error">` 相同的 DOM（role=alert 可打断），读屏行为与本插件
+导入导出的失败提示一致。本轮它有了第一个**插件侧**消费方，于是补进发布面导出。
+> 这也验证了 r82 那个原语的抽象是对的：它不是只为框架兜底造的一次性东西。
+
+**守卫自己提醒我删账本条目**：修完 ① 之后，`ctx.plugins.list` 在调用点已被 try/catch 包住，
+扫描不再命中它 ⇒ ② 的腐烂检查立刻红："账本里这些 API 已不再有未保护调用点（修好了就删条目）"。
+于是删掉该条目并把棘轮从 29 下调到 28。
+> 这正是"账本必须带腐烂检查"的价值：没有它，账本会越攒越多、里面一半是已失效的条目，
+> 最后没人再信它。**注意区分两种更新**：调用点修好了 ⇒ **删条目**（扫不到了）；
+> 更高层修好了（如 r82 的框架兜底）⇒ **改 consequence + 保留条目**（语法事实没变）。
+
+④ 那条断言也从"todo 数量 >0"翻成"**todo 必须为空**"——账本清空是进展，不是判据失效；
+注释里写明了将来若又登记新 todo，这条会红、那时该改回 >0 并在报告里说明。
+
+产出：两处修复 + `mutate` 助手 + `announceTransient` 进发布面 + `stickers.saveFailed` × 4 语言 +
+账本更新（删 1 条、改 1 条、棘轮 29→28、todo 断言翻成清零）。守卫 6 测全绿；
+全量 260 文件 / 2201 测试、5 项审计 0、构建通过、e2e：settings-controls-audit 42 / a11y-names-audit 12。
+
+**如实说明验证边界**：两处修复都**没有真机目视**（要构造真实的写盘失败/列表读取失败，
+零 token 剧本里不易造）。证据是 tsc + 全量测试 + 账本判据 + 棘轮。
+
+### 17.84 行窗口启发式撑不起"未处理异步"普查；但顺着它仍挖到一处真缺陷（r84）
+
+把 r81/r83 的普查推到其它异步形态，实测：
+`void X()` 无 `.catch` **231** 处、`await window.kernel.*` 附近无 try **29** 处、
+`useEffect` 里的 async 形态 **0** 处。
+
+**结论是：这三类都不能直接做成守卫**，原因各不相同，都值得记：
+
+| 形态 | 为什么不能直接守 |
+|---|---|
+| `void X()` 231 处 | 绝大多数是**合法的**发射后不管（系统通知、定时器回调、fire-and-forget 刷新）。要区分"该接住"与"可以不接"，必须知道**这个 promise 的失败对用户意味着什么**——那是语义判断，不是语法判断 |
+| `await window.kernel.*` 29 处 | 我的判据是"往上 N 行找 `try {`"，这是**行窗口启发式**，而保护关系是**函数作用域**级的。抽查即崩：`settings-page.tsx` 的保存路径其实是 `try { … } catch (err) { setSaveError(…) } finally { setSaving(false) }`（r80 那个模式的正确形态），`remote-access` 的 6 处全走集中包装器 `run()`（try/catch/finally + setError + setBusy(false)） |
+| `useEffect` async 0 处 | 判据本身没错，但这个形态在本仓不存在（都用 `void (async () => …)()` 或 `.then`） |
+
+> 通则：**"未处理异步"这类判据需要 enclosing-function 分析，行窗口必然产假阳性**。
+> 而假阳性一多，人就会加豁免，豁免一加守卫就废（r74/r77 的同款结论）。
+> 按 r77 的纪律：**一个方向的判据没把握时，就不要交那条守卫**——
+> 本轮如实记下"这三类扫了、判据不成立、要什么才能做（作用域分析）"，
+> 而不是硬交一条 29 处全红的守卫。
+
+**但顺着这条线仍挖到一处真缺陷**（这说明"普查做不成守卫"不等于"普查没价值"）：
+`layout-store.ts` 的防抖布局持久化是 `void writeGeneralConfig({ layout: skeleton })`——
+发射后不管、无 catch。写盘失败（服务端抛错 ⇒ transport reject）会变成 unhandled rejection，
+用户侧的表现是**"布局改了、下次打开没记住"，且一点提示都没有**（§7.6 禁止的静默）。
+已修：`.catch()` 里用 `announceTransient` 播报 `shell.layoutSaveFailed`（+ 四语言），
+并写明**不重试**的理由（布局是可重放的 UI 状态，用户下一次拖动会再触发持久化）。
+
+**追这处的路径也值得记**：`general-config.ts` 被扫出"3 处 await 无 try、全文 0 个 catch"，
+看着像重灾区，实际它是 **store 层工具**——把错误抛给调用方是**正确设计**
+（r83 的教训：store 就该抛，缺兜底的应在最外层的用户动作层）。
+于是改查它的**调用方**，一跳就到 `layout-store.ts:137` 那个 `void`。
+> 通则：**"0 个 catch"在某一层是缺陷、在另一层是正确设计**。判断标准是这一层的职责：
+> 工具/store 层该抛（让调用方决定），用户动作层该接（决定给用户看什么）。
+> 所以普查要**沿调用链走**，不能按文件计数下结论。
+
+**过程失误（如实记）**：给 `layout-store.ts` 补 import 时，我用"找最后一个以 `import ` 开头的行、
+在其后插入"的办法，结果插进了一个**多行 import 的中间**（`import {` 与它的成员之间），
+tsc 立刻报 3 个语法错。与 r57 的索引切片、r82 的正则插错位置同类：
+> **凡是用"位置"而不是"锚点文本"做插入，都要立刻 tsc + 目视那几行**。
+> 更稳的做法是拿一段唯一的锚点文本做替换（本轮修就是这么修的）。
+
+产出：布局持久化兜底 + `shell.layoutSaveFailed` × 4 语言。全量 260 文件 / 2201 测试、
+5 项审计 0、构建通过、minimal-smoke 28。本轮**没有新增守卫**（理由见上，如实记）。
+
+### 17.85 判据升级到位、但分类工作量超出一轮时：交「棘轮 + 锚」，不交半个账本（r85）
+
+r84 因为行窗口启发式产假阳性而**没有交守卫**。本轮把判据升级成**作用域级**，三个要素：
+
+1. **花括号配对**的 try 范围（不是"往上 N 行找 try"）；
+2. 语句级 `.catch(`；
+3. **集中包装器识别**：文件内形如
+   `const run = async (fn: () => Promise<unknown>) => { … try { await fn(); } catch … }` 的函数，
+   凡在它调用点范围内的 await 都算已保护。
+   ⚠ 参数表要用**括号配对**取，不能用 `[^)]*`：参数类型 `fn: () => Promise<unknown>` 里就含 `)`，
+   正则会在它面前截断——**r73 那条教训的第三次应验**（前两次：泛型 `Record<string, string>`、
+   `?.emit` 的可选链）。
+
+判据升级后，包装器识别出 **3 个**：`run`（remote-access）、`runOp`（plugin-manager，r80）、
+`mutate`（stickers，r83）——**正是最近三轮建的那三个收敛点**。
+> 这本身就是对判据的一次交叉验证：一个"找集中错误处理"的判据，如果连你亲手写的那三个都认不出来，
+> 它一定还会漏别人的。**用已知的正确实现当判据的自检样本**（与 r63"挑最难的文件当样本"同理，
+> 这里是"挑最该被认出的实现当样本"）。
+
+升级后未保护的 await 从 r84 那份不可信的 29 变成 **54** 处（口径也变了：本轮同时覆盖
+`window.kernel.*` 与 `ctx.*`，r84 只扫了前者的一半）。
+
+**本轮交什么、不交什么（这是本轮的主要方法论产出）：**
+
+- **交**：度量 + 棘轮（≤54，只许减少）+ **反假阳性锚**（三处已知已保护的调用点
+  ——remote-access 的 `window.kernel.remote.*`、settings-page 的保存路径、plugin-manager 的
+  `ctx.plugins.list`——**不得**出现在未保护名单里）+ 分层事实钉住（store/工具层 17 处）。
+- **不交**：逐处分类账本。因为分类要按**层职责**判断（`stickers-store.ts` 10 处、
+  `general-config.ts` 3 处都是 store 层，把错误抛给调用方是**正确设计**；
+  `settings-page.tsx` 11 处要逐个分辨读路径还是用户动作），一轮做不完，
+  而**半分类的账本比没有账本更糟**——它给人一种"已经审过了"的错觉。
+
+> 通则：**判据升级到位、但分类工作量超出一轮时，交"棘轮 + 锚"而不是"半个账本"**。
+> 棘轮保证债务不增长，锚保证判据不退化（不会悄悄变回假阳性机器），
+> 两者合起来让后续每一轮都能安全地往下消化——这比交一份看着完整、实则一半没审的账本有用得多。
+
+**③ 那条"分层事实"值得单说**：它断言 store/工具层的未保护点 ≤17（实测 stickers-store 10 /
+general-config 3 / squad-runner 2 / stt-engine 2）。这些**不是待修项**，而是设计如此
+（r83/r84 的结论：store 就该抛，缺兜底的应在最外层用户动作层）。
+把它们单独钉住的目的是**防止后续轮次把它们反复当成新发现重审**——
+> 普查类工作要有"已知合法"的一格，否则每一轮都会重新"发现"同一批东西，
+> 而真正的进展（数字下降）反而看不出来。
+
+**又一次阈值凭猜**：反空转断言我写了"语料 >300 个文件"（照 r77 的 407 推），
+实测只有 229——因为本守卫的语料是 `src/plugins + src/web + packages/react/src`，
+**不含 `src/server`**（服务端不走 `window.kernel`/`ctx`，判据对它无意义）。
+已按实测钉并把差异写进注释。
+> 这是本项目第 N 次同一个错：**反空转阈值必须来自当轮实测，不能从别处类推**。
+> 类推的阈值要么假红（本轮），要么更糟——松到永远不红。
+
+产出：`src/unhandled-async-scope.test.ts`（4 测）。全量 261 文件 / 2205 测试、
+5 项审计 0、构建通过。
+
+### 17.86 消化棘轮债务时，先挑**杠杆最高**的那处；发布面的组件要特别小心作用域（r86）
+
+r85 交了"棘轮 + 锚"（54 处未处理异步），本轮开始消化。选点标准是**杠杆**：
+`packages/react/src/kernel-extensions-page.tsx` 的 5 处——它在**发布面**，
+是 pi / dsh / minimal / probe4 **四个内核的扩展页共用组件**，修一处等于修四处。
+
+查实缺陷与 r80 的 plugin-manager 完全同型（形态①处理了、形态②没处理）：
+
+| handler | 形态②（抛错/reject）的后果 |
+|---|---|
+| `handleToggle` | 开关静默无效、`loadExtensions()` 不跑 ⇒ 界面停在旧状态 |
+| `handleInstall` | `setInstalling(false)` 走不到 ⇒ **按钮永久卡在 installing 态** |
+| `handleRestart` / `handleRestartAll` | 重启静默没发生、待重启列表不刷新 |
+
+`handleInstall` 尤其值得看：它**已经**处理了形态①（`if (result.ok) … else setInstallProgress(result.error)`），
+代码看着很完整——恰恰因此掩盖了形态②完全没处理。这是 r80 那条通则的第二次应验：
+> **只追一条路径就会得出"已经处理了"的错误结论**；形态①处理得越完善，形态②的缺口越不容易被看见。
+
+修法沿用已建成的三件东西（不另造）：`runGuarded`（r80 `runOp` / r83 `mutate` 同款收敛）+
+`announceTransient`（r82 的命令式原语）+ `try/finally` 保证解除 busy 态（r80 的 install 同款）。
+失败后仍然刷新列表——**失败时也要让界面回到服务端的真实状态**，而不是停在"我以为的那一侧"。
+
+**踩到一个作用域坑（发布面组件特有）**：首版把 `runGuarded` 定义在组件内，
+而 `handleRestart` / `handleRestartAll` 属于**同文件的另一个组件**（扩展页 + 待重启区），
+于是 `TS2304: Cannot find name 'runGuarded'`。改成**模块级**函数、`t` 由调用方传入
+（模块级函数拿不到 hook）。
+> 通则：在一个**导出多个组件**的文件里加共享助手时，先确认它们是否属于同一个组件作用域；
+> 不确定就放模块级 + 把 hook 产物当参数传。这比"先写在组件里、报错了再挪"省一轮。
+> 另外 `loadExtensions()` / `loadPending()` 返回 `void`，不能在后面挂 `.catch()`
+> （`TS2339: Property 'catch' does not exist on type 'void'`）——
+> **给 void 返回的调用挂 .catch 是常见笔误**，tsc 会抓，但要认得这个错误信息指的是什么。
+
+消化后棘轮按纪律下调：**54 → 49**（r85 定的"每消化一批就下调"）。
+新增 `ext.toggleFailed` / `ext.restartFailed` 两个键 × 4 语言（落在 `system/i18n` 的 `ext.json`，
+与既有 `ext.installFailed` 同处——§1.3 单源，跨插件共用的壳文案归 system/i18n）。
+
+验证：全量 261 文件 / 2205 测试、5 项审计 0、构建通过、
+**`kernel-capability-gating` 27/27**（这个剧本正好覆盖"模型配置页 + 扩展页 × 三内核真机对照"，
+即本轮改动的组件；页面均非空 ⇒ 改动没把扩展页弄坏）。
+
+⚠ 仍未真机目视的：抛错路径本身（要构造服务端 install/toggle 抛错）。
+与 r80/r82/r83/r84 同类，记在待办。
+
+### 17.87 构造真实失败路径：一次清掉五轮累积的"未真机目视"债（r87）
+
+r80/r82/r83/r84/r86 连续五轮都在修同一类缺陷（服务端失败两种形态，只处理①不处理②⇒静默失败），
+但每轮都只能如实写"未真机目视"——因为构造真实失败需要让写盘/安装**真的失败**，
+而零 token 剧本里没有这个手段。本轮找到了：**把项目层配置文件设为只读**。
+
+```
+chmod 444 <project>/.my-harness-desktop/config/general.json
+chmod 555 <project>/.my-harness-desktop/config/          # 目录也要，否则可删可重建
+```
+然后在界面上点一次右面板开关（触发布局树变更 ⇒ 防抖 300ms ⇒ `writeGeneralConfig`）。
+于是服务端真的抛 `EACCES`，完整走一遍：
+**服务端 throw → gateway 转 HANDLER_ERROR → transport reject → renderer `.catch`
+→ `announceTransient` → 常驻 live region（role=alert）+ 可见文本**。
+
+实测三语言各 **9/9** 通过，播报内容形如：
+`布局保存失败：EACCES: permission denied, open '…/project/.my-harness-desktop/config/general.json'`
+/ `Failed to save layout: EACCES: …` / `Layout konnte nicht gespeichert: EACCES: …`
+——**三语言都验**才说明是按 locale 查表，而不是换了份写死文案（r78 定的纪律）。
+
+**两个踩坑都值得记：**
+
+**① 只读要设在项目层，不是全局层。** `writeGeneralConfig(patch, cwd)` 在**有 cwd 时**走
+`setProject(dir, "config/general.json", …)`，写的是 `<cwd>/.my-harness-desktop/config/general.json`。
+首版把只读设在全局 `<dataRoot>/config/general.json` 上，结果写盘照样成功、探针报"无播报"。
+> 那是**假阴性**：看起来像"修复无效"，实际是**根本没造出失败**。
+> 通则：**构造失败路径的剧本，第一步要证明失败真的发生了**。
+> 本剧本靠"播报文本里必须出现 `EACCES`/`permission denied` **以及那个具体路径**"来证明
+> （两条独立断言），否则"没有播报"永远分不清是修复无效还是没造出失败。
+
+**② 判"可打断播报"要看任一匹配元素，不能只看第一个。** 首版断言取
+`querySelectorAll('[aria-live],[role=status],[role=alert]')` 里**第一个**含该文案的元素，
+而 r37 的常驻宿主本身是 `role=status` + `aria-live=polite`（外层），
+`announceTransient` 把 `role=alert` 设在**它追加的内层 span** 上（嵌套 live region，
+按 ARIA 内层对自己子树优先）。`querySelectorAll` 按文档序返回 ⇒ 外层先命中 ⇒ 断言假红
+（看着像"错误没用 alert 播报"，实际是断言取错了元素）。dump 出真实结构才看清：
+`[{role:status,live:polite,…},{role:alert,live:null,…}]` 两层都在，都含该文案。
+> 通则：**断言嵌套结构的属性时，先 dump 出真实层级**。"取第一个匹配"在嵌套场景下
+> 几乎总是错的——要么取最内层，要么断言"存在任一满足"。
+> 顺带把外层也断言了（`role=status`/`polite` 必须还在）：那是 r37 的形态要求
+> （宿主先于内容存在，才能播报瞬时内容），两层各有各的断言才算把设计钉住。
+
+产出：`scripts/demo/write-failure-feedback.e2e.mjs`（9 项断言 × 3 语言）——
+失败文案是本语言译文、带真实底层错误、点名失败文件、不是裸 i18n 键、
+落在 live region 里、内层 role=alert 可打断、外层仍是 polite 宿主、页面零报错。
+剧本末尾**还原权限**（否则清理临时目录会失败、留下垃圾）。
+
+> 这条剧本的价值超出它验的那一处：它证明了**整条失败反馈链路在真机上通**，
+> 于是 r80（plugin-manager runOp）、r82（config.set 框架兜底）、r83（stickers mutate）、
+> r86（扩展页 runGuarded）四处修复共用同一条链路，都有了间接的真机证据。
+> 五轮累积的"未真机目视"债，用一个剧本 + 一个手段（只读文件系统）清掉了。
+> **找手段比逐处验更值**：一个能构造失败的办法，胜过五个"只能靠静态守卫"的说明。
+
+### 17.88 自动化点不动时，先量**元素矩形**与**判据等的是什么**，别先怀疑坐标（r89）
+
+r88 的结论是"点击没生效，怀疑坐标落在不可见元素上"。r89 按接手点①先查机制，
+把三个假设逐个证伪/证实：
+
+| 假设 | 实测 | 结论 |
+|---|---|---|
+| 元素不可见 / 矩形为 0 | `getBoundingClientRect()` = `{x:24, y:641, w:181, h:24}`，`display:flex`、`visibility:visible`、无隐藏祖先，视口 1280×840 | **证伪**：元素可见、矩形正常、在视口内 |
+| 被"未保存修改"对话框拦截 | `[data-settings-unsaved-dialog]` 不存在 | **证伪**（这一轮没被拦；但机制真实存在，见下） |
+| 判据在等一个不会出现的元素 | `panels:1 / visible:0`；`llm-recorder` 的 settings 条目**没有 `tabs`**，右侧因此不渲染 `[role=tabpanel]` | **证实**：`clickPointUntil` 的谓词要求"可见 tabpanel 内有开关"，而这个条目根本没有 tabpanel ⇒ 谓词永假 ⇒ 重试 6 次后放弃 |
+
+> 通则：**自动化"点不动"时，按顺序量三件事**——① 目标元素的矩形与可见性（不是"存在"）；
+> ② 有没有遮罩/守卫把动作拦下（本例是 `guardNavigate`：`activeDirty` 时把动作存进
+> `pendingAction` 而不执行）；③ **自己的成功判据等的是不是这个页面真会产出的东西**。
+> 第③条最容易被忽略，而它的症状与"点击无效"完全一样（都是"什么都没发生"）——
+> r88 就是把③误判成了坐标问题。
+
+**顺带修掉一个有据可查的真缺陷**：那个"未保存修改"对话框（容器 + 取消/放弃/保存三个按钮）
+此前**只有 i18n 文案、没有任何 `data-*` 锚点**，而同一个文件 461-463 行的注释自己写着
+「`data-settings-id` 是稳定探针锚点……e2e 只能按文本猜——因此写不可靠（skills §10.3：
+探针必须靠稳定锚，不靠文本子串）」。已补 `data-settings-unsaved-dialog` 与
+`data-settings-unsaved="cancel|discard|save"` 四个锚点，并把理由写进注释
+（含"它会拦下设置页内导航，脚本看不到变化就会误判成点击无效"这条 r88 的实测教训）。
+
+> 这也说明**锚点缺失的代价不只是"脚本文案耦合"**：它会连带让脚本**误诊**
+> （被守卫拦住时无法判断"是没点上还是被拦了"）。所以给拦截类 UI（确认框/守卫条）补锚点
+> 的收益比普通控件更高。
+
+**验证目标本身仍未达成**（如实）：`ctx.config.set` 的框架级兜底（r82）还没能在真机上目视。
+剩下的障碍已定位到具体一步：点击 `[data-settings-id=…]` 后，DOM 里有 25 个开关但**没有一个可见**
+（`panels:1 / visible:0`），即右侧配置区没有切到该条目。下一轮的接手点：
+① 查 `ListItem` 的 `onClick` 是否被 `guardNavigate` 之外的东西包住（`activeDirty` 的初值从哪来）；
+② 或绕过 UI 导航——直接触发某个**不需要进设置页**的 `ctx.config.set` 调用方
+（r81 账本里 voice-input 的 `stt-engine.ts` 两处、session-colors 的两处都不在设置页里）；
+③ 或用 `shell:openSettings` 频道（r55）带参数直达某个条目（若它支持）。
+
+产出：设置页未保存对话框 4 个稳定锚点。全量 261 文件 / 2205 测试、5 项审计 0、tsc 0、构建通过；
+e2e：settings-controls-audit 42 / a11y-names-audit 12 / write-failure-feedback（en）9。
+
+### 17.89 真机路走不通时，退到**能精确钉住那一支**的层级，并说清两者互补关系（r90）
+
+r88/r89 两轮想在真机上触发 `ctx.config.set` 的框架级兜底（r82）都失败：
+设置页导航在隐藏窗口里点不动（条目无 `tabs` 时右侧不渲染 tabpanel、25 个开关全不可见），
+而其它调用方（voice-input 的模型/语言选择）同样难触达。
+
+本轮**不再硬攻真机**，改在 **DOM 层**精确钉住这一支（`packages/react/src/plugin-context.config-set.test.tsx`，4 测）：
+① 失败时 live region 里出现 `role=alert` 的播报且含真实原因（`EACCES`）；
+② 播报是**译文**不是裸键（用真实 `shell.json` 初始化 i18next，按 r78 的规则整形资源）；
+③ **仍然 reject**（不吞掉）——否则自己写了 try/catch 的调用方会以为成功了。
+
+> 通则：**真机路走不通时，退到能精确钉住那一支的层级，但要写清两层各证什么、缺哪层会留什么死角。**
+> 本轮的关系是：r87 的真机剧本证明**传输链路**通（服务端 throw → gateway HANDLER_ERROR →
+> transport reject → renderer catch → announceTransient → live region + 可见文本），
+> DOM 测试证明**这一支的兜底逻辑**对。两者互补——
+> 只有真机剧本，则 config.set 这一支没有直接证据；只有 DOM 测试，则传输链路是假设。
+> 这比"因为真机跑不通所以这条没验证"有用得多，也比"用 DOM 测试冒充真机验证"诚实。
+
+**测试替身的边界要划清**：`usePluginContext` 在构造期会触碰多个 API 面，
+最小桩（只给 `config`）会报 `Cannot read properties of undefined (reading 'get')`。
+逐个枚举既啰嗦、又会在发布面新增面时假红，所以用**宽容 Proxy 兜住不关心的面**，
+而**被断言的 `config.set` 仍是显式桩**（不受 Proxy 影响）。
+> 通则：宽容替身只能用于**本测试不关心的面**；被断言的那一个必须是精确替身。
+> 全宽容的替身会让断言失去意义（什么都返回 undefined 也能"通过"），
+> 全精确的替身则会在无关演化上假红——**按"是否被断言"划界**。
+
+**又一次路径层级错**（r57 同款、本项目第二次）：从 `packages/react/src/` 到仓库根是 **3** 级，
+首版写了 2 级 ⇒ `ENOENT: …/packages/src/plugins/…`。
+> 通则：`packages/<pkg>/src/**` 下的测试要读仓库里的其它文件时，**先数层级再写**，
+> 或者干脆用 `process.cwd()`（vitest 的 cwd 就是仓库根）。报错信息里出现
+> `packages/src/…` 这种"两个根拼在一起"的路径，就是层级数错了的签名。
+
+反向注入已验：摘掉 `plugin-context.ts` 里那段 `.catch(…)` ⇒ ①③ 同时红
+（① 报"失败后必须往常驻 live region 里插一条播报"、③ 报"兜底不得吞掉 rejection"）。
+全量 262 文件 / 2209 测试、5 项审计 0、构建通过。
+
+### 17.90 迁移服务端文案会**连带触发三类守卫**，这是好事（r91）
+
+按 r79 的判据（查调用方的 catch）继续消化服务端中文错误，迁移三条：
+`dsh-config-source` 的空路由/空 model id（经"模型配置页保存"→ `kernelConfig.set` →
+设置页 `setSaveError` 浮到 UI，且带**用户可执行指引**）、`installer` 的 ZIP 不支持
+（r80 已证安装链路会把 reject 的 message 交给 `showFeedback`）。
+
+**文案归属按 §1.2 分开放**，这是一个容易搞错的点：
+- dsh 专属 ⇒ **dsh 内核插件自己的语言包**（`src/plugins/kernels/dsh/locales/*/dsh.json`）。
+  不放共享 `shell.*`：那会把内核名带进壳的文案面（§6.3 检验⑤ 的精神）。
+- installer 是壳级 ⇒ `shell.installZipUnsupported`（`system/i18n`）。
+
+**迁移连带触发了三类守卫，每一类都抓到了真问题**：
+
+| 守卫 | 报什么 | 处置 |
+|---|---|---|
+| `locale-kernel-identity` | 新搬进 dsh.json 的文案含 `llm-pi-ai`（内含 "pi"）⇒ 跨内核提及未登记 | **登记**（那是 npm 包名/配置段名，不是对 pi 内核的指称；账本里已有同款先例） |
+| `dsh-config-source.test.ts` ×2 | 断言旧中文字面量 | 按 r54/r78/r90 纪律**给真字典**（init translator + 从字典取译文断言），不软化断言 |
+| 依赖审计（十三检验） | kernel → application 的新 import | **0 违规**（application 在内圈；`kernel/core/kernel-test-ctx.ts` 早有同款 import 作先例） |
+
+> 通则：**一次改动触发多条守卫不是麻烦，是这些守卫在替你做影响面分析**。
+> 尤其"文案搬家"这种看着无害的改动：它会跨进语言包守卫的辖区（内核身份、四语言齐全、
+> 键对账），也会跨进依赖方向的辖区（服务端 i18n 在 application 层）。
+> 如果一条都没触发，反而要怀疑改动没生效或守卫没覆盖到。
+
+**测试助手自己也会错，而且错得很像被测代码的缺陷。** `dict(key, vars)` 首版直接拿全键
+（`"dsh.routeEmptyModels"`）去查已剥前缀的字典 ⇒ 查不到 ⇒ 回落成键名 ⇒
+断言显示 `Expected: "dsh.routeEmptyModels"`，看起来像"被测代码没翻译"。
+修法是让助手**查不到就直接抛**，而不是静默回落：
+
+```ts
+if (out === key) throw new Error(`字典里没有 ${key}（测试助手会静默回落成键名，必须先炸出来）`);
+```
+
+> 通则：**测试助手里的"回落默认值"是诊断毒药**。`?? key`、`|| ""`、`?? []` 这类写法
+> 会把"助手自己查错了"伪装成"被测代码行为不对"。助手应当在拿不到数据时**立刻炸**，
+> 把两种失败分开。（这与 r67"任何 0 违规都要报基数"是同一条纪律的两个面：
+> 都是**不让空值/回落冒充结果**。）
+
+**又一次路径层级错**（本项目第三次：r57 两级、r90 三级、本轮五级）：
+`src/server/kernel/dsh/backend/` → 仓库根是 **5** 级，首版写 4 级 ⇒ `ENOENT: …/src/src/plugins/…`。
+> 报错里出现"两个根拼在一起"（`packages/src/…`、`src/src/…`）就是层级数错了的签名——
+> 这个签名比去数目录快得多，值得直接记住。
+
+产出：3 条消息迁移 + 3 个键 × 4 语言 + 跨内核提及登记 + 2 条测试改真字典断言。
+全量 262 文件 / 2209 测试、5 项审计 0、构建通过；
+e2e：kernel-capability-gating 27（覆盖模型配置页 = 本轮 dsh 消息的浮现路径）、
+write-failure-feedback 9（zh-CN）。
+
+### 17.91 新锚点必须**当轮就有剧本用它**；判"在哪个页面"别用可见性（r92）
+
+r89 给设置页的"未保存修改"对话框补了 4 个锚点（`data-settings-unsaved-dialog` /
+`data-settings-unsaved="cancel|discard|save"`），但当时**没有任何剧本使用它们**。
+本轮把它们用进 `settings-controls-audit`，新增一节验证这条此前完全未测的真实交互路径：
+弄脏表单 → 试图离开 → 对话框必须弹出且三个动作锚点齐全 → 『取消』关闭且留在设置页 →
+再次导航对话框重新出现（拦截不是一次性的）→ 『放弃』关闭且脏字段被复位。
+剧本从 42 项断言增至 **51 项**，全绿。
+
+> 通则：**加锚点的那一轮就要有剧本用它**。锚点是给探针用的，没人用的锚点会腐烂
+> （改了没人发现、删了没人报错），而它腐烂时**不会有任何信号**——
+> 与 r63 的"死组件名"、r71 的"死字段"、r72 的"死契约成员"同一族：
+> **声明了却没有消费方，就是死声明**，只是这次死的是测试锚点而不是产品字段。
+> `src/e2e-anchor-coverage.test.ts` 那条守卫（§2 锚点表 + 腐烂检查）正是为此存在的，
+> 新锚点要同时进那张表。
+
+**一个判据错误值得单独记：不要用"元素可见性"判"当前在哪个页面"。**
+首版断言『放弃并离开』后 `设置列表不可见 && 输入框可见`，实测**两者的 `offsetParent` 都非 null**
+（两个视图都在渲染树里、也都能取到布局盒）。可见性判据在本仓的 DOM 结构下不可靠，
+而**不可靠的判据比没有判据更糟**：它会随布局细节漂移，红了也说不清是产品坏了还是判据坏了。
+
+改断言『放弃』的**本质效果**——`doReset()` 把脏字段复位（探针输入的文本消失）。
+这条比"在哪个页面"更贴合按钮语义，且判据稳定（读的是 input 的 value，不依赖布局）。
+
+> 通则：**断言要挑"语义本质"而不是"表象副作用"**。
+> 「点了放弃」的本质是"我的未保存修改被丢掉了"，而不是"某个视图不见了"；
+> 「点了取消」的本质是"修改还在、我还在原地"。表象（哪个视图可见）依赖布局实现，
+> 本质（值有没有被复位）依赖行为契约——后者才该被断言。
+> 同类：r53 那次"回归锚要写在缺陷的真实语法形态上"、r45 那次"反空转探针要包含 input.value"，
+> 都是"别断言表象"的变体。
+
+**顺带证实了 r88/r89 的一个猜测**：`guardNavigate` 的拦截机制真实存在且工作正常
+（脏表单 + 导航 ⇒ 弹对话框；『取消』⇒ 留在原地、修改不丢）。
+所以 r88/r89 那两轮"点条目没反应"确实**不是**产品缺陷，而是自动化侧的问题
+（r89 已定位为"判据在等一个不会出现的元素"：条目无 `tabs` 时右侧不渲染 tabpanel）。
+
+产出：`settings-controls-audit` 新增"未保存拦截"一节（9 项断言，42 → 51）。
+全量 262 文件 / 2209 测试、5 项审计 0、构建通过、`e2e-anchor-coverage` 4/4。
+
+### 17.92 卡了三轮的自动化阻塞，根因是**产品缺锚点**（r93）
+
+r88/r89 连续两轮想在真机上验证 `ctx.config.set` 的失败兜底，都卡在
+"点了设置条目之后，不知道右侧有没有真的切过去"。r88 归因为坐标、r89 归因为
+"判据在等一个不会出现的元素（条目无 `tabs` 时不渲染 `[role=tabpanel]`）"——
+两个都是**症状**，根因是：
+
+**`SettingsPane` 的根元素没有任何稳定锚点**（无 `data-*`、无 `id`、无 `role`——
+`role="tabpanel"` 与 `id` 只在 `inTabs` 分支里才有）。于是自动化**无法判断
+"当前激活的是哪个设置条目"**，只能靠 `[role=tabpanel]` 或文本猜，而没有 `tabs`
+的条目（17 个里的大多数）根本不渲染 tabpanel ⇒ 判据永假 ⇒ 看起来像"点击无效"。
+
+这违反了该文件自己写在 461-463 行的纪律（「`data-settings-id` 是稳定探针锚点……
+e2e 只能按文本猜——因此写不可靠（skills §10.3：探针必须靠稳定锚，不靠文本子串）」）：
+入口列表有锚点，**内容面板却没有**。已补 `data-settings-pane={item.id}` 与
+`data-settings-pane-active={active}`，并把 r88/r89 的误诊过程写进注释。
+
+补上之后**立刻见效**：探针第一次能确证"点击其实成功了"——
+`pane 锚点: ["pi-kernel=false", "llm-recorder=true"]`。
+也就是说 r88 的"点击没生效"是**假的**（点击一直是好的），r89 的"判据等错元素"只对了一半
+（判据确实错，但错的原因是产品没给可判的东西）。
+
+> 通则：**自动化卡住时，"缺锚点"是与"判据写错"同等常见的根因，而且它伪装成产品缺陷**。
+> 排查顺序建议：① 元素矩形与可见性（r89）→ ② 有无遮罩/守卫拦截（r89/r92）→
+> ③ 自己的判据等的是不是这页真会产出的东西（r89）→ ④ **产品有没有给出可判定的锚点**（本轮）。
+> 前三条都在自动化侧，第四条在产品侧——而它最容易被忽略，因为"加锚点"看起来像是
+> 为了测试而改产品（实际上它同时服务可访问性与未来的 e2e，且 §10.3 本来就要求它）。
+
+**本轮验证目标仍未完成，但阻塞已清除**（如实）：`llm-recorder` 的设置面板里
+只有一个"清理全部记录"按钮，它的 `recordEnabled` 开关不在设置页（在侧面板），
+所以这个插件不适合当验证载体。下一步只需换一个设置面板里**真的有开关**的插件
+（voice-input / session-colors / tool-manager 都在 r81 账本里、且都有设置页），
+探针已经就绪（判据改成断言 `data-settings-pane-active="true"` + 在激活 pane 内找控件）。
+> 这也说明：**选验证载体时要先确认它真的有那条路径**，否则会白跑一轮
+> （本轮就是选了 llm-recorder 才发现它的开关不在设置页）。
+
+产出：`SettingsPane` 两个稳定锚点（+ 注释记录 r88/r89 的误诊链）。
+全量 262 文件 / 2209 测试、5 项审计 0、构建通过；
+e2e：settings-controls-audit 51 / a11y-names-audit 12（锚点是纯增量属性，两者都未受影响）。
+
+### 17.93 四轮才补上的真机验证：阻塞链的每一环都记错了一次（r94）
+
+r82 给 `ctx.config.set` 加了框架级兜底，但 r82/r83/r84/r86 四轮都只能如实写"未真机目视"。
+r94 补上了：新剧本 `scripts/demo/config-write-failure.e2e.mjs`，**zh-CN 与 en 各 7/7 通过**，
+播报形如 `设置保存失败：EACCES: permission denied, open '…/config/tool-manager.json'`
+/ `Failed to save setting: EACCES: …`，且内层 `role=alert`、外层 `status`+polite 宿主都在。
+
+**这条验证花了四轮，每一轮的归因都错了一次**——把这条链完整记下来，比结果更有价值：
+
+| 轮 | 当时的归因 | 实际 |
+|---|---|---|
+| r88 | "坐标落在不可见元素上" | 错。元素矩形正常（r89 实测 24,641,181×24） |
+| r89 | "判据在等一个不会出现的元素（无 `tabs` 的条目不渲染 tabpanel）" | **只对一半**：判据确实错，但错的原因是产品没给可判的东西 |
+| r92 | （转向别的事，顺带证实拦截对话框机制正常） | 排除了"被 guardNavigate 拦住"这个假设 |
+| r93 | 查明根因：`SettingsPane` 根元素**没有任何锚点** | ✅ 补 `data-settings-pane[-active]` 后立刻通 |
+| r94 | 换载体（`llm-recorder` 的开关不在设置页 ⇒ 改 `tool-manager`） | ✅ 一次通过 |
+
+> 通则：**一个自动化阻塞如果连续两轮没解决，就要怀疑"归因层级"错了**——
+> r88/r89 都在自动化侧找原因（坐标、判据），而根因在产品侧（缺锚点）。
+> 判据是：如果每一轮的修复都"让情况变好一点但没通"，说明还在剥症状；
+> 真正的根因被修掉时，通常是**一次就通**（r93 补锚点后 r94 立刻成功）。
+
+**两个可复用的操作细节：**
+
+1. **只读要设两层**：`ctx.config.set` 有 cwd 时写**项目层**
+   `<cwd>/.my-harness-desktop/config/<pluginId>.json`，无 cwd 时写全局层
+   `<dataRoot>/config/<pluginId>.json`。r87 只设全局层 ⇒ 写盘照样成功 ⇒ 假阴性。
+   最稳的做法是两层都设（文件 444 + 目录 555，目录也要否则可删可重建）。
+2. **选载体前先确认它真的有那条路径**：首版选 `llm-recorder`（因为 r81 账本里它有
+   `ctx.config.set`），但它的 `recordEnabled` 开关在**侧面板**、不在设置页 ⇒ 白跑一轮。
+   改用 `tool-manager`（账本里同样有 `config.set("groups", …)`，且设置面板里有可点按钮）。
+   > 探明载体的最省办法：先用一个"只读不写"的探针把候选逐个走一遍，
+   > dump 每个面板里的控件类型（本轮就是这么筛出 `tools` 有 5 个 button、
+   > `blind-review` 有 1 个 select、而 `voice-input`/`session-colors`/`stickers` 面板压根没激活）。
+
+产出：`config-write-failure.e2e.mjs`（7 断言 × 2 语言）+ §2 锚点表登记 4 个新锚点
+（`data-settings-pane`/`-active`、`data-settings-unsaved-dialog`/`=cancel|discard|save`/`-title`），
+并把 r88/r89 的误诊链写进锚点表备注——**锚点表是下一个人的入口，误诊史比锚点本身更值钱**。
+
+### 17.94 半成品剧本要么不交、要么**自己说清没覆盖什么**（r95）
+
+想给 r80 的 plugin-manager 修复补直接真机证据（安装 `.zip` ⇒ installer 确定性抛错），
+结果卡在最后一步：**提交按钮识别不出来**。已查明的三个事实：
+
+1. 插件管理面板**初始没有任何 input**——安装表单默认折叠，要先点「安装插件」展开
+   （对应 `installOpen` 状态）。首版直接找 input ⇒ 找不到 ⇒ 假失败。
+2. 面板顶部的「安装插件」是**折叠开关**，文本与表单内的提交钮高度相似；
+   按文本匹配、按"输入框容器内"匹配都反复命中它——点它等于把刚展开的表单又关上。
+3. 在输入框里按 Enter 也不提交。
+
+于是本轮**没有**完成 r80 的直接验证。处置值得记：
+
+**不能把一个会失败的剧本留在仓库里**（它会让任何全量 e2e 变红，下一个人分不清是新缺陷还是旧坑）；
+**但也不该直接删掉**（那就丢掉了已经查明的卡点信息）。所以改成**自报半成品**：
+- 保留已证实的四步（导航 → 面板激活 → 表单展开 → 填入安装源），它们本身是有价值的导航回归
+  （依赖 r93 的 `data-settings-pane` 锚点）；
+- 文件头与末尾输出都明写「**半成品**：仅覆盖…；提交后的失败反馈未覆盖」；
+- 文件内写下**接手点**（按优先级）：① 给提交钮补稳定锚点（如 `data-plugin-install="submit"`）——
+  与 r89/r93 同一处置：产品缺锚点时补锚点比让脚本猜更根本（§10.3）；
+  ② 或读 plugin-manager 的 JSX 按**结构**而非文本定位；③ 补完后恢复被摘掉的那段断言。
+
+> 通则：**半成品交付物的唯一合法形态是"自己说清没覆盖什么"**。
+> 三个反例都见过：留着会红的剧本（污染全量结果）、悄悄删掉（丢失卡点信息）、
+> 以及最糟的——**留着且输出 PASS 但不说自己只覆盖了一半**（那是假绿，比红更危险）。
+> 本轮首版就差点犯第三个：末尾还印着「PASS: 4 项断言（插件安装失败可见且不卡死）」，
+> 而那正是**没验**的部分。发现后立刻把文案改成如实描述。
+> **检查自己的成功输出文案有没有超出实际断言范围**，应当是每次交付前的固定动作。
+
+顺带：本轮又一次栽在**测试标题/标签里的嵌套双引号**（第 9 次），已改 `『』`。
+这个错的稳定形态是"在双引号字符串里再写一对双引号做强调"，
+值得直接养成习惯：**中文强调一律用 `『』`/`「」`，不用 `"`**。
+
+产出：`scripts/demo/plugin-install-failure.e2e.mjs`（半成品，4 项断言，自报覆盖范围 + 接手点）。
+全量 262 文件 / 2209 测试、5 项审计 0、tsc 0、构建通过。
+
+### 17.95 产品缺锚点时，补锚点比让脚本继续猜更根本（r96）
+
+r95 留下的接手点①是"给安装表单的提交钮补稳定锚点"。本轮照做，一次通过：
+`scripts/demo/plugin-install-failure.e2e.mjs` **zh-CN 与 en 各 10/10**，
+r80 的修复（`runOp` 收敛两种失败形态 + `try/finally` 解除 busy 态）终于有了**直接**真机证据：
+
+- ZIP 不支持的提示以**本语言**出现（r91 迁移的那条服务端消息）
+- 提示含**可执行的下一步**（改用 `.tar.gz`），不是只说"失败了"
+- 不是裸 i18n 键
+- **提交钮没有卡在 installing 态**（`data-installing="false"`）← r80 的根因
+- 失败后表单**保持打开**、输入**没被清空**（r80 的设计：成功才关，失败留着方便改完重试）
+- 页面零报错
+
+补的锚点是一族而不是一个：`data-plugin-install="toggle|source|browse|submit"`。
+**为什么是一族**：r95 的困难不是"找不到提交钮"，而是**折叠开关与提交钮文本高度相似**
+（`pluginManager.install` = "安装插件" vs `pluginManager.installBtn` = "安装"），
+按文本匹配、按"输入框容器内"匹配、按 Enter 提交三种办法都失败。
+一族锚点把"这一组的每个角色"都定死，脚本就不必再猜谁是开关、谁是提交。
+
+顺带补了 `aria-expanded` 到折叠开关上——它此前是个**没有展开态语义**的按钮
+（读屏用户按了之后听不到"已展开"）。这与 r41 给可折叠头补 `aria-expanded` 是同一类修复：
+> **补探针锚点时顺手检查该控件的 ARIA 语义**：两者服务的是同一批"看不见界面的人"
+> （自动化脚本与读屏用户），缺锚点的地方往往也缺语义。r89（未保存对话框）、
+> r93（设置面板）、r96（安装表单）三次都是这样：锚点补上时顺带发现语义也缺。
+
+**提交钮另带 `data-installing`** 这一点值得单独说：r80 的根因是"失败后 `setInstalling(false)`
+走不到 ⇒ 按钮永久卡在 installing 态"。要断言它，靠读按钮文案（"安装中"/"Installing"）
+就得跟着语言与措辞变；而 `data-installing="true|false"` 是**状态本身**，与文案无关。
+> 通则：**断言"某个状态位"时，让产品暴露状态位本身，不要从文案反推**。
+> 从文案反推的断言会在改文案时假红、也会在多语言下漏判（本轮 en 与 zh-CN 共用同一条断言）。
+> 同类：r50 的 `data-plugin-systemprompt-inert`、r46 的 `data-ext-install-unsupported`、
+> r61 的 `data-toast-kind`、r93 的 `data-settings-pane-active`。
+
+产出：安装表单 4 个锚点 + `aria-expanded` + `data-installing`，剧本从半成品变成
+10 项断言 × 2 语言，§2 锚点表登记（含"为什么是一族"与 r95 的误点史）。
+全量 262 文件 / 2209 测试、5 项审计 0、构建通过、a11y-names-audit 12。
+
+### 17.96 一条没有 `.catch` 的加载链 = 整页静默变空（r97）
+
+消化 r85 棘轮时查 `settings-page.tsx` 的 11 处未保护 await，发现真正的问题不在"某一处"，
+而在**整条加载链的形状**：
+
+```ts
+void window.kernel.settings.list().then(async (list) => {
+  for (const item of …) {
+    cfgs.set(item.id, await window.kernel.kernelModels[item.kernelModels].readConfig());  // ← 会抛
+    …
+  }
+  setConfigs(…); setProjectOverrides(…); setDirties(…);
+});        // ← 链尾**没有 .catch**
+```
+
+后果分两层，第二层比第一层严重：
+
+1. 任一读取抛错（内核未装载时 `kernelModels[k].readConfig()`、`configFile` 读失败等）
+   ⇒ 整条链 reject ⇒ **unhandled rejection**；
+2. 而 `setConfigs` / `setProjectOverrides` / `setDirties` 都在链的**末尾**，
+   所以抛错时它们**一个都没执行** ⇒ 设置页呈现"全空/全默认"，且**没有任何提示**。
+   用户看到的是"我的配置不见了/本来就是默认值"，而不是"加载失败了"。
+
+> 通则：**把"多个读取 + 最后统一 setState"写进一条 promise 链时，链中任何一处抛错
+> 都会让全部 setState 落空**——失败面不是"那一项没读到"，而是"整页变空"。
+> 这类形状的代码必须要么逐项兜底（r83 的 refresh 分段兜底），要么链尾统一 `.catch` 并
+> 给用户一个"加载失败"的可见状态。两者都要，因为逐项兜底能让**其它项照常显示**，
+> 链尾 catch 能保证**无论如何都有提示**。本轮先补链尾（成本低、覆盖全部十来个 await），
+> 逐项兜底记入待办。
+
+修法（三件，都是一处）：`loadError` 状态 + 链尾 `.catch`（`announceTransient` 播报 +
+`setLoadError`）+ 界面上一行可见提示（带 `data-settings-load-error` 锚点，供 e2e 断言），
+并在每次重新加载前 `setLoadError(null)`。
+
+**为什么 loadError 与 saveError 分开**：两者的**可执行下一步不同**——
+保存失败 = 重试保存；加载失败 = 重载窗口 / 检查内核是否装载。混用一条会给出错误指引
+（§7.6 的降级要"解释"，解释错了等于没解释）。
+
+新增 `shell.settingsLoadFailed` × 4 语言。全量 262 文件 / 2209 测试、5 项审计 0、构建通过；
+e2e：settings-controls-audit **51**、config-write-failure 7。
+
+**顺带查明棘轮判据的一类假阳性（如实记）**：补了链尾 `.catch` 之后，
+`unhandled-async-scope` 的计数**没有下降**——因为链内那些 `await window.kernel.*`
+既不在 `try {}` 里、也没有**语句级** `.catch`，而我的判据只认这两种形态。
+语义上它们**是**被保护的（async 回调里抛错 ⇒ 链 reject ⇒ 链尾 catch 接住）。
+> 所以棘轮当前的 49 里含这一类假阳性。按 r85 的设计（棘轮 + 锚，不做逐处账本）
+> 这是可接受的——棘轮只保证"不增长"，而增长时人要复核。但要**如实写下这类假阳性**，
+> 否则下一轮有人会以为"数字没降 = 我白改了"。
+> 判据要认全"链式保护"需要识别 `.then(async …)` 之后的链尾 `.catch`，
+> 那是 r85 说的 enclosing-function 分析的延伸，记入待办。
+
+### 17.97 判据漏一种保护形态，就会让"修好了"看起来像"白改了"（r98）
+
+r97 给 `settings-page` 的加载链补了链尾 `.catch`，但棘轮计数**没有下降**。
+r97 如实记下了这个现象并归因为"判据只认 `try{}` 与语句级 `.catch` 两种保护形态"。
+本轮把判据补全：新增第 ④ 种——**链式保护**。
+
+`void p.then(async (…) => { …await X… }).catch(…)` 这种形状里，回调体内的 `await X`
+既不在 `try{}` 里、也没有语句级 `.catch`，但**语义上是被保护的**：
+async 回调里抛错 ⇒ 整条链 reject ⇒ 链尾 `.catch` 接住。
+识别办法：定位每个 `.then(`，用**花括号配对**取出回调体范围，
+再检查体结束后紧跟的少量字符里有没有 `.catch(`。
+
+补上之后基线从 **49 → 46**（`settings-page` 从 11 处降到 8 处——那 3 处正是加载链里的）。
+
+> 通则：**判据漏一种"合法形态"，代价不只是假阳性，而是会让修复看起来无效**。
+> r97 那次如果没如实记下"计数没降"这个现象、而是直接把它当成"改了也没用"，
+> 下一轮就不会去补判据，那条链尾 `.catch` 的价值也就永远显示不出来。
+> 所以：**修复后指标没动时，先怀疑指标，再怀疑修复**——
+> 与 r59/r67/r70/r71/r73 那条"扫描返回 0（或不变）是危险信号"是同一族纪律，
+> 只是这次的方向相反（那边是"太干净"，这边是"没变化"）。
+
+**四种保护形态的完整清单**（这条判据现在的样子，可作为同类普查的模板）：
+
+| # | 形态 | 例子 | 识别方式 |
+|---|---|---|---|
+| ① | `try { … } catch` 包住 | `settings-page` 的保存路径 | 花括号配对的 try 范围 |
+| ② | 语句级 `.catch(` | `await x().catch(() => null)` | 该语句文本里含 `.catch(` |
+| ③ | **集中包装器** | `run()` / `runOp()` / `mutate()` / `runGuarded()` | 识别"参数是回调、体内 `try{ await 回调() }catch`"的函数，其调用点范围算已保护（r85） |
+| ④ | **链式保护** | `.then(async …).catch(…)` | 花括号配对取回调体 + 体后紧跟 `.catch(`（本轮） |
+
+③ 与 ④ 都是"保护不在 await 那一行、而在更外层结构里"——这正是 r84 说的
+"行窗口启发式必然产假阳性"的具体形态，也说明**这类判据必须做结构分析**（花括号/括号配对），
+不能靠正则窗口。而结构分析的参数（如 `.then(` 后 120 字符内必须出现 `{`、
+体后 40 字符内必须出现 `.catch(`）要**写进注释**，否则下一个人调不动也不敢调。
+
+产出：判据扩到四种保护形态，棘轮基线 49 → **46**（并在注释里记下每次下调的原因）。
+全量 262 文件 / 2209 测试、5 项审计 0、构建通过、settings-controls-audit 51。
+
+### 17.98 棘轮量的是"有没有被保护"，量不出"失败时是否优雅降级"（r99）
+
+r97 给 `settings-page` 的加载链补了链尾 `.catch`，但那只是**兜住**——链中任一条目读失败，
+后面的 `setConfigs` / `setItems` 仍然全部落空，页面依旧"整体变空"。
+本轮补 r97 记下的待办：**逐项兜底**（把 for 循环体包进 try，单项失败则记入 `failed[]`、
+该项置空态、**循环继续**；循环后若有失败，`setLoadError(failed.join("; "))` + 播报一次）。
+
+依据是 §7.6 的精神：部分成功应当**显示已成功的部分 + 说明哪一项失败**，而不是全部隐藏。
+最典型的现实场景：某个内核未装载时 `kernelModels[k].readConfig()` 抛错——
+而其它十几个条目（主题/语言/技能/工具/插件…）与它毫无关系，没理由跟着消失。
+
+**但棘轮计数没有下降（仍是 46）**，查清原因后得到一个值得记的结论：
+
+- 加载循环里的那几处 await，**r98 的"链式保护"判据早已把它们算作已保护**
+  （链尾有 `.catch`）；所以本轮再加一层逐项 try，对"是否被保护"这个维度**没有任何改变**。
+- settings-page 剩下的 8 处未保护点其实在**别的函数**里（`readLayered` L63、
+  `refreshActive` L303/309/316、`clearProject` L439、另一处读取 L449/452/459），
+  与加载循环无关。
+
+> 通则：**"有没有兜底"与"兜底之后行为对不对"是两个维度，一条棘轮只能守前者。**
+> 本轮的逐项兜底是**行为改进**（全空 → 部分可用 + 指明失败项），
+> 而棘轮的语义是"未保护点数只许减少"，所以它测不出这次改进。
+> 这不是棘轮的缺陷——它就该只管一件事——而是提醒：
+> **改了行为但指标没动时，要能说清"这个指标本来就不度量这件事"**，
+> 否则会与 r98 那条"指标没动要先怀疑指标"混淆（那次是判据漏了形态，这次是判据管的维度不同）。
+> 两者的分辨办法：把改动前后的判据输出**逐项对比**（本轮就是列出 settings-page 剩下的 8 处
+> 具体在哪几个函数），确认它们与本次改动的位置不重叠。
+
+行为改进本身**未做真机验证**（如实）：要构造"部分条目读失败"需要一个内核未装载而其它条目正常的环境，
+`kernel-capability-gating` 剧本虽然按内核对照，但它是**播种成功路径**的；
+构造失败路径需要新的手段（例如临时移除某个内核插件目录再重载）。记入待办。
+已验证的是：tsc + 全量 2209 测试 + `settings-controls-audit` 51（设置页交互全链路未回归）+
+`kernel-capability-gating` 27（三内核的模型配置页与扩展页均非空 ⇒ 正常路径未受影响）。
+
+产出：加载链逐项兜底 + 部分失败可见（`loadError` 承载"哪一项: 什么原因"）。
+棘轮基线维持 **46**（并在注释里写明"r99 的逐项兜底未使计数下降，原因见 §17.98"，
+避免下一轮有人以为改动无效或误把基线调错）。
+
+### 17.99 构造失败路径时，"没有报错"可能是**代码根本没跑**（r100）
+
+想验证 r99 的逐项兜底（一个条目读失败时其它条目照常显示），构造手段是
+`chmod 000 <dataRoot>/config/general.json` 再让设置页重新加载。两次尝试都得到
+"条目 17 → 17、`loadError` 为空"，看起来像"兜底没生效"。逐个排除后查明两层原因：
+
+**① 第一次：加载链根本没重跑。** 我用"离开设置页 → 再回来"触发重载，
+但那个 `useEffect` 的依赖是 `[pluginsNonce, currentCwd]`——两者都没变，组件也没卸载，
+所以链没有重跑。改用 `page.reload()` 强制重跑。
+> 通则：**构造失败之后，第一步要确认"那段代码真的又执行了一次"**。
+> 否则"没有报错"既可能是修复有效、也可能是代码没跑——与 r87 那条
+> "构造失败的剧本要先证明失败真的发生了"是同一纪律的两面：
+> 那边是证明**失败发生了**，这边是证明**代码跑到了**。
+
+**② 第二次：服务端有配置缓存，`chmod` 之后读取根本不碰磁盘。**
+`page.reload()` 只重载 **renderer**，服务端进程不重启；`ConfigStore` 侧的读取命中内存缓存，
+于是 `chmod 000` 对运行时读取无效。已单独验证 `chmod 000` 本身是有效的
+（非 root 用户 `cat` 得到 `Permission denied`，uid 502），所以不是构造手段的问题。
+
+要让这条路径真的失败，需要在**服务端首次读取之前**就破坏文件（即启动前 chmod），
+但那会与 boot 的种子逻辑纠缠（`40-shell-plugins` 在 general.json 不存在时会写种子；
+不可读时的行为未知，可能让启动本身失败）——超出本轮预算，记入待办。
+
+> 通则：**"改文件权限/内容"这类构造手段，要先问"目标进程什么时候读它、读几次、有没有缓存"**。
+> 前端渲染进程与服务端进程对同一文件的读取时机完全不同；
+> 有缓存的一侧，运行期改文件是无效的（这一条对本仓所有 config/prefs/locale 文件都适用）。
+> 可用的替代手段：① 启动前就破坏（需确认 boot 不会因此失败）；
+> ② 让服务端**主动重读**（例如触发 `pluginsNonce` 变化的插件重载路径，r49 的 kernel-reload 剧本就是这么做的）；
+> ③ 换一个**不经缓存**的读取路径做载体。
+
+本轮结论：r99 的逐项兜底**仍未获得真机证据**（如实），已有的证据是
+tsc + 全量 2209 测试 + `settings-controls-audit` 51（设置页交互未回归）+
+`kernel-capability-gating` 27（三内核正常路径未受影响）。
+下一轮的接手点就是上面②：**用插件重载路径触发 `pluginsNonce` 变化**，
+让加载链在服务端仍持缓存的情况下重跑——但那样读到的还是缓存，所以真正可行的是①或③。
+
+### 17.100 构造失败前先读**服务端的错误策略**：有些失败被设计成永不外泄（r101）
+
+r100 的两次构造失败后，本轮改成**启动前**就把 `blind-review.json` 设为 `chmod 000`
+（挑它是因为全仓只有它同时具备 `saveMode:"framework"` + `configFile`，且不参与 boot 种子逻辑）。
+结果：设置页 **17 个条目照常渲染**（说明没有整体崩塌）、页面零报错，但**仍然没有 loadError**。
+
+查服务端才明白：**这个失败根本不可能浮上来**。`src/server/application/config/config-file.ts` 里
+有两个读取函数，错误策略**故意不同**：
+
+```ts
+/** 读 JSON 文件。不存在/损坏返回空对象。 */
+export function readJsonFile(absPath) {
+  if (!existsSync(absPath)) return {};
+  try { return JSON.parse(readFileSync(absPath, "utf-8")); }
+  catch { return {}; }                     // ← 一切读/解析失败都吞掉
+}
+
+/** deep 合并前的读取:**区分"不存在"与"损坏"**。
+ *  为什么不能直接用 readJsonFile:它把"损坏"和"不存在"都归成 {}——对**只读**是对的(健壮),
+ *  但 deep 合并是**读-改-写**:文件损坏时读回 {}、合并后写回,就会把原文件里**其余键整段抹掉**
+ *  且无任何告警。…所以这里在写回前先把损坏文件原样备份,让"损坏"这件事可恢复、可见。 */
+function readJsonFileForDeepMerge(absPath) { … catch { copyFileSync(absPath, `${absPath}.corrupt-${Date.now()}`); console.warn(…); return {}; } }
+```
+
+也就是说：`configFile.get` 走的是 `readJsonFile`，**读失败 = 空配置**，这是有意的健壮性设计
+（用户看到的是默认值，而不是一屏错误）；只有"读-改-写"路径才会区分损坏并备份 + warn。
+
+> 通则：**构造失败路径之前，先读一遍目标路径上的错误策略**。
+> 有些失败被**设计成永不外泄**（吞掉后回落默认值），此时无论怎么破坏输入都不会产生可观测的失败——
+> 继续换手段是白费，正确动作是**换一个不吞错误的载体**。
+> 这与 r100 的教训（"先确认代码真的跑了"）是同一条纪律的下一层：
+> 先确认代码跑了 → 再确认**这条路径会把失败传出来**。
+> 本轮据此确定了下一个载体：`kernelModels[k].readConfig()` / `kernelConfig[k].get()`
+> （内核配置源，走的是各自内核的读取实现，不经 `readJsonFile`）。
+
+**顺带一个正面结论**：17 个条目在"某个条目配置文件不可读"时**全部照常渲染**，
+说明 r99 的逐项兜底至少没有引入"一处失败拖垮全页"的回归（虽然本轮没能触发它的 catch 分支）。
+这个对照本身有价值：**破坏一个输入、观察整体是否仍可用**，是"优雅降级"类改动的最低成本验证。
+
+本轮**无代码改动**（纯验证 + 结论）。全量 262 文件 / 2209 测试、5 项审计 0、tsc 0、构建通过。
+
+### 17.101 三层都吞错误 ⇒ 兜底代码"不可达"，此时该写的是**可达性分析**而不是删掉它（r102）
+
+r101 定下的新载体（内核配置源）也失败：`pi-settings-store.get()` 同样是
+`catch { console.warn(…); return {} }`。加上 r101 查明的 `readJsonFile`，结论是：
+
+**设置页加载链上的每一条读取路径都被设计成"失败不抛错、回落空值"**，
+所以 r97 的链尾 `.catch` 与 r99 的逐项 try/catch 在当前服务端策略下**实际触发不了**。
+r100/r101/r102 三轮的"构造失败"尝试全部得到同一结果（17 个条目照常、`loadError` 为空）——
+不是兜底失效，是**失败根本没被传出来**。
+
+**处置不是删掉那两层，而是把可达性分析写进代码注释**（就在 try 之前），内容包括：
+① 三条读取路径各自的吞错位置与理由（`config-file.ts` 的 `readJsonFile`、
+`pi-settings-store.get()`、`readLayered`）；② 三轮构造尝试的手段与结果；
+③ **为什么保留**——它们是防御纵深：`settings.list()` 本身仍可能 reject；
+`kernelModels[k].readConfig()` 走各内核自己的实现，未来新增内核不保证吞错；
+服务端若哪天把"损坏"改成抛错（那是更好的设计），这两层立刻有用且行为正确；
+④ 明确写"**不要**因为触发不了就删掉它们，也不要再花轮次去构造触发"。
+
+> 通则：**当一段错误处理被证明不可达时，正确的产出是"可达性分析 + 保留理由"，不是删除、也不是继续硬触发。**
+> 删除会失去防御纵深（而它的成本是几行代码）；继续硬触发是浪费（本轮之前已浪费三轮）。
+> 而**把分析写进代码**（不只写进报告）才是真正止损的一步：
+> 下一个人读到那段 try 时，第一眼就知道"这里触发不了、为什么、什么时候会有用"，
+> 不会重走 r100→r101→r102。这与 r72 删死契约成员**不矛盾**：
+> 那里的"死"是**契约声明了一个没人调用的面**（会误导实现者去实现它），
+> 这里的"不可达"是**实现里多了一层防御**（不误导任何人，只在需要时生效）。
+> 判据：**它会不会让读者对系统行为产生错误预期？** 会 ⇒ 删；不会 ⇒ 注明保留理由。
+
+**顺带浮出一个值得单独立项的设计问题（本轮未做，需要有文档依据再动）**：
+配置文件损坏时静默回落 `{}`，对用户意味着"**我的设置好像全没了**"，而界面上没有任何解释；
+更糟的是下一次保存会用默认值**覆盖**掉原文件。
+`readJsonFileForDeepMerge` 已经认识到这个危险（所以它对损坏文件先备份再 warn），
+但**只读路径没有**同样的待遇。可能的方向：只读路径遇到"文件存在但解析失败"时，
+也返回一个可区分的信号（而不是 `{}`），让 UI 能说明"配置损坏，已备份到 X"。
+> 这属于 §7.6 的"显式降级"范畴，但改它会牵动所有 `configFile.get` 的调用方，
+> 需要先确认设计文档的意图（`readJsonFile` 的注释明确写了"对只读是对的(健壮)"，
+> 所以这可能是**有意的取舍**而不是疏漏）——**有注释背书的取舍，改之前要先推翻它的理由**。
+
+本轮**无功能代码改动**（只加注释）。全量 262 文件 / 2209 测试、5 项审计 0、tsc 0。
+
+### 17.102 同族函数的错误处理必须一致，最弱的那个就是这条路径的实际行为（r103）
+
+r102 查明"构造失败"这条路当前走不通后，本轮转向不依赖构造的消化：`settings-page` 剩下的 8 处。
+查下来发现一个很典型的形态——**同族函数里只有一个没兜底**：
+
+| 函数 | 触发方式 | 错误处理 |
+|---|---|---|
+| `doSave` | 保存按钮 | `setSaving` + `try/catch(setSaveError)` + `finally` ✅ |
+| `doSetGlobal` | 设为全局 | 同上 ✅ |
+| **`doClearProject`** | 移除项目覆盖 | **裸 await** ❌ |
+| **`doReset`** | 放弃修改（未保存对话框的「放弃并离开」） | **裸 await** ❌ |
+
+`doReset` 的后果最严重：它被 r92 验过的那个对话框按钮调用——
+`onClick={async () => { await doReset(); setPendingAction(null); a?.(); }}`。
+若 `doReset` 抛错，`setPendingAction(null)` 与后续导航都走不到 ⇒
+**对话框永远关不掉、用户被卡在设置页**（与 r80 的 install 卡死同类，只是触发者换成了对话框）。
+
+修法按兄弟函数的形态补齐（`setSaving` + `try/catch(setSaveError)` + `finally`），
+`doReset` 则**在函数内部兜住**（而不是让调用方兜），因为调用方那段
+`await doReset(); setPendingAction(null); a?.()` 的语义是"无论重置成不成功都要关框并导航"——
+把兜底放在被调方，才能让所有调用方都获得这个保证。
+
+⚠ 一个容易写错的细节：**失败时不清 dirty**。`doReset` 成功时才 `setDirties(false)`；
+若重读配置失败就把它标成"已保存"，那是**撒谎**（用户的编辑还在内存里、盘上也没变）。
+所以 catch 分支只 `setSaveError`，不动 dirty。
+
+> 通则：**同一组用户动作（保存/另存/重置/清除…）的错误处理必须一致**。
+> 不一致时，最弱的那个就是这条路径的实际行为，而它通常也是最少被测的那个
+> （因为"保存"是主路径、"移除项目覆盖"是角落功能）。
+> 审这类代码的有效切入点是**并排读同族函数**，而不是逐个函数孤立地看——
+> 孤立地看 `doClearProject` 会觉得"没兜底也不算错"，并排看才看得出它是漏了。
+
+棘轮 **46 → 42**（本轮修掉 4 处：`doClearProject` 1 + `doReset` 3）。
+全量 262 文件 / 2209 测试、5 项审计 0、构建通过、`settings-controls-audit` **51**
+（其中 r92 那节正好走「放弃并离开」→ `doReset`，所以这条改动是被真机覆盖的）。
+
+### 17.103 i18n 反方向（死键）：先分清"非 t() 消费"，再动手删（r104）
+
+r77 把死键方向推迟了，理由是"动态拼键需要前缀族匹配"。本轮把它做通，方法是
+**先把所有消费机制建模，再看剩下什么**，而不是直接拿 `t("…")` 的扫描结果当死键清单。
+
+建模的五类消费方（1719 个键）：
+① 静态 `t("key")`（758 个）；② 模板前缀族 `t(\`debug.density.${d}\`)`（14 个前缀）；
+③ **完全动态**键 `t(\`${i18nPrefix}.${suffix}\`)` ⇒ 去调用方收集 `i18nPrefix="…"` 的字面量
+（得到 `dsh.` / `dshModels.` / `kernel.` / `models.` 四族）；
+④ manifest 的 `*Key` 字段（59）+ 派生键前缀（`settings.<id>.` / `sidePanel.<id>.` / `plugin.<id>.`，96 种）；
+⑤ `registerChannels` 的 meta `labelKey`/`descriptionKey`（37）。
+
+**一个必须先排除的陷阱**：首版把 ② 的正则写成 `` t\(`([^`$]*)\$\{ ``，
+它会把 `t(\`${i18nPrefix}.…\`)` 的前缀匹配成**空字符串**，而空前缀 `startswith("")` 恒真
+⇒ `covered()` 对所有键都返回 true ⇒ 报"死键 0 个"。
+> 这就是 r59/r67/r76 那条纪律的又一次应验：**判据退化时的"0 违规"毫无意义**，
+> 而退化最隐蔽的形态就是"某个匹配模式恰好匹配一切"。
+> 防法：把参与判定的**前缀集合打印出来**看一眼（本轮就是这么发现 `''` 混在里面的）。
+
+建模之后仍有 **255** 个键四类都覆盖不到。逐个抽查发现其中**真假混杂**：
+
+| 键族 | 真相 |
+|---|---|
+| `common.locale.*`（4 个） | **假阳性**：`merge.ts` 的 `collectLocaleList` 直接遍历 `resources[id].common.locale[id]`，**不经 `t()`** |
+| `dshExt.*`（13 个） | **真死键**：r58/r63 把按内核分的扩展页统一成 `kernel-extensions-page`（用 `ext.*`）后留下的残渣；`piExt.*` 已经是 0 个 ⇒ 当时只清了 pi 那半 |
+| `debug.area.*` / `copyDomTitle` / `simplify` / `areaNotFound`（7 个） | **真死键**：debug-bar 里唯一的动态拼键是 `debug.density.${d}`（已被前缀族覆盖），这几个是"复制区域 DOM"功能退役后的残留 |
+
+> 通则：**死键判定必须建模"非 `t()` 的消费方式"**——直接遍历 resources 对象
+> （本轮的 `collectLocaleList`）、把键当数据传（manifest 的 `*Key`）、
+> 运行时拼键（前缀族）。只看 `t()` 的扫描会把第一类全部误判成死键。
+> 而**删除前的最后一道关**是拿候选键去全仓（含 `.mjs`/`.md` 之外的所有代码）做一次字面量反查：
+> 本轮就是这样救回 `debug.copied`（正则把它列进候选，但反查发现仍有引用）——
+> **候选清单不等于删除清单**。
+
+删除结果：`dshExt.*` 13 × 4 语言 = 52 条，`debug.*` 7 × 4 = 28 条，**共 80 条**；
+四语言键数删后仍严格对齐（各 **1538**）。依据是 r72 的纪律：
+**死声明会让读者以为系统还有这个能力**（`dshExt.*` 会让人以为 dsh 有独立的扩展页文案），
+而它的成本是四语言的翻译维护。
+
+⚠ **没有把这条做成守卫**（如实）：255 个候选里仍有未逐个核实的部分
+（例如 `common.*` 的其余键、`shell.*` 里可能存在的同类结构遍历消费），
+按 r77 的纪律——**判据没把握时不交那条守卫**。已建模的五类 + "非 t() 消费"这一类
+写进本节，下一轮把剩余候选逐个核实后再交守卫（带账本 + 棘轮）。
+
+产出：删除 80 条死键条目（四语言对齐 1538）。全量 262 文件 / 2209 测试、5 项审计 0、
+tsc 0、构建通过、minimal-smoke 28。
+
+### 17.104 我第二次用 `git checkout --` 毁掉前几轮的工作（r105）
+
+本轮交了死键守卫（`src/i18n-dead-keys.test.ts`，5 测：反空转 + 自检 + 棘轮 231 +
+"已删死键不得复活"账本 + 四语言键集对齐）。六类消费方建模见 r104/守卫文件头。
+反向注入两处都正确变红（注入一个新死键 ⇒ ② 报"从 231 涨到 232"且 ④ 报四语言不齐；
+复活 `dshExt.title` ⇒ ③ 报"已删除的死键又回来了"）。
+
+**然后我在还原注入时用了 `git checkout -- src/plugins/kernels/dsh/locales/zh-CN/dsh.json`。**
+
+这正是 r76 写下铁律禁止的动作（「**永远不要** `git checkout --` 一个前几轮改过的文件；
+本仓累积着大量未提交的工作」），我第二次犯了。损伤面比想象的大——它回退的不是我注入的那一个键，
+而是**该文件的所有后续修改**：
+
+| 损伤 | 发现它的守卫 |
+|---|---|
+| 丢了 r91 的 `dsh.routeEmptyModels` / `dsh.routeEmptyModelId` | `dsh-config-source.test.ts`（r91 改成真字典断言，查不到键就抛） |
+| 恢复了 r104 删掉的 13 个 `dshExt.*` 死键 | 本轮新守卫的 ③（"已删死键不得复活"） |
+| 丢了早期轮次的 `dsh.extTitle` / `dshModels.devRoleHint` / `dshModels.devRoleIncompatible` / `settings.dsh-ext` / `settings.dsh-models` | `locale-parity` + 本轮 ④（四语言键集对齐） |
+| 把已修的旧术语「底座」退回文案里 | `locale-terminology` |
+
+**四条守卫各自抓到了损伤的一面，合起来把损伤范围完整框出来了**——这是"守卫网"最值的一次体现：
+如果只有其中一条，我会以为"补回那两个键就好了"，而实际上还丢了 5 个键、退回了 1 处术语。
+
+> 通则（强化 r76 那条铁律）：**还原注入只能用"本轮自己的备份 + 逐字/语义比对"**，
+> 绝不能用任何 VCS 回退命令。本仓的工作方式是长周期累积未提交改动，
+> `git checkout --`/`git stash`/`git reset` 在这个仓库里的语义是"删掉若干轮的工作"，
+> 而不是"撤销我刚才那次注入"。
+> 修复步骤也应记下来（可复用）：① 用**其它语言的键集**当基准做差集，找出丢了哪些键；
+> ② 从 zh-TW 取值转简体补回（术语按 zh-CN 惯例：相容→兼容、預設→默认、擴充→扩展、核心→内核）；
+> ③ 删掉被带回来的死键；④ 跑**全部**语言相关守卫（parity / terminology / kernel-identity /
+> 派生标签四语齐全 / 死键）而不是一条，因为损伤是跨维度的。
+
+**又一次自检样本凭空造**（r72 同款、本项目第二次）：①那条断言我写了 `debug.density.compact`，
+实际语言包里是 `smart` / `structure` / `all`；改对后又手滑写成 `.loose`（也不存在）。
+守卫自己的报错文案救了我：「自检样本不在语言包里（样本必须来自实测分布，不能凭空造）」。
+> **把纪律写进断言的失败文案里，它就会在下一次犯错时自己提醒你**——
+> 这比写进 skill 更有效，因为它出现在你正要看的那一行。
+
+产出：死键守卫（5 测，棘轮基线 **231**）+ 修复 `git checkout` 造成的 6 键缺失 / 13 死键复活 / 1 处术语退回。
+全量 **263 文件 / 2214 测试**、5 项审计 0、tsc 0、构建通过、kernel-capability-gating 27。
+
+### 17.105 交付清单（做一次全仓审计的完成定义）
+
+审计剧本（可 `--locale`、排除不可见子树、打印跳过计数、H 级发现非零退出）
++ 每个 locale 各跑一遍 + 每条判据配"不空转"断言 + 每个修复配反向注入验证
++ 大批量债务走棘轮清单 + 锚点只用自有且源码可查的 + 文件↔DOM 用不变量而非等式
++ 结论落到守卫（下次自动跑）而不是一次性输出。

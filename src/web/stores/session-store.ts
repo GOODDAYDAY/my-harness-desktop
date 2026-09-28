@@ -11,7 +11,7 @@
 // 就绪闸/防竞态只有这一份,勿回退到插件侧各自拉取)。
 // 模块级单例:首个组件挂载时 init 一次(幂等)。
 import { create } from "zustand";
-import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent, KernelId, ImageInput, DisplayMeta } from "@my-harness-desktop/shared";
+import type { NeutralMessage, SessionDetail, SessionEvent, SyncSnapshot, ModelInfo, SessionState, SessionStats, SessionToolConfig, SessionModelPrefs, SessionInfo, KernelEvent, KernelId, ImageInput, DisplayMeta, SessionCapabilities } from "@my-harness-desktop/shared";
 import { sessionEntryToNeutral, messageContentText as textOf, parseSessionModelPrefs, deriveSessionTitle } from "@my-harness-desktop/shared";
 import { useUiStore } from "./ui-store";
 import { useSessionScopeStore, readFrameworkSlot, writeFrameworkSlot, currentScopeKey } from "./session-scope";
@@ -186,10 +186,12 @@ export interface SessionStoreState {
    *  [] = 未运行(新会话/文件读历史会话),消费方按展示策略兜底。
    *  生命周期随投影基线:openSession/startNewChat 置 [],snapshot/modelSelect 框架刷新。 */
   thinkingLevels: string[];
-  /** 当前会话后端的扩展能力面 + 内核归属(main 侧 capabilities 投影;extension=false 时
-   *  steer/followUp/thinkingLevel/队列/导出等 pi 专属入口置灰,§7.6 显式降级;
-   *  kernel/locked 供内核 TAB 置灰:locked 且非 kernel 的 TAB 不可切)。 */
-  capabilities: { kernel: KernelId | null; locked: boolean; extension: boolean; thinking: boolean };
+  /** 当前会话后端的能力面 + 内核归属(main 侧 `SessionCapabilities` 投影)。
+   *  **类型从圆心 import,不在此内联重写一遍**——此前这里是
+   *  `{ kernel; locked; extension: boolean; thinking: boolean }` 的本地副本,圆心一改就漂
+   *  (本次把单个 `extension` bit 拆成逐轴 `faces` 时它当场编译错,正是 §1.3「两份定义必然漂移」)。
+   *  逐轴降级见 `faces`;`kernel`/`locked` 供内核 TAB 置灰(locked 且非 kernel 的 TAB 不可切)。 */
+  capabilities: SessionCapabilities;
   streaming: boolean;
   /** 切换会话中(乐观 UI:骨架/旧内容淡出) */
   switching: boolean;
@@ -393,9 +395,11 @@ function refreshStats(): void {
  *  让空清单不覆盖,正是串味的来源。 */
 export function refreshThinkingLevels(): void {
   const caps = useSessionStore.getState().capabilities;
-  if (!caps.extension && !caps.thinking) return;
+  // 判据是「有没有档位清单查询面」这一个轴。此前写成 `!caps.extension && !caps.thinking`
+  // ——两个 bit 析取,因为 pi 的清单走扩展面、dsh 走补面;统一到 thinking 面后只剩一个轴。
+  if (!caps.faces.thinking) return;
   const gen = sessionGen;
-  void window.kernel.sessions.pi.getThinkingLevels()
+  void window.kernel.sessions.getThinkingLevels()
     .then((ls) => { if (gen === sessionGen) useSessionStore.setState({ thinkingLevels: ls }); })
     .catch(() => { /* 内核中途退出/补面缺位:保持现状,下次快照/切模型再试 */ });
 }
@@ -413,7 +417,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
   overlay: [],
   stats: null,
   thinkingLevels: [],
-  capabilities: { kernel: null, locked: false, extension: false, thinking: false },
+  capabilities: { kernel: null, locked: false, faces: {}, thinkingCycle: false, levelsSemantics: "precise" },
   streaming: false,
   switching: false,
   syncNonce: 0,
@@ -616,7 +620,22 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         }
         if (toolCfg && Array.isArray(toolCfg.enabledToolIds)) {
           const enabledTools = toolCfg.enabledToolIds;
-          const gateInstalled = await window.kernel.kernels.pi.fitPiExtensionAvailable?.().catch(() => false);
+          // 问**本次发送要用的那个内核**（`prefs.kernel`）：它能不能**强制执行**工具白名单。
+          // 能 → 内核自己过滤，不必再往 prompt 里塞散文；不能 → 软注入补偿（唯一还能传达限制的通道）。
+          //
+          // 这里踩过两个坑，都不是"问谁"而是"问什么"：
+          //  ① 最早写死 `kernels.pi`：dsh/minimal 会话拿 pi 的答案，于是结果取决于**别的内核**
+          //     装没装扩展——环境依赖（CLAUDE.md §1.5 的壳漏内核身份）。
+          //  ② 改成问会话内核后仍问 `fitExtensionAvailable`（桌面适配扩展装没装）：那是**某一个
+          //     内核**实现强制过滤的手段，不是"能不能强制过滤"本身。自带工具门控的内核因此被判为
+          //     "不能过滤"，每次发送都被拼上冗余散文（实测：echo 内核原样回显进时间线，弄坏 DOM 对账）。
+          // 现在的轴是 `toolFilterEnforced`，每个内核按自己的机制回答（见圆心 KernelVersionApi）。
+          // 内核未知 / 该内核不声明此面 → 按「不能强制过滤」处理，照旧软注入（保守且不伪造能力）。
+          const gateKernel = prefs?.kernel;
+          const gateApi = gateKernel ? window.kernel.kernels[gateKernel] : undefined;
+          const gateInstalled = gateApi?.toolFilterEnforced
+            ? await gateApi.toolFilterEnforced().catch(() => false)
+            : false;
           if (!gateInstalled) {
             finalText = `${buildToolLimitNote(enabledTools)}\n\n${text}`;
           }
@@ -779,6 +798,22 @@ export function initSessionStore(): void {
     const cwd = useUiStore.getState().currentCwd;
     if (cwd) void useSessionStore.getState().loadSessionInfos(cwd);
   };
+  // ── 内核集合变了也要重拉（r19 补；此前缺这条，是「删内核」验收不成立的根因）──
+  //
+  // 每一行的 `kernelLoaded` 是 **main 侧按当时的注册表算出来**下发的
+  // （`session-store.ts:835/935` 的 `isKernelLoaded(s.header.kernel)`）。内核插件重载把某个
+  // 内核 unregister 之后，main 侧立刻就算对了（r16 起 `knownKernelIds` 是活 getter），
+  // 但 renderer 手里的 `sessionInfos` 还是**上一批下发的旧旗标**——于是：
+  //   · 会话行不显示"内核未装载"角标（`sessions-list` 按 `session.kernelLoaded === false` 判）；
+  //   · 时间线不显示只读条（`timeline` 按同一个旗标判 `sessionKernelBlocked`）；
+  //   · 用户点发送 → 到服务端才被拒（而 `application/sessions/session-store.ts:502` 的注释
+  //     明写"正常 UI 路径走不到这里"——它假定 UI 已经拦住了）。
+  // 触发信号用**框架中性的** `refresh.requested`（内核装/卸/改完成后 main 侧广播），
+  // 不订阅任何内核插件的私有频道（§8.3）。放在框架层而不是 sessions-list 插件里，
+  // 是因为"sessionInfos 何时该重拉"本来就由框架统一维护（本节上方注释），
+  // 插件只读 store（§3.3 框架管通用）。
+  const offRefresh = window.kernel.onRefreshRequested(() => loadForCwd());
+
   // ui-store 无 subscribeWithSelector,手动比对 currentCwd 变化(仅变化时拉)。
   let lastCwd = useUiStore.getState().currentCwd;
   const unsubCwd = useUiStore.subscribe((state) => {
@@ -811,7 +846,7 @@ export function initSessionStore(): void {
     }
   });
   // 模块级单例:进程内不复用卸载清理(与 onSnapshot 同生命周期,应用关才拆)。
-  void unsubCwd; void offKernel;
+  void unsubCwd; void offKernel; void offRefresh;   // 三者都与 app 同生命周期，不取消订阅
 
   // 第 21 项 + §neutral-storage-split §2.6:任一客户端改列表行(归档/置顶/改名/删除/复制),
   // 服务端广播 headerChanged——updateHeader/rename/delete 自带补丁,本地打行,不再全量重拉

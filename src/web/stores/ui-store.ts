@@ -30,7 +30,9 @@ import { sessionScopeKey } from "@my-harness-desktop/shared";
 export type AppView = "chat" | "settings";
 
 /** 桌面偏好持久化的字段集(与 main 的 Prefs 对齐)。 */
-const PREF_KEYS = {
+/** prefs 键名单源。导出以便 `app/i18n-init.ts` 直接读持久层时复用同一个键名，
+ *  不在两处各写一遍字面量（契约单源）。 */
+export const PREF_KEYS = {
   currentThemeId: "currentThemeId",
   timelineThemeId: "timelineThemeId",
   fontScale: "fontScale",

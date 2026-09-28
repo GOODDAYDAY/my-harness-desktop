@@ -70,3 +70,14 @@ export class DshKernelManager extends KernelManager {
     return this.uninstallNpm(pkgName, onProgress);
   }
 }
+
+/** dsh 内核版本管理实例（装在 `<数据根>/dsh`）。
+ *
+ *  此前住在 `kernel/factories/kernel-managers.ts`（与 pi 的构造并列在一个共享文件里），
+ *  那个文件因此同时 import pi 与 dsh 的实现——删掉任一内核目录会让另一个编译不过。
+ *  现归位到 dsh 自己的 manager：`createPiKernelManager` 是零消费者的死代码（pi 的插件工厂
+ *  直接 `new PiKernelManager(PI_SPEC, installDir)`），随共享文件一起删除。
+ *  依据 docs/design/boot-surface.md §3.6.3 与 dependency-audit 检验⑪。 */
+export function createDshKernelManager(installDir: string): DshKernelManager {
+  return new DshKernelManager(DSH_SPEC, installDir);
+}

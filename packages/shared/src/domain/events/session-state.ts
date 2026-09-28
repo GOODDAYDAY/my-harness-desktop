@@ -159,7 +159,16 @@ export interface TreeNode {
  *  经 ComposerCommand 机制在发送前拦截执行,见 domain/composer-commands.ts)。 */
 export interface CommandItem {
   name: string;
+  /** **文本**说明。来源是内核（`source` 为 extension/prompt/skill 时由内核的
+   *  RpcSlashCommand 投影而来），语言由内核决定，壳不改写。 */
   description?: string;
+  /** **i18n 键**说明。来源是壳插件（`source: "plugin"`，经 `ComposerCommand.descriptionKey`）。
+   *
+   *  ⚠ 为什么不把 `description` 直接改成键（r56）：这两个字段的**来源不同**——
+   *  内核给的已经是文本（壳无权也不该替内核翻译），插件给的必须是键（壳的文案归语言插件）。
+   *  合成一个字段就会逼其中一方撒谎：要么插件写死文本（债务），要么把内核文本当键去 `t()`
+   *  （查不到 ⇒ 界面显示一整句英文/中文当键名）。所以并存，渲染时**优先解析键**。 */
+  descriptionKey?: string;
   source: "extension" | "prompt" | "skill" | "plugin";
 }
 

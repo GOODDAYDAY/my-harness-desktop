@@ -46,6 +46,28 @@
           "divider.inset": "12px"
         }
       }
+    ],
+    "languages": [
+      {
+        "id": "theme-chatgpt.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "theme-chatgpt.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "theme-chatgpt.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "theme-chatgpt.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

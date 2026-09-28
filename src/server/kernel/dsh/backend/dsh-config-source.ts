@@ -9,12 +9,15 @@
 //
 // 依赖方向:本层 import domain(纯类型),是 client/dsh 的流出适配器(与 client/pi 对称)。
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+// 服务端 i18n（r78 接线）。kernel → application 的依赖方向合法：application 在内圈，
+// 且 kernel/core/kernel-test-ctx.ts 已有同款 import（依赖审计 0 违规）。
+import { t } from "../../../application/i18n/translator";
 import { writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { parse, parseDocument, stringify } from "yaml";
 import type { ModelInfo } from "@my-harness-desktop/shared";
 import type { KernelModelSource } from "@my-harness-desktop/shared";
-import type { DshModelSpec, DshProvider, DshDefaultModel, DshConfigApi } from "@my-harness-desktop/shared";
+import type { DshModelSpec, DshProvider, DshDefaultModel, DshConfigApi } from "./dsh-config-contract";
 import { deriveKeyRef, readApiKey, writeApiKey } from "./dsh-credentials-store";
 
 /** cordis 包名 → cordis 逻辑 id 映射(标准 dsh 插件的已知集;id 在插件代码里声明、
@@ -180,13 +183,15 @@ export function assertPiAiRouteServiceable(
   route: { models: ReadonlyArray<{ id: string }> },
 ): void {
   if (route.models.length === 0) {
-    throw new Error(
-      `dsh 路由「${provider}」没有模型:至少添加一个模型,或删除该路由——空路由会让 dsh 运行时拒绝整个 llm-pi-ai 段,连带其它 provider 全部失效`,
-    );
+    // 面向用户（r91）：这条会经"模型配置页保存"→ kernelConfig.set → 设置页的 setSaveError 浮到 UI，
+    // 且它带**用户可执行的指引**（加一个模型 / 删掉该路由）⇒ 必须本地化（r78 接线的服务端 t()）。
+    // 文案归属：dsh 专属 ⇒ 放 dsh 内核插件自己的语言包（§1.2 内容归插件），
+    // 不塞进共享 shell.* 命名空间（那会把内核名带进壳的文案面，§6.3 检验⑤）。
+    throw new Error(t("dsh.routeEmptyModels", { provider }));
   }
   for (const m of route.models) {
     if (!m.id || m.id.trim() === "") {
-      throw new Error(`dsh 路由「${provider}」存在空 model id:补全或删除该模型`);
+      throw new Error(t("dsh.routeEmptyModelId", { provider }));   // 同上面那条：面向用户、带指引（r91）
     }
   }
 }

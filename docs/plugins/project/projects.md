@@ -359,7 +359,7 @@ projects 存两个 key，都显式 `scope: "global"`：
 
 - **删掉 projects 会怎样**：壳照常启动，左栏少一个「项目」分组。加载器（`PluginRegistry`）、槽位契约（`SidebarContribution`）、配置读写（`ConfigStore`）、会话管理（`SessionStore`）全部照常。没有任何机制代码依赖「存在一个叫 projects 的插件」——`sidebar.tsx` 只认 `slots.sidebar()` 返回的贡献项，不认具体插件 id。这是「内置与第三方无特权差异」的检验方式一。
 - **复制覆盖**：把 projects 的 `plugin.json` 复制到用户目录，`bootstrap` 的 `builtin → installed → user → project` 注册序 + `ArraySlot.removeById` 覆盖语义会让高优先级那份胜出。projects 走的是和第三方完全相同的 `registerOne` 路径，无 `if (builtin)` 分支。
-- **内核无关**：projects 的整个 renderer 没有出现 `"pi"`/`"dsh"` 字面量、没有 `if (kernel === ...)` 分支、没有 `asPi()`。它调用的 `setContext` 是壳后端 `SessionStore` 的方法（中立语义：cwd + sessionPath），不是任何内核的专属命令。切项目这个动作**与内核是谁无关**——pi 会话存 JSONL、dsh 会话存 forest，projects 都不感知，它只关心「当前工作目录」这个壳级概念。这是「壳只认中立概念、不认内核存储」的正面实例。
+- **内核无关**：projects 的整个 renderer 没有出现 `"pi"`/`"dsh"` 字面量、没有 `if (kernel === ...)` 分支，也不按内核身份取能力面（那类助手 `asPi()` 已退役为按轴取面的 `faceOf()`）。它调用的 `setContext` 是壳后端 `SessionStore` 的方法（中立语义：cwd + sessionPath），不是任何内核的专属命令。切项目这个动作**与内核是谁无关**——pi 会话存 JSONL、dsh 会话存 forest，projects 都不感知，它只关心「当前工作目录」这个壳级概念。这是「壳只认中立概念、不认内核存储」的正面实例。
 - **依赖方向**：renderer 只 `import` `@my-harness-desktop/shared`（`pathBasename`）和 `@my-harness-desktop/react`（受控 API + `Section`）。没有 `@/server/...`、`@/core/...`、`@/client/...` 的任何 import。符合「壳插件只从发布面引用」的物理纪律。
 
 ---

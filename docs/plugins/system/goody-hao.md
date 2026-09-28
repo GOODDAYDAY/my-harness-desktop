@@ -137,7 +137,7 @@ goody-hao 的 `skills/` 目录挂进 pi 内核的 skills 源路径后，pi 内�
 - `SystemPromptContribution`：`packages/shared/src/domain/contributions.ts:347`
 - `BackendCreateOptions.systemPromptPaths`：`packages/shared/src/domain/backend.ts:232`
 - `systemPromptPaths()`（registry 收集）：`src/server/application/loader/registry.ts:377`
-- pi 工厂 argv 翻译：`src/server/kernel/factories/kernel-factories.ts:37–44`
+- pi 工厂 argv 翻译：`src/server/kernel/pi/backend/pi-backend-factory.ts`（`createPiBackend`；曾经的共享 `kernel-factories.ts` 已退役删除，工厂各归内核自己目录）
 - `pluginSkillsEnsure`：`src/server/bootstrap/assemble.ts:336–357`
 - `ensurePluginSkillsEntry`：`src/server/kernel/pi/extension/pi-bundled-skills.ts:68`
 - `SkillInfo`/`SkillProvider`：`packages/shared/src/domain/skills.ts:17/37`

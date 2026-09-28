@@ -1,5 +1,6 @@
 {
   "shell.continue": "Fortsetzen",
   "shell.continueFailed": "Fortsetzen fehlgeschlagen: {{error}}",
-  "shell.continueStreamingBlocked": "Während der Generierung kann nicht fortgesetzt werden"
+  "shell.continueStreamingBlocked": "Während der Generierung kann nicht fortgesetzt werden",
+  "continue.prompt": "Setze die unvollendete Arbeit fort. Ermittle den aktuellen Stand aus Gesprächsverlauf und todo-Liste und mache dort weiter, wo es stoppte."
 }

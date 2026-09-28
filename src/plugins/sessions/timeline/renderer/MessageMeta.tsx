@@ -10,9 +10,13 @@ export function MessageMeta({ message }: { message: NeutralMessage }): React.Rea
   const meta = buildMessageMeta(message);
   if (!meta) return null;
   return (
+    // ⚠ 这里曾是 `aria-label="message-meta"`——把**机器标识符**当成了可访问名。
+    //   aria-label 会**覆盖**元素内容作为可访问名，于是屏幕阅读器对这个 span 念的是
+    //   "message-meta"（对用户毫无意义），而不是它真正的内容（时间 + title 里的完整明细）。
+    //   它的唯一用途是给单测当锚点，所以改成 data-* 属性：锚点归 data-*，可访问名归内容。
     <span
       className="text-[length:var(--font-size-xs)] text-[var(--color-muted)] font-[var(--font-family-mono)] select-none whitespace-nowrap"
-      aria-label="message-meta"
+      data-message-meta=""
       title={[
         meta.clock,
         meta.duration,

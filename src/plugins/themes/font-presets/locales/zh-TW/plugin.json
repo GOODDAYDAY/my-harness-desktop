@@ -1,0 +1,4 @@
+{
+  "plugin.font-presets.displayName": "Font Presets",
+  "plugin.font-presets.description": "字型預設：等寬/英文/中文三組字型選項 + 各語言文案。字型堆疊是會變的內容，從圓心外推為外掛貢獻——新增字型選項 = 改本 manifest 一行。"
+}

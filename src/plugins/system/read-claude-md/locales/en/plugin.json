@@ -1,0 +1,4 @@
+{
+  "plugin.read-claude-md.displayName": "CLAUDE.md Auto-load",
+  "plugin.read-claude-md.description": "A built-in kernel extension synced with this plugin's on/off state: on session start it discovers global (~/.claude/) and project-level (walking up from cwd) CLAUDE.md instruction files and injects them into the session context as a hidden message. Uninstalling stops the sync."
+}

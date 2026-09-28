@@ -1,4 +1,4 @@
 {
   "plugin.pi.displayName": "Pi Manager",
-  "plugin.pi.description": "Pi kernel version management + base config editor"
+  "plugin.pi.description": "Pi kernel version management + kernel config editor"
 }

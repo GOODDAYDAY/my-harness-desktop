@@ -6,11 +6,40 @@
 // ctx.restart(中性)。本组件只消费 ctx.kernelExtensions(kernel) + ctx.restart,
 // 不含任何内核身份分支。
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { announceTransient } from "./widgets/live-region";
 import { useTranslation } from "react-i18next";
-import type { KernelExtensionInfo, KernelId } from "@my-harness-desktop/shared";
+import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelId } from "@my-harness-desktop/shared";
 import { SettingsSection } from "./settings-section";
 import { Button } from "./widgets/button";
 import { usePluginContext } from "./plugin-context";
+
+/** 用户动作的统一兜底（r86，与 r80 的 runOp / r83 的 mutate 同款）。
+ *
+ *  服务端失败有**两种形态**（r80 查明）：① 返回 `{ok:false,error}`；② handler **抛错**
+ *  ⇒ gateway 转成 `{ok:false,error:{code:"HANDLER_ERROR"}}`（routing/gateway.ts:61-66）
+ *  ⇒ transport **reject**（ws-transport.ts:102）⇒ `await` **throw**。
+ *  本文件此前只处理①（install 的 result.ok 分支），②完全没处理，后果是：
+ *    · handleToggle 抛错 ⇒ 开关静默无效、loadExtensions() 不跑 ⇒ 界面停在旧状态；
+ *    · handleInstall 抛错 ⇒ setInstalling(false) 走不到 ⇒ **按钮永久卡在 installing 态**；
+ *    · handleRestart / handleRestartAll 抛错 ⇒ 重启静默没发生、待重启列表不刷新。
+ *  ⚠ 做成**模块级**而不是组件内：本文件有两个组件（扩展页 + 待重启区），两边都要用；
+ *    组件内定义会让另一个组件取不到（首版就是这么报的 TS2304）。
+ *  本文件没有全局提示位，所以用发布面的命令式原语 announceTransient（r82 建）播报，
+ *  错误走 role=alert 可打断；`t` 由调用方传入（模块级函数拿不到 hook）。 */
+async function runGuarded(
+  t: (key: string, vars?: Record<string, unknown>) => string,
+  op: () => Promise<unknown>,
+  failKey: string,
+): Promise<boolean> {
+  try {
+    await op();
+    return true;
+  } catch (err) {
+    announceTransient(t(failKey, { detail: (err as Error)?.message ?? String(err) }), "error");
+    return false;
+  }
+}
+
 
 /** tag 筛选态:tag -> "inc"(只看) | "exc"(排除);不存在的 key = 不过滤。 */
 type TagFilter = Record<string, "inc" | "exc">;
@@ -33,11 +62,25 @@ export interface KernelExtensionsPageProps {
 }
 
 export function KernelExtensionsPage({ kernel, title, sourcePlaceholder, refreshSignal = 0 }: KernelExtensionsPageProps): React.ReactNode {
+  const ctx = usePluginContext();
+  // 能力面（r46）：这个页面是 pi / dsh / minimal **共用**的，而 minimal 的内核插件系统
+  // 第一版未落地（install/uninstall 都直接返回失败）。此前 UI 不读能力面，
+  // 于是 minimal 的页面上有一个完整可用的安装表单——用户填完来源、点安装、等一轮，
+  // 才在事后看到「不支持安装拓展」。§7.6 要求的是**显式降级**（隐藏/置灰 + 说明），
+  // 不是事后报错。`minimal-extension.ts` 的文件头甚至写着「壳据此置灰入口」，
+  // 而壳从来没读过 capabilities——注释描述了一个不存在的行为。
+  const [caps, setCaps] = useState<KernelExtensionCapabilities | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void ctx.kernelExtensions.capabilities(kernel).then((c) => { if (alive) setCaps(c); }).catch(() => { /* 取不到能力面时保持 null = 不额外限制（宁可多给入口，不静默禁掉） */ });
+    return () => { alive = false; };
+  }, [ctx, kernel]);
+
   return (
     <>
       <ListSection kernel={kernel} title={title} refreshSignal={refreshSignal} />
       <div style={{ borderTop: "2px solid var(--color-border)" }} />
-      <InstallSection kernel={kernel} sourcePlaceholder={sourcePlaceholder} />
+      <InstallSection kernel={kernel} sourcePlaceholder={sourcePlaceholder} canInstall={caps?.install !== false} />
       <PendingRestartSection />
     </>
   );
@@ -64,9 +107,24 @@ function ListSection({ kernel, title, refreshSignal }: { kernel: KernelId; title
     });
   }, [ctx]);
 
+  /** 用户动作的统一兜底（r86，与 r80 的 runOp / r83 的 mutate 同款）。
+   *
+   *  服务端失败有**两种形态**（r80 查明的）：① 返回 `{ok:false,error}`；② handler **抛错**
+   *  ⇒ gateway 转成 `{ok:false,error:{code:"HANDLER_ERROR"}}`（routing/gateway.ts:61-66）
+   *  ⇒ transport **reject**（ws-transport.ts:102）⇒ `await` **throw**。
+   *  本组件此前只处理①（install 的 result.ok 分支），②完全没处理，后果是：
+   *    · handleToggle 抛错 ⇒ 开关静默无效、`loadExtensions()` 不跑 ⇒ 界面停在旧状态；
+   *    · handleInstall 抛错 ⇒ `setInstalling(false)` 走不到 ⇒ **按钮永久卡在 installing 态**；
+   *    · handleRestart / handleRestartAll 抛错 ⇒ 重启静默没发生、待重启列表不刷新。
+   *  本组件没有自己的错误展示态，所以用发布面的命令式原语 announceTransient（r82 建、
+   *  r83 起有插件侧消费方）播报，错误走 role=alert 可打断。 */
   const handleToggle = async (ext: KernelExtensionInfo): Promise<void> => {
-    if (ext.enabled) await ctx.kernelExtensions.disable(kernel, ext.id);
-    else await ctx.kernelExtensions.enable(kernel, ext.id);
+    await runGuarded(
+      t,
+      () => (ext.enabled ? ctx.kernelExtensions.disable(kernel, ext.id) : ctx.kernelExtensions.enable(kernel, ext.id)),
+      "ext.toggleFailed",
+    );
+    // 无论成败都刷新：失败时也要让界面回到服务端的**真实**状态，而不是停在我以为的那一侧
     loadExtensions();
   };
 
@@ -321,7 +379,7 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () =>
   );
 }
 
-function InstallSection({ kernel, sourcePlaceholder }: { kernel: KernelId; sourcePlaceholder?: string }): React.ReactNode {
+function InstallSection({ kernel, sourcePlaceholder, canInstall }: { kernel: KernelId; sourcePlaceholder?: string; canInstall: boolean }): React.ReactNode {
   const { t } = useTranslation();
   const ctx = usePluginContext();
   const [installSource, setInstallSource] = useState("");
@@ -332,17 +390,42 @@ function InstallSection({ kernel, sourcePlaceholder }: { kernel: KernelId; sourc
     if (!installSource.trim() || installing) return;
     setInstalling(true);
     setInstallProgress("");
-    const result = await ctx.kernelExtensions.install(kernel, installSource.trim(), (line) => {
-      setInstallProgress((prev) => prev + line);
-    });
-    setInstalling(false);
-    if (result.ok) {
-      setInstallSource("");
-      setInstallProgress("");
-    } else {
-      setInstallProgress(result.error ?? t("ext.installFailed"));
+    // ⚠ try/finally 保证**无论成败都解除 installing 态**（r86 的卡死根因，与 r80 同款）。
+    try {
+      const result = await ctx.kernelExtensions.install(kernel, installSource.trim(), (line) => {
+        setInstallProgress((prev) => prev + line);
+      });
+      if (result.ok) {
+        setInstallSource("");
+        setInstallProgress("");
+      } else {
+        setInstallProgress(result.error ?? t("ext.installFailed"));   // 形态①：返回值
+      }
+    } catch (err) {
+      // 形态②：抛错/reject —— 进度区显示原因（这个组件没有全局提示位，进度区就是它的反馈位）
+      setInstallProgress(t("ext.installFailed") + ": " + ((err as Error)?.message ?? String(err)));
+    } finally {
+      setInstalling(false);
     }
   };
+
+  // 显式降级（§7.6）：这个内核没有安装能力时，**不给表单**，改成一句说明。
+    // 关键差别不是"少一个按钮"，而是**失败发生的时机**：给表单 = 用户填完来源、点安装、
+    // 等一轮，才在事后看到「不支持安装拓展」；不给表单 + 说明 = 用户在动手之前就知道。
+    // ⚠ 保留区块标题（不是整块消失）：静默消失会让人以为功能坏了或自己找错了页面。
+    if (!canInstall) {
+      return (
+        <SettingsSection title={t("ext.install")}>
+          <div
+            data-ext-install-unsupported=""
+            style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-xs)", padding: "var(--spacing-sm) 0" }}
+          >
+            <span style={{ color: "var(--color-fg)", fontSize: "var(--font-size-sm)" }}>{t("ext.installUnsupported")}</span>
+            <span style={{ color: "var(--color-muted)", fontSize: "var(--font-size-xs)" }}>{t("ext.installUnsupportedHint")}</span>
+          </div>
+        </SettingsSection>
+      );
+    }
 
   return (
     <SettingsSection title={t("ext.install")}>
@@ -416,12 +499,12 @@ function PendingRestartSection(): React.ReactNode {
   }, [loadPending, ctx]);
 
   const handleRestart = async (sessionKey: string): Promise<void> => {
-    await ctx.restart.restart(sessionKey);
-    loadPending();
+    await runGuarded(t, () => ctx.restart.restart(sessionKey), "ext.restartFailed");
+    loadPending();   // 失败也要刷新，让列表回到真实状态
   };
 
   const handleRestartAll = async (): Promise<void> => {
-    await ctx.restart.restartAllIdle();
+    await runGuarded(t, () => ctx.restart.restartAllIdle(), "ext.restartFailed");
     loadPending();
   };
 

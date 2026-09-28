@@ -23,6 +23,15 @@ export interface PaginationProps {
   onPageChange: (page: number) => void;
   /** 尾随内容(如总数统计),渲染在"下一页"按钮之后。 */
   trailing?: ReactNode;
+  /** 「上一页」按钮的可访问名。
+   *  ⚠ **必填**：该按钮是纯图标（ChevronLeft），没有文本内容 ⇒ 没有可访问名，
+   *  读屏只会念"按钮"。共享部件在发布面里**不能写死文案**（CLAUDE.md §1.2），
+   *  所以由消费方传译文进来；设为必填是为了让漏传在**编译期**就暴露，
+   *  而不是等 a11y 普查才发现（r38 实测全应用 23 个视图里，无名可交互元素只有 3 种，
+   *  其中两种就是这个部件的左右箭头）。 */
+  prevLabel: string;
+  /** 「下一页」按钮的可访问名（同 `prevLabel` 的理由）。 */
+  nextLabel: string;
 }
 
 function arrowBtn(disabled: boolean): CSSProperties {
@@ -58,7 +67,7 @@ function pageBtn(active: boolean): CSSProperties {
   };
 }
 
-export function Pagination({ currentPage, totalPages, onPageChange, trailing }: PaginationProps): ReactNode {
+export function Pagination({ currentPage, totalPages, onPageChange, trailing, prevLabel, nextLabel }: PaginationProps): ReactNode {
   if (totalPages <= 1) return null;
 
   return (
@@ -74,6 +83,8 @@ export function Pagination({ currentPage, totalPages, onPageChange, trailing }: 
       <button
         onClick={() => onPageChange(Math.max(1, currentPage - 1))}
         disabled={currentPage <= 1}
+        aria-label={prevLabel}
+        data-pagination="prev"
         style={arrowBtn(currentPage <= 1)}
       >
         <ChevronLeft size={14} />
@@ -83,6 +94,10 @@ export function Pagination({ currentPage, totalPages, onPageChange, trailing }: 
         <button
           key={page}
           onClick={() => onPageChange(page)}
+          // 页码按钮有文本内容（数字）所以"有名字"，但光念"3"听不出这是**当前页**——
+          // 补 aria-current="page"（ARIA 对分页当前项的标准语义）。
+          {...(page === currentPage ? { "aria-current": "page" as const } : {})}
+          data-pagination-page={page}
           style={pageBtn(page === currentPage)}
         >
           {page}
@@ -92,6 +107,8 @@ export function Pagination({ currentPage, totalPages, onPageChange, trailing }: 
       <button
         onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
         disabled={currentPage >= totalPages}
+        aria-label={nextLabel}
+        data-pagination="next"
         style={arrowBtn(currentPage >= totalPages)}
       >
         <ChevronRight size={14} />

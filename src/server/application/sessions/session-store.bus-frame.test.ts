@@ -1,13 +1,14 @@
 // sendPromptTo 的内核无关守卫 —— 修的是「dsh 会话静默收不到任何 bus 帧」。
 //
 // 根因(勿回退):sendPromptTo 曾无条件走 `this.asPi(proc).sendMessage(text, undefined, streamingBehavior)`,
-// 而 asPi 在 backend 无 capabilities.extensions 时抛「当前后端不支持 pi 专属命令」。
+// 而 asPi 在 backend 无扩展面时抛「当前后端不支持 pi 专属命令」(该助手与其类型已删,
+// 现按语义轴取 `capabilities.steering`,见 session-store 的 faceOf/viaFace)。
 // 调用方是 bus 的 deliver(session-bus.ts),它把这个错误 catch 成静默失败并解释为「目标已死」——
 // 于是 dsh 会话收不到房间消息/任务注入/bus_response,且日志里与「进程真的死了」无法区分。
 // 这是 CLAUDE.md §1.5 明禁的唯一状态(静默缺面)。
 // 详见 docs/design/bus-notification-defects-and-stats-handoff.md 缺陷 C。
 //
-// 修法:能力探测——有扩展面则带 streamingBehavior(保住 pi 的 steer/followUp 档位语义),
+// 修法:能力探测——有 steering 面则带 streamingBehavior(保住多路并发的档位语义),
 // 没有则走契约里的中性 sendMessage(BaseBackend 的必实现意图之一,每个内核都有)。
 //
 // 后端用最小 plain object 替身:不 mock sendPromptTo 本身(被测的就是它),
@@ -55,14 +56,19 @@ function fakeBackend(kernel: KernelId, withExtensions: boolean, calls: FakeCalls
   if (!withExtensions) return base as unknown as BaseBackend;
   return {
     ...base,
+    // **逐轴能力面**(圆心 BackendCapabilities)。此前这里是一个 opaque `extensions` 桶,
+    // 桶里混装四条互不相干的轴;拆开后本测试要声明的正是它真正驱动的那几条:
+    //   steering(sendPromptTo 的档位发送)· busFrames/questions(bindProcEvents 会挂两条通道)
+    //   · snapshot(sync 会调 resync 拿快照)。后三者本测试不驱动,给最小实现。
     capabilities: {
-      extensions: {
+      steering: {
         sendMessage: async (text: string, _images?: unknown, streamingBehavior?: string): Promise<void> => {
           calls.ext.push({ text, behavior: streamingBehavior });
         },
-        // bindProcEvents 会给扩展面挂两条通道;sync 会调 resync 拿快照。本测试不驱动它们,给最小实现。
-        onBusFrame: (): (() => void) => () => {},
-        onQuestion: (): (() => void) => () => {},
+      },
+      busFrames: { onBusFrame: (): (() => void) => () => {} },
+      questions: { onQuestion: (): (() => void) => () => {} },
+      snapshot: {
         resync: async (): Promise<unknown> => ({
           state: { model: null, thinkingLevel: null, isStreaming: false, isCompacting: false, sessionId: "s1", messageCount: 0, pendingMessageCount: 0 },
           entries: [], messages: [], tree: [], commands: [], leafId: null,
@@ -95,7 +101,7 @@ async function boot(kernel: KernelId, withExtensions: boolean): Promise<{ store:
     seed: async () => null,
   };
   const catalogFactory: SessionCatalogFactory = { create: () => new PiSessionCatalog(dir) };
-  const store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: [kernel] });
+  const store = new SessionStore(factory, catalogFactory, () => ({ sessionRoots: [join(dir, "sessions")], ids: [kernel] }));
   store.setContext(CWD, sessionPath);
   await store.start(CWD, sessionPath, undefined, false, kernel);
   return { store, calls };
@@ -126,7 +132,7 @@ describe("sendPromptTo 内核无关(缺陷 C 守卫)", () => {
   it("会话不在线:仍抛「会话不在线」——bus 据此区分合法态与真缺陷", async () => {
     const factory: BackendFactory = { create: () => fakeBackend("dsh", false, { neutral: [], ext: [] }), seed: async () => null };
     const catalogFactory: SessionCatalogFactory = { create: () => new PiSessionCatalog(dir) };
-    const store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["dsh"] });
+    const store = new SessionStore(factory, catalogFactory, () => ({ sessionRoots: [join(dir, "sessions")], ids: ["dsh"] }));
     store.setContext(CWD, sessionPath);
     // 不 start:进程不在场。这个错误必须可分辨,不能被 deliver 的 catch 归成同一类。
     await expect(store.sendPromptTo(sessionPath, "{}", "followUp")).rejects.toThrow(/会话不在线/);

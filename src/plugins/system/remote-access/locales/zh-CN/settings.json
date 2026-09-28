@@ -33,5 +33,6 @@
   "remote.copied": "已复制",
   "remote.qr": "二维码",
   "remote.qrDesc": "本机访问无需密码;局域网设备扫码打开后输入密码登录。",
-  "remote.qrDisabledHint": "开启局域网访问后,这里显示局域网地址与访问二维码。"
+  "remote.qrDisabledHint": "开启局域网访问后,这里显示局域网地址与访问二维码。",
+  "settings.remote-access": "远程访问"
 }

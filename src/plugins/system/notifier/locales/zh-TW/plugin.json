@@ -5,5 +5,7 @@
   "settings.notifierCooldown": "冷卻時間",
   "settings.notifierCooldownDesc": "多條通知的最小間隔（秒），防止連續彈出",
   "notify.title": "會話已完成",
-  "notify.body": "助手已完成回答"
+  "notify.body": "助手已完成回答",
+  "plugin.notifier.displayName": "系統通知",
+  "plugin.notifier.description": "會話回合在背景完成時發一條系統通知（macOS / Windows / Linux）"
 }

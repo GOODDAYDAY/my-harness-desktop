@@ -1,12 +1,12 @@
 {
-  "minimalModels.title": "DSH 模型配置",
+  "minimalModels.title": "Minimal 模型配置",
   "minimalModels.desc": "minimal 的模型配置（~/.minimal/agent/models.json）：provider + 模型清单 + 默认。apiKey 落独立凭证文件，不写进 models.json。",
   "minimalModels.providerId": "providerId",
   "minimalModels.displayName": "displayName",
   "minimalModels.api": "api",
   "minimalModels.baseUrl": "baseURL",
   "minimalModels.apiKey": "API Key",
-  "minimalModels.apiKeyDesc": "密钥字面值按 provider 写入 minimal 凭证文件(~/.minimal/agent/.credentials.json),dsh 运行时直接读取;不注入进程环境变量、不写进 models.json/cordis.yml。",
+  "minimalModels.apiKeyDesc": "密钥字面值按 provider 写入 minimal 凭证文件(~/.minimal/agent/.credentials.json),minimal 运行时直接读取;不注入进程环境变量、不写进 models.json。",
   "minimalModels.addProvider": "+ 添加 provider",
   "minimalModels.copyProvider": "复制",
   "minimalModels.deleteProvider": "删除",
@@ -52,5 +52,6 @@
   "minimalModels.discoverNoBaseUrl": "先填写 Base URL 再扫描",
   "minimalModels.discoverToggle": "发现模型",
   "minimalModels.discoverCollapse": "收起",
-  "minimalModels.discoverUseConfigured": "端点不支持列表发现 · 改用已配置的 {{count}} 个模型"
+  "minimalModels.discoverUseConfigured": "端点不支持列表发现 · 改用已配置的 {{count}} 个模型",
+  "settings.minimal-models": "Minimal 模型"
 }

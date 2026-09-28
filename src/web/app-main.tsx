@@ -19,7 +19,7 @@ import { SidePanelStrip } from "./components/right-panel";
 import { SettingsPage } from "./components/settings-page";
 import { LayoutEngine, isLayoutDragging } from "./components/layout-engine";
 import { useUiStore } from "./app/ui-store";
-import { useLayoutStore } from "@my-harness-desktop/react";
+import { useLayoutStore, LiveRegionHost } from "@my-harness-desktop/react";
 import { useSessionStore, getLoadedPluginIds } from "@my-harness-desktop/react";
 import { initSessionStore, initKernelLogos } from "@my-harness-desktop/react";
 import { PluginOverlays, ErrorBoundary } from "@my-harness-desktop/react";
@@ -30,13 +30,16 @@ import type { ChannelMeta } from "@my-harness-desktop/shared";
 // 进入设置 / 返回对话。注册在模块加载期(先于任何 invoke),App 挂载时订阅切 activeView。
 // pluginId 用 "shell"——invoke 只校验 channel 存在,不要求是"真插件",设置页动态列表照常列出。
 eventBus.registerChannels("shell", ["shell:openSettings", "shell:backToChat"], {
+  // ⚠ 文案走 `shell.*` 的 i18n 键（r55）：壳不自持文案（§1.2 铁律一），
+  //   而 `shell.*` 由 system/i18n 插件贡献、始终装载。此前这里直接写中文，
+  //   于是 en/de/zh-TW 用户在键位绑定页看到"打开设置/返回对话"。
   "shell:openSettings": {
-    label: "打开设置",
-    description: "切到设置视图(设置整页覆盖)。",
+    labelKey: "shell.channel.openSettings.label",
+    descriptionKey: "shell.channel.openSettings.desc",
   },
   "shell:backToChat": {
-    label: "返回对话",
-    description: "从设置视图切回对话。",
+    labelKey: "shell.channel.backToChat.label",
+    descriptionKey: "shell.channel.backToChat.desc",
   },
 } satisfies Record<string, ChannelMeta>);
 
@@ -47,6 +50,9 @@ eventBus.registerChannels("shell", ["shell:openSettings", "shell:backToChat"], {
 const ChatView = memo(function ChatView(): React.ReactNode {
   return (
     <div className="h-full flex bg-[var(--color-bg)] text-[var(--color-fg)] font-[var(--font-family-sans)]">
+      {/* 常驻 live region 宿主：必须从启动就在 DOM 里，否则**第一条** toast 播报不出来
+          （aria-live 的前提是容器先于内容存在）。不渲染可见内容。 */}
+      <LiveRegionHost />
       <LayoutEngine />
       <SidePanelStrip />
     </div>

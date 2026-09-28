@@ -95,17 +95,17 @@ html, body, #root {
 
 /* 分组折叠动画(Section 级,一处改全局生效):
    用 grid-template-rows 0fr↔1fr 做高度过渡——不量高度、不闪跳、子树常驻 DOM。
-   .pi-collapsible 由 Section 组件挂 data-state=open/closed;内容溢出靠内层 min-h-0。 */
-.pi-collapsible {
+   .shell-collapsible 由 Section 组件挂 data-state=open/closed;内容溢出靠内层 min-h-0。 */
+.shell-collapsible {
   display: grid;
   grid-template-rows: 1fr;
   transition: grid-template-rows var(--motion-duration-normal) var(--motion-ease-emphasized);
 }
-.pi-collapsible > * {
+.shell-collapsible > * {
   overflow: hidden;
   min-height: 0;
 }
-.pi-collapsible[data-state="closed"] {
+.shell-collapsible[data-state="closed"] {
   grid-template-rows: 0fr;
 }
 
@@ -114,16 +114,16 @@ html, body, #root {
    进场(open)与离场(closed)对称:Radix Presence 在卸载前会保留元素播完离场。 */
 [data-radix-menu-content] {
   transform-origin: var(--radix-popper-transform-origin, top center);
-  animation: pi-menu-in var(--motion-duration-fast) var(--motion-ease-emphasized);
+  animation: shell-menu-in var(--motion-duration-fast) var(--motion-ease-emphasized);
 }
 [data-radix-menu-content][data-state="closed"] {
-  animation: pi-menu-out var(--motion-duration-fast) var(--motion-ease-emphasized);
+  animation: shell-menu-out var(--motion-duration-fast) var(--motion-ease-emphasized);
 }
-@keyframes pi-menu-in {
+@keyframes shell-menu-in {
   from { opacity: 0; transform: scale(0.96) translateY(4px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
-@keyframes pi-menu-out {
+@keyframes shell-menu-out {
   from { opacity: 1; transform: scale(1) translateY(0); }
   to { opacity: 0; transform: scale(0.96) translateY(4px); }
 }
@@ -134,46 +134,46 @@ html, body, #root {
    (border-box + transparent border 透出 1px 光带,padding 区透明不遮内容),
    外发光(box-shadow)随同一 opacity 明暗。三个 @property 变量分轨驱动、
    乘积合成,零属性冲突:
-     --pi-composer-angle   旋转(4.5s linear 匀速圆周,无折返)
-     --pi-composer-breathe 呼吸(3s sine.inOut,最接近自然呼吸的曲线)
-     --pi-composer-fade    显隐(入场 fadein 动画 0→1 慢慢变亮;
+     --shell-composer-angle   旋转(4.5s linear 匀速圆周,无折返)
+     --shell-composer-breathe 呼吸(3s sine.inOut,最接近自然呼吸的曲线)
+     --shell-composer-fade    显隐(入场 fadein 动画 0→1 慢慢变亮;
                            退场 transition →0 慢慢变暗,旋转呼吸继续、
                            乘积衰减="转着暗下去")
    退场结构约束:摘 class 伪元素立即销毁、CSS 退不动——必须由 JS 状态机
-   (composer.tsx)先换 .pi-composer-fadeout、700ms(与 transition 时长一致)
+   (composer.tsx)先换 .shell-composer-fadeout、700ms(与 transition 时长一致)
    后再摘除。为什么不直接动 border-color/box-shadow:Chromium 对两端颜色
    语法不同(legacy rgba vs color(srgb))的帧不做插值,动画退化为跳变
    (实测三轮);opacity/注册变量插值零颜色坑。周期不用 --motion-duration-*
    (三档均为过渡时长),故写实值。只消费 token(primary 经 color-mix)。 */
-@property --pi-composer-fade {
+@property --shell-composer-fade {
   syntax: "<number>";
   initial-value: 1;
   inherits: false;
 }
-@property --pi-composer-breathe {
+@property --shell-composer-breathe {
   syntax: "<number>";
   initial-value: 0.15;
   inherits: false;
 }
-@property --pi-composer-angle {
+@property --shell-composer-angle {
   syntax: "<angle>";
   initial-value: 0deg;
   inherits: false;
 }
 
-.pi-composer-thinking,
-.pi-composer-fadeout {
+.shell-composer-thinking,
+.shell-composer-fadeout {
   position: relative;
 }
 
 /* goal 生效着色:会话目标 active 时输入框换绿晕(静态,区别于思考的旋转光)。
    挂载点 = Composer 的类名开关;何时挂由消费方(timeline)订阅 goal 插件的
    goal:state 事件决定——CSS 只是表现机制,目标语义不进壳。 */
-.pi-composer-goal {
+.shell-composer-goal {
   position: relative;
   border-color: color-mix(in srgb, var(--color-accent-success) 55%, var(--color-border)) !important;
 }
-.pi-composer-goal::after {
+.shell-composer-goal::after {
   content: "";
   position: absolute;
   inset: -1px;
@@ -186,10 +186,10 @@ html, body, #root {
 /* 命令生效高亮:输入内容命中已注册斜杠命令(内核/插件同享)时,药丸给主色边框 +
    命令 chip。判定与发送前拦截用同一个纯函数(matchComposerCommandName)——看着生效
    和实际生效永不脱节(设计 docs/design/goal.md §7.2)。 */
-.pi-composer-command {
+.shell-composer-command {
   border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border)) !important;
 }
-.pi-composer-command-chip {
+.shell-composer-command-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -202,15 +202,15 @@ html, body, #root {
   width: fit-content;
 }
 
-.pi-composer-thinking::before,
-.pi-composer-fadeout::before {
+.shell-composer-thinking::before,
+.shell-composer-fadeout::before {
   content: "";
   position: absolute;
   inset: -1px;
   border-radius: 17px;
   border: 1px solid transparent;
   background: conic-gradient(
-    from var(--pi-composer-angle),
+    from var(--shell-composer-angle),
     transparent 0turn,
     color-mix(in srgb, var(--color-primary) 42%, transparent) 0.1turn,
     transparent 0.24turn,
@@ -219,37 +219,37 @@ html, body, #root {
     transparent 0.76turn
   ) border-box;
   box-shadow: 0 0 18px color-mix(in srgb, var(--color-primary) 22%, transparent);
-  opacity: calc(var(--pi-composer-fade) * var(--pi-composer-breathe));
+  opacity: calc(var(--shell-composer-fade) * var(--shell-composer-breathe));
   pointer-events: none;
 }
 
-.pi-composer-thinking::before {
+.shell-composer-thinking::before {
   animation:
-    pi-composer-fadein 0.8s ease-out,
-    pi-composer-spin 4.5s linear infinite,
-    pi-composer-breathe 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+    shell-composer-fadein 0.8s ease-out,
+    shell-composer-spin 4.5s linear infinite,
+    shell-composer-breathe 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
 }
 
-.pi-composer-fadeout::before {
-  --pi-composer-fade: 0;
-  transition: --pi-composer-fade 0.7s ease-in;
+.shell-composer-fadeout::before {
+  --shell-composer-fade: 0;
+  transition: --shell-composer-fade 0.7s ease-in;
   animation:
-    pi-composer-spin 4.5s linear infinite,
-    pi-composer-breathe 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+    shell-composer-spin 4.5s linear infinite,
+    shell-composer-breathe 3s cubic-bezier(0.37, 0, 0.63, 1) infinite;
 }
 
-@keyframes pi-composer-fadein {
-  from { --pi-composer-fade: 0; }
-  to { --pi-composer-fade: 1; }
+@keyframes shell-composer-fadein {
+  from { --shell-composer-fade: 0; }
+  to { --shell-composer-fade: 1; }
 }
 
-@keyframes pi-composer-spin {
-  to { --pi-composer-angle: 1turn; }
+@keyframes shell-composer-spin {
+  to { --shell-composer-angle: 1turn; }
 }
 
-@keyframes pi-composer-breathe {
-  0%, 100% { --pi-composer-breathe: 0.15; }
-  50% { --pi-composer-breathe: 1; }
+@keyframes shell-composer-breathe {
+  0%, 100% { --shell-composer-breathe: 0.15; }
+  50% { --shell-composer-breathe: 1; }
 }
 
 /* 停顿提示微光(§4.5.2):stream-text-reveal 的 stalled-hint 用渐变裁字 +

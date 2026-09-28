@@ -22,12 +22,13 @@ describe("eventBus.listChannels", () => {
 
   it("channelMeta 随注册收集,无 meta 的 channel 不含 meta 字段", () => {
     eventBus.registerChannels(PLUGIN, ["test:a", "test:b"], {
-      "test:a": { label: "甲", description: "描述", payloadExample: { x: 1 } },
+      "test:a": { labelKey: "test.channel.a.label", descriptionKey: "test.channel.a.desc", payloadExample: { x: 1 } },
     });
     const list = eventBus.listChannels();
     const a = list.find((c) => c.channel === "test:a");
     const b = list.find((c) => c.channel === "test:b");
-    expect(a?.meta).toEqual({ label: "甲", description: "描述", payloadExample: { x: 1 } });
+    // r55：meta 的文案字段是 **i18n 键**（labelKey/descriptionKey），不是文本
+    expect(a?.meta).toEqual({ labelKey: "test.channel.a.label", descriptionKey: "test.channel.a.desc", payloadExample: { x: 1 } });
     expect(a?.pluginId).toBe(PLUGIN);
     expect(b?.meta).toBeUndefined();
     expect("meta" in (b as object)).toBe(false);
@@ -48,9 +49,9 @@ describe("eventBus.listChannels", () => {
 
   it("重复注册同一 channel 幂等,meta 可后补", () => {
     eventBus.registerChannels(PLUGIN, ["test:dup"]);
-    eventBus.registerChannels(PLUGIN, ["test:dup"], { "test:dup": { label: "后补" } });
+    eventBus.registerChannels(PLUGIN, ["test:dup"], { "test:dup": { labelKey: "test.channel.dup.label" } });
     const c = eventBus.listChannels().find((x) => x.channel === "test:dup");
-    expect(c?.meta?.label).toBe("后补");
+    expect(c?.meta?.labelKey).toBe("test.channel.dup.label");
     expect(eventBus.listChannels().filter((x) => x.channel === "test:dup").length).toBe(1);
   });
 });

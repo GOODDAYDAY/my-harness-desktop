@@ -11,5 +11,8 @@
   "timeline.divider": "分隔",
   "timeline.thinkingLevel": "思考强度 → {{level}}",
   "timeline.sessionRenamed": "会话重命名为 \"{{name}}\"",
-  "timeline.compaction": "上下文已压缩{{#if tokens}}({{tokens}} tokens){{/if}}"
+  "timeline.compaction": "上下文已压缩{{#if tokens}}({{tokens}} tokens){{/if}}",
+  "timeline.linesCollapsed": "…（已折叠 {{count}} 行）",
+  "timeline.exitCode": "退出码 {{code}}",
+  "timeline.outputTruncated": "（输出已截断）"
 }

@@ -1,0 +1,4 @@
+{
+  "plugin.dsh.displayName": "DSH Manager",
+  "plugin.dsh.description": "dsh 内核管理:内核版本 + 配置 + 拓展 + 模型(一个入口三个 TAB,与 PI 同级)"
+}

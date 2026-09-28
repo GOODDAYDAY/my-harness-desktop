@@ -5,7 +5,7 @@
 //
 // 不用 Radix Collapsible.Content:它闭合时给 hidden + 不渲染 children,
 // 高度动画(grid 0fr↔1fr)跑不起来。改为自管 open + data-state 容器,
-// 内容常驻 DOM,动画由 index.css 的 .pi-collapsible[data-state] 统一驱动
+// 内容常驻 DOM,动画由 index.css 的 .shell-collapsible[data-state] 统一驱动
 // (全局一处,所有分组白拿)。
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -61,7 +61,7 @@ export function Section({ title, actions, defaultOpen = true, open: controlledOp
           {collapsedSubtitle}
         </div>
       )}
-      <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
+      <div className="shell-collapsible" data-state={open ? "open" : "closed"}>
         <div className="flex flex-col min-h-0">
           {children}
         </div>

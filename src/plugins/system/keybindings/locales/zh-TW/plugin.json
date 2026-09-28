@@ -1,0 +1,4 @@
+{
+  "plugin.keybindings.displayName": "快捷鍵",
+  "plugin.keybindings.description": "把組合鍵綁定到事件匯流排 channel：按下即 invoke，手不離鍵盤觸發任意外掛動作"
+}

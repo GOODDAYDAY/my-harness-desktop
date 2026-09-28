@@ -11,7 +11,7 @@
   "settings.userBubbleMaxLines": "User bubble max lines",
   "settings.userBubbleMaxLinesDesc": "User messages longer than this collapse to a summary; click the bubble to expand in full",
   "settings.showHiddenMessages": "Show hidden messages",
-  "settings.showHiddenMessagesDesc": "Show internal context injected by the agent (e.g. CLAUDE.md), off by default",
+  "settings.showHiddenMessagesDesc": "Show internal context injected by the kernel (e.g. CLAUDE.md), off by default",
   "settings.timelineCollapseDefault": "Collapse timeline content by default",
   "settings.timelineCollapseDefaultDesc": "Tool cards (Bash/Edit/Read/Grep/default) and thinking chain in session flow collapse by default, click to expand"
 }

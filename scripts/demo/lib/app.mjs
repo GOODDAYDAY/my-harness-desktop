@@ -100,7 +100,7 @@ export async function launchApp({ appDir, port = 9222, timeoutMs = 40000, env: e
   });
 
   // renderer 页:旧架构是 file://…renderer/index.html;web-service 架构改为本地
-  // HTTP 服务 http://127.0.0.1:<PORT>/?lt=<token>(assemble PORT=8420,lt=本地鉴权)。
+  // HTTP 服务 http://127.0.0.1:<PORT>/?lt=<token>(PORT = assemble 读的 MHD_PORT,缺省 8420;lt=本地鉴权)。
   // 窗口创建后加载有一小段期,轮询等。两种形态都认。
   const isRenderer = (url) =>
     url.includes("renderer/index.html")

@@ -36,6 +36,7 @@
   "shell.toolExecuting": "Tool wird ausgeführt…",
   "shell.outputting": "Generiert…",
   "shell.compacting": "Komprimiere…",
+  "shell.retrying": "Wiederhole…",
   "shell.scrollToBottom": "Nach unten scrollen",
   "shell.switchingSession": "Sitzung wird gewechselt…",
   "shell.error": "Generierung fehlgeschlagen",

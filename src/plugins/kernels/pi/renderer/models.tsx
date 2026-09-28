@@ -16,7 +16,7 @@ export function ModelManagerPage(props: SettingsComponentProps): React.ReactNode
     <ModelConfigPage
       api={ctx.kernelModels.pi}
       i18nPrefix="models"
-      capabilities={{ reasoning: true }}
+      capabilities={{ reasoning: true, developerRole: true }}
       config={props.config}
       dirty={props.dirty ?? false}
       onChange={props.onChange}

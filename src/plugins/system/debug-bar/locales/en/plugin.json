@@ -1,0 +1,4 @@
+{
+  "plugin.debug-bar.displayName": "Debug Bar",
+  "plugin.debug-bar.description": "Titlebar Debug button: copies the page DOM to the clipboard, gated by the debugMode switch in general-config"
+}

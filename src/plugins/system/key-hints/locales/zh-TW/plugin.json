@@ -1,0 +1,4 @@
+{
+  "plugin.key-hints.displayName": "按鍵導覽",
+  "plugin.key-hints.description": "Vimium 式按鍵導覽：快捷鍵或 ` 鍵進入導覽模式，所有可點元素高亮並顯示字母標記，按字母直接觸發點擊，手不離鍵盤"
+}

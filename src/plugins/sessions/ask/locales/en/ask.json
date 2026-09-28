@@ -1,0 +1,15 @@
+{
+  "ask.selectOrCustom": "Pick an option or type a custom answer.",
+  "ask.expand": "Expand",
+  "ask.collapse": "Collapse",
+  "ask.abandonGroup": "Abandon the whole question group",
+  "ask.recommended": "Recommended",
+  "ask.customWithOptions": "Custom answer (can coexist with selections)",
+  "ask.customReplaces": "Custom answer (typing replaces the selection)",
+  "ask.customPlaceholder": "Type your answer",
+  "ask.prevQuestion": "Previous question",
+  "ask.nextQuestion": "Next question",
+  "ask.skipQuestion": "Skip this question",
+  "ask.submitting": "Submitting…",
+  "ask.submit": "Submit"
+}

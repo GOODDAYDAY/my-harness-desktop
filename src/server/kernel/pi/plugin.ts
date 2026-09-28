@@ -8,7 +8,7 @@
 
 import { join } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
-import { createPiBackend, createPiCatalog, piSeedSession } from "../factories/kernel-factories";
+import { createPiBackend, createPiCatalog, piSeedSession } from "./backend/pi-backend-factory";
 import { ModelsStore } from "./model/models-store";
 import { PiSettingsStore } from "./model/pi-settings-store";
 import { PiModelSource } from "./model/pi-model-source";
@@ -25,7 +25,8 @@ import { readLegacyPiSessions } from "./backend/pi-legacy-sessions";
 import { PiSkillProvider } from "./extension/pi-skill-provider";
 import { ensureBundledSkillsEntry, ensurePluginSkillsEntry, migrateLegacySkillPatterns } from "./extension/pi-bundled-skills";
 import { syncPluginPiExtension, removePluginPiExtension, reconcilePluginPiExtensions } from "./extension/pi-extension-installer";
-import type { KernelPluginFactory, PiSettingsApi } from "@my-harness-desktop/shared";
+import type { KernelPluginFactory } from "@my-harness-desktop/shared";
+import type { PiSettingsApi } from "./manager/pi-settings-contract";
 
 /** pi 内核插件工厂(§kernel-plugin §4):接收壳运行时环境,产出 KernelPlugin。 */
 export const piKernelPlugin: KernelPluginFactory = (ctx) => {
@@ -66,7 +67,10 @@ export const piKernelPlugin: KernelPluginFactory = (ctx) => {
       prefs: ctx.prefs,
       markPending: ctx.markSessionsPendingRestart,
       refresh: ctx.broadcastRefresh,
-      fitPiExtensionAvailable,
+      // pi 的工具强制过滤**就是**靠桌面适配扩展里的 tool-gate 实现的，所以对这个内核而言
+      // 「能不能强制过滤」== 「那个扩展装好了没」。pi 私有的函数名留在 pi 目录内，
+      // 机制层只见中性面名（圆心 KernelVersionApi.toolFilterEnforced 的语义按内核各自兑现）。
+      toolFilterEnforced: fitPiExtensionAvailable,
     }),
     // llm:oneshot 一次性问 pi 内核(cwd = 激活项目根,运行时注入;cliPath 用插件自己的解析)。
     createOneshot: () => (prompt, cwd) => runPiOneshot(prompt, { cwd, cliPath: cliPath() }),

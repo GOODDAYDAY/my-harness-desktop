@@ -159,12 +159,25 @@ export function SidePanelStrip(): React.ReactNode {
   );
 }
 
+/** Tab 显示名的 i18n 解析：与 settings 槽**同一范式**（settings-page.tsx:88 用
+ *  `t(`settings.${item.id}`, { defaultValue: item.title })`）。派生 key = `sidePanel.<id>`，
+ *  manifest 里的 `label` 字面量降级为**兜底**（没有对应译文时仍显示它，不空白）。
+ *  ⚠ 此前这里是裸 `{item.label}` / `title={item.label}`，于是 13 个 Tab 名在任何 locale 下
+ *  都是 manifest 里的硬编码中文（实测：zh-TW 界面显示「盲审/统计/请求记录」，de 界面同样）——
+ *  违反 CLAUDE.md §1.2「文案 → 语言插件」。 */
+function sidePanelLabel(t: (k: string, o: { defaultValue: string }) => string, item: { id: string; label: string }): string {
+  return t(`sidePanel.${item.id}`, { defaultValue: item.label });
+}
+
 function SortableIcon({ item, isActive, onClick }: {
   item: SidePanelItem;
   isActive: boolean;
   onClick: () => void;
 }): React.ReactNode {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  // SortableIcon 是独立组件，RightPanelContent 的 t 不在其作用域内，故自己取。
+  const { t } = useTranslation();
+  const label = sidePanelLabel(t, item);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -180,8 +193,8 @@ function SortableIcon({ item, isActive, onClick }: {
         {...attributes}
         {...listeners}
         onClick={onClick}
-        title={item.label}
-        aria-label={item.label}
+        title={label}
+        aria-label={label}
         aria-pressed={isActive}
         style={{
           position: "relative",
@@ -475,6 +488,14 @@ export function RightPanelContent(): React.ReactNode {
                 className="min-h-0"
               >
               <div
+                // 自有窗格锚点。⚠ 别改用 react-resizable-panels 渲染出的 `data-panel-id`：
+                // 那是第三方库的内部属性，依赖它等于把 e2e/DOM 审计绑在库的实现细节上
+                // （库升级改名就全断），而且它不在本仓源码里，`e2e-anchor-coverage` 守卫
+                // 会判"e2e 依赖了源码中不存在的锚点"。右面板是**多窗格 toggle**语义
+                // （activeSidePanelTabs 是数组，多个 Tab 可同时展开），没有窗格身份就没法
+                // 判断"哪块内容属于哪个 Tab"——实测审计脚本因此只能取第一个滚动容器，
+                // 于是 10 个 Tab 全在审同一个面板（可见元素恒为 14，整段空转）。
+                data-sidepanel-pane={id}
                 className="h-full flex flex-col min-h-0 sidepanel-panel-enter"
                 style={{ opacity: isActive ? 1 : 0.5, transition: "opacity 0.15s" }}
               >
@@ -492,7 +513,7 @@ export function RightPanelContent(): React.ReactNode {
                   onClick={() => useUiStore.getState().toggleSidePanelTab(item.id)}
                 >
                   <PluginIcon name={item.icon} className="size-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate">{sidePanelLabel(t, item)}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto min-h-0" style={{ padding: "var(--sidepanel-content-py) var(--sidepanel-content-px)" }}>
                   {Comp ? (
@@ -510,6 +531,10 @@ export function RightPanelContent(): React.ReactNode {
               {i < renderIds.length - 1 && (
                 <PanelResizeHandle
                   onDragging={setHandleDragging}
+                  // 可访问名与朝向要自己给（库只给 role=separator / aria-valuenow / tabIndex）。
+                  // 理由同 settings-page.tsx 那处：col-resize = 竖向分隔条，ARIA 默认值 horizontal 是错的。
+                  aria-label={t("shell.resizeSidePanel")}
+                  aria-orientation="vertical"
                   // 热区恒在(display:"flex"):风格差异只作用在内线。旧版把
                   // var(--sidepanel-divider-display) 挂在手柄本身,card/minimal/glass 三个
                   // 风格把它设成 none 时,"不要分割线"被物理地翻译成了"取消这个交互点"

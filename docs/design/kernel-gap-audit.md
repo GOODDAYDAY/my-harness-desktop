@@ -1,5 +1,13 @@
 # 内核拉平缺口审计：PI vs DSH
 
+> ⚠️ **本文为设计记录（快照），不是现行架构描述。** 其中提到的
+> `BackendExtensions` / `capabilities.extensions` / `asPi()` / `piSend()` / `kernel-factories`
+> 等符号**已退役**：opaque 扩展面桶已拆成圆心的**逐轴中性能力面** `BackendCapabilities`
+> （steering / retry / compaction / snapshot / stats / modelCycle / toolExec / busFrames /
+> questions / thinking + fileBacked），壳改为按轴探测（`SessionStore.faceOf` / `viaFace`），
+> `kernel/pi/backend/pi-backend-extensions.ts` 与 `kernel/factories/` 已删除。
+> 现行描述见 `CLAUDE.md` §6.2/§6.3 与 `docs/add-new-kernel.md` §1.3。
+
 - 本文是 `kernel-alignment.md` 的实证配套。那篇讲「怎么拉平」（三层次 + 内置插件 + 基类继承），本文做「哪里没拉平」的全项目扫描：把每一处 pi/dsh 不对称、每一处内核形状泄漏、每一处 dsh 缺面定位到文件与统计，作为拉平工作的核对清单。扫描基于 `main` 分支当前工作树（含已提交的 `a1eb5ab` 内核层重构）。
 
 - 判据沿用 `multi-kernel-shell.md` §3.3 那一问：**壳是不是必须向每一个内核索要它？** 答不上（是某个内核专属）的，就进「缺口」，去向要么内置插件补面、要么显式降级，不允许静默缺面。

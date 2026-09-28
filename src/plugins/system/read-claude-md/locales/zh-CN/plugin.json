@@ -1,0 +1,4 @@
+{
+  "plugin.read-claude-md.displayName": "CLAUDE.md 自动加载",
+  "plugin.read-claude-md.description": "内置内核扩展随插件启停同步：会话启动自动发现全局（~/.claude/）与项目级（cwd 逐级向上）CLAUDE.md 指令文件，以隐藏消息注入会话上下文；卸载即停止同步。"
+}

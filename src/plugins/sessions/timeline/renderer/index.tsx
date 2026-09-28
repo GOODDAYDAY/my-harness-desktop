@@ -4,11 +4,14 @@ import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon, getInflightToolCalls } from "@my-harness-desktop/react";
-import { parseSessionModelPrefs, MODELS_CONFIG_PATH, phaseFromView, classifyReferenceFile, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
+import { parseSessionModelPrefs, phaseFromView, classifyReferenceFile, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
 // messageActions 槽宿主(消费方渲染 + 圆心适用性判定)。抽出成模块是为了可测:
 // 「在飞的 pending 行不渲染锚点类按钮」是 UI 行为,得有 DOM 交互 test 守着(§5.6)。
+import { Announce } from "@my-harness-desktop/react";
 import { MessageActionsHost } from "./message-actions-host";
 import { Composer } from "./composer";
+// 待发送图片/文件两条提示条：抽成独立模块以便单测（与 MessageMeta.tsx / phase-icon.tsx 同惯例）
+import { PendingFileBar, PendingImageBar } from "./pending-bars";
 import { BlockRenderer } from "./block-renderer";
 import { ImageBlock } from "./image-block";
 import { decomposeMessage } from "./blocks";
@@ -26,30 +29,30 @@ export const channels = ["timeline:scrollTo", "timeline:rewindRequested", "timel
 // channel 可读描述(快捷键/命令面板类插件动态列表用;无描述则回退显示 channel 名)。
 export const channelMeta: Record<string, ChannelMeta> = {
   "timeline:focusComposer": {
-    label: "聚焦输入框",
-    description: "把光标移入会话输入框,直接开打。",
+    labelKey: "timeline.channel.focusComposer.label",
+    descriptionKey: "timeline.channel.focusComposer.desc",
   },
   "timeline:scrollTo": {
-    label: "滚动时间线",
-    description: "payload: { position: \"top\" | \"bottom\" } 滚到顶/底,或 { messageId } 跳到指定消息。",
+    labelKey: "timeline.channel.scrollTo.label",
+    descriptionKey: "timeline.channel.scrollTo.desc",
     payloadExample: { position: "bottom" },
   },
   "timeline:rewindRequested": {
-    label: "打开回退(rewind)",
-    description: "payload: { message, text } 以指定消息为回退点重发。需要消息对象,一般不由快捷键直接触发。",
+    labelKey: "timeline.channel.rewindRequested.label",
+    descriptionKey: "timeline.channel.rewindRequested.desc",
   },
   "timeline:composerAttachments": {
-    label: "输入框附件",
-    description: "payload 为附件列表,更新输入框附件。",
+    labelKey: "timeline.channel.composerAttachments.label",
+    descriptionKey: "timeline.channel.composerAttachments.desc",
   },
   "timeline:cycleModel": {
-    label: "切换模型",
-    description: "payload: { direction?: 1 | -1 } 在模型清单中循环切换(默认下一个)。",
+    labelKey: "timeline.channel.cycleModel.label",
+    descriptionKey: "timeline.channel.cycleModel.desc",
     payloadExample: { direction: 1 },
   },
   "timeline:cycleThinking": {
-    label: "切换思考深度",
-    description: "payload: { direction?: 1 | -1 } 在思考深度清单中循环切换(默认下一个)。",
+    labelKey: "timeline.channel.cycleThinking.label",
+    descriptionKey: "timeline.channel.cycleThinking.desc",
     payloadExample: { direction: 1 },
   },
 };
@@ -58,6 +61,8 @@ export const channelMeta: Record<string, ChannelMeta> = {
 // 必须在入口 re-export,否则 resolveMessageActionComponent 拿不到、动作按钮静默不渲。
 // fork/收藏动作已迁 session-bookmarks(§bookmark-snapshot-fork-unify §5),此处只留 copy/rewind。
 export { CopyAction, RewindAction } from "./message-actions";
+
+import { deriveThinkingLevels, shouldHintThinkingUnavailable } from "./thinking-levels";
 
 const DEFAULT_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 // 空态欢迎语随机句总数(对应 shell.greeting.1..20 的 i18n key,每次随机取一句)。
@@ -131,7 +136,13 @@ export function TimelineView(): React.ReactNode {
   // 两个 send() 并发跑——pref flush 各自 ensureForSend 起 pi、setContext 互相把对方
   // 的 activeProcKey 切走,撞出"pi 未启动"。ref 同步可见,第二次点击直接挡掉。
   const sendingRef = useRef(false);
-  const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
+  /** 瞬时提示。**带严重级**（r61）：此前只有 `text`，于是所有提示长得一样、也一律用
+   *  polite 播报——而这里大多数提示其实是**失败**（modelApplyFailed / thinkingApplyFailed /
+   *  rewindFailed / attachmentUnsupported / attachSkipped）。后果有两层：
+   *  ① 视觉上失败与告知无差别（恒中性边框 + `--color-fg`）；
+   *  ② 读屏侧失败被"礼貌地排队播报"，而 r59 定的原则是**播报强度属于语义**：
+   *     错误该用 `role=alert` 立刻打断，否则等于听不到。 */
+  const [toast, setToast] = useState<{ key: number; text: string; kind: "info" | "error" } | null>(null);
   const [attachments, setAttachments] = useState<ComposerAttachmentPayload | null>(null);
   // composer 挂图(表情包"加入输入框"的待发送图):state 驱动渲染,ref 供 doSend 消费取走
   // (发送动作在 useCallback 里,ref 同步可见;state 只在渲染层用)。发送成功才清。
@@ -196,13 +207,17 @@ export function TimelineView(): React.ReactNode {
 
   useEffect(() => { setAttachments(null); }, [_pluginsNonce]);
 
-  const showToast = useCallback((text: string): void => setToast({ key: Date.now(), text }), []);
+  /** @param kind 严重级；缺省 "info"。**失败路径必须显式传 "error"**（见 state 上的说明）。 */
+  const showToast = useCallback(
+    (text: string, kind: "info" | "error" = "info"): void => setToast({ key: Date.now(), text, kind }),
+    [],
+  );
 
   // "+" 入口:系统对话框选文件/图片(绝对路径引用,不读 base64)→ 全部入 pendingFiles。
   // 宿主无对话框能力(server/浏览器宿主)时显式降级:toast 说明 + 引导拖拽,不静默无反应。
   const handleAttach = useCallback(async (): Promise<void> => {
     const picked = await ctx.dialog.openFiles().catch(() => {
-      showToast(t("shell.attachmentUnsupported"));
+      showToast(t("shell.attachmentUnsupported"), "error");
       return null;
     });
     if (!picked || picked.length === 0) return;
@@ -226,7 +241,7 @@ export function TimelineView(): React.ReactNode {
       }
     }
     if (newFiles.length > 0) setPendingFilesSync([...pendingFilesRef.current, ...newFiles]);
-    if (rejected > 0) showToast(t("timeline.attachSkipped", { count: rejected }));
+    if (rejected > 0) showToast(t("timeline.attachSkipped", { count: rejected }), "error");
   }, [setPendingFilesSync, showToast, t]);
 
   // 移除单个待发送文件。
@@ -277,17 +292,14 @@ export function TimelineView(): React.ReactNode {
     // 串行挡在 models 前(根因:内核探测慢时模型清单被拖住、输入框空悬——这才是
     // "延迟"体验差的真源)。
     void refreshKernelStatus();
-    // models 走合流清单(model-catalog:pi + dsh,带 kernel 标)而非只扫 pi models.json(§3.3)。
-    const [settingsRes, modelsRes, fallbackRes] = await Promise.allSettled([
-      ctx.kernelConfig["pi"].get(),
+    // models 走合流清单(model-catalog,带 kernel 标)而非只扫某一个内核的模型文件(§3.3)。
+    // ⚠ 这里曾并行读 `ctx.kernelConfig["pi"].get()` 取 `retry.maxRetries` 当折叠条分母——
+    //   已删除：那是通用插件用字面量键取指定内核的面（§6.3 检验⑦），且对非 pi 会话给出
+    //   错误分母。分母改由 `autoRetryStart` 事件的 `maxAttempts` 提供（见 retryMax 声明处）。
+    const [modelsRes, fallbackRes] = await Promise.allSettled([
       ctx.modelsConfig.list(),
       ctx.modelsConfig.getFallbackModel(),
     ]);
-    if (settingsRes.status === "fulfilled") {
-      const s = settingsRes.value;
-      const mr = (s.retry as { maxRetries?: unknown } | undefined)?.maxRetries;
-      if (typeof mr === "number" && Number.isFinite(mr) && mr > 0) setRetryMax(mr);
-    }
     if (modelsRes.status === "fulfilled") {
       setModels(modelsRes.value);
     }
@@ -307,12 +319,17 @@ export function TimelineView(): React.ReactNode {
     } catch { return undefined; }
   }, [ctx.events, refreshExternals]);
 
-  // models.json 保存(configFileSaved 按 path 匹配)后重探:既有精确通知先例
-  // (根因:此前只在挂载时读一次,新装机初始无模型读到空清单后永远不重读),
-  // 重探动作统一走 refreshExternals。
+  // 内核模型配置保存后重探模型清单(根因:此前只在挂载时读一次,新装机初始无模型
+  // 读到空清单后永远不重读)。重探动作统一走 refreshExternals。
+  //
+  // ⚠ 判据是 payload 的**语义分类** `kind === "kernelModels"`（由设置页按贡献声明派生，
+  //   圆心 `configSavedKind`），不是"路径等于某个常量"。此前写的是
+  //   `payload.path === MODELS_CONFIG_PATH`，而那个常量是发布面里的 `"~/.pi/agent/models.json"`
+  //   ——通用插件靠某个内核的私有路径做判断，加内核时这条链对新内核**静默失效**
+  //   （路径不匹配 → 不刷新 → 用户改了模型配置看不到清单变化，要重启才行，且无任何报错）。
   useEffect(() => {
     const off = ctx.events.on("system:configFileSaved", (payload) => {
-      if ((payload as { path?: string })?.path === MODELS_CONFIG_PATH) void refreshExternals();
+      if ((payload as { kind?: string })?.kind === "kernelModels") void refreshExternals();
     });
     return off;
   }, [ctx.events, refreshExternals]);
@@ -361,17 +378,21 @@ export function TimelineView(): React.ReactNode {
   }, [rewindTarget, closeRewind]);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
-  // 思考档位清单(能力探测,§7.6):
-  // - pi 扩展面:内核 RPC 清单优先,空回退默认清单(与历史行为一致);
-  // - dsh 补面(dsh-thinking-level.md):只用精确模型清单(扩展答当前模型支持的档位),
-  //   空清单 = 模型无推理元数据/补面缺席 → 不渲染下拉(显式降级,诚实提示由
-  //   thinkingUnavailableHint 承担),不拿 DEFAULT_LEVELS 伪造可切;
-  // - 两面皆无:空(不渲染)。
-  const levels = capabilities.extension
-    ? (thinkingLevels.length > 0 ? thinkingLevels : DEFAULT_LEVELS)
-    : capabilities.thinking
-      ? thinkingLevels
-      : [];
+  // 思考档位清单(能力探测,§7.6)。判据从「是不是 pi 扩展面」换成**内核自报的清单语义**
+  // (`levelsSemantics`,圆心 ThinkingCapabilities):
+  // - 无 thinking 面 → 空(不渲染下拉);
+  // - `approximate`(内核给全局档位表,且 RPC 形状不识别时会返空)→ 空则回落 DEFAULT_LEVELS
+  //   (与历史行为一致,不是新增回落);
+  // - `precise`(内核给**当前模型**的精确清单)→ 空就是「该模型无档位」,如实不渲染,
+  //   **不拿 DEFAULT_LEVELS 伪造可切**(§1.5 不伪造成功;诚实提示由 thinkingUnavailableHint 承担)。
+  // 这样第四个内核自己声明语义即可,renderer 一行不改。
+  // 规则抽成纯函数(./thinking-levels)以便裸单测——组件本身太大,不适合用它测两条分支。
+  const levels = deriveThinkingLevels({
+    faces: capabilities.faces,
+    levelsSemantics: capabilities.levelsSemantics,
+    fromKernel: thinkingLevels,
+    fallback: DEFAULT_LEVELS,
+  });
 
   // 模型清单装载已并入 refreshExternals(见上):挂载 + 刷新信号 + models.json 保存
   // (configFileSaved 按 path 匹配)三个触发统一重探,不再单独维护 load。
@@ -404,7 +425,20 @@ export function TimelineView(): React.ReactNode {
   // 兜底模型(新会话无显式选择时实际会用到的模型):dsh agent-default-model 优先,否则 pi 兜底。
   // 与 main 的 models.getFallbackModel 同源;currentModel 链据此显示,不再落到 models[0] 的 pi 首项。
   const [fallbackModel, setFallbackModel] = useState<{ provider?: string; modelId?: string; kernel?: KernelId }>({});
-  // 内核重试上限(retry.maxRetries,内核默认 3):折叠条目的展示分母。
+  // 内核重试上限:折叠条目的展示分母。
+  //
+  // ⚠ 来源是**内核自己在 `autoRetryStart` 事件里报的 `maxAttempts`**（见下面的订阅），
+  //   不是去读某个内核的配置文件。此前这里写的是 `ctx.kernelConfig["pi"].get()` 再取
+  //   `retry.maxRetries`——两处问题：① 通用插件用**字面量键**取指定内核的面
+  //   （CLAUDE.md §6.3 检验⑦ 禁止的形态，豁免只给 `src/plugins/kernels/<id>/` 引用自己，
+  //   timeline 不是内核插件）；② 于是 dsh / minimal 会话也按 **pi** 的设置显示分母，
+  //   而 pi 未安装时 `ctx.kernelConfig["pi"]` 是 undefined → `.get()` 抛 TypeError →
+  //   被 `Promise.allSettled` 吞掉 → 静默回落默认值。
+  //   事件里的 `maxAttempts` 是逐会话、逐内核的真实值（`AutoRetryStartEvent`，
+  //   圆心契约），既中性又准确；在飞的重试横幅本来就已经在用它。
+  //   初值 3 = 契约注释里写明的内核默认值（`session-state.ts:471`）。
+  //   已知取舍：上一次运行遗留的历史重试行没有对应事件，分母显示默认值而不是当时配置值——
+  //   这是**展示层**的细微差别，且比"给 dsh 会话显示 pi 的配置"更正确。
   const [retryMax, setRetryMax] = useState(3);
 
   // 内核自动重试进行中状态(autoRetryStart 置、autoRetryEnd 清):
@@ -416,6 +450,8 @@ export function TimelineView(): React.ReactNode {
         const e = event as { attempt?: number; maxAttempts?: number; errorMessage?: string };
         if (typeof e.attempt === "number" && typeof e.maxAttempts === "number") {
           setRetrying({ attempt: e.attempt, maxAttempts: e.maxAttempts, errorMessage: e.errorMessage });
+          // 同一份数据也喂给折叠条的展示分母（替代此前刮 pi 配置的做法，理由见 retryMax 声明处）
+          setRetryMax(e.maxAttempts);
         }
       }
       if (event.type === "autoRetryEnd") setRetrying(null);
@@ -478,7 +514,7 @@ export function TimelineView(): React.ReactNode {
 
   const matchedPolicy = sessionCustom && composerPolicies.length > 0
     ? composerPolicies.find((p) => {
-        const v = sessionCustom[p.customKey];
+        const v = sessionCustom[p.customField];
         return v !== undefined && v !== null;
       })
     : undefined;
@@ -614,7 +650,7 @@ export function TimelineView(): React.ReactNode {
           await ctx.sessions.sync();
         } catch (err) {
           // 失败显形(设计 §4.1 失败路径):sync 取真值,显示随快照回落。
-          showToast(t("timeline.modelApplyFailed", { error: errText(err) }));
+          showToast(t("timeline.modelApplyFailed", { error: errText(err) }), "error");
           void ctx.sessions.sync().catch(() => {});
         }
       })();
@@ -631,7 +667,7 @@ export function TimelineView(): React.ReactNode {
           await ctx.models.setThinkingLevel(l);
           await ctx.sessions.sync();
         } catch (err) {
-          showToast(t("timeline.thinkingApplyFailed", { error: errText(err) }));
+          showToast(t("timeline.thinkingApplyFailed", { error: errText(err) }), "error");
           void ctx.sessions.sync().catch(() => {});
         }
       })();
@@ -698,20 +734,20 @@ export function TimelineView(): React.ReactNode {
         // (编排收在壳侧;见 ForkOptions.abortSource)。
         await ctx.tree.fork(currentNeutralSessionId ?? "", rewindTarget.message.id, "before", { abortSource: true });
       } catch (err) {
-        showToast(t("shell.rewindFailed", { error: errText(err) }));
+        showToast(t("shell.rewindFailed", { error: errText(err) }), "error");
         return;
       }
       // fork 换绑新会话后统一走 sendMessage(偏好回灌 + 工具过滤 + 发送收敛一处,设计 §4.1)
       const store = useSessionStore.getState();
       const res = await store.sendMessage(currentCwd, text);
       if (!res.ok) {
-        showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
+        showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }), "error");
         return;
       }
       setRewindTarget(null);
       setRewindText("");
     } catch (err) {
-      showToast(t("shell.rewindFailed", { error: errText(err) }));
+      showToast(t("shell.rewindFailed", { error: errText(err) }), "error");
       setRewindTarget(null);
       setRewindText("");
     } finally {
@@ -721,8 +757,11 @@ export function TimelineView(): React.ReactNode {
   };
 
   const handleRewindStop = (): void => {
-    if (retrying && capabilities.extension) {
-      void ctx.pi.abortRetry();
+    // 逐轴降级:有「重试面」才走内核的 abortRetry,否则回落到契约的中性 abort。
+    // 此前判据是 `capabilities.extension`(整个扩展面桶),于是「缺多路并发」的内核
+    // 即便将来补上重试面也仍然走不到这里。
+    if (retrying && capabilities.faces.retry) {
+      void ctx.messaging.abortRetry();
     } else {
       void ctx.messaging.abort();
     }
@@ -819,7 +858,7 @@ export function TimelineView(): React.ReactNode {
   }, [composerVoiceContribs, setInput]);
 
   // goal 生效着色:订阅 goal 插件的 goal:state 状态广播(replayLast 回放当前态),
-  //  active → 输入框换绿晕(.pi-composer-goal)。payload 是目标状态全量快照
+  //  active → 输入框换绿晕(.shell-composer-goal)。payload 是目标状态全量快照
   //  ({ objective, phase, round, maxRounds } | null),本消费方只用其中 phase==="active"。
   //  pluginsNonce 键控重订:插件并行加载,timeline 可能先挂载而 goal 的 channel 尚未注册
   //  (on 会抛错)——每次插件集合变化重试订阅,goal 后到也能接上;replayLast 补回订阅前
@@ -842,7 +881,7 @@ export function TimelineView(): React.ReactNode {
     void pluginsNonce; // 仅作失效键:插件热装/卸载后重读注册表(与 useComposerStats 的 nonce 键控同款)
     const pluginCmds: CommandItem[] = getComposerCommands().map((c) => ({
       name: c.name,
-      ...(c.description ? { description: c.description } : {}),
+      ...(c.descriptionKey ? { descriptionKey: c.descriptionKey } : {}),
       source: "plugin",
     }));
     return [...(snapshot?.commands ?? []), ...pluginCmds];
@@ -876,7 +915,7 @@ export function TimelineView(): React.ReactNode {
         image: img ?? undefined,
       });
       if (!res.ok) {
-        showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }));
+        showToast(t("timeline.modelApplyFailed", { error: errText(res.error) }), "error");
         return false;
       }
       if (res.toolFilterFlushed) {
@@ -999,21 +1038,21 @@ export function TimelineView(): React.ReactNode {
     // 图(外部传入或 composer 挂图)也算「有内容」:纯图发送是完整意图。
     const hasImage = !!(image ?? composerImageRef.current);
     if ((!trimmed && !hasAttachments && files.length === 0 && !hasImage) || sendingRef.current) return false;
-    if (!currentCwd) { showToast(t("shell.openFolderFirst")); return false; }
+    if (!currentCwd) { showToast(t("shell.openFolderFirst"), "error"); return false; }
     // 会话所属内核未装载 = 硬门(不是"复查可自愈"那一类):它要用户去启用内核或换会话,
     // 不是等一会就好。这一态**只在这里拦**(服务端不做同一道判断,理由见 session-store 的
     // `start()` 注释:调用方传的 kernel 是模型的派生量,服务端分不清"用户显式换内核"和
     // "模型链静默回落",拦在服务端会连合法的显式换模型一起拦掉);真发出去时服务端的
     // 装配点仍会给一条可行动的显式错误。
     if (sessionKernelBlocked) {
-      showToast(t("shell.sessionKernelNotLoaded", { kernel: sessionKernel ?? "" }));
+      showToast(t("shell.sessionKernelNotLoaded", { kernel: sessionKernel ?? "" }), "error");
       return false;
     }
     if (kernelAvailable === false) {
       // 复查自愈:用户可能刚在设置页装完内核,装好了就直接放行,不弹过期提示。
       // 复查按当前模型归属内核(选 dsh 查 dsh,选 pi 查 pi)。
       const nowOk = await refreshKernelStatus(currentModel?.kernel);
-      if (!nowOk) { showToast(t("shell.kernelRequired")); return false; }
+      if (!nowOk) { showToast(t("shell.kernelRequired"), "error"); return false; }
     }
     // streaming 中按发送 = 入队(有无正文都入:纯评论/纯文件是完整意图,附件快照随项携带,
     // flush 时一并拼入);发的是输入框内容则即时清空。
@@ -1084,8 +1123,14 @@ export function TimelineView(): React.ReactNode {
   }, [ctx.events]);
 
   // 输入框只读条:策略槽命中 / 未装内核 / 未选项目,三态共用同一呈现(composerPolicies 既有交互)。
-  const readonlyBar = (text: string): React.ReactNode => (
+  /** 只读条（composer 被替换成的降级呈现）。
+   *  `reason` 落成 **data 锚点**：这条降级有四种成因（会话策略只读 / 内核未装载 / 内核未安装 /
+   *  未打开文件夹），而它们的可见文案都经 i18n——e2e 若按译文定位就被绑死在某一种语言上
+   *  （zh-TW 是「設定」不是「設置」那类问题，见 skill §17.3）。把"为什么只读"做成属性，
+   *  断言就能按语义而不是按文案。 */
+  const readonlyBar = (reason: "policy" | "kernel-not-loaded" | "kernel-required" | "open-folder-first", text: string): React.ReactNode => (
     <div
+      data-composer-readonly={reason}
       className="flex items-center justify-center w-full rounded-[var(--radius-md)]"
       style={{
         minHeight: "52px",
@@ -1101,14 +1146,14 @@ export function TimelineView(): React.ReactNode {
   );
 
   const composer = matchedPolicy
-    ? readonlyBar(matchedPolicy.readonlyMessageKey ? t(matchedPolicy.readonlyMessageKey) : t("shell.composerReadonly"))
+    ? readonlyBar("policy", matchedPolicy.readonlyMessageKey ? t(matchedPolicy.readonlyMessageKey) : t("shell.composerReadonly"))
     : sessionKernelBlocked
       // 内核未装载:说明白"能读不能发 + 怎么恢复",不静默、也不假装成功(§7.6 显式降级)。
-      ? readonlyBar(t("shell.sessionKernelNotLoaded", { kernel: sessionKernel ?? "" }))
+      ? readonlyBar("kernel-not-loaded", t("shell.sessionKernelNotLoaded", { kernel: sessionKernel ?? "" }))
       : kernelAvailable === false
-        ? readonlyBar(t("shell.kernelRequired"))
+        ? readonlyBar("kernel-required", t("shell.kernelRequired"))
         : !currentCwd
-          ? readonlyBar(t("shell.openFolderFirst"))
+          ? readonlyBar("open-folder-first", t("shell.openFolderFirst"))
           : (
       <Composer
         value={input}
@@ -1120,8 +1165,8 @@ export function TimelineView(): React.ReactNode {
         allowEmptySubmit={hasAttachments || pendingFiles.length > 0 || !!composerImage}
         maxLines={composerMaxLines}
         onStop={() => {
-          if (retrying && capabilities.extension) {
-            void ctx.pi.abortRetry();
+          if (retrying && capabilities.faces.retry) {
+            void ctx.messaging.abortRetry();
           } else {
             void ctx.messaging.abort();
           }
@@ -1133,9 +1178,11 @@ export function TimelineView(): React.ReactNode {
         currentLevel={currentLevel}
         onPickModel={pickModel}
         onPickLevel={pickLevel}
-        // 显式降级(§7.6,能力探测非内核身份分支):当前后端有 dsh 扩展面而无 pi 面 →
-        // 运行时切档不可用,思考开关置灰并悬浮真实原因(此前只挂「思考已关闭」误导文案)。
-        thinkingUnavailableHint={capabilities.thinking && !capabilities.extension ? t("shell.thinkingSwitchUnsupported") : undefined}
+        // 显式降级(§7.6,能力探测非内核身份分支):有档位清单面但**无运行时轮转**面 →
+        // 思考开关置灰并悬浮真实原因(此前只挂「思考已关闭」误导文案)。
+        // 判据是**成员级**的 `thinkingCycle`,不是「有没有某个桶」——此前写成
+        // `capabilities.thinking && !capabilities.extension`,那是拿内核身份当语义代理。
+        thinkingUnavailableHint={shouldHintThinkingUnavailable(capabilities) ? t("shell.thinkingSwitchUnsupported") : undefined}
         commands={allCommands}
         currentKernel={capabilities.kernel}
         kernelLocked={capabilities.locked}
@@ -1333,7 +1380,11 @@ export function TimelineView(): React.ReactNode {
           <PendingFileBar files={pendingFiles} onRemove={removeFile} />
         )}
         {toast && (
-          <div key={toast.key} style={toastStyle}>
+          <div key={toast.key} style={toastStyle(toast.kind)} data-toast-kind={toast.kind}>
+            {/* 视觉呈现照旧（锚在输入框附近、带图标）；`Announce` 只负责把它送进常驻
+                live region 让读屏能播报——瞬时提示若没有 live region，读屏用户完全收不到
+                （这条承载的是「附件类型不支持」「已跳过 N 个文件」这类**唯一一次**的告知）。 */}
+            <Announce message={toast.text} variant={toast.kind} />
             <Wrench className="size-3 text-[var(--color-muted)]" />
             <span>{toast.text}</span>
           </div>
@@ -1543,79 +1594,28 @@ function ComposerDock({ children }: { children: React.ReactNode }): React.ReactN
   );
 }
 
-/** 待发送图条(composer 上方,表情包"加入输入框"的中间态):展示图 + 移除按钮。
- *  图以 dataUri 由贡献方(stickers)读文件提供,timeline 只挂载渲染不碰文件读取。 */
-function PendingImageBar({ image, onRemove }: { image: { src: string; title?: string; dataUri?: string }; onRemove: () => void }): React.ReactNode {
-  return (
-    <div
-      className="flex items-center gap-2 px-3 py-1.5 mb-2 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)]"
-      style={{ width: "fit-content", maxWidth: "100%" }}
-    >
-      {image.dataUri ? (
-        <img src={image.dataUri} alt={image.title ?? "待发送图片"} className="h-16 w-auto max-w-[120px] rounded-[var(--radius-sm)] object-cover" />
-      ) : (
-        <span className="text-[var(--color-muted)] text-[length:var(--font-size-xs)] truncate max-w-[160px]">{image.src}</span>
-      )}
-      <span className="flex-1 min-w-0 text-[var(--color-muted)] text-[length:var(--font-size-xs)] truncate max-w-[220px]">
-        {image.title ?? "贴纸"}
-      </span>
-      <button
-        type="button"
-        onClick={onRemove}
-        title="移除图片"
-        className="flex items-center justify-center size-6 rounded-full border-none bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] cursor-pointer shrink-0"
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
-  );
-}
 
-/** 待发送文件条(composer 上方):绝对路径引用 + 移除按钮。文件是「参考文件」(AI 用工具读),
- *  展示的是绝对路径(契合「复制文件进来直接展示绝对路径」)。 */
-function PendingFileBar({ files, onRemove }: { files: Array<{ path: string; name: string }>; onRemove: (path: string) => void }): React.ReactNode {
-  const { t } = useTranslation();
-  return (
-    <div className="flex flex-col gap-1 mb-2" style={{ width: "fit-content", maxWidth: "100%" }}>
-      {files.map((f) => (
-        <div
-          key={f.path}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)]"
-          style={{ maxWidth: "100%" }}
-        >
-          <FileText className="size-3.5 shrink-0 text-[var(--color-muted)]" />
-          <span
-            className="min-w-0 text-[var(--color-muted)] text-[length:var(--font-size-xs)] truncate font-[var(--font-family-mono)]"
-            title={f.path}
-          >
-            {f.path}
-          </span>
-          <button
-            type="button"
-            onClick={() => onRemove(f.path)}
-            title={t("timeline.removeFile")}
-            className="flex items-center justify-center size-6 rounded-full border-none bg-transparent text-[var(--color-muted)] hover:text-[var(--color-fg)] cursor-pointer shrink-0"
-          >
-            <X className="size-3.5" />
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
 
-const toastStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "6px",
-  width: "fit-content",
-  margin: "0 auto 8px",
-  padding: "6px 14px",
-  borderRadius: "var(--radius-md)",
-  background: "var(--color-surface)",
-  border: "1px solid var(--color-border)",
-  boxShadow: "var(--shadow-md)",
-  fontSize: "var(--font-size-sm)",
-  color: "var(--color-fg)",
-};
+/** 瞬时提示的样式。⚠ **放置模型**与共享 `Toast` 部件不同，这是有意的、不是重复实现：
+ *  共享 `Toast` 是 `position:fixed` 的顶部浮层（从 -60px 滑入、zIndex 200）；
+ *  这里是**文档流内**锚在输入框上方（`width:fit-content` + `margin:0 auto 8px`），
+ *  为的是"提示出现在用户刚操作的地方"。r61 逐份比对过两者的样式块确认了这一点
+ *  （r37 当时只是推断"位置语义不同"，现在有证据）。
+ *  按 kind 着色：失败要有可见的严重级信号，不能与告知长得一样。 */
+function toastStyle(kind: "info" | "error"): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    width: "fit-content",
+    margin: "0 auto 8px",
+    padding: "6px 14px",
+    borderRadius: "var(--radius-md)",
+    background: "var(--color-surface)",
+    border: `1px solid ${kind === "error" ? "var(--color-accent-error)" : "var(--color-border)"}`,
+    boxShadow: "var(--shadow-md)",
+    fontSize: "var(--font-size-sm)",
+    color: kind === "error" ? "var(--color-accent-error)" : "var(--color-fg)",
+  };
+}
 

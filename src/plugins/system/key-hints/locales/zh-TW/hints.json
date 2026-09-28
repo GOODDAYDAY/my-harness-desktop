@@ -6,5 +6,7 @@
   "keyhints.settings.backquoteHint": "關閉後 ` 鍵完全恢復為普通字元，只保留組合鍵觸發。",
   "keyhints.settings.shortcut": "組合鍵觸發",
   "keyhints.settings.shortcutDesc": "進入導覽模式也可以綁組合鍵，改綁在「快捷鍵」設定頁。",
-  "keyhints.settings.shortcutHint": "事件 keyhints:toggle，預設綁定 mod+shift+'。導覽模式內按字母觸發點擊，Esc 退出。"
+  "keyhints.settings.shortcutHint": "事件 keyhints:toggle，預設綁定 mod+shift+'。導覽模式內按字母觸發點擊，Esc 退出。",
+  "keyhints.channel.toggle.label": "切換按鍵導覽模式",
+  "keyhints.channel.toggle.desc": "進入/結束導覽模式：所有可點擊元素高亮並顯示字母標記，按字母即觸發點擊。"
 }

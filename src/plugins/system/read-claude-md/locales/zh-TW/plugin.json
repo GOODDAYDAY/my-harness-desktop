@@ -1,0 +1,4 @@
+{
+  "plugin.read-claude-md.displayName": "CLAUDE.md 自動載入",
+  "plugin.read-claude-md.description": "內建核心擴展隨外掛啟停同步：會話啟動自動發現全域（~/.claude/）與專案級（cwd 逐層向上）CLAUDE.md 指令檔案，以隱藏訊息注入會話上下文；解除安裝即停止同步。"
+}

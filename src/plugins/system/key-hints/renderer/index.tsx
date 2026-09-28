@@ -23,8 +23,8 @@ export const channels = ["keyhints:toggle"] as const;
 // channel 可读描述(快捷键设置页动态列表用;keybindings 默认绑定在设置页可见此描述)。
 export const channelMeta: Record<string, ChannelMeta> = {
   "keyhints:toggle": {
-    label: "切换按键导览模式",
-    description: "进入/退出导览模式:所有可点击元素高亮并显示字母标记,按字母即触发点击。",
+    labelKey: "keyhints.channel.toggle.label",
+    descriptionKey: "keyhints.channel.toggle.desc",
   },
 };
 

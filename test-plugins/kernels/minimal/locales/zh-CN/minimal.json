@@ -24,5 +24,7 @@
   "minimal.customCli.appliedWithPending": "内置内核不可指定",
   "minimal.customCli.cleared": "内置内核不可清除",
   "minimal.customCli.failed": "设置失败",
-  "minimal.noInstallHint": "minimal 随壳分发：不安装、不升级、不降级，也没有需要指定的目录。"
+  "minimal.noInstallHint": "minimal 随壳分发：不安装、不升级、不降级，也没有需要指定的目录。",
+  "plugin.minimal.description": "minimal 内核的 desktop 对接面：内核版本 + 配置 + 拓展 + 模型（一个入口三个 TAB，与 pi/dsh 同级）。测试专用插件：只随测试装载，不在生产内核清单里。",
+  "settings.minimal-ext": "Minimal 拓展"
 }

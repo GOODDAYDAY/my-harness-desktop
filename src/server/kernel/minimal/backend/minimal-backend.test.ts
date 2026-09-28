@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createMinimalBackend } from "../../factories/kernel-factories";
+import { createMinimalBackend } from "./minimal-backend-factory";
 import { minimalDerivedSessionPath } from "./minimal-catalog";
 import type { SessionEvent } from "@my-harness-desktop/shared";
 

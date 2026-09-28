@@ -31,14 +31,29 @@
     ],
     "languages": [
       {
-        "id": "file-preview.preview",
+        "id": "file-preview.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "file-preview.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "file-preview.plugin",
         "locale": "zh-CN",
-        "resources": "./locales/zh-CN/preview.json"
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "file-preview.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
       },
       {
         "id": "file-preview.preview",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/preview.json"
+        "locale": "de",
+        "resources": "./locales/de/preview.json"
       },
       {
         "id": "file-preview.preview",
@@ -47,8 +62,13 @@
       },
       {
         "id": "file-preview.preview",
-        "locale": "de",
-        "resources": "./locales/de/preview.json"
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/preview.json"
+      },
+      {
+        "id": "file-preview.preview",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/preview.json"
       }
     ]
   }

@@ -1,0 +1,4 @@
+{
+  "plugin.voice-input.displayName": "Spracheingabe",
+  "plugin.voice-input.description": "Spracherkennung: Mikrofon im Eingabefeld anklicken, lokal mit einem Whisper-Modell transkribieren, Text einfügen und senden. Das Modell wird bei Bedarf geladen und liegt nicht in git."
+}

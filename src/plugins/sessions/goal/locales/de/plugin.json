@@ -1,0 +1,4 @@
+{
+  "plugin.goal.displayName": "Ziel",
+  "plugin.goal.description": "goal-Fähigkeit: kernel-unabhängiges, in der Sitzung persistierendes Ziel (set_goal/achieve_goal) plus Fortsetzungssteuerung der Shell"
+}

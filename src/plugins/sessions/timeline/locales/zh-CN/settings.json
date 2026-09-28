@@ -11,7 +11,7 @@
   "settings.userBubbleMaxLines": "用户消息气泡最大行数",
   "settings.userBubbleMaxLinesDesc": "超过此行数的用户消息收起为摘要,点气泡展开全文",
   "settings.showHiddenMessages": "显示隐藏消息",
-  "settings.showHiddenMessagesDesc": "显示底座注入的内部上下文(如 CLAUDE.md),默认关闭",
+  "settings.showHiddenMessagesDesc": "显示内核注入的内部上下文(如 CLAUDE.md),默认关闭",
   "settings.timelineCollapseDefault": "时间线内容默认折叠",
   "settings.timelineCollapseDefaultDesc": "会话流中工具卡片(Bash/Edit/Read/Grep/默认)和思考链默认折叠,点击可展开"
 }

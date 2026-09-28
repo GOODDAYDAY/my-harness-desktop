@@ -3,5 +3,6 @@
   "shell.tokensUp": "Eingabe-Tokens",
   "shell.tokensDown": "Ausgabe-Tokens",
   "shell.tpsTitle": "Download-Tempo (Tokens/s)",
-  "shell.totalTitle": "Kumulative Tokens"
+  "shell.totalTitle": "Kumulative Tokens",
+  "shell.tpsValue": "{{value}} Tokens/Sek."
 }

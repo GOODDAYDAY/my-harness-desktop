@@ -7,5 +7,7 @@
   "preview.refresh": "Aktualisieren",
   "preview.viewSource": "Quelltext",
   "preview.viewRendered": "Gerendert",
-  "preview.loadFailed": "Laden fehlgeschlagen"
+  "preview.loadFailed": "Laden fehlgeschlagen",
+  "preview.fsUnavailable": "Dateisystemzugriff nicht verfügbar",
+  "preview.noContent": "Kein Inhalt zurückgegeben"
 }

@@ -1,12 +1,13 @@
 // buildKernel —— 从 transport 三原语构建 window.kernel(web-service-architecture.md §4/§15)。
 // 原 preload.ts 的 kernel 对象整体迁来:ipcRenderer.invoke/on/removeListener → transport
 // .invoke/on/off;platform 由宿主注入(纯值,不经 transport)。依赖只向内,零 electron。
+// 非组件的壳代码取 i18n：用 i18next 单例（拿不到 useTranslation）。
+import { i18next } from "../app/i18n-init";
 import type { KernelApi } from "@my-harness-desktop/react";
 import type { RemoteTransport } from "../transport/ws-transport";
 
 import { IPC } from "@my-harness-desktop/shared";
-import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry, SessionHeaderChangedEvent, ForkOptions } from "@my-harness-desktop/shared";
-import type { DshProvider, DshDefaultModel } from "@my-harness-desktop/shared";
+import type { HeaderPatch, SessionToolConfig, KnownToolInfo, GitStatusResult, GitLogEntry, SessionHeaderChangedEvent, ForkOptions, SessionCapabilities, ConcurrencyMode, KernelPluginReloadReport } from "@my-harness-desktop/shared";
 import type { KernelId, KernelLogo, KernelStatusView, KernelVersionApi } from "@my-harness-desktop/shared";
 
 
@@ -68,18 +69,90 @@ function kernelVersionFor(kernel: KernelId): KernelVersionApi {
       invokeP.catch(() => cleanup());
       return new Promise((resolve) => {
         resolveFn = resolve;
-        setTimeout(() => { if (!cleaned) { cleanup(); resolveFn?.({ ok: false, error: "安装超时" }); } }, 300000);
+        // ⚠ 这个 error 会**显示给用户**（内核设置页的安装结果），所以文案必须走 i18n。
+        //   此前写死中文 "安装超时"，en/de/zh-TW 用户会看到一句中文——而它藏在 `.ts` 里，
+        //   硬编码中文守卫当时只 walk `.tsx`，所以从没被扫到（r42 扩宽了扫描范围）。
+        //   这里不是 React 组件、拿不到 useTranslation，改用 i18next 单例；
+        //   300 秒超时触发时 i18n 必然已初始化完毕，不存在"t 返回 key"的时序风险。
+        setTimeout(() => { if (!cleaned) { cleanup(); resolveFn?.({ ok: false, error: i18next.t("shell.installTimeout") }); } }, 300000);
       });
     },
     // tool-gate 扩展可用性探测(能力探测,带 kernel 参数;后端 pi 有、dsh/minimal 无 → false)。
-    fitPiExtensionAvailable: (): Promise<boolean> => transport.invoke(IPC.kernelVersion.fitPiExtensionAvailable, kernel),
+    toolFilterEnforced: (): Promise<boolean> => transport.invoke(IPC.kernelVersion.toolFilterEnforced, kernel),
   };
 }
 
+/** **当前**内核清单（可变；`reloadKernelIds` 会整体替换）。boot 时以传入的快照为初值。 */
+let currentKernelIds: KernelId[] = [...kernelIds];
+
+/** 三张 per-id 映射。**对象引用恒定、内容可重建**——这样 `const { kernels } = window.kernel`
+ *  解构出去的引用仍然有效（重载后读到的是新内容），不需要消费者重新取一次。
+ *  这正是服务端 §3.6.3 选"函数形状"要解决的同一个问题在 renderer 侧的对应解法：
+ *  renderer 的契约是 `Record<KernelId, X>`（插件里写 `ctx.kernels.pi`），改成函数会波及所有插件，
+ *  所以这里用"稳定引用 + 原地重建"达到同样效果。 */
+const kernelVersionMap = {} as KernelApi["kernels"];
+const kernelModelsMap = {} as KernelApi["kernelModels"];
+const kernelConfigMap = {} as KernelApi["kernelConfig"];
+
+function rebuildKernelMaps(ids: KernelId[]): void {
+  for (const m of [kernelVersionMap, kernelModelsMap, kernelConfigMap]) {
+    for (const k of Object.keys(m)) delete (m as Record<string, unknown>)[k];
+  }
+  for (const id of ids) {
+    // 三个 *For 助手返回的是"按 IPC 频道拼出来的面"，比契约类型略松（少几个可选成员的精确类型），
+    // 此前靠 `Object.fromEntries(...) as KernelApi["kernelModels"]` 整体断言掩盖；改成原地填充后
+    // 断言要落在**每个赋值**上。断言的依据没变（还是那三个助手的实现），只是位置从整体挪到逐项。
+    kernelVersionMap[id] = kernelVersionFor(id) as KernelApi["kernels"][KernelId];
+    kernelModelsMap[id] = kernelModelsFor(id) as unknown as KernelApi["kernelModels"][KernelId];
+    kernelConfigMap[id] = kernelConfigFor(id) as unknown as KernelApi["kernelConfig"][KernelId];
+  }
+}
+
+// ⚠ **boot 时的初始填充**：三张映射现在是可变对象（为了引用恒定、内容可重建），
+//   所以必须在构造时填一次——否则 `window.kernel.kernels` 一开始是空对象，
+//   所有 `ctx.kernels.pi` 用法都会拿到 undefined（首版改造就漏了这一步，
+//   靠 tsc 与 e2e 都没拦住，是 review 时发现的：空对象在类型上完全合法）。
+rebuildKernelMaps(currentKernelIds);
+
+/** 重新拉取内核清单（经 `kernel.list` IPC，main 侧是活的注册表投影）并重建三张映射。 */
+async function reloadKernelIds(): Promise<KernelId[]> {
+  const list = (await transport.invoke(IPC.kernel.list)) as { id: KernelId }[];
+  currentKernelIds = list.map((x) => x.id);
+  rebuildKernelMaps(currentKernelIds);
+  return currentKernelIds;
+}
+
+// 自订阅通用刷新信号：**window.kernel 自己保证自己的新鲜度**，不依赖某个调用方记得去调
+// reloadKernelIds（挂进 plugins-host 的桥接里也行，但那样"新鲜度"就成了别人的责任，
+// 换一个入口装配就会漏）。语义依据见 §3.6.4：`refresh.requested` 是"外部状态变了，重探"，
+// 而内核清单正是 renderer 在 boot 时探过、之后不会自己变新鲜的东西。
+// 代价是每次刷新信号多一个 IPC 往返（`kernel.list` 很轻：只回 id + logo），换来的是不会 stale。
+void transport.on(IPC.refresh.requested, () => { void reloadKernelIds().catch(() => {}); });
+
 /** 暴露到 renderer 的 kernel 全局对象(window.kernel)。 */
 const kernel = {
-  /** 已注册内核 id 清单(boot 时从 kernel.list IPC 拿,替代 KERNEL_IDS 字面量数组)。 */
-  kernelIds,
+  /** 已注册内核 id 清单。**getter**，返回的是"最近一次拉取"的清单而不是 boot 时的定值
+   *  （§3.6.4）：内核插件重载 / 装卸内核之后它会跟着变，消费者不必知道这件事。
+   *  ⚠ 用 getter 而不是重新赋值整个属性，是为了让 `const { kernelIds } = window.kernel`
+   *  这种解构**至少不会拿到一个再也无法更新的死数组**——解构出的仍是旧值（JS 语义如此），
+   *  但直接读 `window.kernel.kernelIds` 的地方一律新鲜。要彻底摆脱解构陷阱得把契约改成
+   *  函数形状（服务端 §3.6.3 就是这么做的），那会波及所有插件的 `ctx.kernel.*` 用法，
+   *  本轮不做；已在契约注释里写明"以直接读属性为准"。 */
+  get kernelIds(): KernelId[] {
+    return currentKernelIds;
+  },
+  /** 重新拉取内核清单并重建三张 per-id 映射（§3.6.4）。
+   *  返回拉取后的清单，方便调用方直接断言/使用。幂等、可重复调。 */
+  reloadKernelIds: (): Promise<KernelId[]> => reloadKernelIds(),
+  // 差量重载内核插件：main 侧按 (id,version) 对比、重跑变动内核的工厂、重建投影面、清访问器缓存。
+  // 返回的变化清单是 renderer 唯一能据以更新的**权威结果**（kernelIds 快照要靠它才知道变了什么）。
+  reloadKernels: async (): Promise<KernelPluginReloadReport> => {
+    const report = (await transport.invoke(IPC.kernel.reload)) as KernelPluginReloadReport;
+    // 重载成功后立刻自拉一次：不等 `refresh.requested` 广播绕回来（那条广播 main 侧确实会发，
+    // 但"触发者自己"没必要多等一个往返；且广播是尽力而为的信号，自拉才是确定的）。
+    if (report.changed) await reloadKernelIds();
+    return report;
+  },
   /** 插件配置:统一项目级配置通道(项目级 <cwd>/.my-harness-desktop/config/{id}.json 默认,
    *  全局 ~/.my-harness-desktop/config/{id}.json 兜底)。renderer 不直接写,经此 → main → ConfigStore。 */
   config: {
@@ -156,9 +229,9 @@ const kernel = {
       transport.invoke(IPC.slots.blockRenderers),
     codeBlockRenderers: (): Promise<{ id: string; languages: string[]; component: string; order?: number; pluginId: string }[]> =>
       transport.invoke(IPC.slots.codeBlockRenderers),
-    sessionGroupings: (): Promise<{ id: string; parentPathKey: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]> =>
+    sessionGroupings: (): Promise<{ id: string; parentPathField: string; childLabelKey?: string; childIcon?: string; order?: number; pluginId: string }[]> =>
       transport.invoke(IPC.slots.sessionGroupings),
-    composerPolicies: (): Promise<{ id: string; customKey: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]> =>
+    composerPolicies: (): Promise<{ id: string; customField: string; readonlyMessageKey?: string; order?: number; pluginId: string }[]> =>
       transport.invoke(IPC.slots.composerPolicies),
     composerAttachments: (): Promise<{ id: string; component: string; order?: number; pluginId: string }[]> =>
       transport.invoke(IPC.slots.composerAttachments),
@@ -174,9 +247,9 @@ const kernel = {
       transport.invoke(IPC.slots.settingsGroups),
   },
   /** 内核版本管理(中性,从 KERNEL_IDS 注册清单遍历):status/setCustomCliDir/listVersions/install。 */
-  kernels: Object.fromEntries(kernelIds.map((k) => [k, kernelVersionFor(k)])) as KernelApi["kernels"],
+  kernels: kernelVersionMap,
   /** 中性内核管理 API：模型页(kernel-design-spec.md §12.5):从 KERNEL_IDS 注册清单遍历。 */
-  kernelModels: Object.fromEntries(kernelIds.map((k) => [k, kernelModelsFor(k)])) as KernelApi["kernelModels"],
+  kernelModels: kernelModelsMap,
   /** 模型探测(发现 + ping;domain ModelProbeApi):纯 HTTP,内核无关。 */
   modelsProbe: {
     discover: (input: { baseUrl: string; apiKey?: string; api?: string }): Promise<unknown> =>
@@ -185,7 +258,7 @@ const kernel = {
       transport.invoke(IPC.modelProbe.ping, input),
   },
   /** 中性内核原生配置 API(kernel 配置 TAB 用):从 KERNEL_IDS 注册清单遍历。 */
-  kernelConfig: Object.fromEntries(kernelIds.map((k) => [k, kernelConfigFor(k)])) as KernelApi["kernelConfig"],
+  kernelConfig: kernelConfigMap,
   /** 内核身份标(logo)取回:每个内核在自己适配器声明,壳经此取回渲染(不硬编码)。 */
   kernelLogos: {
     get: (kernel: KernelId): Promise<KernelLogo> => transport.invoke(IPC.kernelLogos.get, kernel),
@@ -203,7 +276,7 @@ const kernel = {
   },
   /** 中性模型面:合流清单 + 兜底模型;pi models.json 整份读写经 kernelModels["pi"].readConfig/saveConfig。 */
   models: {
-    /** 合流模型清单(pi + dsh,带 kernel 标;会话流模型下拉用)。 */
+    /** 合流模型清单(各内核的模型源合流,带 kernel 标;会话流模型下拉用)。 */
     list: (): Promise<unknown[]> => transport.invoke(IPC.models.list),
     /** 中性「默认或首项模型」(新会话无显式选择时的发送兜底;不直读 pi models.json)。 */
     getFallbackModel: (): Promise<{ provider: string; model: string; kernel: KernelId } | null> =>
@@ -247,7 +320,8 @@ const kernel = {
     getSnapshot: (): Promise<unknown> => transport.invoke(IPC.session.getSnapshot),
     sync: (): Promise<unknown> => transport.invoke(IPC.session.sync),
     switchKernel: (target: KernelId): Promise<void> => transport.invoke(IPC.session.switchKernel, target),
-    getCapabilities: (): Promise<{ kernel: KernelId | null; locked: boolean; extension: boolean; thinking: boolean }> => transport.invoke(IPC.session.getCapabilities),
+    // 类型从圆心 import,不在此内联重写(此前是本地副本,圆心一改就漂——§1.3 契约单源)
+    getCapabilities: (): Promise<SessionCapabilities> => transport.invoke(IPC.session.getCapabilities),
     openSession: (sessionPath: string): Promise<unknown> =>
       transport.invoke(IPC.session.open, sessionPath),
     readToolConfig: (sessionPath: string): Promise<SessionToolConfig | null> =>
@@ -271,8 +345,8 @@ const kernel = {
     deleteBookmark: (snapshotId: string): Promise<unknown> => transport.invoke(IPC.sessions.deleteBookmark, snapshotId),
     onEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (event: unknown) => cb(event);
-      transport.on("session:event", listener);
-      return () => { transport.off("session:event", listener); };
+      transport.on(IPC.session.event, listener);
+      return () => { transport.off(IPC.session.event, listener); };
     },
     /** 列表行变更推送(归档/置顶/改名/删除,第 21 项):payload 自带补丁,订阅方本地打行(copy 例外重拉)。 */
     onHeaderChanged: (cb: (info: SessionHeaderChangedEvent) => void): (() => void) => {
@@ -282,13 +356,13 @@ const kernel = {
     },
     onKernelEvent: (cb: (event: unknown) => void): (() => void) => {
       const listener = (event: unknown) => cb(event);
-      transport.on("session:kernelEvent", listener);
-      return () => { transport.off("session:kernelEvent", listener); };
+      transport.on(IPC.session.kernelEvent, listener);
+      return () => { transport.off(IPC.session.kernelEvent, listener); };
     },
     onQuestion: (cb: (req: unknown) => void): (() => void) => {
       const listener = (req: unknown) => cb(req);
-      transport.on("session:question", listener);
-      return () => { transport.off("session:question", listener); };
+      transport.on(IPC.session.question, listener);
+      return () => { transport.off(IPC.session.question, listener); };
     },
     answerQuestion: (requestId: string, answers: unknown): Promise<void> =>
       transport.invoke(IPC.session.answerQuestion, requestId, answers),
@@ -298,15 +372,15 @@ const kernel = {
       transport.invoke(IPC.session.listTools),
     onSnapshot: (cb: (snapshot: unknown) => void): (() => void) => {
       const listener = (snapshot: unknown) => cb(snapshot);
-      transport.on("session:snapshot", listener);
-      return () => { transport.off("session:snapshot", listener); };
+      transport.on(IPC.session.snapshot, listener);
+      return () => { transport.off(IPC.session.snapshot, listener); };
     },
     /** 中立层基线读 + 变更订阅(session-single-source §3.2,渲染层镜像的数据源)。 */
     getNeutral: (ns: string): Promise<unknown> => transport.invoke(IPC.sessions.getNeutral, ns),
     onNeutralChange: (cb: (change: unknown) => void): (() => void) => {
       const listener = (change: unknown) => cb(change);
-      transport.on("session:neutralChange", listener);
-      return () => { transport.off("session:neutralChange", listener); };
+      transport.on(IPC.session.neutralChange, listener);
+      return () => { transport.off(IPC.session.neutralChange, listener); };
     },
     // MessagingApi
     prompt: (text: string, images?: { data: string; mimeType: string; name?: string }[], display?: { image?: { src: string; title?: string } }, prefs?: unknown): Promise<void> =>
@@ -336,27 +410,24 @@ const kernel = {
     runBash: (command: string, excludeFromContext?: boolean): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
       transport.invoke(IPC.session.runBash, command, excludeFromContext),
     abortBash: (): Promise<void> => transport.invoke(IPC.session.abortBash),
-    // pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensions 探测「有则用、无则降级」
-    // 名称提醒:`pi` 是**pi 扩展面的宿主分组**(steer / followUp / cycleModel …是 pi 专属扩展),
-    // 但组内也有**中性成员**(getThinkingLevels / cycleThinkingLevel —— 它们直接调 `IPC.session.*`,
-    // 与内核无关)。所以**不要**因为看到组名叫 pi 就判定"这里写死了内核身份":
-    // 判据看该成员**打到哪个 IPC**,不是看它挂在哪个分组下。
-    pi: {
-      steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
-        transport.invoke(IPC.session.steer, text, images),
-      followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
-        transport.invoke(IPC.session.followUp, text, images),
-      abortRetry: (): Promise<void> => transport.invoke(IPC.session.abortRetry),
-      cycleModel: (): Promise<void> => transport.invoke(IPC.session.cycleModel),
-      getThinkingLevels: (): Promise<string[]> => transport.invoke(IPC.session.getThinkingLevels),
-      cycleThinkingLevel: (): Promise<void> => transport.invoke(IPC.session.cycleThinkingLevel),
-      compact: (customInstructions?: string): Promise<void> => transport.invoke(IPC.session.compact, customInstructions),
-      setAutoCompaction: (enabled: boolean): Promise<void> => transport.invoke(IPC.session.setAutoCompaction, enabled),
-      setAutoRetry: (enabled: boolean): Promise<void> => transport.invoke(IPC.session.setAutoRetry, enabled),
-      getLastAssistantText: (): Promise<string> => transport.invoke(IPC.session.getLastAssistantText),
-      setSteeringMode: (mode: "all" | "one-at-a-time"): Promise<void> => transport.invoke(IPC.session.setSteeringMode, mode),
-      setFollowUpMode: (mode: "all" | "one-at-a-time"): Promise<void> => transport.invoke(IPC.session.setFollowUpMode, mode),
-    },
+    // ⚠ 此处曾是 `pi: { … }` 分组（还附了一段「不要因为组名叫 pi 就判定这里写死了内核身份，
+    // 判据看它打到哪个 IPC」的注释）——**需要一段注释来解释「为什么这个内核名不是内核身份」，
+    // 本身就说明名字错了**。已平铺：这一层是原始 IPC 面，每个方法本就有自己的 channel，
+    // 分组不提供信息、只把内核名带进壳的公开 API。语义分组在 PluginContext 那层。
+    steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
+      transport.invoke(IPC.session.steer, text, images),
+    followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
+      transport.invoke(IPC.session.followUp, text, images),
+    abortRetry: (): Promise<void> => transport.invoke(IPC.session.abortRetry),
+    cycleModel: (): Promise<void> => transport.invoke(IPC.session.cycleModel),
+    getThinkingLevels: (): Promise<string[]> => transport.invoke(IPC.session.getThinkingLevels),
+    cycleThinkingLevel: (): Promise<void> => transport.invoke(IPC.session.cycleThinkingLevel),
+    compact: (customInstructions?: string): Promise<void> => transport.invoke(IPC.session.compact, customInstructions),
+    setAutoCompaction: (enabled: boolean): Promise<void> => transport.invoke(IPC.session.setAutoCompaction, enabled),
+    setAutoRetry: (enabled: boolean): Promise<void> => transport.invoke(IPC.session.setAutoRetry, enabled),
+    getLastAssistantText: (): Promise<string> => transport.invoke(IPC.session.getLastAssistantText),
+    setSteeringMode: (mode: ConcurrencyMode): Promise<void> => transport.invoke(IPC.session.setSteeringMode, mode),
+    setFollowUpMode: (mode: ConcurrencyMode): Promise<void> => transport.invoke(IPC.session.setFollowUpMode, mode),
     // SessionSnapshotApi
     copySession: (srcPath: string, targetPath: string): Promise<void> =>
       transport.invoke(IPC.session.copySession, srcPath, targetPath),
@@ -458,10 +529,10 @@ const kernel = {
       transport.invoke(IPC.skills.setBundledEnabled, enabled),
     watch: (cwd: string, onChanged: () => void): (() => void) => {
       const listener = () => onChanged();
-      transport.on("skills:changed", listener);
+      transport.on(IPC.skills.changed, listener);
       transport.invoke(IPC.skills.watch, cwd);
       return () => {
-        transport.off("skills:changed", listener);
+        transport.off(IPC.skills.changed, listener);
         transport.invoke(IPC.skills.unwatch, cwd);
       };
     },
@@ -483,20 +554,20 @@ const kernel = {
       transport.invoke(IPC.plugins.install, source),
     onUnloaded: (cb: (pluginId: string, components: string[]) => void): (() => void) => {
       const listener = (data: { pluginId: string; components: string[] }) => cb(data.pluginId, data.components);
-      transport.on("plugin:unloaded", listener);
-      return () => { transport.off("plugin:unloaded", listener); };
+      transport.on(IPC.plugin.unloaded, listener);
+      return () => { transport.off(IPC.plugin.unloaded, listener); };
     },
     onPluginsChanged: (cb: (nonce: number) => void): (() => void) => {
       const listener = (nonce: number) => cb(nonce);
-      transport.on("plugins:changed", listener);
-      return () => { transport.off("plugins:changed", listener); };
+      transport.on(IPC.plugins.changed, listener);
+      return () => { transport.off(IPC.plugins.changed, listener); };
     },
   },
   /** settings.json 被外部写入(如 skill-toggle 改 skills 字段)的通知,settings-page 订阅后重读(评估 P1-E 失同步修复)。 */
   onSettingsChanged: (cb: () => void): (() => void) => {
     const listener = () => cb();
-    transport.on("settings:changed", listener);
-    return () => { transport.off("settings:changed", listener); };
+    transport.on(IPC.settings.changed, listener);
+    return () => { transport.off(IPC.settings.changed, listener); };
   },
   /** 通用刷新信号(装/升/降级内核、自定义内核路径变更等操作完成):消费方(会话流)
    *  收到后重探挂载时探测的外部状态,不用重启。契约单源 IPC.refresh.requested,
@@ -508,6 +579,7 @@ const kernel = {
   },
   /** 内核拓展管理(中性,按 kernel 作用域):pi/dsh 各交一个 KernelExtensionSource。 */
   kernelExtensions: {
+    capabilities: (kernel: string): Promise<unknown> => transport.invoke(IPC.kernelExtensions.capabilities, kernel),
     list: (kernel: string): Promise<unknown[]> => transport.invoke(IPC.kernelExtensions.list, kernel),
     enable: (kernel: string, id: string): Promise<void> => transport.invoke(IPC.kernelExtensions.enable, kernel, id),
     disable: (kernel: string, id: string): Promise<void> => transport.invoke(IPC.kernelExtensions.disable, kernel, id),
@@ -541,8 +613,8 @@ const kernel = {
     restartAllIdle: (): Promise<void> => transport.invoke(IPC.restart.restartAllIdle),
     onStateChange: (cb: (sessionKey: string, state: unknown) => void): (() => void) => {
       const listener = (sessionKey: string, state: unknown) => cb(sessionKey, state);
-      transport.on("restart:state", listener);
-      return () => { transport.off("restart:state", listener); };
+      transport.on(IPC.restart.state, listener);
+      return () => { transport.off(IPC.restart.state, listener); };
     },
   },
   /** 运行平台(platform 直传):renderer 平台分支用(标题栏自绘按钮等)。 */

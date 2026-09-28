@@ -19,8 +19,15 @@ const DESKTOP_DEV_DIR_NAME = ".my-harness-desktop-dev";
 /** 当前运行态的桌面数据根目录(打包态 ~/.my-harness-desktop,dev 态 ~/.my-harness-desktop-dev)。
  *  isPackaged 由调用方注入:Electron 宿主传 app.isPackaged,服务器宿主传 false。
  *  不再 import electron——路径纯函数,node 服务器也能独立跑(§5 Electron-free)。 */
+/** **纯函数版**：数据根由 `homeDir` 派生，环境由调用方注入（§4.5 可测性判据：不需要 mock
+ *  的就是内层材料）。同文件的 `expandDesktopPath` 早已是这个范式，本函数与它对齐。
+ *  `resolveBootPaths`（bootstrap/boot/context.ts）用它，于是整张路径表可裸单测。 */
+export function myHarnessDesktopDirOf(homeDir: string, isPackaged = false): string {
+  return join(homeDir, isPackaged ? DESKTOP_DIR_NAME : DESKTOP_DEV_DIR_NAME);
+}
+
 export function resolveMyHarnessDesktopDir(isPackaged = false): string {
-  return join(homedir(), isPackaged ? DESKTOP_DIR_NAME : DESKTOP_DEV_DIR_NAME);
+  return myHarnessDesktopDirOf(homedir(), isPackaged);
 }
 
 /** 逻辑前缀展开:`~/.my-harness-desktop(/...) 映射到当前数据根;其余 ~/ 映射到家目录;绝对路径原样。

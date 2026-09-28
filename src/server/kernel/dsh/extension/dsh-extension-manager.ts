@@ -33,7 +33,7 @@ export interface DshExtensionManagerOptions {
 }
 
 export class DshExtensionManager extends KernelExtensionManager {
-  readonly capabilities: KernelExtensionCapabilities = { update: false, reorder: false };
+  readonly capabilities: KernelExtensionCapabilities = { install: true };
 
   private readonly dshConfigSource: DshConfigSource;
   private readonly dshKernelManager: DshKernelManager;

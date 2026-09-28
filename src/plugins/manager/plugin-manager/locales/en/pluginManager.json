@@ -33,5 +33,6 @@
   "pluginManager.tag.review": "Review",
   "pluginManager.tag.dev": "Dev",
   "pluginManager.tag.productivity": "Productivity",
-  "pluginManager.tag.insight": "Insight"
+  "pluginManager.tag.insight": "Insight",
+  "pluginManager.systemPromptInert": "The current kernel does not accept an appended system prompt, so this plugin's systemPrompts contribution has no effect"
 }

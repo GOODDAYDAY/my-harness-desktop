@@ -35,7 +35,14 @@ const truncate = (s: string, n: number): string => {
 export const channels = [] as const;
 
 // ── 结构化 review 块:构造/解析/转义同源,契约单源(设计 docs/design/aux-block-mechanism.md §6) ──
-// 块格式 <pi-review> + <item seq quote>comment</item> 条目;文本与属性对称转义。
+// 块格式 <review> + <item seq quote>comment</item> 条目;文本与属性对称转义。
+//
+// ⚠ 标签名曾是 `<pi-review>`（r27 改为中性的 `<review>`）。这是**内核身份泄漏**：
+//   review 是通用壳插件，评论篮对任何内核都适用，而块文本是**拼进 prompt 发给当前内核**的——
+//   于是 dsh / minimal 会话里也会收到一个以 pi 命名的标签（违反 CLAUDE.md §1.4 无特权差异）。
+//   改名必须**向后兼容**：标签随 prompt 落进了会话文件，历史消息里全是 `<pi-review>`，
+//   解析方若只认新标签，老会话的评论块就会退化成裸文本显示。所以解析正则同时认两种，
+//   并用**反向引用** `\1` 要求开闭标签一致（不接受 `<review>…</pi-review>` 这种错配）。
 
 function escapeText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -56,7 +63,7 @@ export function buildReviewBlock(comments: ReviewComment[], promptHeader: string
   const items = comments.map((c, i) =>
     `<item seq="${numOf(i)}" quote="${escapeAttr(c.quote)}">${escapeText(c.comment)}</item>`,
   );
-  return `<pi-review>\n${promptHeader}\n${items.join("\n")}\n</pi-review>`;
+  return `<review>\n${promptHeader}\n${items.join("\n")}\n</review>`;
 }
 
 export interface ReviewAuxData {
@@ -71,10 +78,13 @@ export const auxParsers: AuxBlockParser[] = [
   {
     id: "review",
     parse(text: string) {
-      const re = /<pi-review>\s*([\s\S]*?)\s*<\/pi-review>/g;
+      // `\1` 是开标签的反向引用：新标签 `<review>` 与历史标签 `<pi-review>` 都认，
+      // 但必须开闭一致（错配的残缺标签按正文处理，见 review.md Q7 的同款纪律）。
+      // ⚠ 捕获组序号因加了标签名组而**整体后移**：inner 从 m[1] 变成 m[2]。
+      const re = /<(pi-review|review)>\s*([\s\S]*?)\s*<\/\1>/g;
       const blocks: AuxBlock[] = [];
       for (const m of text.matchAll(re)) {
-        const inner = m[1] ?? "";
+        const inner = m[2] ?? "";
         const items: ReviewAuxData["items"] = [];
         const itemRe = /<item seq="([^"]*)"(?: quote="([^"]*)")?>([\s\S]*?)<\/item>/g;
         for (const im of inner.matchAll(itemRe)) {
@@ -107,7 +117,7 @@ export function ReviewAuxBlock({ aux }: { aux: AuxBlock }): React.ReactNode {
       <div className="flex flex-col gap-1 items-end max-w-full">
         {data.items.map((it, i) => (
           <div key={i} className="flex items-center gap-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] max-w-full">
-            <span className="text-[var(--color-accent)] font-medium flex-none">{it.seq}</span>
+            <span className="text-[var(--color-primary)] font-medium flex-none">{it.seq}</span>
             {it.quote && <span className="italic truncate min-w-0">❝{it.quote}</span>}
             <span className="flex-none">→</span>
             <span className="truncate min-w-0">{it.comment}</span>
@@ -289,7 +299,7 @@ export function Overlay(): React.ReactNode {
     <>
       {floatState.visible && createPortal(
         <button
-          className="flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)] shadow-[var(--shadow-md)] hover:border-[var(--color-accent)] hover:text-[var(--color-fg)] cursor-pointer select-none"
+          className="flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1 text-[length:var(--font-size-xs)] text-[var(--color-muted)] shadow-[var(--shadow-md)] hover:border-[var(--color-primary)] hover:text-[var(--color-fg)] cursor-pointer select-none"
           style={{ position: "fixed", top: `${top}px`, left: `${left}px`, zIndex: 9999 }}
           onMouseDown={(e) => e.preventDefault()}
           onClick={onFloatClick}
@@ -339,7 +349,7 @@ function FloatingCommentEditor({ quoteText, onSubmit, onCancel }: {
     onCancel();
   };
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--color-accent)] border-l-2 bg-[var(--color-surface)] p-3 shadow-[var(--shadow-md)]">
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-primary)] border-l-2 bg-[var(--color-surface)] p-3 shadow-[var(--shadow-md)]">
       <div className="text-[var(--color-muted)] italic text-[length:var(--font-size-xs)] mb-2 max-h-12 overflow-hidden">❝ {quoteText}</div>
       <textarea
         autoFocus

@@ -175,6 +175,9 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
       // 脚本正是因此 found:false 而误判「现象不存在」。project-path 是稳定、唯一、可读的锚。
       data-project-path={dir}
       data-project-active={active ? "true" : "false"}
+      // 激活态此前只靠 background/border 颜色表达（视觉态有、可访问态无）。
+      // dnd-kit 的 attributes 已给了 role="button" 与 tabIndex，缺的是"当前项"语义。
+      aria-current={active ? "true" : undefined}
       className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap"
       style={{
         padding: "var(--sidebar-row-py) var(--sidebar-row-px)",

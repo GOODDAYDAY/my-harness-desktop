@@ -107,7 +107,7 @@ try {
   }
   const itemRects = await page.evaluate(() => {
     const out = {};
-    for (const el of document.querySelectorAll("[role='menuitem']")) {
+    for (const el of document.querySelectorAll("[role^='menuitem']")) {
       const t = (el.textContent || "").trim();
       const r = el.getBoundingClientRect();
       if (r.width > 0) out[t.includes("Beta") ? "beta" : t.includes("Alpha") ? "alpha" : t] = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
@@ -121,7 +121,7 @@ try {
       return {
         menuOpen: !!menu,
         menuText: (menu?.textContent || "").replace(/\s+/g, " ").slice(0, 200),
-        items: [...document.querySelectorAll("[role='menuitem']")].map((el) => (el.textContent || "").trim()),
+        items: [...document.querySelectorAll("[role^='menuitem']")].map((el) => (el.textContent || "").trim()),
         composerModel: document.querySelector("[data-composer-model]")?.dataset.composerModel ?? "",
       };
     });

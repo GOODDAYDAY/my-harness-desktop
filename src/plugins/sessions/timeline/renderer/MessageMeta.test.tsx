@@ -14,14 +14,14 @@ const END = Date.parse("2026-08-03T15:13:09.000Z");
 describe("MessageMeta DOM 渲染", () => {
   it("无 timestamp 的消息不渲染徽标", () => {
     const { container } = render(<MessageMeta message={{ role: "user", content: "hi" } as NeutralMessage} />);
-    expect(container.querySelector('[aria-label="message-meta"]')).toBeNull();
+    expect(container.querySelector('[data-message-meta]')).toBeNull();
   });
 
   it("user 消息渲染发送时间(无时长/无 token)", () => {
     const { container } = render(
       <MessageMeta message={{ role: "user", content: "hi", timestamp: START } as NeutralMessage} />,
     );
-    const el = container.querySelector('[aria-label="message-meta"]')!;
+    const el = container.querySelector('[data-message-meta]')!;
     expect(el).not.toBeNull();
     expect(el.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
     expect(el.textContent).not.toContain("·"); // 无时长、无 token
@@ -36,7 +36,7 @@ describe("MessageMeta DOM 渲染", () => {
         } as unknown as NeutralMessage}
       />,
     );
-    const el = container.querySelector('[aria-label="message-meta"]')!;
+    const el = container.querySelector('[data-message-meta]')!;
     // "HH:MM:SS · 9.0s · ↑1.2k ↓567"
     expect(el.textContent).toMatch(/\d{2}:\d{2}:\d{2} · 9\.0s · ↑1\.2k ↓567/);
     expect(el.getAttribute("title")).toContain("↑1.2k ↓567");

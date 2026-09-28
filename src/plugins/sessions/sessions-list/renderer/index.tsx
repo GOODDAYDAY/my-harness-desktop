@@ -15,11 +15,21 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, TriangleAlert } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, type SessionInfo } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, PluginIcon, type SessionInfo } from "@my-harness-desktop/react";
 import { deriveSessionTitle, applyCustomOrder, advancePhase, scopeKeyFromSessionKey, type WorkingPhase, type SessionRawFilePaths } from "@my-harness-desktop/shared";
 import { filterSessions } from "../core/search";
 import { PhaseIcon } from "./phase-icon";
 
+
+/** 工作阶段 → shell.* 文案键（与 timeline 底部指示器共用同一套文案，见 §1.3 契约单源）。 */
+const PHASE_LABEL_KEY: Record<string, string> = {
+  requesting: "shell.requesting",
+  thinking: "shell.thinking",
+  toolExecuting: "shell.toolExecuting",
+  outputting: "shell.outputting",
+  retrying: "shell.retrying",
+  compacting: "shell.compacting",
+};
 
 /** 头行可选字段补丁(与 updateHeader 契约一致)。 */
 type HeaderPatch = { name?: string; pinned?: boolean; archived?: boolean };
@@ -38,6 +48,14 @@ interface Group {
 interface ChildSession {
   session: SessionInfo;
   parentPath: string;
+  /** 命中的分组策略所声明的子行图标名（lucide）。缺省 ⇒ 用默认缩进图标（契约：childIcon）。
+   *  r71 之前这两个字段**声明了却没人读**：sub-agent 的 manifest 写着
+   *  `childIcon: "git-fork"` / `childLabelKey: "sub-agent.childLabel"`，而本插件只读
+   *  `parentPathField`，于是子 agent 会话在列表里与普通会话长得一样——
+   *  「声明了却不兑现」：用户/插件作者按契约声明，界面毫无反应，且没有任何提示。 */
+  childIcon?: string;
+  /** 命中的分组策略所声明的子分组标题 i18n 键。缺省 ⇒ 不显子分组标题（契约：childLabelKey）。 */
+  childLabelKey?: string;
 }
 
 export function SessionsSection(): React.ReactNode {
@@ -47,7 +65,7 @@ export function SessionsSection(): React.ReactNode {
     currentCwd, currentNeutralSessionId,
     setCurrentSessionPath, setCurrentNeutralSessionId, setSessionTitle,
   } = useUiStore();
-  const piAlive = useSessionStore((s) => s.snapshot !== null);
+  const snapshotAlive = useSessionStore((s) => s.snapshot !== null);
   // 会话元数据收编框架 store(设计 docs/design/plugin-decoupling.md §4.2):
   // 数据源 = sessionInfos(框架拉取 + 事件维护),本插件不再 ctx.sessions.list。
   const sessionInfos = useSessionStore((s) => s.sessionInfos);
@@ -357,9 +375,10 @@ export function SessionsSection(): React.ReactNode {
     for (const s of filtered) {
       if (!s.custom) continue;
       for (const g of groupings) {
-        const parentPath = s.custom[g.parentPathKey];
+        const parentPath = s.custom[g.parentPathField];
         if (typeof parentPath === "string" && parentPath) {
-          children.push({ session: s, parentPath });
+          // 带上命中分组的声明，供 ChildSessionRow 兑现（图标/子标题）
+          children.push({ session: s, parentPath, childIcon: g.childIcon, childLabelKey: g.childLabelKey });
           childPaths.add(s.path);
           break;
         }
@@ -411,6 +430,7 @@ export function SessionsSection(): React.ReactNode {
           <button
             onClick={() => { setSearchOpen((v) => !v); }}
             title={t("sessions.search")}
+            data-session-search=""
             aria-label={t("sessions.search")}
             className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
             style={searchOpen ? { color: "var(--color-primary)" } : undefined}
@@ -421,6 +441,7 @@ export function SessionsSection(): React.ReactNode {
             onClick={() => void refresh()}
             disabled={refreshState !== "idle"}
             title={t("sessions.refresh")}
+            data-session-refresh=""
             aria-label={t("sessions.refresh")}
             className="flex items-center justify-center size-6 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)] disabled:cursor-default"
           >
@@ -430,7 +451,9 @@ export function SessionsSection(): React.ReactNode {
               <RotateCw className={`size-3.5 ${refreshState === "refreshing" ? "animate-spin" : ""}`} style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
             )}
           </button>
-          <button onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle} className="shrink-0 hover:text-[var(--color-fg)]">
+          {/* data-session-new / -search / -refresh：稳定锚点，e2e 与 DOM 审计据此定位，
+              不按译文（六个语言下「新建/搜索/刷新」是六套字符串）。见 skill §17.3。 */}
+          <button data-session-new="" onClick={() => void newSession()} title={t("sessions.new")} style={plusBtnStyle} className="shrink-0 hover:text-[var(--color-fg)]">
             <Plus style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
           </button>
         </div>
@@ -450,7 +473,12 @@ export function SessionsSection(): React.ReactNode {
           >
             <div className="flex items-center gap-1.5 px-2 pb-2 pt-1">
               <Search className="size-3.5 shrink-0 text-[var(--color-muted)]" />
+              {/* `data-session-search-input` 是**真正的搜索输入框**（仅 searchOpen 时渲染）。
+                  ⚠ 别与工具条上那个 `data-session-search` 混淆——后者是**展开/收起搜索**的按钮
+                  （`setSearchOpen((v) => !v)`）。首版剧本把锚点加在按钮上就往里打字，
+                  于是"搜索没生效"看起来像过滤坏了，其实是输入框根本没被写到。 */}
               <input
+                data-session-search-input=""
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -525,7 +553,7 @@ export function SessionsSection(): React.ReactNode {
                 session={s}
                 flat={!!query}
                 active={currentNeutralSessionId === s.neutralSessionId}
-                piAlive={piAlive && currentNeutralSessionId === s.neutralSessionId}
+                snapshotAlive={snapshotAlive && currentNeutralSessionId === s.neutralSessionId}
                 phase={phaseByPath[s.neutralSessionId ?? s.path] ?? "idle"}
                 unread={
                   currentNeutralSessionId !== s.neutralSessionId &&
@@ -580,7 +608,7 @@ const SortableRow = forwardRef<HTMLDivElement, { path: string; dragEnabled: bool
       ref={ref}
       value={path}
       disabled={!dragEnabled}
-      title={dragEnabled ? String(t("sessions.dragToReorder")) : undefined}
+      title={dragEnabled ? String(t("shell.dragToReorder")) : undefined}
       style={{ paddingBottom: "var(--sidebar-row-gap)" }}
     >
       {children}
@@ -632,7 +660,7 @@ function groupByTime(items: SessionInfo[]): { label: string; items: SessionInfo[
 }
 
 /** 分组容器:有 label 才画折叠头(搜索平铺时 kind=time 但 label 为空 → 不画头)。
- *  复用 index.css 的 .pi-collapsible 动画(与 Section 同一套)。
+ *  复用 index.css 的 .shell-collapsible 动画(与 Section 同一套)。
  *  time 分组折叠头右侧带"批量归档"(hover 显示),把整组会话标 archived。 */
 const GroupBlock = forwardRef<HTMLDivElement, {
   group: Group;
@@ -653,9 +681,23 @@ const GroupBlock = forwardRef<HTMLDivElement, {
       <AnimatePresence mode="popLayout">{children}</AnimatePresence>
     </SortableList>
   );
-  if (!group.label) return <motion.div ref={ref} layout className="flex flex-col">{list}</motion.div>;
+  // 无标题的分组（当前只有搜索态：`{ groupId: "search", label: "" }`）走这条早退分支——
+  // 它没有折叠头，所以没有 open 态。⚠ **锚点必须两条分支都带**：首版只给下面那条带标题的
+  // 分支加了 `data-session-group`，于是搜索态查出来是 0 个分组元素，而"每个分组都是 search"
+  // 那条断言在**空数组上恒真**、假绿通过（`[].every(...)` === true）。
+  if (!group.label) {
+    return (
+      <motion.div ref={ref} layout className="flex flex-col" data-session-group={group.groupId} data-session-group-open="true">
+        {list}
+      </motion.div>
+    );
+  }
   return (
-    <motion.div ref={ref} layout className="flex flex-col">
+    // `data-session-group` = 稳定分组 id（pinned/today/yesterday/last7days/earlier/archived/search），
+    // 它同时是持久化 customOrder 的 key。e2e 与 DOM 审计据此判断"某行属于哪个分组"，
+    // 不按分组标题的译文（六种语言六套字符串）。`-open` 标出折叠态：archived 组默认折叠，
+    // 断言"行移进了归档组"时要连折叠态一起读，否则会把"折叠了看不见"误判成"没有这一行"。
+    <motion.div ref={ref} layout className="flex flex-col" data-session-group={group.groupId} data-session-group-open={open ? "true" : "false"}>
       <div
         className="flex items-center pr-2.5"
         onMouseEnter={() => setHovered(true)}
@@ -697,18 +739,18 @@ const GroupBlock = forwardRef<HTMLDivElement, {
           </button>
         )}
       </div>
-      <div className="pi-collapsible" data-state={open ? "open" : "closed"}>
+      <div className="shell-collapsible" data-state={open ? "open" : "closed"}>
         {list}
       </div>
     </motion.div>
   );
 });
 
-function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, onClick, onRawPaths, onOpenRawFile, onDelete, onUpdate, children: childSessions, onSelectChild, onDeleteChild, activeChildPath, phaseByPath }: {
+function SessionRow({ session, flat, active, snapshotAlive, phase, unread, deletable, onClick, onRawPaths, onOpenRawFile, onDelete, onUpdate, children: childSessions, onSelectChild, onDeleteChild, activeChildPath, phaseByPath }: {
   session: SessionInfo;
   flat: boolean;
   active: boolean;
-  piAlive: boolean;
+  snapshotAlive: boolean;
   phase: WorkingPhase;
   unread: boolean;
   deletable?: boolean;
@@ -739,15 +781,44 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
   // 未命名会话不再退化成 id 前缀,回落到最后一条消息预览(问题 B)。
   const title = deriveSessionTitle(session);
   const sub = session.lastMessage ?? new Date(session.created).toLocaleString();
+  // 行状态 → 可访问文本。
+  //
+  // ⚠ 为什么需要：这一行的可访问名原本**只有标题**。而"置顶""归档""正在思考/执行工具/重试"
+  //   这些状态全部只靠图标形态与颜色表达（Pin / Archive / PhaseIcon 的六种形状与配色）——
+  //   读屏用户能听到"排序甲"，听不到"已置顶、思考中"。这不是"缺可访问名"（r38 的普查查不出来，
+  //   因为行**有**名字），而是"名字**不够用**"：视觉信息与可访问信息不对等。
+  //   修法是补一段**视觉隐藏**的状态文本进可访问名，而不是去给图标加 aria-label
+  //   （图标是装饰性的，语义应该由文本承担；给每个图标加名字反而会让读屏念出一串碎片）。
+  //
+  // 阶段文案**复用 shell.* 既有键**（timeline 底部指示器用的同一套），不另造一份：
+  //   §1.3 契约单源。其中 `shell.retrying` 此前四个语言都缺 —— timeline 有意不用它
+  //   （重试态由重试横幅承担，见 index.tsx:99 的注释），但会话行的图标确实画了 retrying
+  //   的红色转圈，所以本轮把该键补进 shell 命名空间（timeline 不受影响）。
+  // ⚠ 未读与「内核未装载」也走这里，而不是靠各自徽标上的 aria-label：
+  //   ① 那两个徽标是**无 role 的 `<span>`**（只含一个 svg），`aria-label` 挂在 generic 元素上
+  //     按 ARIA 不被可靠暴露；靠 `title` 兜底又很脆（title 同时是悬浮提示，且部分
+  //     读屏/浏览器组合不会把后代的 title 并入父级可访问名）。
+  //   ② 未读圆点的渲染条件是 `unread && !hovered` —— **hover 时徽标整个从 DOM 消失**，
+  //     状态跟着消失。放进常驻的 sr-only 文本后不再依赖 hover。
+  //   徽标本身保留（视觉锚 + title 悬浮给明眼人），但标 aria-hidden 避免重复播报。
+  const stateText = [
+    session.pinned ? t("sessions.pinned") : null,
+    session.archived ? t("sessions.archived") : null,
+    phase !== "idle" ? t(PHASE_LABEL_KEY[phase] ?? "") : null,
+    unread ? t("sessions.unread") : null,
+    session.kernelLoaded === false
+      ? t("sessions.kernelNotLoadedShort", { kernel: session.kernel ?? "" })
+      : null,
+  ].filter((x): x is string => !!x && !x.startsWith("shell."));
   // 行图标:正常行与重命名编辑行共用(编辑行与正常行同构,见下)。
   // 阶段图标按 WorkingPhase 切换形态与颜色(设计 docs/design/session-working-phase.md §2.3):
   // 请求=转圈(灰)/思考=脑(蓝紫)/工具=扳手(绿)/输出=转圈(蓝)/重试·压缩=转圈(红/灰);
-  // idle 回落到 piAlive 区分的 MessageSquare(实心=活会话进程,空心=无进程)。
+  // idle 回落到 snapshotAlive 区分的 MessageSquare(实心=活会话进程,空心=无进程)。
   const rowIcon = session.pinned
     ? <Pin className="text-[var(--color-primary)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
     : phase !== "idle"
     ? <PhaseIcon phase={phase} />
-    : piAlive
+    : snapshotAlive
     ? <MessageSquare className="text-[var(--color-primary)]" fill="currentColor" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />
     : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "var(--sidebar-icon-size)", height: "var(--sidebar-icon-size)" }} />;
 
@@ -798,7 +869,11 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
           {rowIcon}
         </div>
         <div className="flex-1 min-w-0">
+          {/* data-session-rename：重命名态的输入框锚点。它**不一定**是 [data-session-path]
+              的后代（SessionRow 与 ContextMenu.Trigger 是两层），所以 e2e 不能靠
+              "[data-session-path] input" 这种层级猜测定位——给个稳定锚点。 */}
           <input
+            data-session-rename=""
             autoFocus
             defaultValue={session.name ?? ""}
             placeholder={session.id.slice(0, 8)}
@@ -831,6 +906,11 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
       <ContextMenu.Trigger asChild>
         <div
           data-session-path={session.path}
+          // 当前会话此前只靠 background/border/boxShadow 三个 token 表达（视觉态有、可访问态无），
+          // 读屏用户在会话列表里听不出自己正处在哪一个会话。与 r36 给项目行补 aria-current 同类。
+          // ⚠ 非激活时给 undefined 而不是 "false"：aria-current="false" 会出现在每一行上，
+          //   等于给全部行都挂一个状态属性（部分读屏会念出来），语义反而是噪音。
+          aria-current={active ? "true" : undefined}
           onClick={onClick}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
@@ -850,11 +930,20 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
           </div>
           <div className="flex-1 min-w-0">
             <div className="truncate text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)]">{title}</div>
+            {/* 视觉隐藏的状态文本：进可访问名，让读屏听到"已置顶、思考中"这类只靠图标表达的状态。
+                ⚠ 用 Tailwind 的 sr-only（不是自造样式）。本仓有过 @source 扫描漂移的历史
+                （CLAUDE.md §3.7），所以 a11y-names-audit 里有一条断言专门验证它**真的**
+                产生了视觉隐藏的计算样式（1px 宽高 + clip），类没生成就会红。 */}
+            {stateText.length > 0 && (
+              <span className="sr-only" data-session-state-text="">{stateText.join("，")}</span>
+            )}
             <div className="truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-muted)] mt-0.5">{sub}</div>
           </div>
           {/* 搜索平铺时,归档项给个 Archive 角标提示 */}
           {flat && session.archived && (
-            <Archive className="size-3.5 shrink-0 text-[var(--color-muted)]" />
+            // 装饰性图标：归档状态已由上面的视觉隐藏文本承担，这里标 aria-hidden
+            // 避免读屏重复播报（或把一个无名 svg 念成噪音）。
+            <Archive aria-hidden="true" className="size-3.5 shrink-0 text-[var(--color-muted)]" />
           )}
           {/* 内核未装载角标(§7.6 显式降级):这一行仍可读(内容在中立层),但发不出去、派不生。
               此前这种行在侧栏和正常行长得一模一样,点下去只往 console 写一条「未注册的内核」——
@@ -864,7 +953,9 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
             <span
               data-session-kernel-unloaded="true"
               title={t("sessions.kernelNotLoaded", { kernel: session.kernel ?? "" })}
-              aria-label={t("sessions.kernelNotLoaded", { kernel: session.kernel ?? "" })}
+              // 状态语义已由行内 sr-only 文本承担（见 stateText 的说明）；
+              // 这里标 aria-hidden 避免重复播报，title 保留给明眼人做悬浮解释。
+              aria-hidden="true"
               className="shrink-0 flex items-center justify-center text-[var(--color-muted)]"
             >
               <TriangleAlert className="size-3.5" />
@@ -874,14 +965,14 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
           {unread && !hovered && !childSessions?.length && (
             <span
               title={t("sessions.unread")}
-              aria-label={t("sessions.unread")}
+              aria-hidden="true"
               className="size-2 shrink-0 rounded-full bg-[var(--color-primary)]"
             />
           )}
           {childSessions && childSessions.length > 0 && (
             <button
               onClick={(e) => { e.stopPropagation(); setChildrenExpanded((v) => !v); }}
-              title={childrenExpanded ? t("sessions.collapse") : t("sessions.expand")}
+              title={childrenExpanded ? t("shell.collapse") : t("shell.expand")}
               className="flex items-center justify-center size-5 shrink-0 rounded-[var(--radius-sm)] bg-transparent border-none cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-fg)]"
             >
               {childrenExpanded
@@ -955,16 +1046,21 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content style={ctxMenuStyle}>
-          <ContextMenu.Item onSelect={() => setEditing(true)} style={ctxItemStyle}>
+          {/* `data-session-action` 是稳定锚点：e2e 与 DOM 审计据此定位菜单项，
+              **不按译文文案匹配**（六种语言下「重命名」是六个不同字符串，按文案找等于
+              把测试绑死在某一种语言上，见 skill §17.3）。值是动作语义、与语言无关。 */}
+          <ContextMenu.Item data-session-action="rename" onSelect={() => setEditing(true)} style={ctxItemStyle}>
             <Pencil className="size-3.5" /> {t("sessions.rename")}
           </ContextMenu.Item>
           <ContextMenu.Item
+            data-session-action="pin"
             onSelect={() => void onUpdate({ pinned: !session.pinned })}
             style={ctxItemStyle}
           >
             <Pin className="size-3.5" /> {session.pinned ? t("sessions.unpin") : t("sessions.pin")}
           </ContextMenu.Item>
           <ContextMenu.Item
+            data-session-action="archive"
             onSelect={() => void onUpdate({ archived: !session.archived })}
             style={ctxItemStyle}
           >
@@ -972,12 +1068,14 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
           </ContextMenu.Item>
           {/* 打开原始文件拆两项:中立层文件 / 内核文件(选择时懒解析,缺面显式降级通知) */}
           <ContextMenu.Item
+            data-session-action="open-desktop-file"
             onSelect={() => void onRawPaths(session).then((p) => onOpenRawFile(p.desktop))}
             style={ctxItemStyle}
           >
             <AppWindow className="size-3.5" /> {t("sessions.openDesktopFile")}
           </ContextMenu.Item>
           <ContextMenu.Item
+            data-session-action="open-kernel-file"
             onSelect={() => void onRawPaths(session).then((p) => onOpenRawFile(p.kernel))}
             style={ctxItemStyle}
           >
@@ -985,7 +1083,7 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
           </ContextMenu.Item>
           {/* 删除:不可恢复,仅 deletable(非当前活跃会话);点后进整行内联确认态,不直接删 */}
           {deletable && onDelete && (
-            <ContextMenu.Item onSelect={() => setConfirmingDelete(true)} style={{ ...ctxItemStyle, color: "var(--color-accent-danger)" }}>
+            <ContextMenu.Item data-session-action="delete" onSelect={() => setConfirmingDelete(true)} style={{ ...ctxItemStyle, color: "var(--color-accent-danger)" }}>
               <Trash2 className="size-3.5" /> {t("sessions.delete")}
             </ContextMenu.Item>
           )}
@@ -993,8 +1091,20 @@ function SessionRow({ session, flat, active, piAlive, phase, unread, deletable, 
       </ContextMenu.Portal>
     </ContextMenu.Root>
     {childSessions && childSessions.length > 0 && (
-      <div className="pi-collapsible" data-state={childrenExpanded ? "open" : "closed"}>
+      <div className="shell-collapsible" data-state={childrenExpanded ? "open" : "closed"}>
         <div className="flex flex-col">
+          {/* 契约 childLabelKey：分组策略可声明"缩进组标题"；不提供则不显（不编一个默认标题）。
+              取第一个子行的声明即可——同一父会话下的子行必然命中同一个分组策略
+              （上面的循环对每个 session 只 break 出第一个命中的 g）。 */}
+          {childSessions[0]?.childLabelKey && (
+            <div
+              data-child-group-label=""
+              className="truncate text-[length:var(--font-size-xs)] text-[var(--color-muted)]"
+              style={{ paddingLeft: "32px", paddingRight: "var(--sidebar-row-px)", paddingTop: "2px", paddingBottom: "2px" }}
+            >
+              {t(childSessions[0].childLabelKey)}
+            </div>
+          )}
           {childSessions.map((c) => {
             const childActive = activeChildPath === c.session.path;
             const childPhase = phaseByPath?.[c.session.neutralSessionId ?? c.session.path] ?? "idle";
@@ -1074,6 +1184,8 @@ function ChildSessionRow({ child, active, phase, onSelect, onDelete, onRawPaths,
       <ContextMenu.Trigger asChild>
         <div
           data-session-path={child.session.path}
+          // 分叉树的子行同样要标当前项（判据与顶层行一致：active 由 childActive 传入）
+          aria-current={active ? "true" : undefined}
           onClick={onSelect}
           className="flex items-center gap-2 cursor-pointer select-none whitespace-nowrap"
           style={{
@@ -1091,7 +1203,12 @@ function ChildSessionRow({ child, active, phase, onSelect, onDelete, onRawPaths,
           <div className="shrink-0 flex items-center justify-center" style={{ width: "var(--sidebar-icon-box)", height: "var(--sidebar-icon-box)" }}>
             {phase !== "idle"
               ? <PhaseIcon phase={phase} />
-              : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "calc(var(--sidebar-icon-size) * 0.8)", height: "calc(var(--sidebar-icon-size) * 0.8)" }} />}
+              // 契约 childIcon：分组策略可声明子行图标；未声明才用默认缩进图标。
+              // 走 PluginIcon（它对内核 id 走 KernelLogo、其余查 lucide 表、未知回落 Puzzle），
+              // 不在这里自己映射图标名——图标解析是机制，只该有一份实现。
+              : child.childIcon
+                ? <PluginIcon name={child.childIcon} className="text-[var(--color-muted)]" style={{ width: "calc(var(--sidebar-icon-size) * 0.8)", height: "calc(var(--sidebar-icon-size) * 0.8)" }} />
+                : <MessageSquare className="text-[var(--color-muted)]" style={{ width: "calc(var(--sidebar-icon-size) * 0.8)", height: "calc(var(--sidebar-icon-size) * 0.8)" }} />}
           </div>
           <div className="flex-1 min-w-0">
             <div className="truncate leading-tight">{deriveSessionTitle(child.session)}</div>
@@ -1117,7 +1234,7 @@ function ChildSessionRow({ child, active, phase, onSelect, onDelete, onRawPaths,
             </ContextMenu.Item>
           )}
           {deletable && onDelete && (
-            <ContextMenu.Item onSelect={() => setConfirmingDelete(true)} style={{ ...ctxItemStyle, color: "var(--color-accent-danger)" }}>
+            <ContextMenu.Item data-session-action="delete" onSelect={() => setConfirmingDelete(true)} style={{ ...ctxItemStyle, color: "var(--color-accent-danger)" }}>
               <Trash2 className="size-3.5" /> {t("sessions.delete")}
             </ContextMenu.Item>
           )}

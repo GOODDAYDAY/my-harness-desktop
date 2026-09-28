@@ -8,7 +8,7 @@
 
 - 先交代一个贯穿全文的不变量，它是一切派生成立的前提：**根 lineage 的 `lineageId` 恒等于 `neutralSessionId`**。这条在 `session-store.ts` 的 `createProc` 里落地——`SessionProc.activeLineageId = ns`、`materializedLineageId = ns`（`session-store.ts:431`），新会话的 `ns` 就是随机 UUID，根 lineage 的 id 即取它。因为这条不变量，映射表才可能退化成「确定性派生」：内核侧标识只要从 `lineageId` 算出来，root 会话就天然等于 `neutralSessionId`，分支会话等于 fork 时生成的 `randomUUID()`。
 
-- 本文所有论断落到具体文件、函数、类型名，行号以当前工作区代码为准。四个关键文件的路径先说清：中立契约与中立类型在 `packages/shared/src/domain/`（`backend.ts`、`session-neutral.ts`、`sessions.ts`、`kernel.ts`）；壳的用例编排在 `src/server/application/sessions/session-store.ts`；pi 适配器在 `src/server/kernel/pi/backend/pi-catalog.ts` 与 `pi-backend.ts`；dsh 适配器在 `src/server/kernel/dsh/backend/dsh-catalog.ts` 与 `dsh-backend.ts`；内核工厂组装在 `src/server/kernel/factories/kernel-factories.ts`。
+- 本文所有论断落到具体文件、函数、类型名，行号以当前工作区代码为准。四个关键文件的路径先说清：中立契约与中立类型在 `packages/shared/src/domain/`（`backend.ts`——含逐轴能力面 `BackendCapabilities`、`session-neutral.ts`、`sessions.ts`、`kernel.ts`）；内核后端工厂各归自己目录（`kernel/<id>/backend/<id>-backend-factory.ts`；曾经的共享 `kernel-factories.ts` 已退役删除）；壳的用例编排在 `src/server/application/sessions/session-store.ts`；pi 适配器在 `src/server/kernel/pi/backend/pi-catalog.ts` 与 `pi-backend.ts`；dsh 适配器在 `src/server/kernel/dsh/backend/dsh-catalog.ts` 与 `dsh-backend.ts`；内核工厂组装在 `src/server/kernel/factories/kernel-factories.ts`。
 
 ## 1. 三种身份：neutralSessionId / lineageId / kernelEntryId
 
@@ -136,7 +136,7 @@
 
   - **投影地址 = lineageId（恒等）**：`DshSessionCatalog.projectionPath(_cwd, lineageId)` 直接 `return lineageId`（`dsh-catalog.ts:80-82`）。对新会话，`ensureForSend` 传的 `randomUUID()` 就是新 ns——注释点透「新 ns 即投影地址（与中立主键同源）」（`session-store.ts:575-576`）。所以 dsh 侧 `SessionInfo.path`（= `projectionPath(rootLineageId)`）是一个**裸 UUID，不是文件路径**——这直接催生了 §5 的 `projectionPath` vs `rawFilePath` 区分。
 
-  - **sessionId = ns 直接传给后端**：`createDshBackend`（`kernel-factories.ts:63-86`）里 `sessionId: opts.neutralSessionId`（`kernel-factories.ts:81`）——把 ns 原样交给 `DshBackend` 构造。`DshBackend` 构造函数 `this.currentSessionId = config.sessionId ?? cwdToBucketName(config.cwd)`（`dsh-backend.ts:94`），所以 dsh 后端初始的会话标识就是 ns（无 ns 时回落 cwd 桶名）。这是「dsh 的映射（ns → sessionId 直接用）」的最直白出处。
+  - **sessionId = ns 直接传给后端**：`createDshBackend`（现住在 `kernel/dsh/backend/dsh-backend-factory.ts`；曾经的共享 `kernel-factories.ts` 已退役删除）里 `sessionId: opts.lineageId ?? opts.neutralSessionId`——把 ns 原样交给 `DshBackend` 构造。`DshBackend` 构造函数 `this.currentSessionId = config.sessionId ?? cwdToBucketName(config.cwd)`（`dsh-backend.ts:94`），所以 dsh 后端初始的会话标识就是 ns（无 ns 时回落 cwd 桶名）。这是「dsh 的映射（ns → sessionId 直接用）」的最直白出处。
 
 - dsh 的 `BaseBackend.sessionId` 覆写了基类，语义与 pi 不同：`DshBackend.sessionId` getter 返回 `this.currentSessionId`（`dsh-backend.ts:98-100`），而不是 `ctx.sessionId`。原因在 seed 的「重绑」——dsh 的 seed 依赖进程（`session/seed` RPC），seed 后服务端返回的 `sessionId` 要回绑到 `currentSessionId`，否则后续 `sendMessage`/`abort`/`setModel` 全读 `this.sessionId` 会发到构造时的桶名会话（`dsh-backend.ts:286-288` 注释把这个坑点名）。所以 dsh 的 `sessionId` 有两态：初始 = ns（惰性未建），seed 后 = 服务端返回的 `sessionId`（值仍是 lineageId，但由服务端权威回传）。
 

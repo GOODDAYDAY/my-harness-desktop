@@ -1,9 +1,10 @@
+import { IPC } from "@my-harness-desktop/shared";
 // Electron main 入口 —— 调 assemble + 开窗 + app 生命周期。
 // 共享组装(stores/ctx/gateway/handlers/起服务器)在 assemble.ts,此处只做 Electron 宿主特有的事。
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, dialog, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { assemble } from "./assemble";
+import { assemble, type Assembled } from "./assemble";
 import { createElectronHost } from "../host/electron-host";
 import { windowVisibilityPolicy } from "./window-visibility";
 
@@ -15,11 +16,12 @@ const visibility = windowVisibilityPolicy(process.env);
 
 let mainWindow: BrowserWindow | null = null;
 const host = createElectronHost(() => mainWindow, { nativeAlerts: visibility.nativeAlerts });
-// rendererDir 在入口算(而非 assemble 内):__dirname 恒为 out/main(入口非 chunk),
-// ../renderer 在 dev/打包态都指向 out/renderer;打包态在 app.asar 内,fs 透明读。
-const assembled = assemble(host, { isPackaged: app.isPackaged, rendererDir: resolve(__dirname, "../renderer") });
+// `assemble` 是 async（启动编排步骤化之后必然如此，理由见 assemble.ts 文件头），所以本入口
+// 在 `whenReady` 里 await 它，产物存进这个模块级变量供 createWindow / before-quit 使用。
+// 启动失败时它保持 null —— before-quit 必须容忍（见文件末尾）。
+let assembled: Assembled | null = null;
 
-function createWindow(): void {
+function createWindow(a: Assembled): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 840,
@@ -47,7 +49,7 @@ function createWindow(): void {
   });
   mainWindow = win;
   // 窗口最大化状态 → 广播 push(§19.4),renderer 据此切 最大化/还原 图标。
-  host.window.onMaximizedChanged((m) => assembled.gateway.broadcast("window:maximizedChanged", m));
+  host.window.onMaximizedChanged((m) => a.gateway.broadcast(IPC.window.maximizedChanged, m));
 
   // 外部链接一律交给系统,不在应用内开新窗口/导航(桌面壳标准做法):
   // window.open / target=_blank 经 setWindowOpenHandler 拦截——http(s) 用默认浏览器,
@@ -69,8 +71,8 @@ function createWindow(): void {
   });
 
   // web 服务化(§4.4):本地窗口加载 http://127.0.0.1:PORT + local token;dev 用 vite URL。
-  const base = process.env["ELECTRON_RENDERER_URL"] ?? `http://127.0.0.1:${assembled.port}/`;
-  void win.loadURL(`${base}${base.includes("?") ? "&" : "?"}lt=${assembled.localToken}`);
+  const base = process.env["ELECTRON_RENDERER_URL"] ?? `http://127.0.0.1:${a.port}/`;
+  void win.loadURL(`${base}${base.includes("?") ? "&" : "?"}lt=${a.localToken}`);
 
   // **静默态永不 show —— 根因修复,勿删**。原实现无条件 `win.show()`:macOS 上 show() 会激活
   // 应用,把用户正在用的窗口焦点和鼠标一起夺走(每跑一次 e2e 打扰一次)。而 e2e 要的是 CDP
@@ -83,7 +85,7 @@ app.setName("My Harness Desktop");
 // dev 态必须手动补,否则系统通知不显示或显示成 Electron)。mac/linux 是 no-op。
 app.setAppUserModelId("works.earendil.my-harness-desktop");
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // dock 图标尽早设置:createWindow 使进程进入 dock,若 bundle 图标未生效
   // (LaunchServices 缓存陈旧),此处晚于 createWindow 会闪现默认图标。
   // bundle 修复见 assets/scripts/patch-electron.cjs(改 icns 后 touch + lsregister)。
@@ -93,11 +95,34 @@ app.whenReady().then(() => {
     else void app.dock.hide();
   }
 
-  createWindow();
+  // 启动编排（14 个步骤，见 bootstrap/boot/steps/）。**必须 try/catch**：
+  // 今天这里没有 catch，致命启动失败会变成未捕获拒绝，进程停在"无窗口且不报错"的状态
+  // （设计文档 §4.3.4 把这列为阶段一的三处有意改善之一）。Electron 宿主的正确呈现是
+  // 给用户一个可见错误框，再以非零码退出——静默停住是最坏的失败形态。
+  try {
+    assembled = await assemble(host, {
+      isPackaged: app.isPackaged,
+      rendererDir: resolve(__dirname, "../renderer"),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
+    console.error("[electron] 启动失败:", msg);
+    // nativeAlerts=false（静默态）时不弹框：测试脚本不该被一个模态框挂住。
+    if (visibility.nativeAlerts) dialog.showErrorBox("启动失败", msg);
+    app.exit(1);
+    return;
+  }
+  const a = assembled;
+
+  createWindow(a);
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(a);
   });
+}).catch((e) => {
+  // 兜底：whenReady 回调里 createWindow 等同步代码抛出也不该变成未捕获拒绝。
+  console.error("[electron] 启动阶段未捕获错误:", e);
+  app.exit(1);
 });
 
 app.on("window-all-closed", () => {
@@ -109,5 +134,11 @@ app.on("window-all-closed", () => {
 // 真正完成再 exit——否则子进程变孤儿(主进程已死,pi 被 init 收养不退出)。
 app.on("before-quit", (event) => {
   event.preventDefault();
-  void assembled.sessionStore.stopAll().finally(() => app.exit());
+  // ⚠ **不能写成 `assembled?.sessionStore.stopAll().finally(...)`**：`?.` 短路后整个表达式是
+  // `undefined`，`.finally` 不会执行，`app.exit()` 永不调用——而 `preventDefault()` 已经阻断了
+  // 本次退出，于是应用**再也退不出去**（启动失败后想关都关不掉）。
+  // 用 `?? Promise.resolve()` 让 Promise 链在 assembled 缺席时依然存在。
+  void (assembled?.sessionStore.stopAll() ?? Promise.resolve())
+    .catch((e) => console.error("[electron] 退出前收尾失败(仍继续退出):", e))
+    .finally(() => app.exit());
 });

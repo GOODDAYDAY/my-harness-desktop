@@ -83,6 +83,9 @@ function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
   onHover: (i: number) => void;
   position: { top: number; left: number };
 }): React.ReactNode {
+  // 命令说明有两种来源：壳插件给的是 **i18n 键**（descriptionKey），内核投影来的是**文本**
+  // （description，语言由内核决定，壳不替它翻译）。渲染时优先解析键。
+  const { t } = useTranslation();
   // 键盘上下键移动选中时,把选中项滚入 popup 可视区(容器自身滚动,不碰页面)。
   const containerRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<HTMLDivElement | null>(null);
@@ -107,7 +110,7 @@ function SlashPopup({ matches, selectedIndex, onSelect, onHover, position }: {
             onMouseDown={(e) => { e.preventDefault(); onSelect(cmd); }} onMouseEnter={() => onHover(i)} style={{ ...itemStyle, background: i === selectedIndex ? "var(--color-surface)" : "transparent" }}>
             <span style={{ fontSize: "var(--font-size-xs)", fontWeight: 500, color: badge.color, border: `1px solid ${badge.color}`, borderRadius: "var(--radius-sm)", padding: "0 4px", lineHeight: "16px", flexShrink: 0 }}>{badge.label}</span>
             <span style={{ fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-base)", color: "var(--color-fg)" }}>/{cmd.name}</span>
-            {cmd.description && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{cmd.description}</span>}
+            {(cmd.descriptionKey || cmd.description) && <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{cmd.descriptionKey ? t(cmd.descriptionKey) : cmd.description}</span>}
           </div>
         );
       })}
@@ -156,7 +159,7 @@ export function Composer({
   // streaming 中不再禁用发送——onSubmit 由父组件分流(立即发送 / 入队)。
   const canSend = (allowEmptySubmit || value.trim().length > 0) && !sending;
   // 光效状态机(与 index.css 三变量结构配套):streaming→亮态(fadein 慢慢变亮);
-  // 结束→fadeout 态(transition 慢慢变暗),700ms 与 CSS --pi-composer-fade
+  // 结束→fadeout 态(transition 慢慢变暗),700ms 与 CSS --shell-composer-fade
   // transition 时长一致,到点摘除——摘 class 伪元素即销毁,退场动画播不了,
   // 故必须延迟摘。中途再亮:清定时器直接切回亮态。
   const [glowOn, setGlowOn] = useState(false);
@@ -214,35 +217,70 @@ export function Composer({
   const renderKernelList = (k: KernelId, interactive: boolean): React.ReactNode => {
     const providers = byKernel.get(k);
     if (!providers) return null;
-    return [...providers].map(([provider, ms]) => (
+    const blocks = [...providers].map(([provider, ms]) => (
       <div key={provider}>
-        <div className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70">{provider}</div>
+        {/* data-composer-model-provider：provider 分组头的稳定锚点（此前是裸 div，
+            e2e 只能按大写译文/字面 provider 名猜）。分组语义 = 内核 → provider 两级，
+            见 groupByKernel；这一层是 provider。 */}
+        <div data-composer-model-provider={provider} className="px-2 py-0.5 text-[length:var(--font-size-xs)] uppercase tracking-wide text-[var(--color-muted)] opacity-70">{provider}</div>
         {ms.map((m) => {
           // 锁定后非当前内核的模型项也置灰(显式降级):此前只锁 TAB 不锁模型项,
           // 刷新后 currentKernel 为 null 时 lockedOut 恒 false,选别家内核模型仍能触发切内核。
           const lockedOut = !!kernelLocked && m.kernel !== currentKernel;
+          // 「当前选中」的唯一判据：Check 图标、`data-composer-model-selected` 锚点、
+          // 以及下面 RadioItem 的 value 都从它派生，避免多处各写一遍三段比较而漂移。
+          const selected = currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id;
           const body = (
             <>
               <PluginIcon name={m.kernel} className="size-3.5 shrink-0" />
               <span className="flex-1 truncate" style={lockedOut ? { opacity: 0.4 } : undefined}>{m.name || m.id}</span>
-              {currentModel?.kernel === m.kernel && currentModel?.provider === m.provider && currentModel?.id === m.id && <Check className="size-3.5" />}
+              {selected && <Check className="size-3.5" />}
             </>
           );
+          // ⚠ 降级必须**给出原因**（§7.6「显式降级，不静默、不伪造成功」）。
+          //   此前锁定的模型行只是 opacity 0.4 置灰，没有任何解释——而同一个下拉里的
+          //   内核 TAB 却有 `title={t("shell.kernelLocked")}`。同一组件内两种标准，
+          //   置灰的那半就是"静默降级"：用户看到一排灰的模型，不知道是坏了、是没装、
+          //   还是因为会话已锁定内核。timeline 早有正确范式（`thinkingUnavailableHint`
+          //   = 置灰 + 悬浮真实原因），这里对齐它。
+          const lockedTitle = lockedOut ? t("shell.kernelLocked", { kernel: currentKernel }) : undefined;
+          // 稳定锚点：值 = `kernel/provider/id`（模型的三段身份，与 currentModel 的比较同源），
+          // 另加 selected/locked 两个状态锚，e2e 与 DOM 审计不必靠 Check 图标或透明度反推状态。
+          const anchors = {
+            "data-composer-model-item": `${m.kernel}/${m.provider}/${m.id}`,
+            ...(selected ? { "data-composer-model-selected": "true" } : {}),
+            ...(lockedOut ? { "data-composer-model-locked": "true" } : {}),
+          };
           if (!interactive) {
             return (
-              <div key={`${m.kernel}/${m.provider}/${m.id}`} style={{ ...itemStyle, opacity: lockedOut ? 0.4 : 1 }}>
+              <div key={`${m.kernel}/${m.provider}/${m.id}`} title={lockedTitle} {...anchors} style={{ ...itemStyle, opacity: lockedOut ? 0.4 : 1 }}>
                 {body}
               </div>
             );
           }
+          // ⚠ 用 RadioItem 而不是 Item：模型清单是**单选**语义（有且仅有一个当前模型），
+          //   `DropdownMenu.Item` 渲染成 `role="menuitem"`，选中态只有一个 Check 图标——
+          //   读屏用户听不出哪一个是当前模型（视觉信息与可访问信息不对等）。
+          //   RadioItem 由 Radix 自动给出 `role="menuitemradio"` 与 `aria-checked`，
+          //   并且保留菜单的键盘导航/typeahead（这也是为什么不直接给 Item 覆盖 role：
+          //   手改 role 会与 Radix 内部的键盘/焦点管理不一致）。
+          //   `value` 与锚点同源（kernel/provider/id 三段身份）。
           return (
-            <DropdownMenu.Item key={`${m.kernel}/${m.provider}/${m.id}`} onSelect={() => onPickModel?.(m)} style={itemStyle} disabled={lockedOut}>
+            <DropdownMenu.RadioItem key={`${m.kernel}/${m.provider}/${m.id}`} value={`${m.kernel}/${m.provider}/${m.id}`} title={lockedTitle} {...anchors} onSelect={() => onPickModel?.(m)} style={itemStyle} disabled={lockedOut}>
               {body}
-            </DropdownMenu.Item>
+            </DropdownMenu.RadioItem>
           );
         })}
       </div>
     ));
+    // 非交互（被叠放隐藏的那一份）保持**普通 div**：不能包 RadioGroup，
+    // 否则那些项会被注册进 Radix 的菜单导航（键盘会走到看不见的项上）——
+    // 这正是本函数 `interactive` 参数存在的理由，重构不能把它丢掉。
+    if (!interactive) return blocks;
+    const selectedKey = currentModel && currentModel.kernel === k
+      ? `${currentModel.kernel}/${currentModel.provider}/${currentModel.id}`
+      : "";
+    return <DropdownMenu.RadioGroup value={selectedKey}>{blocks}</DropdownMenu.RadioGroup>;
   };
 
   const slashQuery = useMemo((): string | null => {
@@ -324,10 +362,10 @@ export function Composer({
       <div
         data-goal-active={goalActive ? "true" : undefined}
         data-command-active={matchedCommand ? "true" : undefined}
-        className={`flex flex-col w-full rounded-[16px] px-2 py-2 bg-[var(--color-surface)] shadow-[var(--shadow-md)] border border-[var(--color-border)]${glowOn ? " pi-composer-thinking" : ""}${glowFading ? " pi-composer-fadeout" : ""}${goalActive ? " pi-composer-goal" : ""}${matchedCommand ? " pi-composer-command" : ""}`}
+        className={`flex flex-col w-full rounded-[16px] px-2 py-2 bg-[var(--color-surface)] shadow-[var(--shadow-md)] border border-[var(--color-border)]${glowOn ? " shell-composer-thinking" : ""}${glowFading ? " shell-composer-fadeout" : ""}${goalActive ? " shell-composer-goal" : ""}${matchedCommand ? " shell-composer-command" : ""}`}
       >
         {matchedCommand && (
-          <div className="pi-composer-command-chip" data-command-chip>
+          <div className="shell-composer-command-chip" data-command-chip>
             /{matchedCommand.name}
             <span style={{ color: "var(--color-muted)" }}>·</span>
             <span style={{ color: "var(--color-muted)" }}>{(SOURCE_BADGE[matchedCommand.source] ?? SOURCE_BADGE.extension).label}</span>

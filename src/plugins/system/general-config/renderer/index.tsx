@@ -122,9 +122,9 @@ export function GeneralConfigPage({ config, onChange }: SettingsComponentProps):
               marginLeft: "auto",
               display: "flex", alignItems: "center", gap: "var(--spacing-xs)",
               padding: "2px var(--spacing-sm)",
-              border: `1px solid ${restartArmed ? "var(--color-error)" : "var(--color-border)"}`,
+              border: `1px solid ${restartArmed ? "var(--color-accent-error)" : "var(--color-border)"}`,
               borderRadius: "var(--radius-sm)", background: "transparent",
-              color: restartArmed ? "var(--color-error)" : "var(--color-muted)",
+              color: restartArmed ? "var(--color-accent-error)" : "var(--color-muted)",
               cursor: "pointer", fontSize: "var(--font-size-sm)",
             }}
           >

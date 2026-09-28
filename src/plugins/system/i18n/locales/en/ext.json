@@ -17,5 +17,10 @@
   "ext.tag.desktop": "desktop",
   "ext.tag.npm": "npm",
   "ext.tag.git": "git",
-  "ext.tag.protected": "protected"
+  "ext.tag.protected": "protected",
+  "ext.installUnsupported": "This kernel does not support installing extensions",
+  "ext.installUnsupportedHint": "The kernel exposes no extension-install capability, so the install form is not offered here — instead of letting you fill in a source and fail afterwards.",
+  "ext.uninstallUnsupported": "This kernel does not support uninstalling extensions",
+  "ext.toggleFailed": "Failed to toggle extension: {{detail}}",
+  "ext.restartFailed": "Restart failed: {{detail}}"
 }

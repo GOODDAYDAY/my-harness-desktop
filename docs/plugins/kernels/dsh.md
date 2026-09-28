@@ -245,7 +245,7 @@ dsh 与 pi 内核插件 之间没有任何代码依赖、没有任何事件订�
 
 dsh 不直连 `src/server`，它通过 `usePluginContext()` 拿受控 API（`packages/shared/src/domain/context.ts` 的 `PluginContext`），用到的字段逐个列出：
 
-- `ctx.kernels.dsh`（`KernelVersionApi`）：版本管理 TAB 的 `status/listVersions/install/setCustomCliDir`。dsh 侧没有 `fitPiExtensionAvailable?` 可选方法（pi 专属，tool-gate 探测），`KernelVersionApi` 把它标成可选，据以显式降级。
+- `ctx.kernels.dsh`（`KernelVersionApi`）：版本管理 TAB 的 `status/listVersions/install/setCustomCliDir`。dsh 侧不声明 `toolFilterEnforced?` 可选方法（旧名 `fitPiExtensionAvailable`，已退役并换轴；tool-gate 探测），`KernelVersionApi` 把它标成可选，据以显式降级。
 - `ctx.kernelConfig.dsh`（`KernelConfigApi`）：配置 TAB 的 `get/set/fields`。
 - `ctx.kernelModels.dsh`（`KernelModelsApi`）：模型 TAB 的 `list/test/readConfig/saveConfig` 等。
 - `ctx.kernelExtensions`（`KernelExtensionSource` 中性面）：拓展 TAB 的 `list/enable/disable/install/uninstall(kernel, ...)`，按 kernel 作用域。dsh 的实现是 `DshExtensionManager`。

@@ -61,7 +61,7 @@ async function pickModel(name) {
   });
   await page.waitForSelector("[role='menu']", { timeout: 8000 });
   await page.evaluate((n) => {
-    const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => (el.textContent || "").includes(n));
+    const item = [...document.querySelectorAll("[role^='menuitem']")].find((el) => (el.textContent || "").includes(n));
     item?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
     item?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   }, name);

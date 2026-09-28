@@ -1,5 +1,13 @@
 # 内核对齐与类层次：PI 与 DSH 的能力拉平 + 基类继承
 
+> ⚠️ **本文为设计记录（快照），不是现行架构描述。** 其中提到的
+> `BackendExtensions` / `capabilities.extensions` / `asPi()` / `piSend()` / `kernel-factories`
+> 等符号**已退役**：opaque 扩展面桶已拆成圆心的**逐轴中性能力面** `BackendCapabilities`
+> （steering / retry / compaction / snapshot / stats / modelCycle / toolExec / busFrames /
+> questions / thinking + fileBacked），壳改为按轴探测（`SessionStore.faceOf` / `viaFace`），
+> `kernel/pi/backend/pi-backend-extensions.ts` 与 `kernel/factories/` 已删除。
+> 现行描述见 `CLAUDE.md` §6.2/§6.3 与 `docs/add-new-kernel.md` §1.3。
+
 - 本文是内核层三篇设计文档的第三篇。`multi-kernel-shell.md` 立「内核 / 中立契约 / 适配器 / 壳」四个抽象（为什么），`base-interface-lineage.md` 落 `BaseBackend` 五操作与 lineage 树（怎么做），`kernel-layer.md` 收口洋葱分层与圆心契约（摆对层）。本文回答剩下来的两个问题：**壳看到 pi 和 dsh 的差异怎么抹平**（能力拉平），以及**两个后端的实现怎么复用**（基类 + 继承）。配套的**缺口实证清单**见 `kernel-gap-audit.md`（逐文件定位每处没拉平/需要改的点并统计）。
 
 - 名词沿用前几篇：**内核**（pi / dsh）、**契约**（圆心 `BaseBackend` 六条意图）、**适配器**（`PiBackend` / `DshBackend`）、**壳插件**（挂槽位的 UI 插件）、**内置插件**（本文新增强调——pi 侧是装进进程的 TS 扩展，dsh 侧是 Cordis 插件树里的插件，两者都是「内核自己的插件」，不是壳插件）。

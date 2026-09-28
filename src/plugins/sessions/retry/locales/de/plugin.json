@@ -1,0 +1,4 @@
+{
+  "plugin.retry.displayName": "Wiederholen",
+  "plugin.retry.description": "Button zum Wiederholen: von einem beliebigen assistant/tool-Knoten abzweigen und neu generieren"
+}

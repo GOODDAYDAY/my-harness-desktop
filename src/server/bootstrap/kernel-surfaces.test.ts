@@ -19,6 +19,8 @@ import { dshKernelPlugin } from "../kernel/dsh/plugin";
 import { minimalKernelPlugin } from "../kernel/minimal/plugin";
 import { makeRealCtx } from "../kernel/core/kernel-test-ctx";
 import { buildKernelSurfaces, ensureBundledSkillsOnAll, makeExtensionDispatch, migrateSkillsOnAll, runKernelStartupMigrations } from "./kernel-surfaces";
+import { liveKernelAccessors } from "./boot/kernel-accessors";
+import type { KernelId } from "@my-harness-desktop/shared";
 import type { BaseBackend, KernelPlugin } from "@my-harness-desktop/shared";
 
 let homedir: string;
@@ -81,9 +83,9 @@ function makeFourthKernel(id: string): { plugin: KernelPlugin; log: string[] } {
 function registryWithRealThree(): KernelRegistry {
   const ctx = makeRealCtx(homedir, cwd).ctx;
   const r = new KernelRegistry();
-  r.register(piKernelPlugin(ctx));
-  r.register(dshKernelPlugin(ctx));
-  r.register(minimalKernelPlugin(ctx));
+  r.register(piKernelPlugin(ctx), "1.0.0");
+  r.register(dshKernelPlugin(ctx), "1.0.0");
+  r.register(minimalKernelPlugin(ctx), "1.0.0");
   return r;
 }
 
@@ -91,9 +93,9 @@ describe("第四个内核：不碰核心代码，能被每一面自动接上", (
   it("注册进同一个注册表 → 全部中性面里都出现它（不需要在核心加一行）", () => {
     const r = registryWithRealThree();
     const { plugin } = makeFourthKernel("kimi");
-    r.register(plugin);
+    r.register(plugin, "1.0.0");
 
-    const s = buildKernelSurfaces(r);
+    const s = buildKernelSurfaces(r, liveKernelAccessors(r));
     expect(s.ids).toEqual(["pi", "dsh", "minimal", "kimi"]);
     // **没有任何"默认内核"**（设计原则 22：内核是模型的派生量，缺内核处显式报错，不挑一个顶上）。
     // 这条守卫是**反向**的：它钉住"注册顺序 ≠ 默认内核"——曾经这里有 `defaultId: ids[0]`，
@@ -101,11 +103,17 @@ describe("第四个内核：不碰核心代码，能被每一面自动接上", (
     expect(Object.keys(s), "壳的内核面里不许出现默认内核").not.toContain("defaultId");
     // 逐面检查：任何一面漏了自动纳入，这里就红
     expect(s.modelCatalog.listModels().filter((m) => m.kernel === "kimi")).toHaveLength(1);
-    expect(Object.keys(s.modelsApis)).toContain("kimi");
-    expect(Object.keys(s.configApis)).toContain("kimi");
-    expect(Object.keys(s.versionApis)).toContain("kimi");
-    expect(Object.keys(s.extensionSources)).toContain("kimi");
-    expect(s.oneshots["kimi"], "第四个内核也交 oneshot 面 → 壳要认得，不能只有 pi 有").toBeTruthy();
+    // per-id 的六个面改从**活访问器**查（阶段三：这些投影字段已从 KernelSurfaces 删除，
+    // 消费者全走 boot/kernel-accessors.ts）。断言意图不变——第四个内核必须被每一面认得。
+    const a = liveKernelAccessors(r);
+    const kimi = "kimi" as never;
+    expect(a.kernelIds()).toContain(kimi);
+    expect(a.kernelModels(kimi), "第四个内核的模型配置面要认得").toBeDefined();
+    expect(a.kernelConfig(kimi), "第四个内核的原生配置面要认得").toBeDefined();
+    expect(a.kernelVersionApi(kimi), "第四个内核的版本管理面要认得").toBeDefined();
+    expect(a.kernelExtensionSource(kimi), "第四个内核的拓展源面要认得").toBeDefined();
+    expect(a.kernelOneshot(kimi), "第四个内核也交 oneshot 面 → 壳要认得，不能只有 pi 有").toBeTruthy();
+    expect(a.kernelLogo(kimi), "第四个内核的 logo 从注册表投影（不再有静态表）").toBeDefined();
     expect(
       s.skillProviders.some((p) => (p as unknown as { __kernel?: string }).__kernel === "kimi"),
       "第四个内核的 skillProvider 没被收进来",
@@ -115,7 +123,7 @@ describe("第四个内核：不碰核心代码，能被每一面自动接上", (
     expect(s.lifecycles.map((l) => l.kernel)).toContain("kimi");
     expect(s.extensionSyncs.map((e) => e.kernel)).toContain("kimi");
     expect(s.sessionRoots).toContain("/kimi/sessions");
-    expect(s.configRoots).toContain("/kimi/config");
+    expect(a.kernelConfigRoots(), "第四个内核的配置根要自动进白名单").toContain("/kimi/config");
     expect(s.skillWatchPaths(cwd)).toContain("/kimi/settings.json");
   });
 
@@ -127,25 +135,29 @@ describe("第四个内核：不碰核心代码，能被每一面自动接上", (
         pi: piKernelPlugin as never, dsh: dshKernelPlugin as never, minimal: minimalKernelPlugin as never,
       };
       for (const id of ids) {
-        if (id === "kimi") r.register(makeFourthKernel("kimi").plugin);
-        else r.register(byId[id](ctx));
+        if (id === "kimi") r.register(makeFourthKernel("kimi").plugin, "1.0.0");
+        else r.register(byId[id](ctx), "1.0.0");
       }
       return r;
     };
     for (const ids of [["pi"], ["pi", "dsh"], ["pi", "dsh", "minimal"], ["pi", "dsh", "minimal", "kimi"]]) {
-      const s = buildKernelSurfaces(mk(ids));
+      const r = mk(ids);
+      const s = buildKernelSurfaces(r, liveKernelAccessors(r));
+      const a = liveKernelAccessors(r);
       expect(s.ids, `注册 ${ids.length} 个内核时面没跟上`).toEqual(ids);
       expect(s.sessionRoots).toHaveLength(ids.length);
-      expect(s.configRoots).toHaveLength(ids.length);
-      expect(Object.keys(s.modelsApis)).toHaveLength(ids.length);
+      expect(a.kernelIds()).toHaveLength(ids.length);
+      expect(a.kernelConfigRoots(), "配置根随注册表线性增长").toHaveLength(ids.length);
+      // 每个内核的模型面都取得到（不是只有前几个）
+      expect(a.kernelIds().filter((k: KernelId) => a.kernelModels(k) !== undefined)).toHaveLength(ids.length);
     }
   });
 
   it("插件携带的扩展按内核 id 派发到第四个内核（挂与摘都到），未知内核 id 显式跳过", () => {
     const r = registryWithRealThree();
     const { plugin, log } = makeFourthKernel("kimi");
-    r.register(plugin);
-    const dispatch = makeExtensionDispatch(buildKernelSurfaces(r));
+    r.register(plugin, "1.0.0");
+    const dispatch = makeExtensionDispatch(buildKernelSurfaces(r, liveKernelAccessors(r)));
 
     dispatch.onActivate("kimi", "some-plugin", "/plugins/some-plugin", "./kimi-extension");
     expect(log).toContain("ext.onActivate:some-plugin:./kimi-extension");
@@ -159,10 +171,10 @@ describe("第四个内核：不碰核心代码，能被每一面自动接上", (
   it("内核自己的历史状态迁移：第四个内核被调到；某个内核抛错只点名它，不拖垮别的", () => {
     const r = registryWithRealThree();
     const { plugin, log } = makeFourthKernel("kimi");
-    r.register(plugin);
+    r.register(plugin, "1.0.0");
     const boom = makeFourthKernel("boom").plugin;
     boom.migrateLegacyState = () => { throw new Error("迁移炸了"); };
-    r.register(boom);
+    r.register(boom, "1.0.0");
 
     const failed = runKernelStartupMigrations(r);
     expect(log, "第四个内核的迁移面没被调到（壳只认 pi/dsh？）").toContain("migrateLegacyState");
@@ -186,9 +198,9 @@ describe("内置技能面：**逐个内核都要挂**（不是「取第一个」
   it("两个内核都有内置技能面 → 两个都被调到（此前只调第一个，第二个静默不生效）", async () => {
     const r = registryWithRealThree();
     const log: string[] = [];
-    r.register(withSkills("kimi", log));
-    r.register(withSkills("qwen", log));
-    const surfaces = buildKernelSurfaces(r);
+    r.register(withSkills("kimi", log), "1.0.0");
+    r.register(withSkills("qwen", log), "1.0.0");
+    const surfaces = buildKernelSurfaces(r, liveKernelAccessors(r));
     expect(surfaces.skillsPlugins.map((p) => p.id)).toEqual(["pi", "kimi", "qwen"]);
 
     const changed = await ensureBundledSkillsOnAll(surfaces, true);
@@ -203,9 +215,9 @@ describe("内置技能面：**逐个内核都要挂**（不是「取第一个」
   it("单个内核抛错：点名留痕、不阻断其余内核（一个坏的不能让别的挂不上）", async () => {
     const r = registryWithRealThree();
     const log: string[] = [];
-    r.register(withSkills("broken", log, { throwOnEnsure: true }));
-    r.register(withSkills("fine", log));
-    const surfaces = buildKernelSurfaces(r);
+    r.register(withSkills("broken", log, { throwOnEnsure: true }), "1.0.0");
+    r.register(withSkills("fine", log), "1.0.0");
+    const surfaces = buildKernelSurfaces(r, liveKernelAccessors(r));
 
     const changed = await ensureBundledSkillsOnAll(surfaces, false);
     expect(log, "坏内核之后的那个没被调到 —— 一个内核抛错不该阻断其余").toContain("fine:ensure:false");

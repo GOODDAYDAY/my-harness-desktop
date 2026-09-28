@@ -30,5 +30,7 @@
   "system.branchOverview": "Branch-Übersicht",
   "system.branchOverviewLoading": "Branch-Übersicht lädt…",
   "system.branchRoot": "Wurzel {{id}}",
-  "system.branchFork": "Branch {{id}} (von {{parent}} an {{boundary}} abgezweigt)"
+  "system.branchFork": "Branch {{id}} (von {{parent}} an {{boundary}} abgezweigt)",
+  "system.expandNode": "Unterknoten aufklappen",
+  "system.collapseNode": "Unterknoten einklappen"
 }

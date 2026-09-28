@@ -94,8 +94,8 @@ beforeEach(async () => {
     seed: (lineage, opts) => piSeedSession(dir, opts.cwd, lineage, opts),
   };
   const catalogFactory: SessionCatalogFactory = { create: () => new PiSessionCatalog(dir) };
-  store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(dir, "sessions")], ids: ["pi"] }, undefined, neutralStore,
-    new ModelCatalog([new PiModelSource(new ModelsStore({ agentDir: dir }))]), undefined, questionStore);
+  store = new SessionStore(factory, catalogFactory, () => ({ sessionRoots: [join(dir, "sessions")], ids: ["pi"] }), undefined, neutralStore,
+    new ModelCatalog(() => [new PiModelSource(new ModelsStore({ agentDir: dir }))]), undefined, questionStore);
   store.setContext(CWD, sessionPath);
   await store.start(CWD, sessionPath);
   adapter.sent = [];

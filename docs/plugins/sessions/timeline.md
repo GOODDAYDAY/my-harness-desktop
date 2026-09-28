@@ -10,7 +10,7 @@
 
 - 它是纯壳插件：`plugin.json` 没有 `piExtension` 也没有 `dshExtension` 字段，目录里也没有 `pi-extension/`、`dsh-extension/` 子目录。它不进任何内核进程，不 import `src/core/`、`src/server/`、`src/web/` 的任何实现——只从 `@my-harness-desktop/shared` 引用类型与纯函数、从 `@my-harness-desktop/react` 引用 hook/组件/事件总线，遵守壳插件依赖纪律。
 
-- 它的内核无关性由三层保证：读的是中性事件（`ctx.sessions.onEvent` 的 `SessionEvent`），渲染的是中性消息（`NeutralMessage`），内核身份只以数据出现（`ModelInfo.kernel`、`capabilities.kernel`）驱动内核标与思考档位降级，从不在渲染链上写 `if (kernel === "pi")` 的分支。文件里出现的 `capabilities.extensions` 是能力探测（有则用、无则降级），不是内核身份分支。
+- 它的内核无关性由三层保证：读的是中性事件（`ctx.sessions.onEvent` 的 `SessionEvent`），渲染的是中性消息（`NeutralMessage`），内核身份只以数据出现（`ModelInfo.kernel`、`capabilities.kernel`）驱动内核标与思考档位降级，从不在渲染链上写 `if (kernel === "pi")` 的分支。文件里出现的能力探测（`capabilities.faces.<轴>` / `thinkingCycle` / `levelsSemantics`）是逐轴「有则用、无则降级」，不是内核身份分支；此前的单个 `capabilities.extensions` bit 已退役为逐轴旗标。
 
 ## 2 目录结构
 

@@ -3,11 +3,39 @@
   "version": "0.4.9",
   "tier": "official",
   "displayName": "GoodyHao",
-  "description": "内置工程原则随会话注入:贡献 systemPrompts 槽,spawn 时经 --append-system-prompt 注入底座 system prompt。卸载即停止注入。",
-  "tags": ["productivity"],
+  "description": "内置工程原则随会话注入:贡献 systemPrompts 槽,由壳在内核支持「追加系统 prompt」时注入其 system prompt。卸载即停止注入。",
+  "tags": [
+    "productivity"
+  ],
   "contributes": {
     "systemPrompts": [
-      { "id": "engineering-principles", "file": "./CLAUDE.md", "order": 100 }
+      {
+        "id": "engineering-principles",
+        "file": "./CLAUDE.md",
+        "order": 100
+      }
+    ],
+    "languages": [
+      {
+        "id": "goody-hao.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "goody-hao.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "goody-hao.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "goody-hao.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      }
     ]
   }
 }

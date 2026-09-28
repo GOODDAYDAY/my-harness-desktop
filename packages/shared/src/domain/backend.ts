@@ -13,7 +13,7 @@
 
 import type { SessionEvent, TreeNode, NeutralMessage, ModelInfo, ProjectStats, TurnUsage, SessionStats, SyncSnapshot } from "./events/session-state";
 import type { QuestionAnswer, Question } from "./events/kernel-event";
-import type { ImageInput, KnownToolInfo, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig, BashResult } from "./sessions";
+import type { ImageInput, KnownToolInfo, SessionInfo, SessionDetail, HeaderPatch, SessionToolConfig, BashResult, ConcurrencyMode } from "./sessions";
 import type { KernelId } from "./kernel";
 import type { NeutralAnchor, NeutralSession, NeutralEntry, NeutralSessionHeader } from "./session-neutral";
 
@@ -96,9 +96,20 @@ export interface BaseBackend {
   /** §2.4.4 把一个分叉点持久化成可重启锚点。 */
   bookmark(lineageId: string, boundary: BoundaryRef): Promise<Anchor>;
 
-  /** §2.4.5 从一个锚点重启一条 lineage,返回重启后的 lineage id。可缺面：dsh 服务端回切，
-   *  pi 无此面（现场 fork 由 session-store 编排），壳经 `backend.resume?` 探测。 */
-  resume?(anchor: Anchor): Promise<string>;
+  // ⚠ 此处曾有可选成员 `resume?(anchor: Anchor): Promise<string>`（"从锚点重启一条 lineage"），
+  //   r72 删除。删除依据（三条都是实测，不是推断）：
+  //   ① 全仓搜索 `backend.resume` / `resume?.(` / `resume &&` 等**全部调用形态**，
+  //      唯一命中是这个成员自己的注释——即契约声称"壳经 backend.resume? 探测"，而壳从没探测过；
+  //   ② 壳的锚点重启走的是 `SessionStore.resume(snapshotId)`：它用快照里的 lineage entries
+  //      在**中立层**派生一个新会话（deriveSession），对所有内核一律适用，
+  //      不需要任何内核提供"服务端回切"面——所以这个抽象**没有消费方**；
+  //   ③ 只有 dsh 实现了它（走 DSH_METHODS.sessionResume），于是它同时是
+  //      "死契约成员"与"内核间的功能不对称"（§1.5：内核同等地位、同等功能）。
+  //   为什么不是"改注释说明它没用"而是删掉：死契约成员**有害**——它与 r46/r47 的死能力轴同理，
+  //   读者（以及第五个内核的实现者）会以为必须实现它、以为壳会探测它。
+  //   没有消费方的抽象不是抽象，是猜测（§1.5「内核先抽象后实现」的前提是壳真的需要这个面）。
+  //   若将来壳确实需要"内核服务端回切"（例如中立层派生无法表达某内核的语义），
+  //   按 §1.5 重新走一遍：先落契约、再各内核实现或显式降级，并**同时**接上消费方。
 
   /** 删除一个书签锚点(回收后端自留的副本)。非 pi 后端若不支持可抛错。 */
   deleteBookmark(anchor: Anchor): Promise<void>;
@@ -150,16 +161,10 @@ export interface BaseBackend {
    *  pi=extension_ui_response 帧翻译,dsh=文件侧车(阶段一)/session/answer(阶段二)。 */
   answerQuestion?(questionId: string, answers: QuestionAnswer[]): Promise<void>;
 
-  /** 内核专属能力探测面(§7.6):按语义分桶,能力名中性、不带内核名(§kernel-plugin §6)。
-   *  壳经 backend.capabilities.extensions / thinking / fileBacked 探测「有则用、无则降级」,
-   *  不按内核身份硬分支:
-   *  - extensions=运行时切档/多路并发等扩展面(pi 有,dsh/minimal 无);对圆心 opaque(unknown),
-   *    形状定义在 client/pi(BackendExtensions),core/application 经 type-only import 收窄。
-   *  - thinking=思考档位能力探测面(getThinkingLevels/onMissing;dsh 补面、pi 经 extensions)。
-   *  - fileBacked=会话是壳要跟踪的文件(boundSessionPath 指向会话文件):pi/minimal 声明 true,
-   *    dsh 无(会话是 RPC 服务端 forest,壳不持文件)。曾用 capabilities.extensions 当文件态代理,
-   *    minimal(文件态但无 pi 面)被误判——多内核下「文件态」是独立轴,须显式声明(§minimal-kernel)。 */
-  readonly capabilities: { extensions?: unknown; thinking?: ThinkingCapabilities; fileBacked?: boolean };
+  /** 能力探测面(§7.6):**按语义轴分面**,能力名中性、不带内核名(§kernel-plugin §6)。
+   *  壳经 `backend.capabilities.<轴>` 探测「有则用、无则降级」,不按内核身份硬分支。
+   *  各轴的含义、谁有谁没有、无此面时壳怎么降级,见 `BackendCapabilities` 的定义处。 */
+  readonly capabilities: BackendCapabilities;
 
   /** 内核 spawn 时读取的配置文件绝对路径清单——这些文件变了壳需重建进程
    *  (内核模型/配置快照 spawn 时定型,运行中不重读)。pi=models.json/settings.json;
@@ -179,14 +184,198 @@ export interface ProcessExitInfo {
  * 记录进 missing，之后壳据此显式降级——不静默、不伪造成功(docs/design/dsh-capability-gate.md)。
  */
 export interface ThinkingCapabilities {
-  /** 已探明的缺失方法名(session/xxx)。懒探测首次「unknown method」时记录。 */
-  readonly missing: ReadonlySet<string>;
-  /** 新缺面发现回调(壳绑定后广播降级事件，驱动 UI 置灰入口)。 */
-  onMissing: ((method: string) => void) | null;
+  /** 新缺面发现回调(壳绑定后广播降级事件，驱动 UI 置灰入口)。
+   *  可选：只有「懒探测」的内核需要它(dsh 装上的适配插件版本可能缺某些 session/* 方法，
+   *  首次调用失败时记录并上报)。方法恒在的内核(pi)不声明。
+   *  ⚠ 此处曾有 `readonly missing: ReadonlySet<string>`——**只被 dsh 自己读**、壳从不消费，
+   *  属死契约面，已删；缺面清单是 dsh 的私有状态(`missingMethods`)，不需要进圆心。 */
+  onMissing?: ((method: string) => void) | null;
   /** 思考档位清单查询(补面，docs/design/dsh-thinking-level.md)：桌面适配插件拦截
    *  session/getThinkingLevels 提供;旧版适配插件无此面 → 调用时懒探测记缺面、
    *  壳据此显式降级(藏档位控件),不静默、不伪造成功。 */
   getThinkingLevels?: () => Promise<string[]>;
+  /** 循环切到下一档位。有清单查询面而无此面的内核 = 只能查不能轮转,壳/renderer 据此
+   *  把「运行时切档」入口置灰并给真实原因(不是笼统置灰整个思考域)。 */
+  cycleThinkingLevel?: () => Promise<void>;
+  /** 清单语义 —— 决定「`getThinkingLevels()` 返回空」该怎么解读:
+   *  - `precise`(缺省):内核给的是**当前模型**支持的精确清单,空 = 该模型无档位,
+   *    渲染层必须如实不渲染,**不许**拿默认清单伪造可切(§1.5 不伪造成功);
+   *  - `approximate`:内核给的是全局档位表,且可能因 RPC 响应形状不识别而返空
+   *    (pi 的 `getThinkingLevels` 在 `data.levels` 形状不符时返回 `[]`,
+   *    `pi-backend.ts:306-313`),渲染层可回落到已知默认清单。
+   *  **为什么要这个字段**:此前渲染层用「有没有 pi 扩展面」来区分这两种语义
+   *  (`capabilities.extension ? 回落默认 : 如实不渲染`),那是拿内核身份当语义代理;
+   *  分面之后两个内核都有 thinking 面,区分必须由内核**自己声明**,第四个内核也能自报。 */
+  levelsSemantics?: "precise" | "approximate";
+}
+
+/** 并发档位:`steer`=插话(立即影响当前回合) / `followUp`=排队(当前回合结束后处理)。 */
+export type StreamingBehavior = "steer" | "followUp";
+// `ConcurrencyMode` 的单源在 `./sessions`（`MessagingApi` 与 `SteeringCapabilities` 共用），
+// 本文件经 import 复用、不再另定义一份——同一概念两份定义必然漂移（§1.3）。
+
+/**
+ * 多路并发面(§7.6 三分法里的「显式降级」轴)。
+ * 谁有:pi 有;dsh **无多路并发**(`docs/design/kernel-parity-audit.md:59`「➖ pi 扩展面,降级」)。
+ * 无此面的内核:壳走契约的 `sendMessage`(每个内核必实现),代价是「不分 steer/followUp 档位」,
+ * 不是「收不到帧」——后者才是不可接受的(见 `session-store.sendPromptTo` 的降级说明)。
+ */
+export interface SteeringCapabilities {
+  steer(text: string, images?: ImageInput[]): Promise<void>;
+  followUp(text: string, images?: ImageInput[]): Promise<void>;
+  setSteeringMode(mode: ConcurrencyMode): Promise<void>;
+  setFollowUpMode(mode: ConcurrencyMode): Promise<void>;
+  /** 带并发档位的发送。无此面 → 壳回落到契约 `sendMessage`(不分档)。 */
+  sendMessage(text: string, images?: ImageInput[], behavior?: StreamingBehavior): Promise<void>;
+}
+
+/**
+ * 重试面:中断正在进行的重试、开关自动重试。
+ * 谁有:pi 有;dsh 的 `llm/retry` **事件已转发**、配置面尚未对齐
+ * (`docs/design/kernel-parity-audit.md:87` 列为 P1 剩余)——所以它是**可补**的面,不是永久专属。
+ */
+export interface RetryCapabilities {
+  abortRetry(): Promise<void>;
+  setAutoRetry(enabled: boolean): Promise<void>;
+}
+
+/**
+ * 压缩面:手动触发上下文压缩、开关自动压缩。
+ * 谁有:pi 有(`compact` RPC);dsh 经 `compaction-basic` 插件只有**自动**压缩,手动触发面缺
+ * (`docs/design/kernel-parity-audit.md:80`「⚠️ 手动触发面缺」)——同为可补的面。
+ */
+export interface CompactionCapabilities {
+  compact(customInstructions?: string): Promise<void>;
+  setAutoCompaction(enabled: boolean): Promise<void>;
+}
+
+/**
+ * 快照面:能从**内核实况**拉回一份状态快照。
+ * 谁有:pi 有(并发拉 state+entries+tree+commands 组装中性快照);dsh 无——它的会话真相源在
+ * 内核进程内,状态由**壳记账 + 中立头组装**(`session-store.sync` 的无快照面分支)。
+ * 这条轴还决定「模型是否已生效」的真相源:有快照面读快照,无快照面读壳侧账本
+ * `effectiveModel`(`docs/model-switching.md` §11.3 那个根因)。
+ */
+export interface SnapshotCapabilities {
+  resync(): Promise<SyncSnapshot>;
+  /** 最近一条 assistant 文本(无则空串)。盲评/复盘类插件用它取内核实际产出。 */
+  getLastAssistantText(): Promise<string>;
+}
+
+/**
+ * 会话统计面:**内核侧口径**的 tokens / cost / contextUsage。
+ * 谁有:pi 有(`get_session_stats` RPC);dsh 无此面 → 壳只给自算部分
+ * (tps / 轮次用量 / 回合数 / 步数),其余留空(0/undefined)**不伪造**。
+ */
+export interface StatsCapabilities {
+  getSessionStats(local: {
+    tps: number | null; turn: TurnUsage; lastTurn: TurnUsage | null; turns: number; steps: number;
+  }): Promise<SessionStats>;
+}
+
+/**
+ * 模型循环面:在**内核自己的**模型清单里轮转,以及读回该清单。
+ * 谁有:pi 有(`cycle_model` RPC,轮转顺序是**内核私有**语义)。
+ *
+ * ⚠ **本面与快捷键的"循环切换模型"不是同一个操作**（r25 实测澄清；此前这里的注释说
+ * "壳自行轮转属行为变更、本次不做"，而壳其实早就在自行轮转了，陈述已过时且会误导）：
+ *
+ * | | 本面（`cycleModel`） | 快捷键 `timeline:cycleModel` |
+ * |---|---|---|
+ * | 轮转范围 | **单个内核**自己的清单 | **跨内核**的合流清单（`ModelCatalog`） |
+ * | 顺序由谁定 | 内核私有语义（pi 的 `cycle_model`） | 壳按合流清单的次序推导 |
+ * | 触发路径 | `IPC.session.cycleModel` → `SessionStore.cycleModel()` → `faceOf(proc,"modelCycle")` | 默认键位 `mod+shift+]` / `mod+shift+[` → timeline 的 channel |
+ * | 当前生产消费者 | **零**（无插件调用 `ctx.sessions.cycleModel()`） | 快捷键（唯一实际在用的轮转） |
+ *
+ * 所以：**不要把快捷键改成走本面**——那会失去跨内核轮转（内核不知道别的内核有哪些模型），
+ * 是功能退化而不是"归位"。本面保留是给插件用的能力面（"在当前内核内轮换"这个语义
+ * 壳无法代劳，因为顺序是内核私有的）。它当前无消费者这一点由
+ * `src/capability-axis-consumers.test.ts` 显式声明并守卫（分类为"服务端强制"，附理由），
+ * 不是被遗忘——将来若有插件要用，那条守卫会要求把分类改过来。
+ */
+export interface ModelCycleCapabilities {
+  cycleModel(): Promise<void>;
+  getModels(): Promise<ModelInfo[]>;
+}
+
+/**
+ * 工具执行面:直投一条 shell 命令并取回结果、中断正在跑的 bash。
+ * 谁有:pi 有(调用方需声明 `rpc:bash` 权限);无此面的内核 → 壳置灰该入口。
+ */
+export interface ToolExecCapabilities {
+  bash(command: string, excludeFromContext?: boolean): Promise<BashResult>;
+  /** 中断正在跑的 bash。返回内核的原始 ack(调用方不消费),故为 unknown 而非 void——
+   *  与内核实现的真实返回对齐,不借契约收窄逼迫实现丢弃它已有的返回值。 */
+  abortBash(): Promise<unknown>;
+}
+
+/**
+ * bus 上行帧通道面:内核侧插件往壳的会话总线投递的原始帧。
+ * 谁有:pi 有(`$bus` 上行帧透传);无此面的内核 → 该会话无上行帧(壳不伪造)。
+ */
+export interface BusFrameCapabilities {
+  onBusFrame(cb: (frame: Record<string, unknown>) => void): () => void;
+}
+
+/**
+ * 提问上行通道面:内核把「需要用户回答的提问」投给壳(壳落账 + 广播 + 投渲染层)。
+ * 与契约的 `answerQuestion?`(下行:把答案送回内核)配成一对;两者可分别缺席。
+ * 谁有:pi 有(`extension_ui` 帧翻译);dsh 走文件侧车桥(`DshQuestionBridge`,不经本面)。
+ */
+export interface QuestionChannelCapabilities {
+  onQuestion(cb: (req: { requestId: string; questions: Question[] }) => void): () => void;
+}
+
+/**
+ * 后端能力面集合(§7.6)——**按语义轴分面,能力名中性、不带内核名**。
+ *
+ * 为什么是一组小面而不是一个 opaque 桶:此前是 `extensions?: unknown`(形状定义在
+ * `kernel/pi/backend/pi-backend-extensions.ts`,壳经 type-only import 收窄 + `as` 断言)。
+ * 那个形状有三个实测后果:
+ *   ① **application 跨界 import 内核内部**——检验⑪ allowlist 里唯一那条,「内核可整体卸载」打折;
+ *   ② **一个桶被当多个轴的代理**:`session-store` 曾用 `capabilities.extensions != null` 当
+ *      「有无文件头可写」的判据(该轴其实是 `fileBacked`),于是 minimal(`fileBacked: true`
+ *      但无 pi 面)被误判——`minimal-backend.ts:52` 的注释正是为规避它而写的;
+ *   ③ **降级粒度只有一个 bit**:`SessionCapabilities.extension` 让 renderer 一次性显隐
+ *      steer/压缩/统计/队列/导出等全部功能,于是「dsh 缺多路并发」连带禁掉了它本可有的
+ *      压缩与统计——违背「内核同等地位、同等功能」。
+ * 分面之后每个轴可独立探测、独立降级,且新增一个轴不需要动既有轴(开闭原则)。
+ *
+ * 全部字段可选:无此面 = `undefined`,壳「有则用、无则降级」,不按内核身份硬分支。
+ */
+export interface BackendCapabilities {
+  steering?: SteeringCapabilities;
+  retry?: RetryCapabilities;
+  compaction?: CompactionCapabilities;
+  snapshot?: SnapshotCapabilities;
+  stats?: StatsCapabilities;
+  modelCycle?: ModelCycleCapabilities;
+  toolExec?: ToolExecCapabilities;
+  busFrames?: BusFrameCapabilities;
+  questions?: QuestionChannelCapabilities;
+  /** 思考档位面(懒探测缺面)。 */
+  thinking?: ThinkingCapabilities;
+  /** 会话是壳要跟踪的文件(`boundSessionPath` 指向会话文件):pi/minimal 声明 true,
+   *  dsh 无(会话是 RPC 服务端 forest,壳不持文件)。「文件态」是**独立轴**,
+   *  不许用任何能力面当它的代理(曾发生,见上 ②)。 */
+  fileBacked?: boolean;
+  /** 该内核是否承接**追加系统 prompt**(`BackendCreateOptions.systemPromptPaths` /
+   *  `systemPromptTexts`)。
+   *
+   *  为什么需要这一轴(r50):这两个字段由 application 层**中性地**注入给每一个内核
+   *  (`session-store.ts` 无内核分支),但实测只有一个内核的 backend-factory 消费它们,
+   *  其余内核**静默忽略**——§1.5 唯一禁止的状态「静默缺面」(既不翻译、也不补面、也不降级)。
+   *  而且这条路是**活的**:`systemPromptPaths` 来自 `registry.systemPromptPaths()`
+   *  = 壳插件贡献的 `systemPrompts` 槽(`goody-hao` 插件正在用它),于是该插件在支持的
+   *  内核下真注入、在其它内核下静默不生效,而用户从界面上看不出任何差别。
+   *
+   *  这一轴就是 §1.5 三条出路里的第三条(**显式降级**)的前提:先把不对称变成
+   *  契约里可查询的事实,renderer 才能据此明示。取证与另两条出路见
+   *  `docs/add-new-kernel.md` §4.2 的 r49 复核结论。
+   *
+   *  ⚠ 是**成员级**语义而非"面对象":系统 prompt 的注入发生在 spawn 期(工厂层),
+   *  没有可在运行期调用的方法,所以用纯布尔(与 `fileBacked` 同范式),不造一个空对象面。 */
+  systemPrompt?: boolean;
 }
 
 /**

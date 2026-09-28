@@ -3,5 +3,6 @@
   "shell.tokensUp": "上傳 tokens",
   "shell.tokensDown": "下載 tokens",
   "shell.tpsTitle": "下載速度（tokens/秒）",
-  "shell.totalTitle": "累計 token 總消耗"
+  "shell.totalTitle": "累計 token 總消耗",
+  "shell.tpsValue": "{{value}} tokens/秒"
 }

@@ -1,12 +1,12 @@
 {
-  "minimalModels.title": "DSH-Modellkonfiguration",
+  "minimalModels.title": "Minimal-Modellkonfiguration",
   "minimalModels.desc": "minimal-Modellkonfiguration (~/.minimal/agent/models.json): Provider, deren Modelle und der Standard. API-Schlüssel liegen in einer separaten Datei, nie in models.json.",
   "minimalModels.providerId": "providerId",
   "minimalModels.displayName": "displayName",
   "minimalModels.api": "api",
   "minimalModels.baseUrl": "baseURL",
   "minimalModels.apiKey": "API Key",
-  "minimalModels.apiKeyDesc": "Der Schlüssel-Literalwert wird pro Provider in dshs Anmeldedatenspeicher (~/.dsh/.credentials.yaml) geschrieben und direkt von der dsh-Laufzeit gelesen. Er wird weder als Prozessumgebungsvariable injiziert noch in models.json/cordis.yml geschrieben.",
+  "minimalModels.apiKeyDesc": "Der Schlüssel-Literalwert wird pro Provider in die Anmeldedatei von minimal (~/.minimal/agent/.credentials.json) geschrieben und direkt von der minimal-Laufzeit gelesen. Er wird weder als Prozessumgebungsvariable injiziert noch in models.json geschrieben.",
   "minimalModels.addProvider": "+ Anbieter hinzufügen",
   "minimalModels.copyProvider": "Anbieter kopieren",
   "minimalModels.deleteProvider": "Anbieter löschen",
@@ -52,5 +52,6 @@
   "minimalModels.discoverNoBaseUrl": "Zuerst Base-URL ausfüllen",
   "minimalModels.discoverToggle": "Entdecken",
   "minimalModels.discoverCollapse": "Einklappen",
-  "minimalModels.discoverUseConfigured": "Auflistung nicht unterstützt · stattdessen {{count}} konfigurierte Modelle nutzen"
+  "minimalModels.discoverUseConfigured": "Auflistung nicht unterstützt · stattdessen {{count}} konfigurierte Modelle nutzen",
+  "settings.minimal-models": "Minimal-Modelle"
 }

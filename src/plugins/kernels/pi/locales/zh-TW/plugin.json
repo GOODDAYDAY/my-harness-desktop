@@ -1,4 +1,4 @@
 {
   "plugin.pi.displayName": "Pi 管理",
-  "plugin.pi.description": "pi 內核版本管理 + 底座配置編輯"
+  "plugin.pi.description": "pi 核心版本管理 + 核心設定編輯"
 }

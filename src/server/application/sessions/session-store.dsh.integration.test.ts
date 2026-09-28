@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { SessionStore, type BackendFactory } from "./session-store";
-import { createDshBackend } from "../../kernel/factories/kernel-factories";
+import { createDshBackend } from "../../kernel/dsh/backend/dsh-backend-factory";
 import type { SessionCatalogFactory } from "@my-harness-desktop/shared";
 
 const CLI = join(homedir(), ".my-harness-desktop-dev", "dsh", "node_modules", "@deepseek-ai", "dsh-sdk-jsonrpc-demo", "lib", "bin.js");
@@ -47,7 +47,7 @@ describe.skipIf(skippable)("SessionStore → dsh 全链路(真机)", () => {
     const catalogFactory: SessionCatalogFactory = {
       create: () => ({ kernel: "dsh", newSessionId: () => null }) as unknown as ReturnType<SessionCatalogFactory["create"]>,
     };
-    const store = new SessionStore(factory, catalogFactory, { sessionRoots: [join(homedir(), ".pi", "agent", "sessions")], ids: ["pi"] });
+    const store = new SessionStore(factory, catalogFactory, () => ({ sessionRoots: [join(homedir(), ".pi", "agent", "sessions")], ids: ["pi"] }));
 
     const gotReply = new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => resolve(false), 60_000);

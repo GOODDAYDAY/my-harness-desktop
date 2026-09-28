@@ -130,7 +130,7 @@ function CopyButton({ getText }: { getText: () => string }): ReactNode {
 
 const bodyBoxStyle: React.CSSProperties = {
   margin: "2px 0 6px", padding: "var(--spacing-sm)", maxHeight: 280, overflow: "auto",
-  background: "var(--color-bg-secondary, transparent)", border: "1px solid var(--color-border)",
+  background: "var(--color-surface, transparent)", border: "1px solid var(--color-border)",
   borderRadius: "var(--radius-sm)", fontSize: "var(--font-size-xs)",
 };
 

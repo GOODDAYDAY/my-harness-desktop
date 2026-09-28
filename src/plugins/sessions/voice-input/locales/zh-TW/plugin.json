@@ -1,0 +1,4 @@
+{
+  "plugin.voice-input.displayName": "語音輸入",
+  "plugin.voice-input.description": "語音轉文字輸入：點輸入框麥克風錄音，本機 Whisper 模型轉寫後回填文字發送。模型隨需下載、不進 git。"
+}

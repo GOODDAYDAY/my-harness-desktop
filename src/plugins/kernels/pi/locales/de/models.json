@@ -61,5 +61,7 @@
   "models.discoverNoBaseUrl": "Zuerst Base-URL ausfüllen",
   "models.discoverToggle": "Entdecken",
   "models.discoverCollapse": "Einklappen",
-  "models.discoverUseConfigured": "Auflistung nicht unterstützt · stattdessen {{count}} konfigurierte Modelle nutzen"
+  "models.discoverUseConfigured": "Auflistung nicht unterstützt · stattdessen {{count}} konfigurierte Modelle nutzen",
+  "models.devRoleIncompatible": "devRole inkompatibel",
+  "models.devRoleHint": "Manche OpenAI-kompatiblen Gateways akzeptieren nur die system-Rolle; der Kernel sendet für Reasoning-Modelle standardmäßig developer und erhält eine 400-Ablehnung — aktivieren, um auf system zurückzufallen."
 }

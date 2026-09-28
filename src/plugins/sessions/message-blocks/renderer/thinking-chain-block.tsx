@@ -137,6 +137,8 @@ export function ThinkingChainBlock({
     <div className="mb-1">
       <button
         onClick={toggleOpen}
+        // 展开/收起态此前只由 ChevronRight/ChevronDown 图标表达（视觉态有、可访问态无）
+        aria-expanded={open}
         className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent border-none cursor-pointer p-0"
       >
         {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}

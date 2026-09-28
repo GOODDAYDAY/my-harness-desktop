@@ -20,6 +20,36 @@
     ],
     "languages": [
       {
+        "id": "key-hints.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "key-hints.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "key-hints.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "key-hints.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "key-hints.hints",
+        "locale": "de",
+        "resources": "./locales/de/hints.json"
+      },
+      {
+        "id": "key-hints.hints",
+        "locale": "en",
+        "resources": "./locales/en/hints.json"
+      },
+      {
         "id": "key-hints.hints",
         "locale": "zh-CN",
         "resources": "./locales/zh-CN/hints.json"
@@ -30,14 +60,24 @@
         "resources": "./locales/zh-TW/hints.json"
       },
       {
-        "id": "key-hints.hints",
-        "locale": "en",
-        "resources": "./locales/en/hints.json"
+        "id": "key-hints.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
       },
       {
-        "id": "key-hints.hints",
-        "locale": "de",
-        "resources": "./locales/de/hints.json"
+        "id": "key-hints.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "key-hints.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "key-hints.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
       }
     ]
   }

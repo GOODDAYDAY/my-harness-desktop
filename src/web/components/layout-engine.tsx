@@ -280,6 +280,8 @@ const LayoutSplitRenderer = memo(function LayoutSplitRenderer({
   onLayoutOverride?: (sizes: number[]) => void;
 }): ReactNode {
   const [handleDraggingIdx, setHandleDraggingIdx] = useState<number | null>(null);
+  // 分隔条的可访问名走 i18n（壳不写死文案，§1.2）
+  const { t } = useTranslation();
 
   const onLayout = useCallback(
     (sizes: number[]): void => {
@@ -360,6 +362,13 @@ const LayoutSplitRenderer = memo(function LayoutSplitRenderer({
             {i < split.children.length - 1 ? (
               <PanelResizeHandle
                 key={`h-${split.id}-${i}-${childrenIds}`}
+                // 可访问名与朝向要自己给（react-resizable-panels 只给 role=separator /
+                // aria-valuenow / tabIndex —— r39 实测另三处手柄都是 label=null、orient=null）。
+                // ⚠ 朝向**按布局方向算**，不能写死：direction==="horizontal" 是左右并排 ⇒
+                //   手柄是竖条、水平移动 ⇒ aria-orientation="vertical"；vertical 则相反。
+                //   （ARIA 对 separator 的默认值是 horizontal，写死会在另一种布局下说反。）
+                aria-label={t("shell.resizePanels")}
+                aria-orientation={split.direction === "horizontal" ? "vertical" : "horizontal"}
                 onDragging={(dragging) => {
                   if (dragging) draggingCount += 1;
                   else draggingCount = Math.max(0, draggingCount - 1);

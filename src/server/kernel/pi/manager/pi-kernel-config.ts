@@ -7,7 +7,8 @@
 // 从字段名派生 key,不写死文案。
 // 依赖只向内:client 只 import core/domain(契约)+ 同层 pi-settings-store。
 import { join } from "node:path";
-import type { KernelConfigApi, KernelConfigField, PiSettingsApi } from "@my-harness-desktop/shared";
+import type { KernelConfigApi, KernelConfigField } from "@my-harness-desktop/shared";
+import type { PiSettingsApi } from "./pi-settings-contract";
 import { parseSettingsSchema, type SchemaField } from "../model/pi-settings-store";
 
 /** i18n key 派生(文案由 pi-manager 语言资源贡献)。 */
@@ -24,7 +25,13 @@ function toField(f: SchemaField): KernelConfigField {
     type: f.type,
     label: labelKey(f.key),
     description: descKey(f.key),
-    options: f.enumValues?.map((v) => ({ value: v, label: optionKey(f.key, v) })),
+    // `kind` 只在**混合字面量联合**时才有值（解析器对纯字符串联合不产出 enumValueKinds），
+    // 所以既有字段的 options 形状一字不变——加法式扩展，不影响任何既有消费方。
+    options: f.enumValues?.map((v, i) => ({
+      value: v,
+      label: optionKey(f.key, v),
+      ...(f.enumValueKinds?.[i] ? { kind: f.enumValueKinds[i] } : {}),
+    })),
     group: f.key.includes(".") ? groupKey(top) : groupKey("general"),
   };
 }

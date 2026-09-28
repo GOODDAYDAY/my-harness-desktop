@@ -32,7 +32,7 @@ function mockWindow(): void {
         list: async () => [],
         getStats: async () => null,
         getThinkingLevels: async () => [],
-        getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+        getCapabilities: async () => ({ kernel: "pi", locked: false, faces: { steering: true, retry: true, thinking: true }, thinkingCycle: true, levelsSemantics: "approximate" }),
         onEvent: (cb: EventHandler) => { eventCb = cb; return () => {}; },
         onSnapshot: () => () => {},
         onKernelEvent: () => () => {},

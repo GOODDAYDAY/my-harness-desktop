@@ -30,14 +30,49 @@
     ],
     "languages": [
       {
-        "id": "voice-input.voice",
+        "id": "voice-input.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "voice-input.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "voice-input.plugin",
         "locale": "zh-CN",
-        "resources": "./locales/zh-CN/voice.json"
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "voice-input.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "voice-input.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      },
+      {
+        "id": "voice-input.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "voice-input.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "voice-input.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
       },
       {
         "id": "voice-input.voice",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/voice.json"
+        "locale": "de",
+        "resources": "./locales/de/voice.json"
       },
       {
         "id": "voice-input.voice",
@@ -46,8 +81,13 @@
       },
       {
         "id": "voice-input.voice",
-        "locale": "de",
-        "resources": "./locales/de/voice.json"
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/voice.json"
+      },
+      {
+        "id": "voice-input.voice",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/voice.json"
       }
     ]
   }

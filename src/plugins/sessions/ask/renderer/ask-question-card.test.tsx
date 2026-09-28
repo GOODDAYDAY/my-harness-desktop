@@ -4,6 +4,8 @@
 // 结算后（result.answers）渲染 N/M answered 摘要。
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import type { Question, QuestionRequestEvent } from "@my-harness-desktop/shared";
 
@@ -13,7 +15,31 @@ const mocks = vi.hoisted(() => ({
   onQuestionCb: null as ((req: QuestionRequestEvent) => void) | null,
 }));
 
-vi.mock("@my-harness-desktop/react", () => {
+// i18n 给**真字典**：直接读插件自己的 zh-CN locale 文件，不在测试里另抄一份
+// （另抄一份必然与真实文案漂移，于是"测试绿但界面是别的字"）。
+// CLAUDE.md §5.6：`useTranslation` 用 vi.mock 给真字典，断言跑真文案、不断言 key。
+const ASK_DICT = JSON.parse(
+  readFileSync(join(__dirname, "../locales/zh-CN/ask.json"), "utf-8"),
+) as Record<string, string>;
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    // 支持 {{var}} 插值：文案带变量时（本插件暂无，但机制要在）断言才跑得通
+    t: (k: string, vars?: Record<string, unknown>): string => {
+      let v = ASK_DICT[k] ?? k;
+      for (const [name, val] of Object.entries(vars ?? {})) v = v.split(`{{${name}}}`).join(String(val));
+      return v;
+    },
+  }),
+}));
+
+vi.mock("@my-harness-desktop/react", async (importOriginal) => {
+  // ⚠ 先展开**真实模块**再覆盖需要打桩的成员（r57）。
+  //   此前只返回 `{ usePluginContext }`，于是被测组件一旦用到发布面的其它导出
+  //   （这里是收敛后新引入的 `CollapsibleCardHeader` / `ExecutionStatus`）就报
+  //   `No "X" export is defined on the mock`。与 r37 给发布面加 `Announce` 后
+  //   retry/continue 的 mock 报错同型：**替身必须与真实形状一致**，
+  //   而"一致"的可持续做法是展开真实模块，而不是每加一个导出就手抄一遍。
+  const actual = await importOriginal<Record<string, unknown>>();
   const sessions = {
     onQuestion: (cb: (req: QuestionRequestEvent) => void) => {
       mocks.onQuestionCb = cb;
@@ -22,7 +48,7 @@ vi.mock("@my-harness-desktop/react", () => {
     answerQuestion: mocks.answerQuestion,
     getPendingQuestions: mocks.getPendingQuestions,
   };
-  return { usePluginContext: () => ({ sessions }) };
+  return { ...actual, usePluginContext: () => ({ sessions }) };
 });
 
 import { AskQuestionCard } from "./ask-question-card";

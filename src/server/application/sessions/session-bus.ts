@@ -346,9 +346,13 @@ export class SessionBus {
       kernel: inheritedKernel,
     });
     this.spawnedBy.set(key, origin);
-    const adapter = this.store.getAdapter(key);
-    if (p.name && adapter) await adapter.setSessionName(p.name).catch(() => {});
+    // 命名走**中性契约**的 setSessionName(BaseBackend 第七意图),不走任何能力面。
+    // 此前这里取 `store.getAdapter(key)`(= pi 扩展面)再调 setSessionName —— 而该方法
+    // 早已提升进契约(backend.ts:127「壳经此命名,不再经 pi 扩展面」),于是无扩展面的内核
+    // 拿到 undefined、命名**静默不发生**,且 `.catch(() => {})` 把它彻底藏住:
+    // 这正是 CLAUDE.md §1.5 明禁的「静默缺面」。改走契约后每个内核都必实现,同等功能。
     const backend = this.store.getBackend(key);
+    if (p.name && backend) await backend.setSessionName(p.name).catch(() => {});
     if (p.model && backend) await backend.setModel(p.model.provider, p.model.modelId).catch(() => {});
     if (p.toolConfig) await this.store.updateHeader(sessionPath, { toolConfig: p.toolConfig }).catch(() => {});
     if (p.watch) {

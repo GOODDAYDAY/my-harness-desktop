@@ -1,0 +1,15 @@
+{
+  "ask.selectOrCustom": "Option wählen oder eine eigene Antwort eingeben.",
+  "ask.expand": "Aufklappen",
+  "ask.collapse": "Einklappen",
+  "ask.abandonGroup": "Gesamte Fragengruppe verwerfen",
+  "ask.recommended": "Empfohlen",
+  "ask.customWithOptions": "Eigene Antwort (kann neben der Auswahl stehen)",
+  "ask.customReplaces": "Eigene Antwort (Eingabe ersetzt die Auswahl)",
+  "ask.customPlaceholder": "Antwort eingeben",
+  "ask.prevQuestion": "Vorherige Frage",
+  "ask.nextQuestion": "Nächste Frage",
+  "ask.skipQuestion": "Diese Frage überspringen",
+  "ask.submitting": "Wird gesendet …",
+  "ask.submit": "Senden"
+}

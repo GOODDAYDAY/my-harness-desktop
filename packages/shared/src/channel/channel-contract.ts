@@ -50,6 +50,7 @@ export const IPC = {
     writeImages: "dialog:writeImages",
   },
   kernelExtensions: {
+    capabilities: "kernel-extensions:capabilities",
     disable: "kernel-extensions:disable",
     enable: "kernel-extensions:enable",
     install: "kernel-extensions:install",
@@ -90,6 +91,12 @@ export const IPC = {
   kernel: {
     // 内核清单(id + logo),从运行时注册表动态提供(替代 KERNEL_IDS 字面量数组)
     list: "kernel:list",
+    // 内核插件**差量重载**（装/删/改内核插件目录后，不重启应用即生效；boot-surface.md §3.6.2）。
+    // 与 plugins:reload 分工：那条重载**壳插件**的生命周期（deactivate→rediscover→activate），
+    // 这条重载**内核注册表**（按 (id,version) 差量、重跑工厂、重建投影面、清访问器缓存）。
+    // 一个内核插件同时是壳插件，所以"装了一个内核"两条都要走：壳侧挂它的 renderer/locales，
+    // 内核侧挂它的适配器与能力面。
+    reload: "kernel:reload",
   },
   // 内核版本管理中性端点(带 kernel 参数,替代原 kernel 与 dshKernel 两套独立端点)。
   kernelVersion: {
@@ -100,7 +107,7 @@ export const IPC = {
     install: "kernel-version:install",
     installProgress: "kernel-version:install-progress",
     installDone: "kernel-version:install-done",
-    fitPiExtensionAvailable: "kernel-version:fitPiExtensionAvailable",
+    toolFilterEnforced: "kernel-version:toolFilterEnforced",
   },
   misc: {
     openFile: "open-file",

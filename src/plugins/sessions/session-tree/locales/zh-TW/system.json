@@ -20,7 +20,7 @@
   "system.statAssistant": "{{n}} 助手",
   "system.statTools": "{{n}} 工具",
   "system.statTotal": "共 {{n}} 條",
-  "system.emptyTreeDesc": "發送第一條消息後,這裡會顯示會話結構;分叉後可看到分支",
+  "system.emptyTreeDesc": "發送第一條訊息後,這裡會顯示會話結構;分叉後可看到分支",
   "system.currentMark": "目前",
   "system.legendChat": "對話",
   "system.legendTool": "工具",
@@ -30,5 +30,7 @@
   "system.branchOverview": "分支概覽",
   "system.branchOverviewLoading": "分支概覽載入中…",
   "system.branchRoot": "根 {{id}}",
-  "system.branchFork": "分支 {{id}}（從 {{parent}} 第 {{boundary}} 分叉）"
+  "system.branchFork": "分支 {{id}}（從 {{parent}} 第 {{boundary}} 分叉）",
+  "system.expandNode": "展開子節點",
+  "system.collapseNode": "摺疊子節點"
 }

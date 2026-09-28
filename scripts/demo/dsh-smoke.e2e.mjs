@@ -88,7 +88,7 @@ try {
 
   // 选真实模型(按显示名匹配)。
   const itemRect = await page.evaluate((name) => {
-    const item = [...document.querySelectorAll("[role='menuitem']")].find((el) =>
+    const item = [...document.querySelectorAll("[role^='menuitem']")].find((el) =>
       (el.textContent || "").includes(name) && el.getBoundingClientRect().width > 0);
     if (!item) return null;
     const r = item.getBoundingClientRect();

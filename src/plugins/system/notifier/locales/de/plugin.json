@@ -5,5 +5,7 @@
   "settings.notifierCooldown": "Abkühlzeit",
   "settings.notifierCooldownDesc": "Mindestabstand zwischen Benachrichtigungen (Sekunden) gegen Spam",
   "notify.title": "Runde abgeschlossen",
-  "notify.body": "Der Assistent hat seine Antwort beendet"
+  "notify.body": "Der Assistent hat seine Antwort beendet",
+  "plugin.notifier.displayName": "Benachrichtigungen",
+  "plugin.notifier.description": "Sendet eine Systembenachrichtigung, wenn ein Sitzungsdurchlauf im Hintergrund abschließt (macOS / Windows / Linux)"
 }

@@ -1,0 +1,4 @@
+{
+  "plugin.read-claude-md.displayName": "CLAUDE.md automatisch laden",
+  "plugin.read-claude-md.description": "Eine mitgelieferte Kernel-Erweiterung, synchron zum Aktivierungsstatus dieses Plugins: Beim Sitzungsstart werden globale (~/.claude/) und projektbezogene (von cwd aufwärts gesuchte) CLAUDE.md-Dateien gefunden und als verborgene Nachricht in den Sitzungskontext injiziert. Deinstallieren beendet die Synchronisation."
+}

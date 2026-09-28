@@ -68,7 +68,7 @@ try {
   });
   await waitForDomIdle(page, { quietMs: 400, timeoutMs: 6000 }).catch(() => {});
   const picked = await page.evaluate(() => {
-    const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => el.getBoundingClientRect().width > 0);
+    const item = [...document.querySelectorAll("[role^='menuitem']")].find((el) => el.getBoundingClientRect().width > 0);
     if (!item) return null;
     const r = item.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2, t: (item.textContent || "").trim().slice(0, 24) };

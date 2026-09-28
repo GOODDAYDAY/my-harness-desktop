@@ -27,5 +27,19 @@
   "timeline.attachSkipped": "Skipped {{count}} non-referenceable file(s)",
   "timeline.removeFile": "Remove file",
   "timeline.image": "Image",
-  "timeline.imageLost": "Image file lost: {{src}}"
+  "timeline.imageLost": "Image file lost: {{src}}",
+  "timeline.removeImage": "Remove image",
+  "timeline.pendingImageAlt": "Image pending send",
+  "timeline.channel.focusComposer.label": "Focus composer",
+  "timeline.channel.focusComposer.desc": "Move the cursor into the session composer so you can start typing.",
+  "timeline.channel.scrollTo.label": "Scroll timeline",
+  "timeline.channel.scrollTo.desc": "payload: { position: \"top\" | \"bottom\" } scrolls to the top/bottom, or { messageId } jumps to a message.",
+  "timeline.channel.rewindRequested.label": "Open rewind",
+  "timeline.channel.rewindRequested.desc": "payload: { message, text } resends from the given message as the rewind point. Needs a message object, so it is normally not bound to a shortcut.",
+  "timeline.channel.composerAttachments.label": "Composer attachments",
+  "timeline.channel.composerAttachments.desc": "payload is an attachment list; replaces the composer's attachments.",
+  "timeline.channel.cycleModel.label": "Cycle model",
+  "timeline.channel.cycleModel.desc": "payload: { direction?: 1 | -1 } cycles through the model list (next by default).",
+  "timeline.channel.cycleThinking.label": "Cycle thinking level",
+  "timeline.channel.cycleThinking.desc": "payload: { direction?: 1 | -1 } cycles through the thinking levels (next by default)."
 }

@@ -45,7 +45,7 @@ function renderPage(provider = makeProvider(), onChange = vi.fn()) {
     <ModelConfigPage
       api={api as never}
       i18nPrefix="models"
-      capabilities={{ reasoning: true }}
+      capabilities={{ reasoning: true, developerRole: true }}
       config={{ providers: [provider], default: null } as never}
       dirty={false}
       onChange={onChange}

@@ -31,7 +31,8 @@
   "pluginManager.tag.git": "Git",
   "pluginManager.tag.conversation": "Unterhaltung",
   "pluginManager.tag.review": "Review",
-  "pluginManager.tag.dev": "Dev",
+  "pluginManager.tag.dev": "Entwicklung",
   "pluginManager.tag.productivity": "Produktivität",
-  "pluginManager.tag.insight": "Einblick"
+  "pluginManager.tag.insight": "Einblick",
+  "pluginManager.systemPromptInert": "Der aktuelle Kernel akzeptiert keinen angehängten System-Prompt, daher bleibt der systemPrompts-Beitrag dieses Plugins ohne Wirkung"
 }

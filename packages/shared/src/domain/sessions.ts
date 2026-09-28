@@ -10,7 +10,8 @@
 //     ├─ ModelApi(getModels/setModel/test/setThinkingLevel)
 //     ├─ SessionTreeApi(fork/forkFromSession/clone/getForkMessages —— 中性分叉面)
 //     └─ BashApi(run/abortBash —— 需声明 rpc:bash 权限)
-//   PiExtensions(pi 内核专属扩展面 §7.6:steer/followUp/abortRetry/cycleModel/
+//   （已退役的 PiExtensions 袋子曾在此列为一项;12 个方法现按语义域归位到
+//   MessagingApi/ModelApi/SessionsApi,见本文件下方退役说明）//   旧文:steer/followUp/abortRetry/cycleModel/
 //     getThinkingLevels/cycleThinkingLevel/compact/setAutoCompaction/setAutoRetry/
 //     exportHtml/getLastAssistantText/setSteeringMode/setFollowUpMode
 //     —— 经 capabilities.extensions 探测,有则用无则降级)
@@ -157,8 +158,19 @@ export interface SessionRole {
 }
 
 /** 角色卡 → system prompt 文本(纯函数,零依赖)。只做结构化字段 → 可读文本的拼接,
- *  不含任何业务分支(圆心纪律)。spawn 时内联作 --append-system-prompt 的值注入——
- *  内核 resolvePromptInput 对非文件路径参数当作文本本身,无需落文件。 */
+ *  不含任何业务分支(圆心纪律)。
+ *
+ *  ⚠ 圆心**不描述注入机制**(r49 修):此前这里写着「spawn 时内联作 --append-system-prompt 的值注入」
+ *  ——那是某一个内核的 CLI 旗标,属于内核专属细节,写在圆心违反 §7.1 铁律一。
+ *  注入方式由各内核的适配器自己决定(§1.5 适配器翻译);圆心只产出中性文本。
+ *
+ *  ⚠ 已知的**契约不对称**(docs/add-new-kernel.md §4.2 预言的形态,r49 实测确认):
+ *  本函数与 `systemPromptPaths` 一起经 `BackendCreateOptions` 中性地下发给**每一个**内核,
+ *  但实测只有一个内核的 backend-factory 消费它们,dsh / minimal / probe4 三者**静默忽略**。
+ *  这是 §1.5 唯一禁止的状态「静默缺面」(既不翻译、也不补面、也不降级)。
+ *  当前无 UI 设置角色卡,所以没有用户可见症状;但 `systemPromptPaths` 这条路是**活的**
+ *  (`goody-hao` 插件贡献 systemPrompts 槽),于是该插件在 pi 下生效、在其它内核下静默不生效。
+ *  正确修法见 docs/add-new-kernel.md §4.2 的 r49 复核结论。 */
 export function roleToPrompt(role: SessionRole): string {
   const lines: string[] = [`你是${role.name ?? "一个指定角色"}。`];
   if (role.persona) lines.push("", "## 人设", role.persona);
@@ -262,6 +274,11 @@ export interface RpcOps {
   getStats(): Promise<SessionStats>;
 }
 
+/** 并发模式：全部并发 / 一次一条。
+ *  **单源在此**（不在 `backend.ts` 另写一份）：`SteeringCapabilities` 与 `MessagingApi` 共用它，
+ *  而 `backend.ts` 已单向 import 本文件，反过来放会造出圆心内部的循环依赖。 */
+export type ConcurrencyMode = "all" | "one-at-a-time";
+
 /** 消息发送——继承 RpcOps。对激活会话发消息的各种变体。 */
 export interface MessagingApi extends RpcOps {
   /** 发一条用户消息(唯一会起进程的入口)。resolve 只代表内核接受,输出靠事件流。
@@ -270,8 +287,25 @@ export interface MessagingApi extends RpcOps {
    *  prefs:会话级模型/思考强度偏好(可选)。§atomic-send:回灌编排收进用例层,
    *  renderer 拼一个 SessionModelPrefs 传下来,main 一次编排「模型对齐→强度对齐→发消息」。 */
   prompt(text: string, images?: ImageInput[], display?: DisplayMeta, prefs?: SessionModelPrefs): Promise<void>;
-  /** 中断当前生成(内核 abort;pi 未启动时静默)。 */
+  /** 中断当前生成(内核 abort;内核未启动时静默)。 */
   abort(): Promise<void>;
+
+  // ---- 多路并发（能力轴 `steering`）：无此面的内核调用会抛「当前内核不支持<轴名>」，
+  //      壳插件应先查 `capabilities.faces.steering` 再决定入口显隐（§7.6 显式降级）----
+  /** 中途插入转向消息(steer 档:立即影响当前回合)。 */
+  steer(text: string, images?: ImageInput[]): Promise<void>;
+  /** 排队消息(followUp 档:当前回合结束后处理)。 */
+  followUp(text: string, images?: ImageInput[]): Promise<void>;
+  /** 设置 steer 排队模式。 */
+  setSteeringMode(mode: ConcurrencyMode): Promise<void>;
+  /** 设置 followUp 排队模式。 */
+  setFollowUpMode(mode: ConcurrencyMode): Promise<void>;
+
+  // ---- 重试（能力轴 `retry`）----
+  /** 中止正在进行的自动重试。 */
+  abortRetry(): Promise<void>;
+  /** 设置自动重试开关。 */
+  setAutoRetry(enabled: boolean): Promise<void>;
 }
 
 /** 模型连通性测试结果:ok 即通,不通带错误原因。 */
@@ -292,6 +326,18 @@ export interface ModelApi extends RpcOps {
   test(cwd: string, provider: string, modelId: string, kernel: KernelId): Promise<ModelTestResult>;
   /** 切思考强度(内核 set_thinking_level)。 */
   setThinkingLevel(level: string): Promise<void>;
+
+  // ---- 轮转与档位清单（能力轴 `modelCycle` / `thinking`）----
+  /** 快捷循环切换模型。⚠ `getModels` 曾同时存在于本接口与已退役的 `PiExtensions`
+   *  （同一概念两份定义，§1.3 违规）；本接口是唯一定义处。 */
+  cycleModel(): Promise<void>;
+  /** 可选思考强度清单。**空清单怎么解读由内核自报的 `levelsSemantics` 决定**：
+   *  `precise`=该模型确无档位，如实不渲染；`approximate`=全局表且可能因 RPC 形状不识别而返空，
+   *  渲染层可回落已知默认。见圆心 `ThinkingCapabilities.levelsSemantics`。 */
+  getThinkingLevels(): Promise<string[]>;
+  /** 快捷循环切换思考强度。成员级能力：有清单面不代表能轮转
+   *  （见 `SessionCapabilities.thinkingCycle`）。 */
+  cycleThinkingLevel(): Promise<void>;
 }
 
 /** 分叉选项(派生行为的可调面)。
@@ -341,35 +387,17 @@ export interface SessionTreeApi extends RpcOps {
   getForkMessages(entryId: string): Promise<NeutralMessage[]>;
 }
 
-/** pi 内核专属扩展面(§7.6 内核扩展面):dsh 无此面,壳插件经 capabilities.extensions
- *  探测「有则用、无则降级」。这些方法都是 pi 命令的投影,返回中性类型,pi 协议翻译
- *  收进 client/pi。终态随「会话身份中性化」进一步下沉,此处是插件可引用的 pi 扩展面契约。 */
-export interface PiExtensions {
-  /** 中途插入转向消息(steer 模式)。 */
-  steer(text: string, images?: ImageInput[]): Promise<void>;
-  /** 排队消息(follow_up 模式)。 */
-  followUp(text: string, images?: ImageInput[]): Promise<void>;
-  /** 中止正在进行的自动重试。 */
-  abortRetry(): Promise<void>;
-  /** 快捷循环切换模型(内核 cycle_model)。 */
-  cycleModel(): Promise<void>;
-  /** 可选思考强度清单(内核 get_available_thinking_levels)。 */
-  getThinkingLevels(): Promise<string[]>;
-  /** 快捷循环切换思考强度(内核 cycle_thinking_level)。 */
-  cycleThinkingLevel(): Promise<void>;
-  /** 压缩上下文(内核 compact)。 */
-  compact(customInstructions?: string): Promise<void>;
-  /** 设置自动压缩开关(内核 set_auto_compaction)。 */
-  setAutoCompaction(enabled: boolean): Promise<void>;
-  /** 设置自动重试开关(内核 set_auto_retry)。 */
-  setAutoRetry(enabled: boolean): Promise<void>;
-  /** 取最后一条 assistant 回复的纯文本(内核 get_last_assistant_text)。 */
-  getLastAssistantText(): Promise<string>;
-  /** 设置 steer 排队模式(内核 set_steering_mode)。 */
-  setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void>;
-  /** 设置 follow_up 排队模式(内核 set_follow_up_mode)。 */
-  setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<void>;
-}
+// ⚠ 此处曾有 `export interface PiExtensions`（12 个方法）——**已退役并拆散归位**：
+//   steer / followUp / setSteeringMode / setFollowUpMode / abortRetry / setAutoRetry → `MessagingApi`（发送域）
+//   cycleModel / getThinkingLevels / cycleThinkingLevel                             → `ModelApi`（模型域）
+//   compact / setAutoCompaction / getLastAssistantText                              → `SessionsApi`（会话域）
+//   getModels                                                                       → **删除**（`ModelApi.getModels` 已有，是重复定义）
+// 退役理由三条：① 接口名与它在 `PluginContext` / `SessionsApi` 上的字段名都是内核名（`pi`），
+// 违反「核心代码零内核名字眼」；② 它把 12 个分属三个域的方法塞进一个「内核专属」袋子，
+// 袋子边界是**哪个内核实现的**而不是**语义属哪一域**，于是同一概念在两个接口里各定义一次
+// （`getModels`）；③ 可用性本应按能力轴逐轴探测（`capabilities.faces.<轴>`），袋子形状逼着
+// 壳与插件把 12 件事当一个 bit 看。归位后每个方法与它的域兄弟同处，加内核时本文件零改动
+// （面是可选的，缺面由壳逐轴降级）。
 
 /** Bash 执行——继承 RpcOps。需声明 rpc:bash 权限。
  *  在内核进程上下文执行 bash 命令,等价 RCE,独立权限门控。 */
@@ -451,9 +479,14 @@ export interface SessionsApi {
   deleteBookmark(snapshotId: string): Promise<void>;
   /** 跨内核切换(§3.6):把激活会话切到目标内核(五步编排)。dsh 侧 seed 未接线时降级报错。 */
   switchKernel(target: KernelId): Promise<void>;
-  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensions 探测「有则用、无则降级」。
-   *  dsh 下这些入口隐藏/置灰,调用抛「当前内核不支持」。 */
-  pi: PiExtensions;
+  // ---- 上下文压缩与内容读取（能力轴 `compaction` / `snapshot`）----
+  /** 压缩上下文。无 `compaction` 面的内核 → 抛「当前内核不支持手动压缩」；壳插件据
+   *  `capabilities.faces.compaction` 决定入口显隐（§7.6 显式降级，不静默）。 */
+  compact(customInstructions?: string): Promise<void>;
+  /** 设置自动压缩开关。 */
+  setAutoCompaction(enabled: boolean): Promise<void>;
+  /** 取最后一条 assistant 回复的纯文本（无则空串）。采集类插件的主源，读文件兜底在调用方。 */
+  getLastAssistantText(): Promise<string>;
 }
 
 /** 项目目录 fs(permissions: "fs:project";读写均经 assertProjectPath 圈禁到项目根)。

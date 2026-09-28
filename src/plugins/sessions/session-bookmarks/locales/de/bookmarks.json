@@ -20,7 +20,7 @@
   "bookmarks.errorEntryNotFound": "Diese entryId existiert nicht in dieser Sitzung",
   "bookmarks.validating": "Wird geprüft...",
   "bookmarks.add": "Hinzufügen",
-  "bookmarks.emptyPreview": "(empty)",
+  "bookmarks.emptyPreview": "(leer)",
   "bookmarks.errorNotForkable": "Die Lesezeichen-Markierung ist keine Assistentennachricht; Fork nicht möglich",
   "bookmarks.forkCreated": "Neue Sitzung aus Lesezeichen „{{label}}“ erstellt",
   "bookmarks.deleteFailed": "Lesezeichen konnte nicht gelöscht werden. Bitte erneut versuchen"

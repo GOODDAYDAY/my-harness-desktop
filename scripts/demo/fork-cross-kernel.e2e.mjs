@@ -139,7 +139,7 @@ try {
     const menu = document.querySelector("[role='menu']");
     return {
       tabs: [...(menu?.querySelectorAll("button") ?? [])].map((b) => `${b.textContent.trim()}:${b.disabled ? "disabled" : "ok"}`),
-      items: [...(menu?.querySelectorAll("[role='menuitem']") ?? [])].map((m) => `${m.textContent.trim().slice(0, 20)}:${(m.getAttribute("aria-disabled") ?? "ok")}`),
+      items: [...(menu?.querySelectorAll("[role^='menuitem']") ?? [])].map((m) => `${m.textContent.trim().slice(0, 20)}:${(m.getAttribute("aria-disabled") ?? "ok")}`),
     };
   });
   console.log("  诊断 menu:", JSON.stringify(menuDiag).slice(0, 500));
@@ -151,7 +151,7 @@ try {
   });
   await new Promise((r) => setTimeout(r, 600));
   const dshModelPicked = await page.evaluate(() => {
-    const items = [...document.querySelectorAll("[role='menuitem']")].filter((m) => m.getBoundingClientRect().width > 0 && (m.getAttribute("aria-disabled") ?? "") !== "true");
+    const items = [...document.querySelectorAll("[role^='menuitem']")].filter((m) => m.getBoundingClientRect().width > 0 && (m.getAttribute("aria-disabled") ?? "") !== "true");
     const item = items.find((m) => /ds|deepseek|kimi|qwen/i.test(m.textContent || ""));
     if (!item) return false;
     item.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));

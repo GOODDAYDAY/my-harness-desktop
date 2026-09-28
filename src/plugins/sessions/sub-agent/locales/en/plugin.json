@@ -1,0 +1,4 @@
+{
+  "plugin.sub-agent.displayName": "Sub-agent",
+  "plugin.sub-agent.description": "Sub-agent orchestration: dispatch, parallel fan-out, war room, plus parent/child ownership and lifecycle management"
+}

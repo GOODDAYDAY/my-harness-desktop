@@ -6,5 +6,7 @@
   "keyhints.settings.backquoteHint": "When off, ` is a normal character everywhere; only combo-key triggers remain.",
   "keyhints.settings.shortcut": "Combo-key trigger",
   "keyhints.settings.shortcutDesc": "Guide mode can also be triggered by a combo, rebindable on the Shortcuts settings page.",
-  "keyhints.settings.shortcutHint": "Event keyhints:toggle, default binding mod+shift+'. In guide mode press letters to click, Esc to exit."
+  "keyhints.settings.shortcutHint": "Event keyhints:toggle, default binding mod+shift+'. In guide mode press letters to click, Esc to exit.",
+  "keyhints.channel.toggle.label": "Toggle key-hint mode",
+  "keyhints.channel.toggle.desc": "Enter/leave hint mode: every clickable element is highlighted with a letter badge, and pressing that letter triggers the click."
 }

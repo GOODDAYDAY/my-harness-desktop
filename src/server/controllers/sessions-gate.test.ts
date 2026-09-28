@@ -15,7 +15,7 @@
 //      `~/.pi/agent-evil/…` 会被 `startsWith("~/.pi/agent")` 放行 ✗ —— 这是最容易漏的一处)
 //   ② **门被装上**:经 `copySession` 通道走一遍 —— 该通道此前无门控,现在 src/target 都要过 ✓
 //
-// 注:内核配置根从 `paths.piAgentDir`（写死 pi）改成了 `ctx.kernelConfigRoots`（注册表收集）。
+// 注:内核配置根从 `paths.piAgentDir`（写死 pi）改成了 `ctx.kernelConfigRoots()`（注册表收集，函数形状）。
 // 断言里的 PI_DIR 仍是那个具体目录 —— 它现在是"某个已注册内核报上来的配置根"的一个实例。
 import { describe, it, expect, beforeEach } from "vitest";
 
@@ -36,7 +36,8 @@ function ctxWith(): Record<string, unknown> {
       },
       apply: () => rec(p),                                    // await 后仍可读属性
     });
-  return { kernelConfigRoots: [PI_DIR], paths: { myHarnessDesktopDir: MHD_DIR }, sessionStore: rec("store") };
+  // kernelConfigRoots 是**函数形状**（§3.6.3 活访问器）：夹具要跟真形状，否则测的不是生产路径。
+  return { kernelConfigRoots: () => [PI_DIR], paths: { myHarnessDesktopDir: MHD_DIR }, sessionStore: rec("store") };
 }
 
 const gateway = { register: (ch: string, h: (...a: unknown[]) => unknown) => { handlers.set(ch, h); }, broadcast: () => {} };

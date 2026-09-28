@@ -4,7 +4,7 @@ import type {
   LayoutApi,
 } from "@my-harness-desktop/shared";
 import type {
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, BusApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
@@ -19,6 +19,11 @@ import { usePluginId } from "./plugin-id-context";
 import { eventBus, type PluginEventsApi } from "./event-bus";
 import { useLayoutStore } from "../../../src/web/stores/layout-store";
 import { promptSession } from "../../../src/web/stores/session-store";
+// r82：config.set 的框架级失败兜底需要两样非组件能力——
+//   · announceTransient：Announce 的命令式孪生（同一宿主、同一 DOM 形态）
+//   · i18next 单例：在 useMemo 里查文案（用 hook 的 t 会把语言切换塞进依赖数组）
+import { announceTransient } from "./widgets/live-region";
+import { i18next } from "../../../src/web/app/i18n-init";
 
 export function usePluginContext(): PluginContext {
   const pluginId = usePluginId();
@@ -26,7 +31,25 @@ export function usePluginContext(): PluginContext {
 
   const config: PluginConfigApi = useMemo(() => ({
     get: <T,>(key: string) => window.kernel.config.get<T>(pluginId, key),
-    set: <T,>(key: string, value: T, opts?: { scope?: "project" | "global" }) => window.kernel.config.set(pluginId, key, value, opts),
+    // ⚠ 框架级兜底（r82）：`config.set` 失败此前是**静默**的——服务端 handler 抛错时
+    //   gateway 转成 {ok:false,error:{code:"HANDLER_ERROR"}}、transport 据此 reject
+    //   （ws-transport.ts:102），而 9 处调用点既不在 try 内也无 .catch ⇒ 用户的设置
+    //   界面上已翻、实际没落盘，且一点提示都没有（§7.6 禁止的静默失败）。
+    //   收进框架一处（§3.3：9 个调用方的处理逻辑大同小异 ⇒ 该收进框架，而不是各写一遍）：
+    //   失败时用 announceTransient 播报（错误 ⇒ role=alert 可打断），并**保持 reject 语义**
+    //   （已经自己 try/catch 的调用方行为不变）。
+    set: <T,>(key: string, value: T, opts?: { scope?: "project" | "global" }) =>
+      window.kernel.config.set(pluginId, key, value, opts).catch((err: unknown) => {
+        // 播报用 role=alert（错误可打断）；随后**重新抛出**，保持原有 reject 语义
+        // （已经自己 try/catch 的调用方行为完全不变）。
+        // 文案走 i18next 单例（不是 hook 里的 t）：这段在 useMemo 里构造，
+        // 依赖数组只有 pluginId，把 t 塞进来会让每次语言切换都重建整个 config 面。
+        announceTransient(
+          i18next.t("shell.configWriteFailed", { detail: (err as Error)?.message ?? String(err) }),
+          "error",
+        );
+        throw err;
+      }),
     all: () => window.kernel.config.all(pluginId),
     getScope: (scope: "project" | "global") => window.kernel.config.getScope(pluginId, scope),
   }), [pluginId]);
@@ -37,20 +60,6 @@ export function usePluginContext(): PluginContext {
     list: () => window.kernel.i18n.list(),
   }), [t, i18n.language]);
 
-  const pi: PiExtensions = useMemo(() => ({
-    steer: (text, images?: ImageInput[]) => window.kernel.sessions.pi.steer(text, images),
-    followUp: (text, images?: ImageInput[]) => window.kernel.sessions.pi.followUp(text, images),
-    abortRetry: () => window.kernel.sessions.pi.abortRetry(),
-    cycleModel: () => window.kernel.sessions.pi.cycleModel(),
-    getThinkingLevels: () => window.kernel.sessions.pi.getThinkingLevels(),
-    cycleThinkingLevel: () => window.kernel.sessions.pi.cycleThinkingLevel(),
-    compact: (customInstructions?) => window.kernel.sessions.pi.compact(customInstructions),
-    setAutoCompaction: (enabled) => window.kernel.sessions.pi.setAutoCompaction(enabled),
-    setAutoRetry: (enabled) => window.kernel.sessions.pi.setAutoRetry(enabled),
-    getLastAssistantText: () => window.kernel.sessions.pi.getLastAssistantText(),
-    setSteeringMode: (mode) => window.kernel.sessions.pi.setSteeringMode(mode),
-    setFollowUpMode: (mode) => window.kernel.sessions.pi.setFollowUpMode(mode),
-  }), []);
   const sessions: SessionsApi = useMemo(() => ({
     getSnapshot: () => window.kernel.sessions.getSnapshot() as Promise<SyncSnapshot>,
     sync: () => window.kernel.sessions.sync() as Promise<SyncSnapshot>,
@@ -63,6 +72,10 @@ export function usePluginContext(): PluginContext {
     onSnapshot: (cb) => window.kernel.sessions.onSnapshot((s) => cb(s as SyncSnapshot)),
     list: (cwd) => window.kernel.sessions.list(cwd) as Promise<SessionInfo[]>,
     rawFilePaths: (sessionId) => window.kernel.sessions.rawFilePaths(sessionId),
+    // 压缩与内容读取（曾在 `ctx.pi` 袋子里；归位到 sessions，能力轴 compaction/snapshot）
+    compact: (customInstructions?) => window.kernel.sessions.compact(customInstructions),
+    setAutoCompaction: (enabled) => window.kernel.sessions.setAutoCompaction(enabled),
+    getLastAssistantText: () => window.kernel.sessions.getLastAssistantText(),
     openSession: (sessionPath) =>
       // domain 契约已对齐真实返回值(SessionDetail|null),不再在边界处裁剪丢 info
       window.kernel.sessions.openSession(sessionPath) as Promise<SessionDetail | null>,
@@ -86,7 +99,6 @@ export function usePluginContext(): PluginContext {
     resume: (snapshotId) => window.kernel.sessions.resume(snapshotId) as Promise<string>,
     deleteBookmark: (snapshotId) => window.kernel.sessions.deleteBookmark(snapshotId) as Promise<void>,
     switchKernel: (target) => window.kernel.sessions.switchKernel(target),
-    pi,
   }), []);
 
   const messaging: MessagingApi = useMemo(() => ({
@@ -94,6 +106,13 @@ export function usePluginContext(): PluginContext {
     // 不过输入框管线(无乐观回显/待发队列)。goal 续跑等插件自驱动发送走这里。
     prompt: (text, images?: ImageInput[], display?, prefs?) => promptSession(text, images, display, prefs),
     abort: () => window.kernel.sessions.abort(),
+    // 多路并发 + 重试（曾在 `ctx.pi` 袋子里；按语义域归位到 messaging，能力轴 steering/retry）
+    steer: (text, images?: ImageInput[]) => window.kernel.sessions.steer(text, images),
+    followUp: (text, images?: ImageInput[]) => window.kernel.sessions.followUp(text, images),
+    setSteeringMode: (mode) => window.kernel.sessions.setSteeringMode(mode),
+    setFollowUpMode: (mode) => window.kernel.sessions.setFollowUpMode(mode),
+    abortRetry: () => window.kernel.sessions.abortRetry(),
+    setAutoRetry: (enabled) => window.kernel.sessions.setAutoRetry(enabled),
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
@@ -102,6 +121,10 @@ export function usePluginContext(): PluginContext {
     setModel: (provider, modelId, kernel) => window.kernel.sessions.setModel(provider, modelId, kernel),
     test: (cwd, provider, modelId, kernel) => window.kernel.sessions.testModel(cwd, provider, modelId, kernel),
     setThinkingLevel: (level) => window.kernel.sessions.setThinkingLevel(level),
+    // 轮转与档位清单（曾在 `ctx.pi` 袋子里；归位到 models，能力轴 modelCycle/thinking）
+    cycleModel: () => window.kernel.sessions.cycleModel(),
+    getThinkingLevels: () => window.kernel.sessions.getThinkingLevels(),
+    cycleThinkingLevel: () => window.kernel.sessions.cycleThinkingLevel(),
     getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
   }), []);
 
@@ -185,7 +208,7 @@ export function usePluginContext(): PluginContext {
   }), [pluginId]);
 
   return useMemo(() => ({
-    config, sessions, messaging, models, tree, pi,
+    config, sessions, messaging, models, tree,
     i18n: i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout,
     prefs: window.kernel.prefs,
     themes: window.kernel.themes,
@@ -204,5 +227,5 @@ export function usePluginContext(): PluginContext {
     appInfo: { get: () => window.kernel.app.info(), restart: () => window.kernel.app.restart() },
     notify: { show: (opts) => window.kernel.notify.show(opts) },
     window: { isFocused: () => window.kernel.window.isFocused() },
-  }), [config, sessions, messaging, models, tree, pi, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout]);
+  }), [config, sessions, messaging, models, tree, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout]);
 }

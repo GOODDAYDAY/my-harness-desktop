@@ -5,7 +5,7 @@
 // cliPath=dev 源码/pkg resources)由工厂闭包从 KernelPluginContext 解析,不进 KernelPlugin 契约。
 
 import { join, resolve } from "node:path";
-import { createMinimalBackend, createMinimalCatalog, minimalSeedSession } from "../factories/kernel-factories";
+import { createMinimalBackend, createMinimalCatalog, minimalSeedSession } from "./backend/minimal-backend-factory";
 import { MinimalConfigSource } from "./manager/minimal-config-source";
 import { MinimalModelSource, MinimalModelsApi } from "./manager/minimal-models";
 import { MinimalConfigApi } from "./manager/minimal-config";
@@ -27,6 +27,12 @@ function minimalVersionApi(): KernelVersionApi {
       Promise.resolve({ versions: [], latest: null }),
     install: (): Promise<{ ok: boolean; error: string | null }> =>
       Promise.resolve({ ok: false, error: "minimal 是内置内核，不支持安装/升级" }),
+    // 工具系统是 minimal 的**本体**不是扩展（docs/design/minimal-kernel.md §5.6.1：
+    // 适配器把壳下发的 enabledToolIds 翻译成 minimal 自己的工具集/开关语义；§5.7.1：
+    // 自带档位门控 + per-tool 超时）。所以它**能**强制过滤，答案恒 true。
+    // ⚠ 别改回"探测某个扩展装没装"——那会让 minimal 被判为不能过滤，于是每次发送都被拼上
+    // 一段冗余的散文限制说明（实测：echo 内核把它原样回显进时间线，弄坏 DOM 对账）。
+    toolFilterEnforced: (): Promise<boolean> => Promise.resolve(true),
   };
 }
 

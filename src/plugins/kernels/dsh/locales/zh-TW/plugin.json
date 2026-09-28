@@ -1,0 +1,4 @@
+{
+  "plugin.dsh.displayName": "DSH Manager",
+  "plugin.dsh.description": "dsh 核心管理：核心版本 + 設定 + 拓展 + 模型（一個入口三個 TAB，與 PI 同級）"
+}

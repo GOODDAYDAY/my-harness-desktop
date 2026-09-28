@@ -111,8 +111,13 @@ export interface MainViewContribution {
  *  左栏分组(对话/项目等)以可折叠 section 形式挂在左栏,order 小的在上。 */
 export interface SidebarContribution {
   id: string;
-  /** 分组标题(如 "对话"/"项目")。 */
-  title: string;
+  // ⚠ 此处曾有 `title: string`（"分组标题，如 对话/项目"），已删除——它是**死字段**：
+  // 经 registry.sidebarItems() → IPC slots:sidebar → sidebar.tsx 的 setItems 一路透传，
+  // 但 sidebar.tsx **从未读取** item.title（分组标题由各插件自己渲染
+  // `<Section title={t("sessions.title")}>`，那才是翻译过的真实来源；实测 DOM 显示「会话」
+  // 而 manifest 写的是「对话」，两者不符正好证明 manifest 这份没被用）。
+  // 留着它的危害是实际的：它让"侧栏分组标题"看起来可翻译，于是审计按它去查四语译文，
+  // 得到 3 条假发现（见 src/contribution-i18n.test.ts）。
   /** renderer 侧组件名,经 registerSidebarComponent 注册后按名查。 */
   component: string;
   /** 排序,小的在上;缺省 100。 */
@@ -201,7 +206,7 @@ export interface MessageActionContribution {
 }
 
 /** 会话分组槽(sessionGroupings):插件声明会话分组策略——
- *  sessions-list 消费方查槽,把 custom[parentPathKey] 存在的 session 嵌套在父会话下。
+ *  sessions-list 消费方查槽,把 custom[parentPathField] 存在的 session 嵌套在父会话下。
  *  声明式贡献 + 消费方查槽(三段式,与 fileActions 同范式:domain 契约 → registry 注册 →
  *  renderer hook 查询 → sessions-list buildGroups 消费)。
  *  双向解耦:sessions-list 不认识贡献方(清单来自内核注册表),贡献方不认识 sessions-list。 */
@@ -209,7 +214,8 @@ export interface SessionGroupingContribution {
   /** 分组策略 id(插件内唯一)。 */
   id: string;
   /** custom 域 key,值=父会话路径(匹配 SessionInfo.path);有此 key 的 session 作为子项嵌套在父会话下。 */
-  parentPathKey: string;
+  /** session.custom 里的**数据字段名**（存父会话路径），不是 i18n 键——见 customField 上的说明。 */
+  parentPathField: string;
   /** 子行 i18n label key(缩进行标题,如 "subagent.childLabel");不提供则不显子分组标题。 */
   childLabelKey?: string;
   /** 子行 lucide 图标名(如 "git-fork");不提供则用默认缩进图标。 */
@@ -219,14 +225,22 @@ export interface SessionGroupingContribution {
 }
 
 /** Composer 策略槽(composerPolicies):插件声明输入框条件渲染策略——
- *  timeline 消费方查槽,session.custom[customKey] 存在时把输入框换为只读提示条。
+ *  timeline 消费方查槽,session.custom[customField] 存在时把输入框换为只读提示条。
  *  声明式 + 数据驱动(无需函数:条件是 custom 域 key 的存在性,提示文案走 i18n)。
  *  三段式:domain 契约 → registry 注册 → renderer hook 查询 → timeline 渲染前查表。 */
 export interface ComposerPolicyContribution {
   /** 策略 id(插件内唯一)。 */
   id: string;
   /** custom 域 key,存在即触发只读(数据驱动:key 在 session.custom 里有值就匹配)。 */
-  customKey: string;
+  // ⚠ 是 session.custom 里的**数据字段名**，不是 i18n 键（r65 从 customKey 改名而来）。
+  //   改名理由：本契约里 `*Key` 后缀原本有两种含义——i18n 键（labelKey / titleKey / descKey /
+  //   childLabelKey / readonlyMessageKey）与数据键（customKey / parentPathKey）。这个歧义
+  //   实测在**一轮里骗了两次**自动化审计：把数据键当成 i18n 键去查四语言，报出根本不存在的
+  //   "缺失译文"（subagent.parent_session 被报缺 zh-CN/zh-TW/en/de 四条）。
+  //   改名后规则变干净：**契约里 `*Key` 一律指 i18n 键、数据字段一律用 `*Field`**，
+  //   于是"所有 `*Key` 都必须在四语言里存在"成为一条可执行的守卫
+  //   （见 src/manifest-i18n-keys.test.ts）。
+  customField: string;
   /** 只读提示文案 i18n key(如 "subagent.composerReadonly");不提供则用默认文案。 */
   readonlyMessageKey?: string;
   /** 排序,小的优先;缺省 100。多个策略同时命中时取 order 最小的。 */

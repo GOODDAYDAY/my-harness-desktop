@@ -1,5 +1,13 @@
 # dsh 运行时思考深度切换——补面设计
 
+> ⚠️ **本文为设计记录（快照），不是现行架构描述。** 其中提到的
+> `BackendExtensions` / `capabilities.extensions` / `asPi()` / `piSend()` / `kernel-factories`
+> 等符号**已退役**：opaque 扩展面桶已拆成圆心的**逐轴中性能力面** `BackendCapabilities`
+> （steering / retry / compaction / snapshot / stats / modelCycle / toolExec / busFrames /
+> questions / thinking + fileBacked），壳改为按轴探测（`SessionStore.faceOf` / `viaFace`），
+> `kernel/pi/backend/pi-backend-extensions.ts` 与 `kernel/factories/` 已删除。
+> 现行描述见 `CLAUDE.md` §6.2/§6.3 与 `docs/add-new-kernel.md` §1.3。
+
 > 状态：**已实施**（2026-09-08 `a79a3e76` 全量落地）。前置事实已全部实测（2026-09-07，kernel-thinking-matrix e2e + dsh 源码对读）。
 >
 > 落地与验证：① `src/server/kernel/dsh/extension/dsh-extension/index.mjs` 给 `handleRequest` 补丁拦截 `session/setThinkingLevel`（经 `ctx.get("llm").resolveCallConfig` 校验）+ `session/getThinkingLevels`（`resolveModelInfo(...).reasoning?.efforts`），并 `installModelSelection(agent.ctx, ref)` 原地热切 `{provider, model, reasoningEffort}`；② `DshBackend.setThinkingLevel` override（懒探测缺面 no-op + 未知会话 stash `pendingThinkingLevel`）+ `capabilities.thinking.getThinkingLevels`；③ 配套 §5：`dsh-config-source.ts` 的 `setProvider` 写 `reasoningEfforts`（`off:null/low:low/medium:medium/high:high`）+ `toModelSpec` 读回 `reasoning:true`；④ 呈现面：composer `levels = capabilities.thinking ? thinkingLevels : []`（dsh 档位清单来自 `getThinkingLevels`，非 pi 的 DEFAULT_LEVELS）。

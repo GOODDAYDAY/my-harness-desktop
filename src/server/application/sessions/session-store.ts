@@ -12,9 +12,8 @@
 // application 依赖 gateway(type)+ domain,不依赖 shell。
 import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
-import type { BaseBackend, BackendFactory, LineageTree, SessionCatalog, SessionCatalogFactory } from "@my-harness-desktop/shared";
+import type { BaseBackend, BackendCapabilities, BackendFactory, LineageTree, SessionCatalog, SessionCatalogFactory } from "@my-harness-desktop/shared";
 import { BOOKMARK_SNAPSHOT_VERSION, materializeLineagePrefix, type BookmarkSnapshot } from "@my-harness-desktop/shared";
-import type { BackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions";
 import { type KernelId } from "@my-harness-desktop/shared";
 import type { NeutralSession, NeutralModelRef, DisplayMeta, NeutralEntry, NeutralSessionHeader, NeutralChange } from "@my-harness-desktop/shared";
 import { neutralEntryId, sortLineagesTopologically, resolveForkBoundaries, emptyNeutralSession, appendNeutralEntry, appendNeutralEntryWithHeader, derivedHeaderFromSession, backfillUserAuthority, backfillKernelEntryId, lineageContent, assembleSeedProjection, cloneNeutralSession, resolveBoundaryEntryId, resolveForkBoundary, reprojectEntries, neutralMessagesOfSession, neutralSessionToTree } from "@my-harness-desktop/shared";
@@ -24,9 +23,10 @@ import { PendingQuestionStore } from "./pending-question-store";
 import type { SessionEvent, SyncSnapshot, ModelInfo, SessionStats, ProjectStats, NeutralMessage, TurnUsage, TreeNode } from "@my-harness-desktop/shared";
 import { isVisibleMessage, deduplicateAdjacent, messageUsageOf, resolveContextUsage, sessionEntryToNeutral, shellSessionStats } from "@my-harness-desktop/shared";
 import type { KernelEvent, QuestionRequestEvent, QuestionAnswer, SessionCapabilities, PendingQuestionRecord, Question, ToolResultWriteback } from "@my-harness-desktop/shared";
+import { projectCapabilityFlags } from "@my-harness-desktop/shared";
 import type { SessionStoreForRestart } from "@my-harness-desktop/shared";
 import type {
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, BashApi,
   ImageInput, BashResult, SessionInfo, HeaderPatch, SessionDetail, SessionToolConfig, ModelTestResult,
   SessionModelPrefs, SessionRole, KnownToolInfo, SessionRawFilePaths, ForkOptions,
 } from "@my-harness-desktop/shared";
@@ -88,7 +88,7 @@ interface ConfigSnapshotEntry {
 
 interface SessionProc {
   backend: BaseBackend;
-  /** 会话当前内核(pi/dsh)。跨内核切换(§3.6)时改写;路由 factory + asPi 类型守卫依据。 */
+  /** 会话当前内核(不透明 id)。跨内核切换(§3.6)时改写;路由 factory 与能力面探测的依据。 */
   kernel: KernelId;
   /** 进程出生证(ask-design §4.3):每次创建/换绑(materialize/switchKernel)重新生成。
    *  提问落账时记录;answer 时比对——匹配且活着 = 活路,不匹配 = 续路。 */
@@ -154,13 +154,12 @@ interface SessionProc {
 }
 
 export class SessionStore implements
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi, SessionStoreForRestart
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, BashApi, SessionStoreForRestart
 {
-  /** pi 内核专属扩展面(§7.6):SessionStore 聚合实现全部 pi 专属命令,经此面向插件暴露。
-   *  插件经 capabilities.extensions 探测「有则用、无则降级」。 */
-  get pi(): PiExtensions {
-    return this;
-  }
+  // ⚠ 此处曾有 `get pi(): PiExtensions { return this; }` —— 发布面 `ctx.pi` 的源头。
+  // 已退役：那 12 个方法按语义域归位进 `MessagingApi` / `ModelApi` / `SessionsApi`
+  // （本类已 implements 这三个接口，所以方法实现一行未动，只是不再经一个内核名袋子暴露）。
+  // `getModels` 那份重复定义随之消失（`ModelApi.getModels` 是唯一源）。
   /** 会话 → 内核 → 进程条目。key = sessionPath(历史会话)或 `new:${cwd}`(新会话,未落盘)。
    *  进程按需起(发消息选模型时才起,§kernel-follows-model):内核是模型的派生量,
    *  选模之前不起任何内核进程——历史教训:预热双内核会把会话绑进「预热时随机定的中立
@@ -209,7 +208,15 @@ export class SessionStore implements
    * 此前这里是单个 `agentDir`（= `~/.pi/agent`），于是那道圈禁门只在 pi 上成立，
    * 别的内核的会话文件不在同一道门里保护；现在按注册表逐内核收，加第四个内核自动纳入。
    */
-  private kernelSessionRoots: readonly string[];
+  // ⚠ 这两个是**私有 getter**，不是构造期存下的字段（boot-surface.md §3.6.3）。
+  //   SessionStore 是被长期持有的实例，而内核插件重载只整体替换 `state.surfaces`；
+  //   若构造时把 `{ sessionRoots, ids }` 摊平成两个字段存下，重载后它们不会追溯更新——
+  //   症状是"新内核的会话根不进路径圈禁白名单、已卸载内核的 id 仍被当作已知内核"，
+  //   两者都不报错。改成 getter 后四个读取点（`isKnownKernel` / 旧会话内核回读 /
+  //   项目统计聚合 / `kernelSessionRoots` 暴露面）一行不改，但每次现读。
+  private get kernelSessionRoots(): readonly string[] {
+    return this.kernelFacts().sessionRoots;
+  }
   /** 系统 prompt 文件路径列表,spawn 时拉取(由 registry.systemPromptPaths() 注入,
    *  插件贡献的 systemPrompts 槽项;插件卸载 → 贡献移除 → 不注入);空数组不拼 argv。 */
   private getSystemPromptPaths: () => string[];
@@ -244,7 +251,7 @@ export class SessionStore implements
      * `defaultId = ids[0]`，它就是"默认走 pi"这个印象的机械来源：任何缺内核的缝隙都被
      * 静默填成注册顺序第一个内核。
      */
-    kernelFacts: { sessionRoots: string[]; ids: KernelId[] },
+    kernelFacts: () => { sessionRoots: string[]; ids: KernelId[] },
     getSystemPromptPaths?: () => string[],
     neutralStore?: NeutralSessionStore,
     modelCatalog?: ModelCatalog,
@@ -258,20 +265,23 @@ export class SessionStore implements
   ) {
     this.factory = factory;
     this.catalogFactory = catalogFactory;
-    this.kernelSessionRoots = kernelFacts.sessionRoots;
+    this.kernelFacts = kernelFacts;
     this.getSystemPromptPaths = getSystemPromptPaths ?? (() => []);
     this.neutralStore = neutralStore ?? null;
     this.modelCatalog = modelCatalog ?? null;
     this.bookmarkDir = bookmarkDir ?? null;
     this.questionStore = questionStore ?? null;
-    this.knownKernelIds = kernelFacts.ids;
   }
 
   /** 目录/CRUD 按内核懒缓存(§1.5 多内核默认):统一经 Map<KernelId, SessionCatalog> 查,
    *  不在调用方写 kernel === "pi" 二选一。pi/dsh 别名保留给已有文件类方法。 */
   private catalogCache = new Map<KernelId, SessionCatalog>();
-  /** 已注册内核清单（注册表快照；bootstrap 注入）。 */
-  private readonly knownKernelIds: readonly KernelId[];
+  /** 已注册内核清单（**每次现读**注册表派生事实，不是快照；bootstrap 注入 getter）。 */
+  private get knownKernelIds(): readonly KernelId[] {
+    return this.kernelFacts().ids;
+  }
+  /** 注册表派生的内核事实来源（会话根 + 已注册清单），由 bootstrap 注入。 */
+  private readonly kernelFacts: () => { sessionRoots: string[]; ids: KernelId[] };
   private catalogFor(kernel: KernelId): SessionCatalog {
     let c = this.catalogCache.get(kernel);
     if (!c) {
@@ -649,22 +659,23 @@ export class SessionStore implements
       });
     });
     // dsh 懒探测的缺面回调:发现新缺面方法时广播降级事件(§dsh-capability-gate §4)。
-    const dsh = proc.backend.capabilities.thinking;
-    if (dsh) {
-      dsh.onMissing = (method) => {
+    // 懒探测缺面上报（有 `onMissing` 的内核才绑；方法恒在的内核不声明它）。
+    const thinking = proc.backend.capabilities.thinking;
+    if (thinking) {
+      thinking.onMissing = (method) => {
         this.dispatchKernel({ kind: "capabilityDegraded", sessionKey: proc.key, method });
       };
     }
-    const pi = proc.backend.capabilities.extensions as BackendExtensions | undefined;
-    if (!pi) return;
-    pi.onBusFrame((frame) => {
+    // bus 上行帧与提问上行是**两条独立的轴**，各自探测（此前共用一个 opaque 桶，
+    // 于是「无 pi 面」的内核连提问通道也一并没有——而 dsh 的提问走文件侧车桥，不经此面）。
+    proc.backend.capabilities.busFrames?.onBusFrame((frame) => {
       for (const cb of this.busFrameListeners) {
         try {
           cb(frame, proc.key);
         } catch (err) { console.error("[session-store] bus 帧监听器抛错已隔离:", err); }
       }
     });
-    pi.onQuestion((req) => {
+    proc.backend.capabilities.questions?.onQuestion((req) => {
       this.mintQuestionRecord(proc, req); // 先落账(准入失败的帧只投不落,ask-design §4.3)
       const questionEvent: QuestionRequestEvent = {
         kind: "question",
@@ -763,8 +774,8 @@ export class SessionStore implements
     const existing = this.procs.get(this.activeProcKey)?.get(kernel);
     const modelMismatch = !!(provider && model && (!existing?.model
       || existing.model.provider !== provider || existing.model.modelId !== model));
-    // 模型失配的重启判据(docs/model-switching.md §11.2:两根正交的轴,勿回退为读
-    // capabilities.extensions——那是「pi 扩展面」的桶探测,不是「能不能热切」的轴):
+    // 模型失配的重启判据(docs/model-switching.md §11.2:两根正交的轴,勿回退为读某个
+    // 能力面当代理——「有没有某能力面」不是「能不能热切模型」的轴,后者由后端自报):
     // ① 运行时切模轴缺面(后端自报 supportsRuntimeSetModel=false,如 dsh 旧运行时缺
     //    session/setModel)→ 只能停旧起新;
     // ② 未物化的惰性内核会话(从没发过消息,服务端还没有会话可热切)→ 握手是唯一
@@ -1618,7 +1629,7 @@ export class SessionStore implements
       this.bindProcEvents(proc);
       // 7. 周边收尾(§9.2/§9.3)
       await this.writeKernelToHeader(proc).catch(() => {});
-      this.latestSnapshot = newBackend.capabilities.extensions ? await this.sync().catch(() => null) : null;
+      this.latestSnapshot = newBackend.capabilities.snapshot ? await this.sync().catch(() => null) : null;
       this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target, capabilities: this.sessionCapabilitiesOf(proc) });
     } finally {
       this.switching = false;
@@ -1685,8 +1696,8 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("内核未启动");
     const messages = this.neutralMessagesOf(proc);
-    if (!proc.backend.capabilities.extensions) {
-      // dsh(无 pi 扩展面=无快照面):基线照常产出——内容来自中立层,状态由壳记账组装。
+    if (!proc.backend.capabilities.snapshot) {
+      // 无快照面的内核:基线照常产出——内容来自中立层,状态由壳记账组装。
       // 此前 sync 对 dsh 降级为返回旧基线/空,渲染层无基线可用;中立层单源后两内核同等待遇。
       const base = this.latestSnapshot ?? emptySnapshot();
       const header = this.readNeutral(proc)?.header;
@@ -1714,7 +1725,7 @@ export class SessionStore implements
       }
       return snapshot;
     }
-    const snapshot = await this.asPi(proc).resync();
+    const snapshot = await this.faceOf(proc, "snapshot", "快照").resync();
     // 内容面换中立层(单源):pi 的 get_entries 读到的内核文件内容不再是渲染基线。
     snapshot.messages = messages;
     // 逐条明细树同换中立层投影(§209):pi 的 get_tree 只剩灾难恢复工具面(§6),
@@ -2049,13 +2060,18 @@ export class SessionStore implements
     }
     // §atomic-send 修订:强度对齐只对「支持运行时切档」的内核生效(能力探测,非内核身份硬分支)。
     // 根因:composer 的 pickModel 无条件把默认档位盖进 pending,而 setThinkingLevel 已从
-    // BackendExtensions 提升进契约、dsh 继承缺面默认抛错——dsh 每次带 pending 发送都被它打断成
+    // setThinkingLevel 提升进契约、无此面的内核继承缺面默认抛错——它每次带 pending 发送都被打断成
     // 「当前内核不支持思考强度切换」。dsh 侧:适配插件补面后(dsh-thinking-level.md,
     //  capabilities.thinking.getThinkingLevels 在 = session/setThinkingLevel 热切面在)走对齐;
     //  补面缺席(旧插件)时 DshBackend.setThinkingLevel 懒探测记缺面 + no-op,发送不炸。
     if (prefs?.thinkingLevel) {
       const be = this.activeProc()?.backend;
-      const canSwitchThinking = !!be && (be.capabilities.extensions != null || be.capabilities.thinking?.getThinkingLevels != null);
+      // 「能不能运行时切档」的判据 = thinking 面上有没有清单查询：有清单查询面的内核
+      // 都有 session/setThinkingLevel 热切面（dsh 由适配插件补面同时提供两者，
+      // docs/design/dsh-thinking-level.md）。此前写成 `extensions != null || thinking?.getThinkingLevels != null`
+      // ——第一个析取项是 opaque 桶探测，两个内核统一到 thinking 面后它已多余（行为等价：
+      // pi 现声明 thinking 面、dsh 一直走第二项、minimal 两项皆无）。
+      const canSwitchThinking = !!be && be.capabilities.thinking?.getThinkingLevels != null;
       // 档位校验收在 setThinkingLevel(1a 集中一处):这里只判「内核支持不支持运行时切档」。
       if (canSwitchThinking) await this.setThinkingLevel(prefs.thinkingLevel);
     }
@@ -2130,7 +2146,7 @@ export class SessionStore implements
   }
 
   async getModels(): Promise<ModelInfo[]> {
-    return this.piSend((pi) => pi.getModels());
+    return this.viaFace("modelCycle", "模型清单", (f) => f.getModels());
   }
 
   /** 双写第二半(设计 §4.1):RPC 成功后把全量三字段写进头行 model 域。
@@ -2256,7 +2272,7 @@ export class SessionStore implements
     // 勿回退读它(旧判据恒「未生效」→ 每次发送都重发 session/setModel,该方法在旧运行时
     // 是坏面,第二发起每次发送都被打断,即「dsh 不能发送第二条语句」的根因;
     // docs/model-switching.md §11.3)。
-    if (!alreadyEffective && !proc.backend.capabilities.extensions) {
+    if (!alreadyEffective && !proc.backend.capabilities.snapshot) {
       if (prevEffectiveModel && prevEffectiveModel.provider === provider && prevEffectiveModel.modelId === modelId) alreadyEffective = true;
     }
     if (!alreadyEffective) {
@@ -2285,7 +2301,7 @@ export class SessionStore implements
     const level = this.latestSnapshot?.state.thinkingLevel ?? "";
     if (this.activeSessionPath) {
       await this.writeNeutralModelPrefs(this.activeSessionPath, { provider, modelId, thinkingLevel: level, kernel: targetKernel });
-      if (level && proc.backend.capabilities.extensions) {
+      if (level && proc.backend.capabilities.fileBacked) {
         await this.writeModelPrefsToHeader(this.activeSessionPath, { provider, modelId, thinkingLevel: level, kernel: targetKernel });
       }
     }
@@ -2402,10 +2418,8 @@ export class SessionStore implements
   async getThinkingLevels(): Promise<string[]> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) return [];
-    const pi = proc.backend.capabilities.extensions as BackendExtensions | undefined;
-    if (pi) return pi.getThinkingLevels();
-    const dshLevels = proc.backend.capabilities.thinking?.getThinkingLevels;
-    if (dshLevels) return dshLevels();
+    const levels = proc.backend.capabilities.thinking?.getThinkingLevels;
+    if (levels) return levels();
     return [];
   }
 
@@ -2416,10 +2430,17 @@ export class SessionStore implements
     // 档位校验(dsh-thinking-level):档位清单是**内核声明的能力面**——不支持该档位就不进内核
     // (否则 session/setThinkingLevel 抛「does not support reasoning effort」,如 dsh 的
     // deepseek-v4-flash 无 high)。集中在这一处:prompt 的 ensureForSend 与 dsh 补发都经此。
-    // pi 走 extensions 面(全局枚举、不按模型)→ 无 thinking.getThinkingLevels → 整段不进;
-    // dsh 走 thinking.getThinkingLevels(模型特定)。清单本身抛错 → 回落空 → 跳过(宁可不设档也不发坏的)。
-    const getLevels = proc.backend.capabilities.thinking?.getThinkingLevels;
-    if (getLevels) {
+    // **只有「精确清单」才拿它做准入校验**。清单语义由内核自报(`levelsSemantics`):
+    //   precise(缺省)= 内核按**当前模型**给清单 → 「档位不在清单里」确实意味着该模型不支持,
+    //     拒得对(如 dsh 的 deepseek-v4-flash 无 high);
+    //   approximate = 内核给的是**全局枚举表**,不反映当前模型 → 拿它校验会**误拒**,整段不进。
+    // 此前这个区分是隐式的:pi 干脆不声明 thinking 面(清单只经扩展面暴露),于是「无
+    // thinking.getThinkingLevels → 整段不进」。分面之后两个内核都有 thinking 面,
+    // 区分必须由内核显式声明,不能再靠「谁没声明某个面」来表达(那又是拿内核身份当语义代理)。
+    // 清单本身抛错 → 回落空 → 跳过(宁可不设档也不发坏的)。
+    const thinkingFace = proc.backend.capabilities.thinking;
+    const getLevels = thinkingFace?.getThinkingLevels;
+    if (getLevels && thinkingFace?.levelsSemantics !== "approximate") {
       const levels = await getLevels().catch((): string[] => []);
       if (!levels.includes(level)) {
         console.warn(`[session-store] 思考档位 ${level} 不在当前模型清单(${levels.join(",") || "无"})，跳过`);
@@ -2453,9 +2474,9 @@ export class SessionStore implements
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("内核未启动");
     const local = { tps: proc.lastTps, turn: proc.turn, lastTurn: proc.lastTurn, turns: proc.turns, steps: proc.steps };
-    const pi = proc.backend.capabilities.extensions as BackendExtensions | undefined;
-    if (!pi) return shellSessionStats(local);
-    const stats = await pi.getSessionStats(local);
+    const stats0 = proc.backend.capabilities.stats;
+    if (!stats0) return shellSessionStats(local);
+    const stats = await stats0.getSessionStats(local);
     // 上下文信任序(resolveContextUsage,契约单源):锚不可信(供应商不报 prompt token)时
     // 用 context-probe 的请求侧实测兜底,再无可信来源则诚实未知——不放行内核的假锚点。
     if (!proc.lastPromptAnchorReal) {
@@ -2470,21 +2491,21 @@ export class SessionStore implements
   async steer(text: string, images?: ImageInput[]): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
-    await this.asPi(proc).steer(text, images);
+    await this.faceOf(proc, "steering", "多路并发（插话）").steer(text, images);
     this.markTouched(proc);
   }
 
   async followUp(text: string, images?: ImageInput[]): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
-    await this.asPi(proc).followUp(text, images);
+    await this.faceOf(proc, "steering", "多路并发（排队）").followUp(text, images);
     this.markTouched(proc);
   }
 
   async abortRetry(): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) return;
-    await this.asPi(proc).abortRetry();
+    await this.faceOf(proc, "retry", "中断重试").abortRetry();
   }
 
   // ============ ModelApi ============
@@ -2492,13 +2513,15 @@ export class SessionStore implements
   async cycleModel(): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
-    await this.asPi(proc).cycleModel();
+    await this.faceOf(proc, "modelCycle", "模型轮转").cycleModel();
   }
 
   async cycleThinkingLevel(): Promise<void> {
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("会话未启动，请先选择模型");
-    await this.asPi(proc).cycleThinkingLevel();
+    const cycle = proc.backend.capabilities.thinking?.cycleThinkingLevel;
+    if (!cycle) throw new Error("当前内核不支持运行时轮转思考档位");
+    await cycle();
   }
 
   // ============ SessionTreeApi ============
@@ -2653,8 +2676,8 @@ export class SessionStore implements
     const seedFn = this.factory.seed;
     // RPC seed 面(现进程直接 seed,不 stop+重建=双 spawn 浪费;seed 按 lineageId 幂等):
     // ① factory 无预 seed 函数(测试简化工厂 / 无预 seed 内核)→ 恒现进程 seed;
-    // ② factory.seed 对本内核返 null(生产 dsh,能力面探测 !capabilities.extensions)→ 现进程 seed。
-    // 预 seed 内核(生产 pi,factory.seed 返路径 + capabilities.extensions)才走下方 stop+预 seed+spawn。
+    // ② factory.seed 对本内核返 null(无预 seed 面的内核)→ 现进程 seed。
+    // 预 seed 内核(factory.seed 返路径 + capabilities.fileBacked)才走下方 stop+预 seed+spawn。
     if (proc.backend.alive && (seedFn == null || !proc.backend.capabilities.fileBacked)) {
       await proc.backend.seed(lineage, seedOpts);
       proc.materializedLineageId = proc.activeLineageId;
@@ -2846,66 +2869,76 @@ export class SessionStore implements
     return prefix.entries.map((e) => e.message);
   }
 
-  // ============ PiExtensions:维护面(compact/auto/export/lastText) ============
+  // ============ 能力面:压缩 / 重试开关 / 快照文本 ============
 
   async compact(customInstructions?: string): Promise<void> {
-    await this.piSend((pi) => pi.compact(customInstructions));
+    await this.viaFace("compaction", "手动压缩", (f) => f.compact(customInstructions));
   }
 
   async setAutoCompaction(enabled: boolean): Promise<void> {
-    await this.piSend((pi) => pi.setAutoCompaction(enabled));
+    await this.viaFace("compaction", "自动压缩开关", (f) => f.setAutoCompaction(enabled));
   }
 
   async setAutoRetry(enabled: boolean): Promise<void> {
-    await this.piSend((pi) => pi.setAutoRetry(enabled));
+    await this.viaFace("retry", "自动重试开关", (f) => f.setAutoRetry(enabled));
   }
 
   async getLastAssistantText(): Promise<string> {
-    return this.piSend((pi) => pi.getLastAssistantText());
+    return this.viaFace("snapshot", "最近回复文本", (f) => f.getLastAssistantText());
   }
 
-  // ============ PiExtensions:队列模式(steering/followUp mode) ============
+  // ============ 能力面:多路并发模式 ============
 
   async setSteeringMode(mode: "all" | "one-at-a-time"): Promise<void> {
-    await this.piSend((pi) => pi.setSteeringMode(mode));
+    await this.viaFace("steering", "插话并发模式", (f) => f.setSteeringMode(mode));
   }
 
   async setFollowUpMode(mode: "all" | "one-at-a-time"): Promise<void> {
-    await this.piSend((pi) => pi.setFollowUpMode(mode));
+    await this.viaFace("steering", "排队并发模式", (f) => f.setFollowUpMode(mode));
   }
 
   // ============ BashApi ============
 
   async run(command: string, opts?: { excludeFromContext?: boolean }): Promise<BashResult> {
-    return this.piSend((pi) => pi.bash(command, opts?.excludeFromContext));
+    return this.viaFace("toolExec", "命令直投", (f) => f.bash(command, opts?.excludeFromContext));
   }
 
   async abortBash(): Promise<void> {
-    await this.piSend((pi) => pi.abortBash());
+    await this.viaFace("toolExec", "中断命令", (f) => f.abortBash());
   }
 
-  /** pi 专属命令发送 + rpcError 上报(语义收编后:pi 专属命令经此助手,中性操作走 proc.backend)。
-   *  作用于激活会话(activeProc);失败统一上报 rpcError 运维事件后外抛。 */
-  private piSend<T>(fn: (pi: BackendExtensions) => Promise<T>): Promise<T> {
+  /** 取某进程后端的**一个能力面**;无此面 → 抛可行动错误(§7.6 显式降级:不静默、不伪造成功)。
+   *
+   *  取代此前的 `asPi(proc)`。那个助手的名字字面意思就是「当 pi 用」,而 CLAUDE.md §1.5 的
+   *  判别气味原文点名的正是 `asPi()` 类型守卫;它的返回类型还来自**跨界** import 的
+   *  `BackendExtensions`(住在 `kernel/pi/backend/`,是 audit 检验⑪ allowlist 里唯一那条)。
+   *  现在按语义轴取面、错误消息点名**轴**不点名内核,类型全部来自圆心。
+   *
+   *  唯一的 `as` 断言集中在此:TS 无法按泛型 K 收窄索引访问 `capabilities[axis]`,
+   *  此前是 19 处调用点各写一次 `as BackendExtensions`。 */
+  private faceOf<K extends keyof BackendCapabilities>(
+    proc: SessionProc, axis: K, label: string,
+  ): NonNullable<BackendCapabilities[K]> {
+    const face = proc.backend.capabilities[axis];
+    if (!face) throw new Error(`当前内核不支持${label}`);
+    return face as NonNullable<BackendCapabilities[K]>;
+  }
+
+  /** 经能力面发一条内核命令(作用于激活会话):面缺失 → 抛可行动错误;
+   *  调用失败 → 统一上报 rpcError 运维事件后外抛。取代此前的 `piSend()`。 */
+  private viaFace<K extends keyof BackendCapabilities, T>(
+    axis: K, label: string, fn: (face: NonNullable<BackendCapabilities[K]>) => Promise<T>,
+  ): Promise<T> {
     const proc = this.activeProc();
-    if (!proc || !proc.backend.alive) throw new Error("pi 未启动");
+    if (!proc || !proc.backend.alive) throw new Error("内核未启动");
     const key = this.activeKey;
-    const pi = this.asPi(proc);
-    return fn(pi).catch((err: unknown) => {
+    const face = this.faceOf(proc, axis, label);
+    return fn(face).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       const reason = err instanceof Error && (err as { code?: string }).code === "timeout" ? "timeout" : "sendError";
       this.dispatchKernel({ kind: "rpcError", reason, message, sessionKey: key });
       throw err;
     });
-  }
-
-  /** 能力探测:取当前后端的 pi 扩展面(pi 专属命令的前提)。dsh 无此面 → 抛错降级。
-   *  经 backend.capabilities.extensions 探测,不按内核身份硬分支;type-only import 接口、
-   *  不 import 具体内核类(§28.6)。 */
-  private asPi(proc: SessionProc): BackendExtensions {
-    const pi = proc.backend.capabilities.extensions;
-    if (!pi) throw new Error("当前后端不支持 pi 专属命令");
-    return pi as BackendExtensions;
   }
 
   /** 事件路由(多会话并存的核心纪律):
@@ -3196,11 +3229,6 @@ export class SessionStore implements
     return () => { this.busFrameListeners.delete(cb); };
   }
 
-  /** 按 key 取 pi 扩展面(进程不在 / 非唯一槽位 / 非 pi 内核返回 undefined)。 */
-  getAdapter(sessionKey: string): BackendExtensions | undefined {
-    return this.soleProc(sessionKey)?.backend.capabilities.extensions as BackendExtensions | undefined;
-  }
-
   /** 按 key 取中性后端(bus 会话只有一个槽位,`soleProc` 精确取它;
    *  不读全局 activeKernel,避免主会话是 dsh 时 bus 落空)。进程不在/槽位不唯一返回 undefined。 */
   getBackend(sessionKey: string): BaseBackend | undefined {
@@ -3216,8 +3244,8 @@ export class SessionStore implements
     return {
       kernel: this.activeSessionKernel(),
       locked: this.activeSessionHasHistory(),
-      extension: false,
-      thinking: false,
+      // 无激活进程 = 一个面都没有（同一个投影函数，不给第二份字面量）。
+      ...projectCapabilityFlags(undefined),
     };
   }
 
@@ -3228,8 +3256,8 @@ export class SessionStore implements
     return {
       kernel: proc?.kernel ?? null,
       locked: !!(proc?.backend.alive && proc?.touched),
-      extension: proc?.backend.capabilities.extensions != null,
-      thinking: proc?.backend.capabilities.thinking != null,
+      // 逐轴旗标由圆心纯函数投影（单一真相源 + 可裸单测，见 projectCapabilityFlags）。
+      ...projectCapabilityFlags(proc?.backend.capabilities),
     };
   }
 
@@ -3332,8 +3360,8 @@ export class SessionStore implements
    *  三个消费者,协议帧置位会把「用户从没发过消息的会话」误锁内核(实弹:pi spawn 时
    *  fit-pi-extension 的 bus ping 应答经此路置 touched,新会话模型下拉的 dsh TAB 锁死)。
    *
-   *  内核无关(根因修复,勿退回 asPi):streamingBehavior 是 pi 的多路并发档位,属 pi 扩展面。
-   *  此前这里无条件走 `this.asPi(proc).sendMessage(...)`,而 asPi 在无 extensions 时抛
+   *  内核无关(根因修复,勿退回按内核身份取面):streamingBehavior 是多路并发档位,属 steering 面。
+   *  此前这里无条件走 `this.asPi(proc).sendMessage(...)`,而 asPi 在无扩展面时抛
    *  「当前后端不支持 pi 专属命令」——bus 的 deliver 把它 catch 成静默失败并解释为「目标已死」,
    *  于是 dsh 会话收不到任何 bus 帧(房间消息/任务注入/bus_response 全丢),且日志看不出区别。
    *  这是 CLAUDE.md §1.5 明禁的静默缺面。修法:能力探测——有扩展面则带档位(保住 pi 的
@@ -3342,9 +3370,9 @@ export class SessionStore implements
   async sendPromptTo(sessionKey: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
     const proc = this.soleProc(sessionKey);
     if (!proc || !proc.backend.alive) throw new Error(`会话不在线: ${sessionKey}`);
-    const ext = proc.backend.capabilities.extensions as BackendExtensions | undefined;
-    if (ext) {
-      await ext.sendMessage(text, undefined, streamingBehavior);
+    const steering = proc.backend.capabilities.steering;
+    if (steering) {
+      await steering.sendMessage(text, undefined, streamingBehavior);
       return;
     }
     await proc.backend.sendMessage(text);
@@ -3355,7 +3383,7 @@ export class SessionStore implements
     const proc = this.soleProc(sessionKey);
     if (!proc || !proc.backend.alive) return "";
     // 内核命令级失败(backend reject)同样回退空串——本方法是采集主源,读文件兜底在调用方
-    return this.asPi(proc).getLastAssistantText().catch(() => "");
+    return this.faceOf(proc, "snapshot", "最近回复文本").getLastAssistantText().catch(() => "");
   }
 }
 

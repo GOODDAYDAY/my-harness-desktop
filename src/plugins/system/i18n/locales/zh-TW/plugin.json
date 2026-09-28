@@ -1,8 +1,8 @@
 {
   "plugin.i18n.displayName": "國際化",
-  "plugin.i18n.description": "my-harness-desktop 語言槽插件,貢獻四語言文案 + 語言設定頁",
-  "plugin.error.notLoaded": "插件未載入",
-  "plugin.error.notFound": "插件未找到",
-  "plugin.error.protected": "插件受保護,不可卸載",
-  "plugin.error.dependents": "以下插件依賴此插件: {{deps}}"
+  "plugin.i18n.description": "my-harness-desktop 語言槽外掛,貢獻四語言文案 + 語言設定頁",
+  "plugin.error.notLoaded": "外掛未載入",
+  "plugin.error.notFound": "外掛未找到",
+  "plugin.error.protected": "外掛受保護,不可卸載",
+  "plugin.error.dependents": "以下外掛依賴此外掛: {{deps}}"
 }

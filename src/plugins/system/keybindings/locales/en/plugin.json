@@ -1,0 +1,4 @@
+{
+  "plugin.keybindings.displayName": "Keybindings",
+  "plugin.keybindings.description": "Bind key combos to event-bus channels: pressing invokes immediately, triggering any plugin action without leaving the keyboard"
+}

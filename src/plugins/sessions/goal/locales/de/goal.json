@@ -18,5 +18,14 @@
   "goal.note.clear": "Ziel entfernt",
   "goal.note.auto_pause_error": "Runde mit Fehler beendet; Ziel automatisch pausiert",
   "goal.note.auto_pause_interrupt": "Runde unterbrochen; Ziel automatisch pausiert",
-  "goal.note.send_failed": "Fortsetzung senden fehlgeschlagen; Ziel automatisch pausiert: {{detail}}"
+  "goal.note.send_failed": "Fortsetzung senden fehlgeschlagen; Ziel automatisch pausiert: {{detail}}",
+  "goal.roundCard.achieved": "Ziel erreicht",
+  "goal.usage": "/goal <Ziel> Ziel setzen und Fortsetzung starten\n/goal stop pausieren · /goal resume fortsetzen · /goal edit <neues Ziel> ändern · /goal limit <n> Rundenlimit ändern · /goal clear löschen · /goal Status anzeigen",
+  "goal.continueSendFailed": "Fortsetzung fehlgeschlagen, Ziel pausiert: {{msg}}",
+  "goal.roundAborted": "Runde abnormal beendet, Ziel pausiert (/goal resume zum Fortsetzen)",
+  "goal.noGoal": "Noch kein Ziel. Mit /goal <Ziel> eines setzen.",
+  "goal.achievedNotEditable": "Ziel erreicht und nicht bearbeitbar (/goal clear löscht es, danach neu setzen)",
+  "goal.channel.state.label": "Zielstatus",
+  "goal.channel.state.desc": "Vollständiger Snapshot des Sitzungsziels { goal: GoalState | null }. timeline abonniert ihn und färbt das Eingabefeld nach phase.",
+  "goal.command.desc": "Sitzungsziel setzen/verwalten (auto-Fortsetzung). /goal <Ziel> zum Setzen; stop·resume·edit·clear zur Steuerung"
 }

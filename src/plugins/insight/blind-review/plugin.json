@@ -45,24 +45,34 @@
     ],
     "languages": [
       {
-        "id": "blind-review.settings",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/settings.json"
-      },
-      {
-        "id": "blind-review.settings",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/settings.json"
-      },
-      {
-        "id": "blind-review.settings",
-        "locale": "en",
-        "resources": "./locales/en/settings.json"
-      },
-      {
-        "id": "blind-review.settings",
+        "id": "blind-review.plugin",
         "locale": "de",
-        "resources": "./locales/de/settings.json"
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "blind-review.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "blind-review.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "blind-review.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "blind-review.review",
+        "locale": "de",
+        "resources": "./locales/de/review.json"
+      },
+      {
+        "id": "blind-review.review",
+        "locale": "en",
+        "resources": "./locales/en/review.json"
       },
       {
         "id": "blind-review.review",
@@ -75,14 +85,44 @@
         "resources": "./locales/zh-TW/review.json"
       },
       {
-        "id": "blind-review.review",
-        "locale": "en",
-        "resources": "./locales/en/review.json"
+        "id": "blind-review.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
       },
       {
-        "id": "blind-review.review",
+        "id": "blind-review.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
+      },
+      {
+        "id": "blind-review.settings",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "blind-review.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
+      },
+      {
+        "id": "blind-review.sidePanel",
         "locale": "de",
-        "resources": "./locales/de/review.json"
+        "resources": "./locales/de/sidePanel.json"
+      },
+      {
+        "id": "blind-review.sidePanel",
+        "locale": "en",
+        "resources": "./locales/en/sidePanel.json"
+      },
+      {
+        "id": "blind-review.sidePanel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sidePanel.json"
+      },
+      {
+        "id": "blind-review.sidePanel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sidePanel.json"
       }
     ]
   }

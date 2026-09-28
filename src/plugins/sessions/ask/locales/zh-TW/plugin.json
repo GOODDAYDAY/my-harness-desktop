@@ -1,0 +1,4 @@
+{
+  "plugin.ask.displayName": "提問",
+  "plugin.ask.description": "ask_user_question 能力：模型暫停向使用者提問（帶選項/自訂答案），答案回灌模型。問題以「氣泡 + 選項 chips」內嵌在會話流（timeline），不彈窗。"
+}

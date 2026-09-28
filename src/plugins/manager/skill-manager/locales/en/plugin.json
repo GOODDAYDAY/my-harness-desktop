@@ -1,4 +1,4 @@
 {
   "plugin.skill-manager.displayName": "Skill Manager",
-  "plugin.skill-manager.description": "Manage pi base skill enable, disable, paths"
+  "plugin.skill-manager.description": "Manage pi kernel skill enable, disable, paths"
 }

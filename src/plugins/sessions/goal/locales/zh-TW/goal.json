@@ -18,5 +18,14 @@
   "goal.note.clear": "已刪除目標",
   "goal.note.auto_pause_error": "回合異常結束，目標已自動暫停",
   "goal.note.auto_pause_interrupt": "回合被中斷，目標已自動暫停",
-  "goal.note.send_failed": "續跑發送失敗，目標已自動暫停：{{detail}}"
+  "goal.note.send_failed": "續跑發送失敗，目標已自動暫停：{{detail}}",
+  "goal.roundCard.achieved": "目標達成",
+  "goal.usage": "/goal <目標> 設定目標並開始續跑\n/goal stop 暫停 · /goal resume 恢復 · /goal edit <新目標> 改 · /goal limit <n> 改上限 · /goal clear 刪除 · /goal 檢視狀態",
+  "goal.continueSendFailed": "續跑傳送失敗，目標已暫停：{{msg}}",
+  "goal.roundAborted": "回合異常結束，目標已暫停（/goal resume 恢復）",
+  "goal.noGoal": "目前沒有目標。用 /goal <目標內容> 設定。",
+  "goal.achievedNotEditable": "目標已達成，不可編輯（/goal clear 刪除後可設新目標）",
+  "goal.channel.state.label": "目標狀態",
+  "goal.channel.state.desc": "目前會話目標的全量快照 { goal: GoalState | null }。timeline 訂閱後依 phase 為輸入框上色。",
+  "goal.command.desc": "設定/管理本會話目標（自動續跑）。/goal <目標> 設定；stop·resume·edit·clear 控制"
 }

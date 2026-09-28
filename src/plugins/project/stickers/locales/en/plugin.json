@@ -1,0 +1,4 @@
+{
+  "plugin.stickers.displayName": "Stickers",
+  "plugin.stickers.description": "Sticker cards: click a card to send it into the session (text goes to the prompt, banner images render in the stream). Built-in packs ship with the shell and can be deleted; editable at global and project level."
+}

@@ -1,0 +1,4 @@
+{
+  "plugin.debug-bar.displayName": "Debug Bar",
+  "plugin.debug-bar.description": "標題列 Debug 按鈕：複製頁面 DOM 到剪貼簿，受 general-config 的 debugMode 開關控制"
+}

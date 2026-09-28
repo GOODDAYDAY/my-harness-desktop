@@ -1,0 +1,4 @@
+{
+  "plugin.key-hints.displayName": "Key Hints",
+  "plugin.key-hints.description": "Vimium-style key hints: enter hint mode via a shortcut or the ` key; every clickable element is highlighted with a letter marker, and pressing the letter triggers the click — hands never leave the keyboard"
+}

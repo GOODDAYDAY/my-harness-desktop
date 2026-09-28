@@ -20,7 +20,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..", "..", "..");
 
 /** 可种的测试专用插件 id（目录即白名单：test-plugins/kernels/<id>）。 */
-export const TEST_KERNEL_IDS = ["minimal"];
+export const TEST_KERNEL_IDS = ["minimal", "probe4"];
 
 /**
  * 把 test-plugins/kernels/<id> 种进隔离 HOME 的用户插件目录。

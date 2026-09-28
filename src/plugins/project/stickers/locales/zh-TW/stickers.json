@@ -1,5 +1,5 @@
 {
-  "stickers.openFolderFirst": "先打開文件夾",
+  "stickers.openFolderFirst": "先打開資料夾",
   "stickers.searchPlaceholder": "搜尋標題或內容…",
   "stickers.projectSection": "專案貼紙",
   "stickers.projectSectionDesc": "僅目前專案可見 · 存於 <專案>/.my-harness-desktop/stickers.json",
@@ -34,5 +34,25 @@
   "stickers.pickerEmpty": "還沒有貼紙，到表情包面板新增",
   "stickers.untitled": "貼紙",
   "stickers.fillComposer": "加入輸入框（不發送，可改後再發）",
-  "stickers.fillShort": "加入"
+  "stickers.fillShort": "加入",
+  "stickers.panelTitle": "貼圖",
+  "stickers.emptyHint": "尚無貼圖。點右上角 ＋ 新建，點卡片直接傳送至工作階段。",
+  "stickers.importTitle": "匯入貼圖 zip（整體還原：資料 + banner 圖）",
+  "stickers.import": "匯入",
+  "stickers.exportTitle": "匯出貼圖 zip（整體打包：資料 + banner 圖）",
+  "stickers.export": "匯出",
+  "stickers.importedCount": "已匯入 {{count}} 條",
+  "stickers.skippedCount": "，跳過 {{count}} 條",
+  "stickers.builtinBadgeHint": "內建：隨殼自帶、所有專案可見、不可編輯、可刪除",
+  "stickers.layerBuiltin": "內建",
+  "stickers.layerGlobal": "全域",
+  "stickers.layerProject": "專案",
+  "stickers.bannerAlt": "banner 預覽",
+  "stickers.removeImage": "移除圖片",
+  "stickers.uploadBanner": "上傳 banner 圖（選填）",
+  "stickers.imageAlt": "貼圖",
+  "stickers.exportedZip": "已匯出表情包 zip",
+  "stickers.exportFailed": "匯出失敗：{{detail}}",
+  "stickers.importFailed": "匯入失敗：{{detail}}",
+  "stickers.saveFailed": "儲存失敗：{{detail}}"
 }

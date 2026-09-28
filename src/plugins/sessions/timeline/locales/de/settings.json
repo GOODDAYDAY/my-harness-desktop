@@ -11,7 +11,7 @@
   "settings.userBubbleMaxLines": "Maximale Zeilen in Nutzerblasen",
   "settings.userBubbleMaxLinesDesc": "Längere Nutzernachrichten werden als Zusammenfassung eingeklappt; Klick auf die Blase zeigt den Volltext",
   "settings.showHiddenMessages": "Versteckte Nachrichten anzeigen",
-  "settings.showHiddenMessagesDesc": "Interne Kontextnachrichten des Agenten anzeigen (z.B. CLAUDE.md), standardmäßig aus",
+  "settings.showHiddenMessagesDesc": "Interne Kontextnachrichten des Kernels anzeigen (z.B. CLAUDE.md), standardmäßig aus",
   "settings.timelineCollapseDefault": "Zeitlinien-Inhalte standardmäßig einklappen",
   "settings.timelineCollapseDefaultDesc": "Werkzeug-Karten (Bash/Edit/Read/Grep/Standard) und Denkkette im Sitzungsfluss standardmäßig einklappen, zum Aufklappen klicken"
 }

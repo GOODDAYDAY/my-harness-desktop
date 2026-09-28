@@ -95,6 +95,26 @@
         "id": "llm-recorder.plugin",
         "locale": "de",
         "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "llm-recorder.sidePanel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sidePanel.json"
+      },
+      {
+        "id": "llm-recorder.sidePanel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sidePanel.json"
+      },
+      {
+        "id": "llm-recorder.sidePanel",
+        "locale": "en",
+        "resources": "./locales/en/sidePanel.json"
+      },
+      {
+        "id": "llm-recorder.sidePanel",
+        "locale": "de",
+        "resources": "./locales/de/sidePanel.json"
       }
     ]
   }

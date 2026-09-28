@@ -270,6 +270,10 @@ function CustomCliSection({ api, i18nPrefix, status, onStatus }: {
       <div style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center" }}>
         <input
           type="text"
+          // 稳定锚点（§17.3）：自定义内核目录是**内核插件自定 prefs 键**的写入入口，
+          // 它的读写路径在 r32 改成了动态键 API（不再枚举进 application 层的 Prefs 类型），
+          // 需要 e2e 能确定性定位来验「设置 → 落盘 → 读回 → 清除」整条链。
+          data-kernel-custom-dir=""
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={k("placeholder")}
@@ -280,9 +284,9 @@ function CustomCliSection({ api, i18nPrefix, status, onStatus }: {
             fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)", boxSizing: "border-box",
           }}
         />
-        <Button variant="secondary" onClick={() => void browse()} disabled={busy}>{k("browse")}</Button>
-        <Button variant="primary" onClick={() => void apply(input.trim())} disabled={busy || !changed}>{k("apply")}</Button>
-        <Button variant="secondary" onClick={() => void apply("")} disabled={busy || !appliedDir}>{k("clear")}</Button>
+        <Button variant="secondary" data-kernel-custom-dir-browse="" onClick={() => void browse()} disabled={busy}>{k("browse")}</Button>
+        <Button variant="primary" data-kernel-custom-dir-apply="" onClick={() => void apply(input.trim())} disabled={busy || !changed}>{k("apply")}</Button>
+        <Button variant="secondary" data-kernel-custom-dir-clear="" onClick={() => void apply("")} disabled={busy || !appliedDir}>{k("clear")}</Button>
       </div>
       {feedback && (
         <div style={{ fontSize: "var(--font-size-sm)", color: feedback.ok ? "var(--color-accent-success)" : "var(--color-accent-error)" }}>

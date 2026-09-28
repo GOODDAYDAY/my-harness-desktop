@@ -166,21 +166,31 @@ function buildReviewBlock(comments: ReviewComment[], promptHeader: string): stri
   if (comments.length === 0) return "";
   const items = comments.map((c, i) =>
     `<item seq="${numOf(i)}" quote="${escapeAttr(c.quote)}">${escapeText(c.comment)}</item>`);
-  return `<pi-review>\n${promptHeader}\n${items.join("\n")}\n</pi-review>`;
+  return `<review>\n${promptHeader}\n${items.join("\n")}\n</review>`;
 }
 ```
 
 - 产出格式：
 
 ```
-<pi-review>
+<review>
 以下是用户对之前回复的评论,请据此修改:
 <item seq="①" quote="被评论的代码原文摘录">评审意见一</item>
 <item seq="②" quote="另一段原文">评审意见二</item>
-</pi-review>
+</review>
 ```
 
 - `seq`/`quote` 是 `item` 的**属性**，评论文本是 `item` 的**内容**。编号用 `numOf`（第 18–19 行）：`NUMS = ["①".."⑨"]`，第 10 条起降级为 `"10"`、`"11"` 纯数字（`NUMS[i] ?? String(i + 1)`）。
+- **⚠ 标签中性化与历史兼容（r27）**：块标签曾是 `<pi-review>`，现为 `<review>`。改名依据是
+  **内核身份泄漏**——`sessions/review` 是通用壳插件，评论篮对任何内核都适用，而块文本是
+  **拼进 prompt 发给当前内核**的，于是 dsh / minimal 会话的 prompt 里也会出现一个以 pi 命名的
+  标签（违反 CLAUDE.md §1.4「无特权差异」）。**必须向后兼容**：标签随 prompt 落进了会话文件，
+  历史消息里全是 `<pi-review>`，解析方若只认新标签，老会话的评论块会退化成裸 XML 文本显示。
+  所以解析正则是 `/<(pi-review|review)>\s*([\s\S]*?)\s*<\/\1>/g`——同时认两种标签，
+  并用反向引用 `\1` 要求开闭**同名**。守卫见 `review-basket.dom.test.tsx` 的
+  「review 块标签：中性化 + 历史兼容」组（4 条：写方标签不含任何内核名 / 新旧标签都能解析且
+  `start`-`end` 精确 / 错配标签不算块 / 同一文本里新旧混存各自解析且区间不重叠）。
+  本文其余处出现 `<pi-review>` 一律指**历史格式**。
 - **`promptHeader` 是模型侧引导语**（i18n key `shell.reviewPromptHeader`，第 41 行注释、`aux-block-mechanism.md` §6.2）：在 items 之前一行、**不在 `<item>` 里**——解析器的 `itemRe` 只匹配 `<item>…</item>` 条目，引导语对渲染层透明、只对模型可见。这是"补上语义提示又不干扰引用条展示"的落点：裸 `<pi-review>` 块里模型只看到一串 seq/quote 属性，没有一句话告诉它"这是用户对之前回复的评论"。
 - **转义对称**（第 30–38 行）：`escapeText` 转义 `&` `<` `>`，`escapeAttr` 在 `escapeText` 基础上再转义 `"`，`unescape` 逆序还原。评论文本走 `escapeText`、quote 属性走 `escapeAttr`——评论里恰好出现 `<item` 字样也会被转义成 `&lt;item`，不会被条目正则误匹配（`aux-block-mechanism.md` QA）。
 - 构造与解析同源：`buildReviewBlock` 产出的文本格式是 parser 的输入契约，两者在同一文件里同步演进。模板配置（`promptHeader`/`itemTemplate`）已退役——模板自由度与解析器强耦合，用户把模板改成任意格式解析器就认不出来，恢复模板等于把"剥离失败即裸显"的老 bug 请回来（`aux-block-mechanism.md` §6.3）。
@@ -189,7 +199,7 @@ function buildReviewBlock(comments: ReviewComment[], promptHeader: string): stri
 
 - `index.tsx` 第 59–86 行 `export const auxParsers: AuxBlockParser[] = [{ id: "review", parse(text) { ... } }]`。
 - `parse` 用两个正则 `matchAll` 扫描：
-  - 外层 `/<pi-review>\s*([\s\S]*?)\s*<\/pi-review>/g` 提取全部完整块，`m.index` 填 `start`、`m.index + m[0].length` 填 `end`（契约硬化，不再让机制猜边界）。`\s*` 放宽换行硬依赖，拼接格式微调不再裸显。
+  - 外层 `/<(pi-review|review)>\s*([\s\S]*?)\s*<\/\1>/g` 提取全部完整块（**反向引用 `\1` 要求开闭标签一致**，且同时认历史标签 `<pi-review>` 与中性标签 `<review>`，见下），`m.index` 填 `start`、`m.index + m[0].length` 填 `end`（契约硬化，不再让机制猜边界）。`\s*` 放宽换行硬依赖，拼接格式微调不再裸显。
   - 内层 `/<item seq="([^"]*)"(?: quote="([^"]*)")?>([\s\S]*?)<\/item>/g` 提取条目，`quote` 存在才 `unescape`，`comment` `unescape(...).trim()`。
 - 产出 `AuxBlock[]`：每个块 `{ type: "review", data: { count: items.length, items } satisfies ReviewAuxData, start, end }`。无匹配返回 `null`（契约要求）。
 - **注册路径**：`plugins-host.ts` 第 41–45 行加载 module 时 `Array.isArray(mod.auxParsers)` 即 `registerAuxParsers(auxParsers)` 进 `packages/react/src/aux-block-parsers.ts` 的注册表，并记录 `pluginAuxParserIds`；`onUnloaded`（第 120–124 行）按记录的 id 摘除。与 channels 同生命周期。
@@ -242,7 +252,7 @@ get().appendOptimisticUser(sendText, sendText);
 - review 的 `auxParsers` 经 `plugins-host.ts` 进 `aux-block-parsers.ts` 注册表，timeline `blocks.ts` 的 `decomposeMessage` 经 `getAuxParsers()` 拿全部解析器喂 `parseUserBlocks`。**解析器是纯函数，卸载后残留无害**（不匹配任何新文本）。
 - 派发复用既有 blockRenderers 槽：`BlockRenderer` 对 auxBlock 取 `name = block.aux.type`（"review"），`resolveBlockRenderer` 二键解析命中 `{ block: "auxBlock", names: ["review"] }` 的贡献项。`auxBlock` 是开放字符串类型 + `names` 匹配块 type，是机制侧零新增的复用——机制不认识 review，只认 `auxBlock` 块类型 + `review` 名字。
 - **与 skill 块的对照**：skill 块是 skill-manager 插件实例（`auxBlock/skill`），review 块是 review 插件实例（`auxBlock/review`）。两者在 `parseUserBlocks` 里按 `start` 排序合并，组合场景（同一条消息里 skill 块 + review 块共存）天然正确——skill parser 的 args 捕获非贪婪 + 前瞻 `(?=\n<|$)` 在 `<pi-review>` 前停住，review 块留给 review parser 独立提取（`aux-block-mechanism.md` §4.1 + QA）。
-- **无特权差异的天然降级**：删掉 review 插件，`auxParsers` 注册表里没有 review parser，`parseUserBlocks` 不识别 `<pi-review>`，块按正文裸显；删掉 skill-manager 同理。机制不受影响，谁删谁降级。
+- **无特权差异的天然降级**：删掉 review 插件，`auxParsers` 注册表里没有 review parser，`parseUserBlocks` 不识别 `<review>`，块按正文裸显；删掉 skill-manager 同理。机制不受影响，谁删谁降级。
 
 ### 7.4 与 message-blocks 的 `userIntent`：纯评论消息的占位气泡
 
@@ -302,9 +312,9 @@ get().appendOptimisticUser(sendText, sendText);
 
 不会。构造侧 `buildReviewBlock` 用 `escapeText`/`escapeAttr` 转义，解析侧 `unescape` 还原。评论里恰好出现 `<item` 会被转义成 `&lt;item`，不会被条目正则误匹配（`aux-block-mechanism.md` QA）。代价是模型看到的块里含实体（`&lt;` 等）——这是 XML 结构化的代价，换取解析确定性；引导语补足了"这段是什么"的语义，实体对模型的干扰可接受。
 
-**Q7：正文恰好手输 `<pi-review>` 或 `<skill` 字样怎么办？会被误判成块吗？**
+**Q7：正文恰好手输 `<review>` / `<pi-review>` 或 `<skill` 字样怎么办？会被误判成块吗？**
 
-残缺标签按正文处理。解析器要求完整标签形态——`<pi-review>` 必须配 `</pi-review>` 闭合，review 的 itemRe 要求 `<item seq="..." …>…</item>` 完整结构。用户手输完整标签块的概率趋近于零；真撞上了，引用条也是合理展示（`aux-block-mechanism.md` QA）。
+残缺标签按正文处理。解析器要求完整标签形态——`<review>` 必须配 `</review>` 闭合（正则用反向引用 `\1` 保证开闭**同名**，所以 `<review>…</pi-review>` 这种错配也不算块），review 的 itemRe 要求 `<item seq="..." …>…</item>` 完整结构。用户手输完整标签块的概率趋近于零；真撞上了，引用条也是合理展示（`aux-block-mechanism.md` QA）。
 
 **Q8：`editorActive` 这个字段到底还在不在用？为什么契约里还有它？**
 

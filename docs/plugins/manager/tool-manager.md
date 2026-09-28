@@ -4,9 +4,9 @@
 
 tool-manager 是 `src/plugins/manager/` 域下的一个壳插件，plugin id 为 `tool-manager`，版本 `0.4.9`，tier `official`。它只做一件事：**把"当前内核有哪些可用工具"和"本次会话允许哪些工具"这两个事实呈现给用户，并让用户能改后者**。前者叫工具发现（读），后者叫工具配置（读+写）。它不产出任何工具能力——工具能力属于内核（pi 的 `dist/core/tools` 核心工具 + `my-harness-fit-pi-extension` 扩展工具），也不执行过滤——硬过滤由 pi 内核的 tool-gate 扩展执行，软过滤由壳前端 `src/web/stores/session-store.ts` 在发送前拼提示文本执行。tool-manager 只是"配置的生产者"和"清单的展示者"。
 
-这份边界决定了它的依赖形状：`renderer/index.tsx` 只 import `react`、`react-i18next`、`framer-motion`、`lucide-react`、`@my-harness-desktop/react`、`@my-harness-desktop/shared`（经 `../core/types` 间接），没有任何 `@/server`、`@/client` 的跨层 import——符合 §6.3 的依赖方向检验。`core/types.ts` 里唯一的外部类型引用是 `export type { SessionToolConfig } from "@my-harness-desktop/shared"`，这是纯 re-export（契约单源，§1.3），不复制定义。整个插件没有 `permissions` 字段，因为它只用到 `ctx.sessions`（核心默认能力）、`ctx.config`（核心默认能力）、`ctx.kernels.pi.fitPiExtensionAvailable`（核心默认的 kernel 探测面）——都不需要声明权限。
+这份边界决定了它的依赖形状：`renderer/index.tsx` 只 import `react`、`react-i18next`、`framer-motion`、`lucide-react`、`@my-harness-desktop/react`、`@my-harness-desktop/shared`（经 `../core/types` 间接），没有任何 `@/server`、`@/client` 的跨层 import——符合 §6.3 的依赖方向检验。`core/types.ts` 里唯一的外部类型引用是 `export type { SessionToolConfig } from "@my-harness-desktop/shared"`，这是纯 re-export（契约单源，§1.3），不复制定义。整个插件没有 `permissions` 字段，因为它只用到 `ctx.sessions`（核心默认能力）、`ctx.config`（核心默认能力）、`ctx.kernels[capabilities.kernel]?.toolFilterEnforced`（核心默认的 kernel 探测面，问**当前会话内核**能否强制过滤工具）——都不需要声明权限。
 
-plugin.json 的 `contributes` 声明了三组贡献：`settings`（一个设置页）、`sidePanel`（一个右面板 Tab）、`languages`（三命名空间 × 四 locale 的文案）。它**没有声明任何 `channels`**，也没有 `dependsOn`——tool-manager 不通过事件总线与别的插件通信，它只调壳提供的受控 API（`ctx.sessions.listTools`、`ctx.sessions.readToolConfig`、`ctx.config.get/set`、`ctx.kernels.pi.fitPiExtensionAvailable`），与内核（不是插件）通过中立契约 `BaseBackend.listTools?` 和 `SessionCatalog.readToolConfig` 交互。这是它和 file-preview 插件最大的不同：file-preview 走"事件 channel + 槽位查渲染器"的插件间协作，tool-manager 走"直接调壳 API"的单插件闭环。
+plugin.json 的 `contributes` 声明了三组贡献：`settings`（一个设置页）、`sidePanel`（一个右面板 Tab）、`languages`（三命名空间 × 四 locale 的文案）。它**没有声明任何 `channels`**，也没有 `dependsOn`——tool-manager 不通过事件总线与别的插件通信，它只调壳提供的受控 API（`ctx.sessions.listTools`、`ctx.sessions.readToolConfig`、`ctx.config.get/set`、`ctx.kernels[capabilities.kernel]?.toolFilterEnforced`），与内核（不是插件）通过中立契约 `BaseBackend.listTools?` 和 `SessionCatalog.readToolConfig` 交互。这是它和 file-preview 插件最大的不同：file-preview 走"事件 channel + 槽位查渲染器"的插件间协作，tool-manager 走"直接调壳 API"的单插件闭环。
 
 ## 目录结构
 
@@ -120,13 +120,13 @@ pending 到落盘的 flush 发生在**发送消息时**，不是切换开关时�
 - 第 507 行读 `ui.pendingToolConfig?.sessionPath === sessionPath ? ui.pendingToolConfig : null`——pending 只对当前会话生效。
 - 第 509-512 行：若 pending 存在且 `!flushed`，`await window.kernel.sessions.updateHeader(sessionPath, { toolConfig: pendingTools.config })` 把配置写进会话头行，然后 `setPendingToolConfig({ ...pendingTools, flushed: true })` 标记已落盘。这条 updateHeader 最终走到 `pi-catalog.ts` 的 `piUpdateSessionHeader`（第 401-403 行处理 `toolConfig` 键：有值则写 `cur.toolConfig`，null 则 delete）。
 - 第 514-516 行：否则（pending 已 flush 或不存在）`toolCfg = await window.kernel.sessions.readToolConfig(sessionPath)` 读回头的现有配置。
-- 第 517-523 行：若 `toolCfg.enabledToolIds` 是数组，`gateInstalled = await window.kernel.kernels.pi.fitPiExtensionAvailable?.().catch(() => false)` 探测 tool-gate 是否在场；**若 gate 不在场**，`finalText = buildToolLimitNote(enabledTools) + "\n\n" + text` 把限制提示前置拼进 prompt——这就是"软注入"。
+- 第 517-523 行：若 `toolCfg.enabledToolIds` 是数组，壳按**本次发送要用的那个内核**（`prefs.kernel`）问它能否**强制执行**工具白名单：`window.kernel.kernels[prefs.kernel]?.toolFilterEnforced?.()`；**若 gate 不在场**，`finalText = buildToolLimitNote(enabledTools) + "\n\n" + text` 把限制提示前置拼进 prompt——这就是"软注入"。
 
 `buildToolLimitNote`（session-store.ts 第 20-31 行）生成 `[System] 本次会话已限制可用工具。\n可用工具: <list>\n请勿使用未在列表中的工具。`，空清单显示"无"（显式全禁语义）。注释自述它是"非 UI 文案——演进:内核提供工具白名单 RPC 后整体移除"，是过渡期的软过滤手段，靠 LLM 自觉遵守，不一定有效。
 
 硬过滤的执行者是 tool-gate 的 `applyFromHeader`（`toolgate.ts` 第 88-106 行），挂在 `pi.on("session_start")` 和 `pi.on("turn_start")`：读会话文件头行 8KB 窗口，取 `custom-my-harness-desktop.toolConfig.enabledToolIds`，若字段缺失（无配置/旧数据）恢复全量 `allNames`，否则 `enabledToolIds.filter(n => allNames.includes(n))` 过滤掉未注册名，最后 `pi.setActiveTools(enabled)` 硬性设置内核活跃工具。第 99-101 行有个指纹优化：`lastAppliedKey` 记录上次应用的排序指纹，无变化就跳过 `setActiveTools`，避免每轮 turn 重复设置。tool-gate 为什么自己读文件而不是走 `sessionManager.getHeader()`——第 10-11 行注释给的理由是：desktop 在会话运行中改头行，sessionManager 缓存的是 spawn 时读的那份，自己读文件才能拿到 desktop 刚写的最新值。
 
-于是三段拼成闭环：**ToolPanelTab 切开关 → pending（内存）→ send 时 flush 写头行 → tool-gate turn_start 读头行 → setActiveTools 硬过滤**。软注入（`buildToolLimitNote`）只在 `fitPiExtensionAvailable()` 为 false 时作为降级手段介入。`fitPiExtensionAvailable`（`src/server/kernel/pi/extension/my-harness-fit-pi-extension-installer.ts` 第 114-117 行）就是 `existsSync(EXT_FILE_TARGET)`——检查 tool-gate 扩展文件是否已同步进内核目录。
+于是三段拼成闭环：**ToolPanelTab 切开关 → pending（内存）→ send 时 flush 写头行 → tool-gate turn_start 读头行 → setActiveTools 硬过滤**。软注入（`buildToolLimitNote`）只在**本次发送所用内核**的 `fitExtensionAvailable()` 为 false 时作为降级手段介入。`fitExtensionAvailable`（旧名 `fitPiExtensionAvailable` 已中性化；`src/server/kernel/pi/extension/my-harness-fit-pi-extension-installer.ts` 第 114-117 行）就是 `existsSync(EXT_FILE_TARGET)`——检查 tool-gate 扩展文件是否已同步进内核目录。
 
 ## 核心纯函数（core/types.ts）
 
@@ -164,14 +164,29 @@ tool-manager 是一个**低协作度的插件**，它不 emit/invoke 任何 chan
 
 - `ctx.sessions.listTools()` / `ctx.sessions.readToolConfig(path)`：读内核工具清单和会话工具配置，走中立契约。前者对应 `BaseBackend.listTools?`，后者对应 `SessionCatalog.readToolConfig`。
 - `ctx.config.get/set("groups")`：工具组的项目级持久化，走框架统一配置通道。
-- `ctx.kernels.pi.fitPiExtensionAvailable?.()`：探测 pi 内核扩展面 tool-gate 是否安装，决定降级警告是否显示。这是"有则用、无则降级"的能力探测，不是 `if (kernel === "pi")` 硬分支。
+- `ctx.kernels[capabilities.kernel]?.toolFilterEnforced?.()`：问**当前会话内核**能否强制执行工具白名单，决定降级警告是否显示。
+  ⚠ 这里踩过**两个**坑，都不是"问谁"而是"问什么"，逐个记录以免重犯：
+  ① 最早写作 `ctx.kernels.pi.fitPiExtensionAvailable?.()`（该名**已退役**），文档还称它「是能力探测，不是
+     `if (kernel === "pi")` 硬分支」——**那句话是错的**：它字面就把内核 id 写死成 `pi`，
+     dsh/minimal 会话下本页面报告的是别的内核的状态（违反 §1.4 内核无特权、§1.5 壳不漏身份）。
+  ② 改成问会话内核之后，问的仍是「桌面适配扩展（tool-gate）装没装」。那只是**某一个内核**
+     实现强制过滤的手段，不是「能不能强制过滤」本身：自带工具门控的内核
+     （`docs/design/minimal-kernel.md` §5.6.1 适配器翻译 `enabledToolIds`、§5.7.1 档位门控）
+     因此被判为"不能过滤"，本页面会给它显示一条**假的**降级警告，壳还会给它每次发送拼上
+     冗余的散文限制说明（实测 echo 内核把散文原样回显进时间线，弄坏 DOM 对账）。
+  现轴为 `toolFilterEnforced`：**每个内核按自己的机制回答同一个中性问题**（靠扩展硬过滤的内核
+  答"扩展装好没"；工具系统是内核本体的答 true；没有工具配置面的不声明 → 壳显式降级）。
+  三个内核各自的答案由 `src/server/kernel/tool-filter-axis.test.ts` 用**真实插件**钉住。
+  方法名也把 `fitPiExtensionAvailable` **改为**中性的 `toolFilterEnforced`——它是按 `KernelId` 键控的统一对外面，
+  名字不该把其中一个内核写死。守卫：`npm run audit:deps` 检验⑬（不许字面量键访问内核注册表；
+  豁免「内核自己的插件目录引用自己」）。
 - `ctx.sessions.onEvent`：订阅活跃会话中性事件流，做 `toolCallStart` 的事件收集兜底。
 
 **与内核 / 内核插件的交互**——这是 tool-manager 真正的"能力下游"，但都不在本插件目录：
 
 - 工具清单的**权威生产者**是 `packages/my-harness-fit-pi-extension/toolgate.ts` 的 `announceTools`（写 `~/.pi/agent/desktop-known-tools.json`），tool-manager 是它的消费者。两者之间没有直接调用，只有**文件契约**（`known-tools.ts` 的 `readKnownTools` 读同一个文件）和**类型契约**（`KnownToolInfo` 圆心单源）。
 - 工具过滤的**硬执行者**是同一扩展的 `applyFromHeader`（`pi.setActiveTools`），tool-manager 写进头行的 `custom-my-harness-desktop.toolConfig.enabledToolIds` 是它的输入。tool-manager 从不直接调 `setActiveTools`——它只写头行，执行交给内核扩展。
-- 工具过滤的**软执行者**是壳前端 `src/web/stores/session-store.ts` 的 `buildToolLimitNote`，在 tool-gate 缺席时把限制拼进 prompt。tool-manager 通过 `fitPiExtensionAvailable` 探测到缺席后只显示警告，拼提示的动作由 session-store 在 send 路径完成。
+- 工具过滤的**软执行者**是壳前端 `src/web/stores/session-store.ts` 的 `buildToolLimitNote`，在 tool-gate 缺席时把限制拼进 prompt。tool-manager 通过 `toolFilterEnforced` 探测到「不能强制过滤」后只显示警告，拼提示的动作由 session-store 在 send 路径完成。
 
 **槽位名清单**：tool-manager **贡献** `settings`（`tools` 页）、`sidePanel`（`tools` Tab）、`languages`（三命名空间）；**不贡献**任何其他槽位；**不消费**任何兄弟插件的槽位。**channel 清单**：无。**dependsOn 清单**：无（符合 §8.2——它不消费任何人的 channel，自然无需 dependsOn）。
 
@@ -193,7 +208,8 @@ tool-manager 是一个**低协作度的插件**，它不 emit/invoke 任何 chan
 
 **Q：dsh 内核下工具过滤是什么行为？**
 
-三层降级，全部显式、不静默。① `DshBackend` 继承 `AbstractBackend.listTools` 的缺面默认，返回 null——工具清单只有 BUILTIN_TOOLS + 事件收集兜底。② `DshSessionCatalog.readToolConfig` 直接返回 null——按"无配置"处理，ToolPanelTab 回落组默认，`enabledToolIds` 为空。③ 发送路径里 `fitPiExtensionAvailable()` 对 dsh 无意义（tool-gate 是 pi 专属扩展），软注入提示只在 pi + 无 gate 时拼。这意味着 dsh 下工具过滤实际上不生效（没有硬过滤执行者），但 UI 不假装成功——它显示的是"当前内核无工具过滤能力"的诚实状态，而不是伪造一个过滤开关。
+三层降级，全部显式、不静默。① `DshBackend` 继承 `AbstractBackend.listTools` 的缺面默认，返回 null——工具清单只有 BUILTIN_TOOLS + 事件收集兜底。② `DshSessionCatalog.readToolConfig` 直接返回 null——按"无配置"处理，ToolPanelTab 回落组默认，`enabledToolIds` 为空。③ 发送路径里 `toolFilterEnforced()` 问的是**本次发送要用的那个内核**（`prefs.kernel`），软注入提示在「该内核不能强制执行工具白名单」时拼。这意味着 dsh 下工具过滤实际上不生效（没有硬过滤执行者），但 UI 不假装成功——它显示的是"当前内核无工具过滤能力"的诚实状态，而不是伪造一个过滤开关。
+  ⚠ 这一条曾写作「`fitPiExtensionAvailable()` 对 dsh 无意义（tool-gate 是 pi 专属扩展），软注入提示只在 pi + 无 gate 时拼」，而实现是**无条件问 pi**。三种内核的实际后果逐个核过：dsh 进不到这个分支（`DshSessionCatalog.readToolConfig` 返 null，②所述）；pi 问自己、行为不变；**minimal 会进这个分支**（`minimal-catalog.ts:148` 实现了 `readToolConfig`），于是它借 pi 的答案——pi 装了 gate 时 minimal 会话**拿不到任何工具限制**，既无硬过滤也无软提示。现改为问会话自己的内核（`wrapVersionApi` 对未提供实现的内核返回 `false`），minimal 及将来任何「有工具配置但无 gate 扩展」的内核都会得到软注入补偿。这是「一个内核拿另一个内核的能力答案做自己的判断」这类漂移的实例，守卫见 `npm run audit:deps` 检验⑬。
 
 **Q：`enabledGroupIds` 显式空数组和字段缺失有什么区别？**
 

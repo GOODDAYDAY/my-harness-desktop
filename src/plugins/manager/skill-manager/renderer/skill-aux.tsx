@@ -56,7 +56,7 @@ export function SkillAuxBlock({ aux }: { aux: AuxBlock }): React.ReactNode {
           onClick={() => setOpen((o) => !o)}
           className="flex items-center gap-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)] cursor-pointer select-none text-left max-w-full"
         >
-          <Sparkles className="size-3.5 flex-none text-[var(--color-accent)]" />
+          <Sparkles className="size-3.5 flex-none text-[var(--color-primary)]" />
           <span className="flex-none">{t("skill-blocks.skillRef", { name: data.name })}</span>
           {argLine && <span className="truncate min-w-0 opacity-80">· {argLine}</span>}
           {open ? <ChevronUp className="size-3 flex-none" /> : <ChevronDown className="size-3 flex-none" />}

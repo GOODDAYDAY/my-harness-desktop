@@ -1,4 +1,9 @@
-import type { PluginManifest, PluginState, KernelId } from "@my-harness-desktop/shared";
+import type { PluginManifest, PluginState } from "@my-harness-desktop/shared";
+// 同层单向依赖：`boot-ops.ts` 定义操作表与驱动器，本文件消费它们（反之不成立，
+// 故 `SkillsEnsure` / `PluginExtensionEnsure` 也定义在 boot-ops 侧、由本文件引用——
+// 若两处互相 import 就是同层循环，设计文档 REV-11 记过这个坑）。
+import { runOps, PLUGIN_ATTACH_OPS, PLUGIN_DETACH_OPS } from "./boot-ops";
+import type { PluginBootDeps, SkillsEnsure, PluginExtensionEnsure } from "./boot-ops";
 import type { DiscoveredPlugin } from "../loader/discover";
 import type { PluginRegistry } from "../loader/registry";
 import type { ConfigStore } from "../config/config-store";
@@ -71,22 +76,13 @@ export interface PluginLifecycleDeps {
   };
   notifyPluginsChanged: () => void;
   notifyPluginUnloaded: (pluginId: string, components: string[]) => void;
-  skillsEnsure?: {
-    onActivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
-    onDeactivate(pluginId: string, pluginPath: string, source: DiscoveredPlugin["source"]): Promise<void>;
-  };
-  /**
-   * 插件携带**内核扩展**的挂摘（manifest.extensions 声明才触发）。
-   *
-   * 按内核 id 派发，不是一个内核一个字段：装配点拿到的这一份实现自己知道"哪个 id 归我"，
-   * 其余 id 显式忽略（不静默吞——见装配点的实现注释）。实现在各内核插件里
-   * （pi = 写 ~/.pi/agent/extensions/，dsh = 同步目录 + 挂 cordis.yml 块），
-   * application 只持接口——与 skillsEnsure 同一形状。加第四个内核：圆心与生命周期层零改动。
-   */
-  pluginExtensionEnsure?: {
-    onActivate(kernel: KernelId, pluginId: string, pluginPath: string, extensionDir: string): void;
-    onDeactivate(kernel: KernelId, pluginId: string): void;
-  };
+  /** 技能挂摘面。**类型单源在 `./boot-ops`**（冷启动步骤与暖启动共用同一份实现，
+   *  故也共用同一个类型声明；此前这里内联写了一遍形状，与操作表侧是两份定义）。 */
+  skillsEnsure?: SkillsEnsure;
+  /** 插件携带**内核扩展**的挂摘面（`manifest.extensions` 声明才触发）。同上，单源在 `./boot-ops`。
+   *  按内核 id 派发、不是一个内核一个字段：实现自己知道"哪个 id 归我"，其余 id 显式忽略
+   *  （不静默吞——见装配点 `makeExtensionDispatch` 的 warn）。加第四个内核：本层零改动。 */
+  pluginExtensionEnsure?: PluginExtensionEnsure;
 }
 
 export async function activate(
@@ -98,11 +94,19 @@ export async function activate(
   try {
     deps.registry.registerOne({ manifest, path: pluginPath, source });
     await deps.loader.load(manifest, pluginPath);
-    if (deps.skillsEnsure) await deps.skillsEnsure.onActivate(manifest.id, pluginPath, source);
-    // 遍历插件声明的内核扩展（{内核 id: 相对路径}），逐个派发给对应内核的同步实现。
-    for (const [kernel, dir] of Object.entries(manifest.extensions ?? {})) {
-      deps.pluginExtensionEnsure?.onActivate(kernel, manifest.id, pluginPath, dir);
-    }
+    // 启动面经**与冷启动同一张表、同一个驱动器**装载（单实体暖启动，§5.1.3）。
+    // 此前这里是内联的 `skillsEnsure.onActivate` 调用 + 一个手写 for 循环遍历
+    // `manifest.extensions`——与冷启动那份循环是**两份实现**（判别气味三），且暖侧没有
+    // 逐实体/逐内核的隔离：一个内核的技能钩子抛错会冒泡到本函数的 catch，被记成
+    // "插件激活失败"并撤注册（`setPluginError`）。现在失败被 `runOps` 就地降级并点名到
+    // 操作与实体，插件保持 active——这是有意的行为改善（设计文档 §6.4.1 失败路径 ②）。
+    await runOps(
+      PLUGIN_ATTACH_OPS,
+      "warm",
+      [{ id: manifest.id, manifest, path: pluginPath, source }],
+      bootDepsOf(deps),
+      (e) => e.id,
+    );
     clearPluginState(manifest.id);
     deps.notifyPluginsChanged();
     return { ok: true, error: null };
@@ -116,17 +120,28 @@ export async function activate(
 export async function deactivate(deps: PluginLifecycleDeps, pluginId: string): Promise<void> {
   const manifest = deps.registry.manifestOf(pluginId);
   if (!manifest) return;
-  const plugin = deps.registry.allPlugins().get(pluginId);
+  // `manifestOf` 与 `allPlugins()` 读同一个 `byId` Map，所以 manifest 非空即 entry 必非空
+  // （此前的 `&& plugin` 是防御性死代码，且它让"技能摘除被跳过、扩展摘除照跑"这种
+  // 半截状态在类型上看起来是可能的）。
+  const plugin = deps.registry.allPlugins().get(pluginId)!;
   deps.registry.unregister(pluginId);
-  if (deps.skillsEnsure && plugin) {
-    await deps.skillsEnsure.onDeactivate(pluginId, plugin.path, plugin.source);
-  }
-  for (const kernel of Object.keys(manifest.extensions ?? {})) {
-    deps.pluginExtensionEnsure?.onDeactivate(kernel, pluginId);
-  }
+  // 摘除同样经共享表 + 共享驱动器（detach 侧两个操作都是 warm-only：冷启动时禁用插件
+  // 根本不注册，所以不存在"启动时要摘"的情形）。
+  await runOps(
+    PLUGIN_DETACH_OPS,
+    "warm",
+    [{ id: pluginId, manifest, path: plugin.path, source: plugin.source }],
+    bootDepsOf(deps),
+    (e) => e.id,
+  );
   const components = collectComponentNames(manifest);
   deps.notifyPluginUnloaded(pluginId, components);
   deps.notifyPluginsChanged();
+}
+
+/** 从生命周期依赖取操作表所需的窄视图（冷暖两侧的 `bootDeps` 同形状、内容同源）。 */
+function bootDepsOf(deps: PluginLifecycleDeps): PluginBootDeps {
+  return { skillsEnsure: deps.skillsEnsure, pluginExtensionEnsure: deps.pluginExtensionEnsure };
 }
 
 export async function reloadPlugin(

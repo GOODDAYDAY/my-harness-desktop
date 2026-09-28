@@ -33,5 +33,6 @@
   "remote.copied": "已複製",
   "remote.qr": "QR 碼",
   "remote.qrDesc": "本機存取無需密碼;區域網路裝置掃碼開啟後輸入密碼登入。",
-  "remote.qrDisabledHint": "開啟區域網路存取後,這裡顯示區域網路位址與存取 QR 碼。"
+  "remote.qrDisabledHint": "開啟區域網路存取後,這裡顯示區域網路位址與存取 QR 碼。",
+  "settings.remote-access": "遠端存取"
 }

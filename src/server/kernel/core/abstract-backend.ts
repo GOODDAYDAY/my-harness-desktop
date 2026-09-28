@@ -11,7 +11,7 @@
 // 3. 组装归 bootstrap:createPiBackend / createDshBackend 在 bootstrap/kernel,本文件不 import 实现。
 
 import type { KernelId } from "@my-harness-desktop/shared";
-import type { BaseBackend, Anchor, BoundaryRef, LineageTree, ThinkingCapabilities, SeedOptions } from "@my-harness-desktop/shared";
+import type { BaseBackend, Anchor, BoundaryRef, LineageTree, BackendCapabilities, SeedOptions } from "@my-harness-desktop/shared";
 import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
 import type { KnownToolInfo, ImageInput } from "@my-harness-desktop/shared";
@@ -44,9 +44,11 @@ export interface BackendContext {
 export abstract class AbstractBackend<C extends BackendContext = BackendContext> implements BaseBackend {
   protected constructor(protected readonly ctx: C) {}
 
-  /** 内核专属能力探测面(§7.6;默认空,子类 override)。dsh 给 { thinking: ThinkingCapabilities },
-   *  pi/minimal 额外给 fileBacked:true(文件态内核)。形状与 BaseBackend.capabilities 契约同步。 */
-  readonly capabilities: { extensions?: unknown; thinking?: ThinkingCapabilities; fileBacked?: boolean } = {};
+  /** 能力探测面(§7.6;默认空 = 一个面都没有,子类 override)。
+   *  形状由圆心 `BackendCapabilities` 单源定义(按语义轴分面),本类只给缺省值——
+   *  不再在此重复写一遍内联形状(此前是 `{ extensions?: unknown; thinking?: …; fileBacked?: boolean }`,
+   *  与契约两份定义,契约一改这里就漂)。 */
+  readonly capabilities: BackendCapabilities = {};
 
   /** 内核 spawn 时读取的配置文件路径清单(缺省无依赖;pi/dsh 子类各自 override)。 */
   get configDepPaths(): string[] { return []; }

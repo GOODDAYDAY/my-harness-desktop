@@ -72,7 +72,7 @@ try {
   await page.waitForSelector("[role='menu']", { timeout: 8000 }).catch(() => {});
   // Radix ContextMenu.Item 的 onSelect 用可信点击触发(合成 click 不保证触发)——取菜单项坐标 mouse.click
   const itemBox = await page.evaluate(() => {
-    const item = [...document.querySelectorAll("[role='menuitem']")].find((m) => (m.textContent || "").includes("重命名"));
+    const item = [...document.querySelectorAll("[role^='menuitem']")].find((m) => (m.textContent || "").includes("重命名"));
     if (!item) return null;
     const r = item.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

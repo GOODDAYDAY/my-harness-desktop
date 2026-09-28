@@ -6,5 +6,7 @@
   "keyhints.settings.backquoteHint": "关闭后 ` 键完全恢复为普通字符，只保留组合键触发。",
   "keyhints.settings.shortcut": "组合键触发",
   "keyhints.settings.shortcutDesc": "进入导览模式也可以绑组合键，改绑在「快捷键」设置页。",
-  "keyhints.settings.shortcutHint": "事件 keyhints:toggle，默认绑定 mod+shift+'。导览模式内按字母触发点击，Esc 退出。"
+  "keyhints.settings.shortcutHint": "事件 keyhints:toggle，默认绑定 mod+shift+'。导览模式内按字母触发点击，Esc 退出。",
+  "keyhints.channel.toggle.label": "切换按键导览模式",
+  "keyhints.channel.toggle.desc": "进入/退出导览模式：所有可点击元素高亮并显示字母标记，按字母即触发点击。"
 }

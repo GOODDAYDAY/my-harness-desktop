@@ -26,7 +26,7 @@ export interface PiExtensionManagerOptions {
 }
 
 export class PiExtensionManager extends KernelExtensionManager {
-  readonly capabilities: KernelExtensionCapabilities = { update: false, reorder: false };
+  readonly capabilities: KernelExtensionCapabilities = { install: true };
 
   private readonly agentDir: string;
   private readonly piSettings: PiSettingsStore;

@@ -15,7 +15,11 @@ import { join, dirname } from "node:path";
 import type { RpcAdapter } from "./rpc-adapter";
 import type { ProcessExit } from "../../core/subprocess-handle";
 import type { Anchor, BoundaryRef, LineageTree, SeedOptions } from "@my-harness-desktop/shared";
-import type { BackendExtensions } from "./pi-backend-extensions";
+import type {
+  BackendCapabilities, SteeringCapabilities, RetryCapabilities, CompactionCapabilities,
+  SnapshotCapabilities, StatsCapabilities, ModelCycleCapabilities, ToolExecCapabilities,
+  BusFrameCapabilities, QuestionChannelCapabilities,
+} from "@my-harness-desktop/shared";
 import { AbstractBackend, type BackendContext } from "../../core/abstract-backend";
 import { resync } from "./resync";
 import { toModelInfo, toSessionStats } from "../protocol/context-binding";
@@ -97,7 +101,10 @@ export async function piSeedSession(agentDir: string, cwd: string, lineage: Neut
 }
 
 /** pi 后端:把 RpcAdapter + 命令构造 + 会话文件编排收编成一个 BaseBackend 实现。 */
-export class PiBackend extends AbstractBackend<PiBackendContext> implements BackendExtensions {
+export class PiBackend extends AbstractBackend<PiBackendContext> implements
+  SteeringCapabilities, RetryCapabilities, CompactionCapabilities, SnapshotCapabilities,
+  StatsCapabilities, ModelCycleCapabilities, ToolExecCapabilities, BusFrameCapabilities,
+  QuestionChannelCapabilities {
   constructor(
     private readonly adapter: RpcAdapter,
     ctx: PiBackendContext,
@@ -105,8 +112,26 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements Back
     super(ctx);
   }
 
-  /** pi 扩展面(§7.6):壳经 capabilities.extensions 探测,不按内核身份硬分支。fileBacked=true:pi 会话是壳要跟踪的文件。 */
-  override readonly capabilities = { extensions: this as BackendExtensions, fileBacked: true };
+  /** 能力面(§7.6):按语义轴交出,壳逐轴探测「有则用、无则降级」,不按内核身份硬分支。
+   *  `this` 直接满足各面接口(class 声明处 implements),所以**不需要 `as` 断言**——
+   *  此前是 `{ extensions: this as BackendExtensions }`,一个 opaque 桶 + 一次强转,
+   *  桶的形状定义在本内核目录里、却要 application 跨界 import(检验⑪ allowlist 的唯一一条)。
+   *  fileBacked=true:pi 会话是壳要跟踪的文件(独立轴,不是任何能力面的代理)。 */
+  override readonly capabilities: BackendCapabilities = {
+    steering: this, retry: this, compaction: this, snapshot: this, stats: this,
+    modelCycle: this, toolExec: this, busFrames: this, questions: this,
+    // 追加系统 prompt:pi-backend-factory 把 systemPromptPaths/Texts 拼成 CLI 参数,故声明 true。
+    systemPrompt: true,
+    // 思考档位:pi 的方法恒在(无懒探测),故不声明 onMissing;清单与轮转都由内核提供。
+    thinking: {
+      getThinkingLevels: () => this.getThinkingLevels(),
+      cycleThinkingLevel: () => this.cycleThinkingLevel(),
+      // pi 的清单是全局档位表,且 RPC 形状不识别时返空(见本文件 getThinkingLevels 的兜底),
+      // 故声明 approximate:渲染层空清单时回落已知默认档位(与既有行为一致,不是新增回落)。
+      levelsSemantics: "approximate",
+    },
+    fileBacked: true,
+  };
 
   /** pi spawn 时读取的配置文件(models.json/settings.json;变了壳重建进程)。 */
   override get configDepPaths(): string[] {

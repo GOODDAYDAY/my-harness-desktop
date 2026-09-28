@@ -177,7 +177,7 @@ typecheck 0 · **577 全量测试**（60 文件）· 5 e2e · build OK · 零 pu
 
 ### 已清理的内核名判别（round 27-28）
 
-- `build-kernel.ts` 的 `kernel === "pi"`（fitPiExtensionAvailable 条件挂载）→ `kernelVersion.fitPiExtensionAvailable(kernel)` 带参数能力探测。
+- `build-kernel.ts` 的 `kernel === "pi"`（旧名 `fitPiExtensionAvailable` 的条件挂载，已退役）→ `kernelVersion.<能力>(kernel)` 带参数能力探测。该能力现名 `toolFilterEnforced`，语义也已换轴：从「桌面适配扩展装没装」改为「**该内核能否强制执行工具白名单**」，每个内核按自己的机制回答（详见 `docs/plugins/manager/tool-manager.md`）。
 - `controllers/kernel.ts` 的 `getFallbackModel` 的 `kernel: "dsh"/"pi" as const` → 遍历注册内核（`kernelIds`）找默认模型。
 
 **审计结论：真正的"内核名判别"（`kernel === "pi"` / `"dsh" as const` / `asPi()`）已全部清零**，剩余 pi/dsh 字面量均为"资源命名/别名/装配点"的非判别残留。

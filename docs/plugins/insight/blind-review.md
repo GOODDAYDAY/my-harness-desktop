@@ -18,7 +18,7 @@
 - **`settings` 槽**——贡献设置页一个"盲审"配置页（组件 `BlindReviewSettings`）；
 - **`languages` 槽**——贡献四语言文案包（`blind-review.settings` 与 `blind-review.review` 两个语言包 id）。
 
-交互机制只有一条事件线：它在 renderer 顶层 `export const channels = ["blind-review:fileActionInvoke"]` 声明一个**约定频道**，接收文件树触发的文件动作 invoke（§6）。除此之外它与任何插件没有共享 store 互读写，没有对任何内核专属能力的依赖（唯一用到的是 pi 扩展面 `ctx.pi.getLastAssistantText()`，见 §9）。
+交互机制只有一条事件线：它在 renderer 顶层 `export const channels = ["blind-review:fileActionInvoke"]` 声明一个**约定频道**，接收文件树触发的文件动作 invoke（§6）。除此之外它与任何插件没有共享 store 互读写，没有对任何内核专属能力的依赖（唯一用到的是快照能力轴 `ctx.sessions.getLastAssistantText()`，见 §9）。
 
 本插件与设计文档 `docs/plugins/blind-review.md` 是一对：那份是**方案/设计**（为什么这么做、Anthropic blind auditing game 的映射、流程 mermaid），本文是**实现级技术文档**（每个论断落到具体文件、函数、类型名，讲清槽位契约、事件路由、与 file-tree 的消费关系）。两文不重复，本文默认读者已理解"蓝队 + 信息屏障 + 裁判"的业务意图，专注代码怎么落地。
 
@@ -368,7 +368,7 @@ CLAUDE.md §8.2 说"凡消费别人的 channel（on 或 invoke）都应声明 de
 - `ctx.fs.readDirTree / readFile`——白盒队文件树 + 文件动作读文件。走 `fs:project` 门控 + 项目根圈禁（`FsApi` 契约 `sessions.ts` 399–418 行注释"读写均经 assertProjectPath 圈禁到项目根"）。`ctx.fs` 是可选字段（`PluginContext.fs?: FsApi`，`context.ts` 287 行）——未声明权限时 main IPC 边界拒绝，runner 里 `if (!ctx.fs) throw` 显式降级。
 - `ctx.sessions.setContext / renameSession`——开新会话（信息屏障）+ 恢复 + 命名标记（核心默认）。
 - `ctx.messaging.prompt / abort`——发送审查指令 / 中止（核心默认）。
-- `ctx.pi.getLastAssistantText()`——收报告文本。这是 **pi 内核专属扩展面**（`PiExtensions`，`context.ts` 285 行注释"pi 内核专属扩展面……dsh 下这些入口隐藏/置灰"）。blind-review 在这里有一个显式的内核耦合点：它读的是 pi 的"最后一条 assistant 文本"，dsh 内核下此入口降级（抛"当前内核不支持"）。这是本插件唯一没有完全抹平内核差异的地方——设计文档 §4 写的是 `ctx.maintenance.getLastAssistantText()`，但实现落点是 `ctx.pi.getLastAssistantText()`（`plugin-context.ts` 53 行）。要在 dsh 下等价，需经 `ctx.sessions` 的中性消息面另取，属已知演进点，不影响当前 pi 路径正确性。
+- `ctx.sessions.getLastAssistantText()`——收报告文本。它属**快照能力轴**（`capabilities.faces.snapshot`）：能从内核实况拉回状态的内核才有此面，无此面的内核调用会抛「当前内核不支持最近回复文本」，本插件按设计降级为读文件兜底。⚠ 此前这里写作 `ctx.pi.getLastAssistantText()`、文档也称它为「pi 内核专属扩展面（`PiExtensions`）」——那个内核名袋子已退役，12 个方法按语义域归位到 `messaging`/`models`/`sessions` 三个中性组，可用性改由**逐轴**能力面探测（不再是「有没有 pi 面」一个 bit）。所以本插件的耦合点现在是「有没有快照面」这条中性轴，而不是「是不是 pi」。设计文档 §4 写的是 `ctx.maintenance.getLastAssistantText()`，但实现落点是 `ctx.pi.getLastAssistantText()`（`plugin-context.ts` 53 行）。要在 dsh 下等价，需经 `ctx.sessions` 的中性消息面另取，属已知演进点，不影响当前 pi 路径正确性。
 - `useSessionStore.subscribe` / `useUiStore.getState()`——zustand 非组件订阅（等待完成）与 store 快照读（记录/取会话路径、读 cwd）。这是 renderer 侧框架状态只读，不调 setter。
 
 ## 10 QA

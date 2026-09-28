@@ -1,4 +1,4 @@
 {
   "plugin.pi.displayName": "Pi-Verwaltung",
-  "plugin.pi.description": "Pi-Kernel-Versionsverwaltung + Basiskonfigurations-Editor"
+  "plugin.pi.description": "Pi-Kernel-Versionsverwaltung + Kernelkonfigurations-Editor"
 }

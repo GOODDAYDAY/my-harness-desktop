@@ -1,0 +1,4 @@
+{
+  "plugin.session-colors.displayName": "会话图钉",
+  "plugin.session-colors.description": "给会话行与会话消息钉带颜色的图钉，任意位置，跟随宿主移动"
+}

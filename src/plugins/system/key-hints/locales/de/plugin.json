@@ -1,0 +1,4 @@
+{
+  "plugin.key-hints.displayName": "Tastenhinweise",
+  "plugin.key-hints.description": "Vimium-artige Tastenhinweise: Hint-Modus über eine Tastenkombination oder die `-Taste starten; jedes klickbare Element wird hervorgehoben und mit einem Buchstaben markiert — Tippen des Buchstabens löst den Klick aus"
+}

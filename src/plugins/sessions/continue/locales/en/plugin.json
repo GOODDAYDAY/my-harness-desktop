@@ -1,0 +1,4 @@
+{
+  "plugin.continue.displayName": "Continue",
+  "plugin.continue.description": "Continue button: resumes in place after an abnormal stop (tool failure / LLM failure / cancel) — no fork, no resending old messages"
+}

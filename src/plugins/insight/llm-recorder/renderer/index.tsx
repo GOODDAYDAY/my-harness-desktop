@@ -107,7 +107,7 @@ function RecordRow({ pair, expanded, payloadBytes, onToggle, onOpenModal }: {
         <span
           style={{
             flexShrink: 0, display: "inline-flex", alignItems: "center", columnGap: 4,
-            color: pair.response === null ? "var(--color-muted)" : failed ? "var(--color-danger, #f38ba8)" : "var(--color-accent-success)",
+            color: pair.response === null ? "var(--color-muted)" : failed ? "var(--color-accent-danger, #f38ba8)" : "var(--color-accent-success)",
           }}
         >
           {/* 状态列：有 HTTP status 就报它；没有（dsh）就报这次调用怎么结束的（stop / tool-calls /

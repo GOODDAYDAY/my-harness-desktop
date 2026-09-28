@@ -24,5 +24,7 @@
   "minimal.customCli.appliedWithPending": "Not available for a built-in kernel",
   "minimal.customCli.cleared": "Nothing to clear for a built-in kernel",
   "minimal.customCli.failed": "Failed",
-  "minimal.noInstallHint": "minimal ships with the shell: nothing to install, upgrade, downgrade, or point at."
+  "minimal.noInstallHint": "minimal ships with the shell: nothing to install, upgrade, downgrade, or point at.",
+  "plugin.minimal.description": "The minimal kernel's desktop surface: kernel version + settings + extensions + models (one entry, three tabs, on par with pi/dsh). Test-only plugin: loaded by tests alone, not part of the production kernel list.",
+  "settings.minimal-ext": "Minimal Extensions"
 }

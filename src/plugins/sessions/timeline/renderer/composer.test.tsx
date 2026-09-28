@@ -64,7 +64,7 @@ describe("Composer 斜杠弹窗(含壳插件命令)", () => {
     );
     const pill = container.querySelector("[data-command-active]");
     expect(pill).not.toBeNull();
-    expect(pill!.classList.contains("pi-composer-command")).toBe(true);
+    expect(pill!.classList.contains("shell-composer-command")).toBe(true);
     // chip 显示命令名 + 来源徽标
     const chip = container.querySelector("[data-command-chip]");
     expect(chip?.textContent).toContain("/goal");
@@ -91,7 +91,7 @@ describe("Composer 发送拦截接线(与 timeline sendText 同款顺序)", () =
     registerComposerCommands([
       {
         name: "goal",
-        description: "测试命令",
+        descriptionKey: "test.command.desc",
         handle: (input) => { handledInputs.push(input); return true; },
       },
     ]);
@@ -175,11 +175,11 @@ describe("Composer 发送拦截接线(与 timeline sendText 同款顺序)", () =
 });
 
 describe("Composer goal 生效着色(输入框上方目标条的呼应面)", () => {
-  it("goalActive=true → 药丸挂 pi-composer-goal 类 + data-goal-active 锚点", () => {
+  it("goalActive=true → 药丸挂 shell-composer-goal 类 + data-goal-active 锚点", () => {
     render(<Composer value="" onValueChange={() => {}} onSubmit={() => {}} goalActive />);
     const textarea = document.querySelector("[data-timeline-composer]")!;
     const pill = textarea.parentElement!; // 药丸容器
-    expect(pill.classList.contains("pi-composer-goal")).toBe(true);
+    expect(pill.classList.contains("shell-composer-goal")).toBe(true);
     expect(pill.getAttribute("data-goal-active")).toBe("true");
   });
 
@@ -187,7 +187,7 @@ describe("Composer goal 生效着色(输入框上方目标条的呼应面)", () 
     render(<Composer value="" onValueChange={() => {}} onSubmit={() => {}} />);
     const textarea = document.querySelector("[data-timeline-composer]")!;
     const pill = textarea.parentElement!;
-    expect(pill.classList.contains("pi-composer-goal")).toBe(false);
+    expect(pill.classList.contains("shell-composer-goal")).toBe(false);
     expect(pill.getAttribute("data-goal-active")).toBeNull();
   });
 });

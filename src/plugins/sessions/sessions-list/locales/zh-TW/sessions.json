@@ -34,5 +34,6 @@
   "sessions.deleteConfirmYes": "確認刪除",
   "sessions.deleteConfirmNo": "取消",
   "sessions.unread": "未讀訊息",
-  "sessions.kernelNotLoaded": "本會話所屬內核「{{kernel}}」未裝載：可檢視，不能傳送"
+  "sessions.kernelNotLoaded": "本會話所屬核心「{{kernel}}」未裝載：可檢視，不能傳送",
+  "sessions.kernelNotLoadedShort": "核心未裝載"
 }

@@ -270,7 +270,19 @@ schema 解析面（`parseSettingsSchema(installDir, globalResolvePaths)`）：
 
 - `findSettingsDts` —— 优先 installDir（`~/.my-harness-desktop/pi/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.d.ts`），回退全局 `require.resolve` 路径。`globalResolvePaths` 由 shell 注入（`process.cwd()` / `~/.npm-global` / `/usr/local/lib`），application 不读 process 环境（`assemble.ts` 第 145–149 行）。
 - `parseSettingsInterfaces` —— 用 `ts.createProgram` + `checker` 把 `Settings` 接口展平成 `SchemaField[]`。嵌套 interface（如 `CompactionSettings`）展成 dotted key（`compaction.enabled`）；字面量联合/外部类型别名（`ThinkingLevel` / `Transport`）经 checker 解析成 `enum` + `enumValues`。这是「方案 D：未知字段兜底」——`.d.ts` 有但描述表没有的字段照展示，内核升级新字段不丢。
-- `schemaFieldsOf` —— 把一个 TS Type 映射成 0..N 个 `SchemaField`：Boolean→`boolean`、Number→`number`、String→`string`、string 数组→`string[]`、全字符串字面量联合→`enum`、全数字字面量→`number`、有属性的对象→递归展平 dotted 子字段、无属性对象→`object`（不透明）。解析失败返回空数组（降级：配置表单退化成通用 JSON 兜底，不脆）。
+- `schemaFieldsOf` —— 把一个 TS Type 映射成 0..N 个 `SchemaField`：Boolean→`boolean`、Number→`number`、String→`string`、string 数组→`string[]`、有属性的对象→递归展平 dotted 子字段、无属性对象→`object`（不透明）。解析失败返回空数组（降级：配置表单退化成通用 JSON 兜底，不脆）。
+
+  联合类型分**五条**（按特异性从高到低）：
+
+  | 联合形态 | 映射 | 说明 |
+  |---|---|---|
+  | 全字符串字面量 | `enum` + `enumValues` | 既有行为；`ThinkingLevel` / `Transport` 这类外部别名经 checker 解析后也走这条 |
+  | 全数字字面量 | `number` | 既有行为 |
+  | 全布尔字面量 | `boolean` | TS 把 `boolean` 表示成 `true \| false` 联合时会落到这条；比"两选项 enum"更忠实 |
+  | **混合**字面量 | `enum` + `enumValues` + **`enumValueKinds`** | 如 `boolean \| "auto"`、`"kitty" \| "iterm2" \| "auto" \| false`。`enumValueKinds` 与 `enumValues` **同序**，标注每个值写回时的种类 |
+  | 含非字面量成员 | `object` | 不透明（`PackageSource[]`、`Record<string, ThinkingLevel>` 属这类），交给 JSON 编辑器 |
+
+  第四条是后加的，此前一律落 `object`：于是 pi 的 `terminal.hyperlinks` / `terminal.images` / `terminal.trueColor` 三个字段在设置页只能拿到**裸 JSON 编辑器**，用户得手敲 `true` / `"auto"`——而同一个表单对纯字符串联合给的是下拉框。同一张表单里能力不一致是缺陷不是取舍。实测改完后 pi 的 70 个字段里 `object` 型从 5 个降到 2 个（剩下两个确实不透明）。
 
 ### 8.2 createPiConfigApi 与 KernelConfigField
 
@@ -279,7 +291,14 @@ schema 解析面（`parseSettingsSchema(installDir, globalResolvePaths)`）：
 - `label: labelKey(f.key)` = `kernel.fields.${key}`；`description: descKey` = `kernel.fieldDescs.${key}`；`group` = `kernel.groups.${top}`（dotted key 取第一段，无点进 `general`）；`options` = `kernel.options.${field}.${value}`。
 - 注释明说「字段名 + 类型从内核来：`parseSettingsSchema` 解析 pi 自己的 settings-manager.d.ts……适配器不硬编码字段清单——pi 升级加字段，自动跟着 .d.ts 变」；「label/description/group/选项文案是壳的本地化 i18n key，由共享表单 `t()` 解析；适配器只从字段名派生 key，不写死文案」。
 
-`KernelConfigForm`（`packages/react/src/manager/kernel-config-form.tsx`）是消费端：`useEffect` 里 `api.fields()` 拉字段清单，`config` 从框架注入，`onChange` 上报。它把**通用数据型**映射成控件：`boolean`→开关 / `number`→数字 / `string`→文本 / `string[]`→列表 / `enum`→下拉 / `object`→可编辑 JSON。字段清单空（如 dsh 无 schema）时按值递归推断类型：嵌套对象展平成叶子控件（`InferredField`），只有真正无法结构化的叶子（空对象/对象数组）才落到可编辑 JSON textarea。分组渲染按 `group` i18n key 归组，未覆盖的顶层键进「其他字段」。整页不含内核身份分支，pi/dsh 共用。
+`KernelConfigForm`（`packages/react/src/manager/kernel-config-form.tsx`）是消费端：`useEffect` 里 `api.fields()` 拉字段清单，`config` 从框架注入，`onChange` 上报。它把**通用数据型**映射成控件：`boolean`→开关 / `number`→数字 / `string`→文本 / `string[]`→列表 / `enum`→下拉 / `object`→可编辑 JSON。
+
+`enum` 的下拉有两处**必须**按选项的 `kind` 转换，不能简化成直接透传字符串（`KernelConfigField.options[].kind`，缺省 `"string"`）：
+
+- **显示**：`String(value)`——配置里存的是真布尔 `false` 时，要能对上 `<option value="false">`；
+- **写回**：按该选项声明的 `kind` 转回真值。HTML `<option value>` 只能是字符串，若不转，内核拿到的就是字符串 `"false"`——**而在 JS 里 `"false"` 是真值**，用户选"关闭"、内核当成"开启"，语义直接反过来，且不报错不崩，只会静默做错事。
+
+另有一条：配置里的值**不在枚举内**时（例如手改过 settings.json 写了 `"sixel"`），要补一个 `disabled` 的合成选项把真值显示出来。原生 `<select>` 无法表示"选项外的值"，不补的话浏览器会退回显示第一项——数据没坏（`onChange` 未触发、不会误写），但**界面在撒谎**：用户看到的与将要保存的不一致。文案走 `settings.valueNotInOptions`（归 `system/i18n`）。字段清单空（如 dsh 无 schema）时按值递归推断类型：嵌套对象展平成叶子控件（`InferredField`），只有真正无法结构化的叶子（空对象/对象数组）才落到可编辑 JSON textarea。分组渲染按 `group` i18n key 归组，未覆盖的顶层键进「其他字段」。整页不含内核身份分支，pi/dsh 共用。
 
 这条链的机制-内容分离结论：**字段清单是内核吐的数据（`.d.ts` 为唯一源），控件映射是壳的机制，文案是 pi 贡献的内容**。三者各归其位，pi 一个字段名都不写死。
 
@@ -337,7 +356,7 @@ pi 的 `kernelConfig: "pi"` / `kernelModels: "pi"` 声明触发的是**框架**�
 
 ### 9.5 能力探测的消费方
 
-`ctx.kernels.pi` 类型里有可选方法 `fitPiExtensionAvailable?(): Promise<boolean>`（`context.ts` 第 275 行），pi 有、dsh 缺面。它的消费方不是 pi 自己，而是 tool-manager 插件（据 `context.ts` 注释「tool-manager 据此刻『过滤不生效』降级提示」）——pi 的「内核版本」TAB 只负责展示与安装，不消费这个探测。这再次印证「能力接口探测、有则用无则降级」，pi 的专属能力（tool-gate 扩展可用性）不进 pi 的 UI 分支。
+`ctx.kernels.pi` 类型里有可选方法 `toolFilterEnforced?(): Promise<boolean>`（圆心 `KernelVersionApi`；旧名 `fitPiExtensionAvailable` 已退役并**换轴**：从「桌面适配扩展装没装」改为「该内核能否强制执行工具白名单」）。pi 对它的答案恰好是「我的 tool-gate 扩展装好了没」——因为 pi 的强制过滤机制就是那个扩展；而工具系统是本体的内核（如 minimal）答 true。dsh 不声明（缺面）。消费方不是 pi 自己，而是 tool-manager 插件（据 `context.ts` 注释「tool-manager 据此刻『过滤不生效』降级提示」）——pi 的「内核版本」TAB 只负责展示与安装，不消费这个探测。这再次印证「能力接口探测、有则用无则降级」，pi 的专属能力（tool-gate 扩展可用性）不进 pi 的 UI 分支。
 
 ## 10 QA
 

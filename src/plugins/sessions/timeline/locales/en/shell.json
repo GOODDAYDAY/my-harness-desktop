@@ -36,6 +36,7 @@
   "shell.toolExecuting": "running tool…",
   "shell.outputting": "generating…",
   "shell.compacting": "compacting…",
+  "shell.retrying": "retrying…",
   "shell.scrollToBottom": "Scroll to bottom",
   "shell.switchingSession": "switching session…",
   "shell.error": "Generation failed",

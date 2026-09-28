@@ -20,6 +20,57 @@ import type { Question } from "./events/kernel-event";
  * 契约只描述「内核能干什么」,不描述「内核怎么 spawn、参数从哪来」。
  * 字段按需扩展:阶段二 minimal 只需 isPackaged/homedir,阶段三 pi/dsh 迁移时补 prefs 等。
  */
+/** 一次内核插件**差量重载**的结果（`boot-surface.md` §3.6.2）。
+ *
+ *  为什么这个类型住在圆心：它是 main → renderer 的**跨进程载荷**，两侧都要按同一形状读写；
+ *  服务端若自己定义一份、renderer 再定义一份，就是 §1.3 说的"同一概念两份定义"，必然漂移。
+ *
+ *  ⚠ 所有字段都是**普通数据**，不能有 getter：这份对象要经 JSON 序列化过 IPC，
+ *  而 getter 不会被 `JSON.stringify` 收进去（首版实现里 `changed` 写成了 `get changed()`，
+ *  单测直接读对象时是对的、一过 IPC 就消失——典型的"本地绿、跨进程丢字段"）。 */
+export interface KernelReloadReport {
+  /** 新装载的内核 id（此前不在注册表里）。 */
+  added: KernelId[];
+  /** 同 id 但 version 变了 → 工厂重跑（改动这才真的生效）。 */
+  replaced: { id: KernelId; from: string; to: string }[];
+  /** 从注册表消失的内核 id（**不** stop 已在跑的进程：会话进程生命周期归 SessionStore）。 */
+  removed: KernelId[];
+  /** 同 id 同 version、原样保留（工厂没重跑）。 */
+  unchanged: KernelId[];
+  /** 装载阶段抛出的错误（按内核 id）。单个内核装载失败**不让整次重载失败**：
+   *  暖路径上"用户刚投递了一个坏插件"不该把已经在跑的应用打回不可用状态。 */
+  errors: { id: string; message: string }[];
+  /** 是否发生了任何变化（决定 main 侧要不要广播、renderer 要不要重拉）。 */
+  changed: boolean;
+}
+
+/** 一次**壳插件**差量重扫的结果（`application/lifecycle/shell-reload.ts`）。
+ *  形状与 `KernelReloadReport` 对齐，便于 UI 用同一套呈现。同样是跨进程载荷：
+ *  字段必须全是普通数据，不能有 getter（getter 不被 `JSON.stringify` 收进去）。 */
+export interface ShellReloadReport {
+  /** 新拾起的插件 id（新投递的目录，或它的内核面刚变得可装载）。 */
+  activated: string[];
+  /** 被摘掉的插件 id（目录消失 / 内核面不再可装载 / 被禁用）。 */
+  deactivated: string[];
+  /** 两边都有、原样保留（要重装某个插件用 per-id 的 `plugins:reload`）。 */
+  unchanged: string[];
+  errors: { id: string; message: string }[];
+  changed: boolean;
+}
+
+/** 一次「重载内核插件」的**完整**结果：内核注册表侧 + 壳插件侧。
+ *
+ *  为什么是两份而不是一份：「一个内核 = 一个插件」，同一个目录既是内核插件
+ *  （`manifest.kernel` 面 → 内核注册表），也是壳插件（`renderer/`+`locales/`+`contributes.settings`
+ *  → 壳插件注册表）。只重载一侧会留下用户可见的半截状态（装了内核但设置页没 TAB；
+ *  删了内核但 TAB 还在、点进去报错）。两份报告让 UI 能分别说明"哪一侧动了什么"。 */
+export interface KernelPluginReloadReport {
+  kernels: KernelReloadReport;
+  shell: ShellReloadReport;
+  /** 任一侧有变化即为 true。 */
+  changed: boolean;
+}
+
 export interface KernelPluginContext {
   /** 是否打包态(dev 读源码路径 / pkg 读 resources)。 */
   isPackaged: boolean;

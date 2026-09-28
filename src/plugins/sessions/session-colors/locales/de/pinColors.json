@@ -14,5 +14,12 @@
   "pinColors.locateMessage": "Zur Nachricht springen",
   "pinColors.previewMissing": "Keine Vorschau",
   "pinColors.quickPin": "Anheften",
-  "pinColors.quickUnpin": "Lösen"
+  "pinColors.quickUnpin": "Lösen",
+  "pinColors.color.f38ba8": "Rot",
+  "pinColors.color.fab387": "Orange",
+  "pinColors.color.f9e2af": "Gelb",
+  "pinColors.color.a6e3a1": "Grün",
+  "pinColors.color.89b4fa": "Blau",
+  "pinColors.color.cba6f7": "Violett",
+  "pinColors.color.f5c2e7": "Rosa"
 }

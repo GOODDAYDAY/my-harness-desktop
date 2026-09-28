@@ -43,5 +43,6 @@ export * from "./domain/working-phase";
 export * from "./wire/wire";
 
 // 配置路径契约 + 样式预设清单(原 packages/contract,插件 import 的发布面)
+export * from "./contract/config-saved";
 export * from "./contract/paths";
 export * from "./contract/style-presets";

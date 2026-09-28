@@ -11,14 +11,14 @@ import type { SessionHeaderChangedEvent, SessionInfo } from "@my-harness-desktop
 
 type HeaderCb = (e: SessionHeaderChangedEvent) => void;
 
-const shared: { headerCb?: HeaderCb; listCalls: string[] } = { listCalls: [] };
+const shared: { headerCb?: HeaderCb; refreshCb?: () => void; listCalls: string[] } = { listCalls: [] };
 
 /** 最小 window.kernel mock:捕获 headerChanged 订阅,list 计数(断言不重拉/重拉)。 */
 function stubKernel() {
   const sessions = {
     setContext: async () => {},
     list: async (cwd: string) => { shared.listCalls.push(cwd); return []; },
-    getCapabilities: async () => ({ kernel: null, locked: false, extension: false, thinking: false }),
+    getCapabilities: async () => ({ kernel: null, locked: false, faces: {}, thinkingCycle: false, levelsSemantics: "precise" }),
     getStats: async () => null,
     sync: async () => { throw new Error("no-kernel"); },
     onEvent: () => () => {},
@@ -28,7 +28,12 @@ function stubKernel() {
     onNeutralChange: () => () => {},
     getNeutral: async () => ({ session: null, activeLineageId: null }),
   };
-  vi.stubGlobal("window", { kernel: { sessions } });
+  // onRefreshRequested 是 window.kernel 的**顶层**面（不是 sessions 下的）。
+  // 替身必须带上它：initSessionStore 会订阅（r19 起，内核集合变了要重拉 sessionInfos，
+  // 否则会话行的 kernelLoaded 旗标 stale → 角标与只读条都不出现）。
+  // 这里顺便**捕获回调**，好在下面断言"信号到达 → 真的重拉了列表"。
+  const onRefreshRequested = (cb: () => void) => { shared.refreshCb = cb; return () => {}; };
+  vi.stubGlobal("window", { kernel: { sessions, onRefreshRequested } });
 }
 
 const row = (path: string, ns: string): SessionInfo => ({
@@ -107,5 +112,28 @@ describe("headerChanged 增量路由 + 本地补丁动作", () => {
   it("applyHeaderPatch 对未知 path 安静跳过(广播先于初始拉取到达不炸)", () => {
     useSessionStore.getState().applyHeaderPatch("/p/ghost.jsonl", { pinned: true });
     expect(useSessionStore.getState().sessionInfos!["/p/a.jsonl"].pinned).toBeUndefined();
+  });
+
+  // ---- r19 的修复：内核集合变了要重拉列表（否则 kernelLoaded 旗标 stale）----
+  //
+  // 每一行的 `kernelLoaded` 是 main 侧按**当时的注册表**算好下发的。内核插件重载把某个内核
+  // unregister 之后，main 侧立刻算对了，但 renderer 手里的 `sessionInfos` 还是旧旗标——
+  // 于是会话行不显示"内核未装载"角标、时间线不显示只读条，用户点发送要到服务端才被处置。
+  // 修法是让框架的拉取口也订阅中性 `refresh.requested`。这条断言就是那个订阅的守卫。
+  it("收到 refresh.requested → 重拉当前 cwd 的会话列表", async () => {
+    useUiStore.setState({ currentCwd: "/proj" });
+    shared.listCalls.length = 0;
+    expect(shared.refreshCb, "initSessionStore 应已订阅刷新信号（替身捕获不到 = 订阅没装）").toBeTypeOf("function");
+    shared.refreshCb!();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(shared.listCalls, "刷新信号到达必须重拉列表（否则 kernelLoaded 旗标停在上一批）").toContain("/proj");
+  });
+
+  it("没有当前 cwd 时不拉（拉了也是白拉，且会把 sessionInfosCwd 弄脏）", async () => {
+    useUiStore.setState({ currentCwd: undefined });
+    shared.listCalls.length = 0;
+    shared.refreshCb!();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(shared.listCalls).toEqual([]);
   });
 });

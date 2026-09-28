@@ -1,0 +1,15 @@
+{
+  "ask.selectOrCustom": "请选择一个选项或填写自定义答案。",
+  "ask.expand": "展开",
+  "ask.collapse": "收起",
+  "ask.abandonGroup": "放弃整组问题",
+  "ask.recommended": "推荐",
+  "ask.customWithOptions": "自定义答案(可与已选共存)",
+  "ask.customReplaces": "自定义答案(键入即取代选项)",
+  "ask.customPlaceholder": "输入你的答案",
+  "ask.prevQuestion": "上一题",
+  "ask.nextQuestion": "下一题",
+  "ask.skipQuestion": "跳过本题",
+  "ask.submitting": "提交中…",
+  "ask.submit": "提交"
+}

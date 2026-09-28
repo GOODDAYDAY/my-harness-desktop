@@ -55,7 +55,19 @@ function scanCalledMembers(): Set<string> {
   for (const file of files) {
     // 跳过方法名单源自身（它是定义，不是调用）。
     if (file.endsWith(join("protocol", "dsh-methods.ts"))) continue;
-    const src = readFileSync(file, "utf8");
+    // ⚠ 必须**剥离注释**再匹配（r72）：本仓的纪律是"退役符号可以留在代码里，但要带标注"
+    //   （文档漂移审计正是按"有标注即合法"工作的），所以注释里提到 `DSH_METHODS.xxx`
+    //   是合法且会反复出现的形态。首版不剥注释，于是 r72 删除 sessionResume 时写在
+    //   dsh-backend.ts 的那段"此处曾有 …（走 DSH_METHODS.sessionResume）"退役说明
+    //   被当成了**调用点**，报出"DSH_METHODS.sessionResume 在单源表里不存在"——
+    //   看起来像我删错了，实际是扫描器把注释当代码。
+    //   通则（与 audit:deps 检验⑬ 同一教训）：**按文件剥离块注释与行注释后再判**，
+    //   否则退役说明、示例、TODO 都会变成假阳性。
+    const src = readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//"))
+      .join("\n");
     for (const m of src.matchAll(/DSH_METHODS\.([A-Za-z]+)/g)) called.add(m[1]);
   }
   return called;

@@ -20,14 +20,29 @@
     ],
     "languages": [
       {
-        "id": "keybindings.settings",
+        "id": "keybindings.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "keybindings.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "keybindings.plugin",
         "locale": "zh-CN",
-        "resources": "./locales/zh-CN/settings.json"
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "keybindings.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
       },
       {
         "id": "keybindings.settings",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/settings.json"
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
       },
       {
         "id": "keybindings.settings",
@@ -36,8 +51,13 @@
       },
       {
         "id": "keybindings.settings",
-        "locale": "de",
-        "resources": "./locales/de/settings.json"
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/settings.json"
+      },
+      {
+        "id": "keybindings.settings",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/settings.json"
       }
     ]
   }

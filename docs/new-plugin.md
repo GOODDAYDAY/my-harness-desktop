@@ -248,7 +248,7 @@ ctx.events.on("goal:state", (p) => {}, { replayLast: true });  // 返回反注�
 ctx.events.invoke("别的插件:channel", payload);   // 定向分派，不需权属
 ```
 
-**pi 扩展面**（`ctx.pi`，pi 专属能力，dsh 下入口隐藏/置灰）：`steer`、`followUp`、`cycleModel`、`getThinkingLevels`、`cycleThinkingLevel`、`compact`、`exportHtml` 等。这些是 pi 的扩展面，`PluginContext.pi` 上永远存在，但调用前要按能力探测「有则用、无则降级」——不要按内核身份硬分支。
+**内核能力面**（按语义域归位到既有中性 API 组，**不再有 `ctx.pi` 这个内核名袋子**）：`ctx.messaging` 收发送域（`steer`、`followUp`、`setSteeringMode`、`setFollowUpMode`、`abortRetry`、`setAutoRetry`）、`ctx.models` 收模型与档位域（`cycleModel`、`getThinkingLevels`、`cycleThinkingLevel`）、`ctx.sessions` 收会话域（`compact`、`setAutoCompaction`、`getLastAssistantText`）。这些方法在 `PluginContext` 上永远存在，但**不是每个内核都实现**——调用前按能力轴探测「有则用、无则降级」：`capabilities.faces.<轴>`（`steering` / `retry` / `compaction` / `snapshot` / `modelCycle` / `thinking` …）。不要按内核身份硬分支，也不要假定「某个内核一定有」。
 
 **共享 store 只读**：`useUiStore` / `useSessionStore`（从 `@my-harness-desktop/react` re-export）可以读，不能调 setter。改变框架状态走 ctx API。goal 的 `goal-controller.ts` 读 `useUiStore.getState().pendingQueue` 判断「用户插队」，但发消息走 `messaging.prompt`，不改 store。
 

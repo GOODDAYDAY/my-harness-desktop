@@ -7,7 +7,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { createPiBackend } from "../../factories/kernel-factories";
+import { createPiBackend } from "./pi-backend-factory";
 import type { SessionEvent } from "@my-harness-desktop/shared";
 
 const CLI = join(homedir(), ".my-harness-desktop-dev", "pi", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");

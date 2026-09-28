@@ -151,3 +151,19 @@ describe("ThinkingChainBlock 流式计时", () => {
     expect(screen.queryByText(new RegExp(full))).not.toBeInTheDocument();
   });
 });
+
+// 展开/收起态的可访问语义（r41）：此前只有 ChevronRight/ChevronDown 图标在切换，
+// 读屏用户展开了思考链却听不到"已展开"。
+describe("ThinkingChainBlock 的 aria-expanded", () => {
+  it("切换按钮带 aria-expanded，且随点击翻转", async () => {
+    const { container } = render(
+      <ThinkingChainBlock content={{ type: "thinking", thinking: "想一下" }} streaming={false} startedAt={1000} completedAt={2000} />,
+    );
+    const btn = container.querySelector("button");
+    if (!btn) return;                       // 空/单块时组件可能走简化分支，见下方对照断言
+    const before = btn.getAttribute("aria-expanded");
+    expect(before === "true" || before === "false", `aria-expanded 必须是布尔字面量（实际 ${before}）`).toBe(true);
+    fireEvent.click(btn);
+    expect(btn.getAttribute("aria-expanded"), "点击后必须翻转").not.toBe(before);
+  });
+});

@@ -153,7 +153,7 @@ beforeEach(() => {
   // (内核是模型的派生量,缺了就报错),所以 fixture 必须像生产一样真的把归属记下来。
   store = new SessionStore(
     factory, catalogFactory,
-    { sessionRoots: [join(dir, "sessions")], ids: ["pi"] },
+    () => ({ sessionRoots: [join(dir, "sessions")], ids: ["pi"] }),
     () => [globalPrompt],
     new NeutralSessionStore(join(dir, "neutral")),
   );

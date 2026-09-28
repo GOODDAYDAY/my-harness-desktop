@@ -12,16 +12,7 @@
 // 红绿证明:把 unregister 去掉 → ② 必红(留下孤儿 Tab);把 protected 判断去掉 → ① 必红。
 import { describe, it, expect, beforeEach } from "vitest";
 
-import {
-  canUninstall,
-  checkDependents,
-  canDeactivate,
-  reportLoadFailure,
-  setPluginError,
-  clearPluginState,
-  activate,
-  deactivate,
-} from "./index";
+import { canUninstall, checkDependents, canDeactivate, reportLoadFailure, setPluginError, clearPluginState, activate, deactivate, getPluginState } from "./index";
 
 type P = { id: string; dependsOn?: string[]; protected?: boolean };
 const mkRegistry = (plugins: P[]): unknown => ({
@@ -134,11 +125,86 @@ describe("lifecycle:插件携带的内核扩展按内核 id 派发", () => {
 
   it("停用时按同样声明的内核 id 逐个摘（与挂对称，不漏摘）", async () => {
     const { deps, off } = depsWithSpy();
+    // 假注册表必须遵守真实注册表的不变量：`manifestOf(id)` 读 `byId.get(id)?.manifest`、
+    // `allPlugins()` 返回同一个 `byId`（registry.ts:181-183 / 428-430），所以 manifest 非空
+    // 即 entry 必非空。此前这里的替身让 manifestOf 有值而 allPlugins 为空——建模了一个
+    // **不可能的状态**，于是 deactivate 改成经共享操作表（需要 path/source 构造实体）后当场炸。
+    const manifest = { id: "multi", extensions: { pi: "./pi-extension", dsh: "./dsh-extension" } };
+    const entry = { manifest, path: "/plugins/multi", source: "builtin" };
     deps.registry = {
-      registerOne: () => {}, unregister: () => {}, allPlugins: () => new Map(),
-      manifestOf: () => ({ id: "multi", extensions: { pi: "./pi-extension", dsh: "./dsh-extension" } }),
+      registerOne: () => {}, unregister: () => {},
+      allPlugins: () => new Map([["multi", entry]]),
+      manifestOf: () => manifest,
     };
     await deactivate(deps as never, "multi");
     expect(off.sort()).toEqual(["dsh:multi", "pi:multi"]);
+  });
+});
+
+// 设计文档 §6.4.1 失败路径 ②：技能挂摘失败**不再**被记成"插件激活失败"并撤注册。
+// 旧行为：暖侧没有逐实体隔离，skillsEnsure 抛错会冒泡到 activate 的 catch →
+//   unregister + setPluginError + 返回 { ok: false }，于是"某个内核的技能目录不可读"
+//   被放大成"整个插件激活失败"，管理页显示 error、贡献全撤。
+// 新行为：失败被 runOps 就地降级并点名到操作与实体，插件保持 active。
+// 这条测试守的是**旧行为消失**（不是新行为出现）——两侧都要断言。
+describe("lifecycle:启动面失败按实体降级，不放大成插件激活失败", () => {
+  function depsWithFailingSkills(): { deps: any; registry: { registered: string[]; unregistered: string[] } } {
+    const registry = { registered: [] as string[], unregistered: [] as string[] };
+    const deps = {
+      registry: {
+        registerOne: (e: { manifest: { id: string } }) => { registry.registered.push(e.manifest.id); },
+        unregister: (id: string) => { registry.unregistered.push(id); },
+        manifestOf: () => undefined,
+        allPlugins: () => new Map(),
+      },
+      configStore: {},
+      loader: { load: async () => {}, unload: () => {} },
+      notifyPluginsChanged: () => {},
+      notifyPluginUnloaded: () => {},
+      // 技能挂摘抛错（模拟某个内核的技能目录不可读）
+      skillsEnsure: {
+        onActivate: async () => { throw new Error("技能目录不可读"); },
+        onDeactivate: async () => { throw new Error("技能目录不可读"); },
+      },
+      pluginExtensionEnsure: { onActivate: () => {}, onDeactivate: () => {} },
+    };
+    return { deps, registry };
+  }
+
+  it("挂载侧：技能挂摘抛错 → activate 仍返回 ok、插件不被撤注册", async () => {
+    const { deps, registry } = depsWithFailingSkills();
+    const r = await activate(deps as never, { id: "p1" } as never, "/plugins/p1", "builtin");
+    expect(r.ok, "技能挂摘失败不该被放大成插件激活失败").toBe(true);
+    expect(registry.registered).toEqual(["p1"]);
+    expect(registry.unregistered, "旧行为会在这里撤注册").toEqual([]);
+    expect(getPluginState("p1", [])).not.toBe("error");
+  });
+
+  it("挂载侧：留痕点名到操作与实体（不是匿名失败）", async () => {
+    const { deps } = depsWithFailingSkills();
+    const errs: string[] = [];
+    const orig = console.error;
+    console.error = (...a: unknown[]) => { errs.push(a.map(String).join(" ")); };
+    try {
+      await activate(deps as never, { id: "p1" } as never, "/plugins/p1", "builtin");
+    } finally { console.error = orig; }
+    // 操作 id 带 attach- 前缀（与 detach 侧可区分）+ 实体 id
+    expect(errs.join("\n")).toContain("[boot-op:attach-plugin-skills]");
+    expect(errs.join("\n")).toContain("p1");
+  });
+
+  it("摘除侧：技能摘除抛错 → deactivate 不炸，扩展摘除照常跑（一个操作失败不阻断同表其余操作）", async () => {
+    const { deps, registry } = depsWithFailingSkills();
+    const off: string[] = [];
+    const manifest = { id: "p1", extensions: { pi: "./pi-extension" } };
+    deps.registry = {
+      registerOne: () => {}, unregister: (id: string) => { registry.unregistered.push(id); },
+      allPlugins: () => new Map([["p1", { manifest, path: "/plugins/p1", source: "builtin" }]]),
+      manifestOf: () => manifest,
+    };
+    deps.pluginExtensionEnsure = { onActivate: () => {}, onDeactivate: (k: string, id: string) => off.push(`${k}:${id}`) };
+    await deactivate(deps as never, "p1");
+    expect(off).toEqual(["pi:p1"]);
+    expect(registry.unregistered).toEqual(["p1"]);
   });
 });

@@ -363,7 +363,9 @@ function DiscoverySection({ provider, i18nPrefix, onAddModel, open }: {
     try {
       const r = await ctx.modelsProbe.discover(probeInput());
       if (r.ok) { setDiscovered(r.models ?? []); setScanVia(r.via ?? null); }
-      else setScanError(r.error ?? "unknown error");
+      // 兜底文案也要走 i18n：这是**显示给用户**的扫描失败原因，写死英文会让
+      // zh-CN/zh-TW/de 用户看到一句英文（r42；此前守卫只扫硬编码中文，英文从旁边溜了）。
+      else setScanError(r.error ?? t("settings.unknownError"));
     } catch (err) {
       setScanError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -513,15 +515,31 @@ function ModelRow({ model, idx, providerId, defaultTarget, testStates, dirty, ca
       <span />
       <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--spacing-md)", rowGap: "var(--spacing-xs)", fontSize: "var(--font-size-sm)", alignItems: "center" }}>
         {capabilities.reasoning && (
-          <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
+          <label data-model-reasoning="" style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }}>
             <input type="checkbox" checked={!!model.reasoning} onChange={(e) => onUpdateModel(idx, { reasoning: e.target.checked })} />
             reasoning
           </label>
         )}
-        <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }} title="部分 OpenAI 兼容网关只认 system 角色,pi-ai 对 reasoning 模型默认发 developer 会被 400 拒——勾选则退回 system。">
+        {/* 文案走 i18n（此前是写死中文的 title + JSX 文本，德/英/繁中用户都看到简体）。
+            措辞同时**中性化**：原文写「pi-ai 对 reasoning 模型默认发 developer」，而本组件是
+            pi 与 dsh **共用**的（i18nPrefix 分别是 models / dshModels），且这个控件没有能力门控
+            （旁边的 reasoning 有 capabilities.reasoning），所以 dsh 也会渲染它——
+            共享组件里不该出现某一个内核的专属措辞。 */}
+        {/* ⚠ 能力门控（r44）：`supportsDeveloperRole` 只有 pi 消费，此前无条件渲染 ⇒
+            dsh / minimal 的模型页上有一个勾了也没作用的开关。现按 `capabilities.developerRole`
+            显式降级（不画），与旁边 reasoning 的门控同一形态。
+            文案的中性化（上一轮做的）与这里的门控是**两件不同的事**：前者管"共享组件里
+            不出现某个内核的专属措辞"，后者管"没有这一维的内核根本不该看到这个控件"。 */}
+        {capabilities.developerRole && (
+        <label
+          // 稳定锚点：这个控件是**能力门控**的验证对象（只有声明 developerRole 的内核才渲染），
+          // 按译文定位会在换语言时失效，所以给锚点。
+          data-model-devrole=""
+          style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", cursor: "pointer" }} title={k("devRoleHint")}>
           <input type="checkbox" checked={model.supportsDeveloperRole === false} onChange={(e) => onUpdateModel(idx, { supportsDeveloperRole: e.target.checked ? false : undefined })} />
-          devRole 不兼容
+          {k("devRoleIncompatible")}
         </label>
+        )}
         <label style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)", flexShrink: 0 }}>
           contextWindow
           <input type="number" value={model.contextWindow ?? 0} onChange={(e) => onUpdateModel(idx, { contextWindow: Number(e.target.value) })} style={{ ...inputStyle(), width: "90px", minWidth: "90px", flexShrink: 0 }} />

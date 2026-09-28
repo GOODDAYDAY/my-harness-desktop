@@ -39,7 +39,15 @@ export class SkillAggregator {
     return skill.filePath ?? `${skill.name}:${skill.scope}`;
   }
 
-  constructor(private readonly providers: SkillProvider[]) {}
+  /** ⚠ 持**取 provider 的函数**而不是数组，理由与 `ModelCatalog` 同款（§3.6.3）：
+   *  本实例被 `MainContext.skillAggregator` 长期持有，内核插件重载只替换 `state.surfaces`，
+   *  构造期数组不会追溯更新 → 新内核的技能永远进不了聚合。 */
+  constructor(private readonly getProviders: () => SkillProvider[]) {}
+
+  /** 当前聚合的内核技能提供方（每次现读；本类内部一律经它，不持快照）。 */
+  private get providers(): SkillProvider[] {
+    return this.getProviders();
+  }
 
   /** 合并视图整体支持哪些轴（任一行支持即 true）——空态/表头用；**行级渲染请用行上的 capabilities**。 */
   get capabilities(): SkillCapabilities {

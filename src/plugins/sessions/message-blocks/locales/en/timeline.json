@@ -11,5 +11,8 @@
   "timeline.divider": "—",
   "timeline.thinkingLevel": "Thinking level → {{level}}",
   "timeline.sessionRenamed": "Session renamed to \"{{name}}\"",
-  "timeline.compaction": "Context compacted{{#if tokens}} ({{tokens}} tokens){{/if}}"
+  "timeline.compaction": "Context compacted{{#if tokens}} ({{tokens}} tokens){{/if}}",
+  "timeline.linesCollapsed": "…({{count}} lines collapsed)",
+  "timeline.exitCode": "exit {{code}}",
+  "timeline.outputTruncated": "(output truncated)"
 }

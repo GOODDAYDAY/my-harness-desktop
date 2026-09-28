@@ -1,3 +1,4 @@
+import { Announce } from "@my-harness-desktop/react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Play } from "lucide-react";
@@ -12,8 +13,12 @@ const STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] te
  * 与 retry 语义分开。
  */
 
-/** 模型向的通用续跑文案(内容归插件,不进壳)。 */
-const CONTINUE_PROMPT = "继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。";
+// ⚠ 续跑文案走 i18n（r56）：它是经 `messaging.prompt()` **发出去的用户消息**，
+//   会原样出现在时间线的用户气泡里 ⇒ 属"用户说的话"，英文界面里冒出一句中文是错的。
+//   这与 session-store 的 `TOOL_LIMIT_PREFIX` 是**两类**：后者是发往内核的协议指令、
+//   渲染层会 `stripToolLimitNote` 剥除、用户不可见，且剥除依赖 `startsWith(前缀)` 字面比对
+//   ——本地化它会让**历史消息**剥不掉而露出协议原文。判据见 shell-no-hardcoded-copy 的豁免清单。
+//   所以这里从模块级常量改成在组件内 `t("continue.prompt")`（常量拿不到 hook）。
 export function ContinueAction({ message }: MessageActionProps): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
@@ -32,7 +37,7 @@ export function ContinueAction({ message }: MessageActionProps): React.ReactNode
       return;
     }
     try {
-      await ctx.messaging.prompt(CONTINUE_PROMPT);
+      await ctx.messaging.prompt(t("continue.prompt"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setToast(t("shell.continueFailed", { error: msg }));
@@ -55,7 +60,12 @@ export function ContinueAction({ message }: MessageActionProps): React.ReactNode
         {t("shell.continue")}
       </button>
       {toast && (
-        <span className="text-xs text-[var(--color-accent-error)]">{toast}</span>
+        <>
+          {/* 错误文本是瞬时的（几秒后消失），必须走 alert live region，否则读屏用户
+              永远不会知道「重试失败/续跑失败」——而这类失败恰恰没有其它可见后果。 */}
+          <Announce message={toast} variant="error" />
+          <span className="text-xs text-[var(--color-accent-error)]">{toast}</span>
+        </>
       )}
     </>
   );

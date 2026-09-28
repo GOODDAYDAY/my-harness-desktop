@@ -1,5 +1,6 @@
 {
   "shell.continue": "Continue",
   "shell.continueFailed": "Continue failed: {{error}}",
-  "shell.continueStreamingBlocked": "Cannot continue while generating"
+  "shell.continueStreamingBlocked": "Cannot continue while generating",
+  "continue.prompt": "Continue the unfinished work. Judge the current progress from the conversation history and the todo list, then pick up where it stopped."
 }

@@ -13,11 +13,13 @@
 // 依赖方向：只依赖圆心契约 + 注册表，不 import 任何具体内核、不 import electron/react。
 
 import { ModelCatalog } from "../application/models/model-catalog";
+import type { KernelAccessors } from "./boot/kernel-accessors";
 import type { KernelRegistry } from "../kernel/core/kernel-registry";
 import type {
   KernelConfigApi,
   KernelExtensionSource,
   KernelId,
+  KernelLogo,
   KernelModelSource,
   KernelModelsApi,
   KernelModelsRegistry,
@@ -49,16 +51,6 @@ export interface KernelSurfaces {
   ids: KernelId[];
   /** 模型清单合流（ModelCatalog 只依赖 KernelModelSource 接口）。 */
   modelCatalog: ModelCatalog;
-  /** 模型配置中性 API（设置页模型 TAB）。 */
-  modelsApis: KernelModelsRegistry;
-  /** 内核原生配置中性 API（设置页配置 TAB）。 */
-  configApis: Record<KernelId, KernelConfigApi>;
-  /** 内核版本管理中性 API（设置页内核版本 TAB）。 */
-  versionApis: Record<KernelId, KernelVersionApi>;
-  /** 一次性问内核（缺面的内核为 undefined = 显式缺面）。 */
-  oneshots: Record<KernelId, KernelOneshot | undefined>;
-  /** 内核拓展源（设置页拓展 TAB）。 */
-  extensionSources: Record<KernelId, KernelExtensionSource>;
   /** 技能提供者（SkillAggregator 聚合它们，不读内核存储）。 */
   skillProviders: SkillProvider[];
   /** 带内置 skills 挂/摘面的内核插件（通常只有 pi 一个）。 */
@@ -70,10 +62,16 @@ export interface KernelSurfaces {
   extensionSyncs: { kernel: KernelId; sync: KernelPluginExtensionSync }[];
   /** 各内核会话文件根（总线路径圈禁用）。 */
   sessionRoots: string[];
-  /** 各内核配置根（configFile 框架通道白名单前缀）。 */
-  configRoots: string[];
   /** 各内核技能清单文件（改它们 = 技能清单变了，壳据此重挂监视器）。 */
   skillWatchPaths: (cwd: string) => string[];
+  // ⚠ 这里**不再有** `modelsApis` / `configApis` / `versionApis` / `oneshots` /
+  //   `extensionSources` / `logos` / `configRoots` 七个 per-id 投影字段（阶段三删除）。
+  //   两个理由：① 它们的消费者已全部改走 `boot/kernel-accessors.ts` 的**活访问器**
+  //   （函数形状，调用时现读注册表），留在这里就是**同一份投影的两个来源**（§1.3 契约单源），
+  //   必然漂移；② 它们是**急切实例化**——`byId((p) => p.createModelsApi())` 在 boot 时对
+  //   每个内核调每个工厂，而访问器是惰性 + memo 的（只在真被用到时才造，且保持实例稳定）。
+  //   logo 的 last-known 语义（卸载后仍在跑的会话不丢图标）也只能在访问器里实现，
+  //   快照字段做不到。
 }
 
 /**
@@ -82,7 +80,7 @@ export interface KernelSurfaces {
  * **本函数里不许出现任何内核名**：它循环的是注册表。加第四个内核 = 加一个插件目录，
  * 本文件与调用方零改动——这正是它单独成文件的原因（可被测试直接证明）。
  */
-export function buildKernelSurfaces(registry: KernelRegistry): KernelSurfaces {
+export function buildKernelSurfaces(registry: KernelRegistry, accessors: KernelAccessors): KernelSurfaces {
   const plugins = registry.all();
   const ids = plugins.map((p) => p.id);
   const byId = <T>(make: (p: KernelPlugin) => T): Record<KernelId, T> =>
@@ -91,12 +89,17 @@ export function buildKernelSurfaces(registry: KernelRegistry): KernelSurfaces {
   return {
     plugins,
     ids,
-    modelCatalog: new ModelCatalog(plugins.map((p) => p.createModelSource())),
-    modelsApis: byId((p) => p.createModelsApi()) as KernelModelsRegistry,
-    configApis: byId((p) => p.createConfigApi()),
-    versionApis: byId((p) => p.createVersionApi()),
-    oneshots: byId((p) => p.createOneshot?.()) as Record<KernelId, KernelOneshot | undefined>,
-    extensionSources: byId((p) => p.createExtensionSource()),
+    // ⚠ getter 里读的是 **accessors**（活访问器），不是本函数局部捕获的 `plugins` 数组——
+    //   后者只是"构造这一刻"的快照：重载会整体替换 surfaces、造出新的 ModelCatalog，
+    //   但 `MainContext.modelCatalog` 仍指向**旧实例**，于是旧实例里的 getter 若捕获局部数组，
+    //   永远只看到旧内核（延迟求值 ≠ 活）。走 accessors 才能每次现读注册表，
+    //   且 accessors 的 memo 保证 source 实例稳定（pi/minimal 的 createModelSource 每次 new 包装器）。
+    modelCatalog: new ModelCatalog(() =>
+      accessors
+        .kernelIds()
+        .map((id) => accessors.kernelModelSource(id))
+        .filter((s): s is KernelModelSource => !!s),
+    ),
     skillProviders: plugins.map((p) => p.createSkillProvider?.()).filter((s): s is SkillProvider => !!s),
     skillsPlugins: plugins.filter((p) => p.ensureSkills),
     lifecycles: plugins
@@ -106,7 +109,6 @@ export function buildKernelSurfaces(registry: KernelRegistry): KernelSurfaces {
       .map((p) => ({ kernel: p.id, sync: p.createPluginExtensionSync?.() }))
       .filter((e): e is { kernel: KernelId; sync: KernelPluginExtensionSync } => !!e.sync),
     sessionRoots: plugins.map((p) => p.sessionRoot?.()).filter((r): r is string => !!r),
-    configRoots: plugins.map((p) => p.configRoot?.()).filter((r): r is string => !!r),
     skillWatchPaths: (cwd) => plugins.flatMap((p) => p.skillWatchPaths?.(cwd) ?? []),
   };
 }

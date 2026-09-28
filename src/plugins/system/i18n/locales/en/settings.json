@@ -1,4 +1,10 @@
 {
   "settings.language": "Language",
-  "settings.languageDesc": "Choose the interface language. Takes effect immediately."
+  "settings.languageDesc": "Choose the interface language. Takes effect immediately.",
+  "settings.otherFields": "Other fields (entries in the kernel config with no preset description, shown as inferred from their values)",
+  "settings.noSchemaFields": "This kernel provides no field schema and currently has no editable entries — its configuration may be managed by the kernel itself.",
+  "settings.valueNotInOptions": "{{value}} (not among the options)",
+  "settings.ungrouped": "Ungrouped",
+  "settings.listRemoveItem": "Remove this item",
+  "settings.unknownError": "unknown error"
 }

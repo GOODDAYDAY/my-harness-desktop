@@ -25,9 +25,15 @@ export interface ButtonProps {
   style?: CSSProperties;
   title?: string;
   type?: "button" | "submit";
+  /** 稳定锚点等 `data-*` 属性（e2e 与 DOM 审计用；纪律见 skill §17.3）。
+   *  ⚠ 这一条是 r32 补的：此前 `ButtonProps` 是**封闭接口**，写在 `<Button>` 上的 `data-*`
+   *  会被静默丢弃（TypeScript 对 `data-*` 属性不报错，所以编译期也发现不了）——
+   *  后果是**全仓任何用 Button 的控件都挂不上稳定锚点**，审计只能退回按译文定位，
+   *  换语言就失效。共享控件必须透传锚点，否则锚点纪律在按钮上根本落不了地。 */
+  [key: `data-${string}`]: string | undefined;
 }
 
-export function Button({ variant = "primary", disabled = false, onClick, children, style, title, type = "button" }: ButtonProps): ReactNode {
+export function Button({ variant = "primary", disabled = false, onClick, children, style, title, type = "button", ...anchors }: ButtonProps): ReactNode {
   const [hovered, setHovered] = useState(false);
 
   const visual: CSSProperties = disabled
@@ -68,6 +74,7 @@ export function Button({ variant = "primary", disabled = false, onClick, childre
 
   return (
     <button
+      {...anchors}
       type={type}
       onClick={onClick}
       disabled={disabled}

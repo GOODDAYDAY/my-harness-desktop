@@ -7,12 +7,20 @@
 // 零依赖纯类型:不 import react/electron/pi(圆心纯度纪律,§6.1)。
 // 契约单源(§1.3):类型只在圆心定义,packages/contract 纯 re-export。
 
-/** channel 的可读描述(插件可选导出,增强而非门槛——不声明则回退显示 channel 名)。 */
+/** channel 的可读描述(插件可选导出,增强而非门槛——不声明则回退显示 channel 名)。
+ *
+ *  ⚠ 文案字段是 **i18n 键**，不是文本（r55 改）。此前这里写的是
+ *  「文案归插件自持有，**直接写文本或走 i18n 均可**」——那句"均可"就是债务的批准书：
+ *  8 个通道里有 8 个都直接写了中文，于是 en / de / zh-TW 用户在键位绑定页看到中文，
+ *  而 `shell-no-hardcoded-copy` 的债务棘轮里长期挂着这 20 处。
+ *  改成 `labelKey` 之后"直接写文本"在**字段名上就说不通**（消费方一律 `t(key)`），
+ *  并且可以用守卫核对"每个声明的键在四个语言里都存在"。
+ *  形态与本仓既有的 `ThemeContribution.labelKey` / `FontPresetContribution.labelKey` 一致。 */
 export interface ChannelMeta {
-  /** 人类可读的短名(列表展示)。文案归插件自持有,直接写文本或走 i18n 均可。 */
-  label?: string;
-  /** 用法说明(含 payload 形状/含义,设置页展示)。 */
-  description?: string;
+  /** 人类可读短名的 **i18n 键**(列表展示;缺省回退显示 channel 名)。 */
+  labelKey?: string;
+  /** 用法说明的 **i18n 键**(含 payload 形状/含义,设置页展示)。 */
+  descriptionKey?: string;
   /** payload 示例(设置页预填 JSON 编辑框,用户改后保存)。 */
   payloadExample?: unknown;
   /** 会话作用域(设计 docs/design/session-scope.md §2.5)。

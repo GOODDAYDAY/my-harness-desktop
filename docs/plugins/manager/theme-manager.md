@@ -381,7 +381,7 @@ theme-manager 与壳（框架）的交互面最多，但全是「机制对内容
 - **不 import 壳内部实现**：整个 `renderer/` 目录 grep `@/server/`、`@/core/`、`@/client/` 均为零命中，只有 `@my-harness-desktop/shared`（类型）与 `@my-harness-desktop/react`（受控 API/组件）。合规。
 - **不 import electron / react 之外的框架**：renderer 只 import `react`、`react-i18next`、`lucide-react`（图标）、`@my-harness-desktop/react`。这些是外层框架，壳插件可用。合规。
 - **token key 合规、token 值违规**：theme-manager 代码里没有一处写死颜色十六进制、没有一处写死 `--color-*` 的字面值——预览卡全部消费 `var(--color-*)`、`var(--spacing-*)`、`var(--radius-*)`。它写死的只有「查询 key」（`settings.fontScale` 等 i18n key、`ctx.themes.build` 的调用），不含值。唯一的「值」是 §5.3 说的 `PREVIEW_SUFFIX` 回落后缀与示例代码，属插件内演示文案，非壳内容泄漏。
-- **无内核身份分支**：theme-manager 全文没有 `if (kernel === "pi")`、没有 `asPi()`、没有任何内核专属概念。它不感知 pi/dsh——外观是壳的机制，与内核无关。这正是「壳的渲染是纯函数」的延伸：主题/字体/风格对 pi 会话和 dsh 会话一视同仁。
+- **无内核身份分支**：theme-manager 全文没有 `if (kernel === "pi")`、没有任何内核专属概念，也不经任何能力面取内核专属命令（曾用于此目的的 `asPi()` 助手已随能力面分轴退役）。它不感知 pi/dsh——外观是壳的机制，与内核无关。这正是「壳的渲染是纯函数」的延伸：主题/字体/风格对 pi 会话和 dsh 会话一视同仁。
 - **零硬编码 plugin id**：theme-manager 代码里没有出现 `theme-manager`、`font-presets`、任何主题插件的 id 字面量——它查槽不查插件。§8.3 的「零硬编码」纪律合规。
 
 一句话：theme-manager 是「薄壳纪律」的模范生——它把「会变的内容」（配色、字体栈、文案）全部推给 themes/font-presets/languages 槽，自己只留「怎么把这些槽渲染成 UI」的渲染逻辑。删掉它，壳照常启动、主题机制完好，只是少了那页设置 UI；复制到用户目录覆盖它，走同一加载器、同一契约、同一优先级。

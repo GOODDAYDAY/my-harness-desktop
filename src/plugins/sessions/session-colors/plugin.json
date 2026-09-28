@@ -23,11 +23,46 @@
         "id": "contentPin",
         "component": "ContentPinAction",
         "placement": "left",
-        "when": { "role": ["user", "assistant"] },
+        "when": {
+          "role": [
+            "user",
+            "assistant"
+          ]
+        },
         "order": 30
       }
     ],
     "languages": [
+      {
+        "id": "session-colors.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "session-colors.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "session-colors.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "session-colors.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "session-colors.pinColors",
+        "locale": "de",
+        "resources": "./locales/de/pinColors.json"
+      },
+      {
+        "id": "session-colors.pinColors",
+        "locale": "en",
+        "resources": "./locales/en/pinColors.json"
+      },
       {
         "id": "session-colors.pinColors",
         "locale": "zh-CN",
@@ -39,14 +74,24 @@
         "resources": "./locales/zh-TW/pinColors.json"
       },
       {
-        "id": "session-colors.pinColors",
-        "locale": "en",
-        "resources": "./locales/en/pinColors.json"
+        "id": "session-colors.sidePanel",
+        "locale": "de",
+        "resources": "./locales/de/sidePanel.json"
       },
       {
-        "id": "session-colors.pinColors",
-        "locale": "de",
-        "resources": "./locales/de/pinColors.json"
+        "id": "session-colors.sidePanel",
+        "locale": "en",
+        "resources": "./locales/en/sidePanel.json"
+      },
+      {
+        "id": "session-colors.sidePanel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sidePanel.json"
+      },
+      {
+        "id": "session-colors.sidePanel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sidePanel.json"
       }
     ]
   }

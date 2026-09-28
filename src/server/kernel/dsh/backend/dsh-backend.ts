@@ -14,7 +14,7 @@
 
 import { rmSync } from "node:fs";
 import type { JsonRpcTransport } from "../protocol/json-rpc";
-import type { Anchor, BoundaryRef, LineageTree, ThinkingCapabilities, SeedOptions, NeutralSession } from "@my-harness-desktop/shared";
+import type { Anchor, BoundaryRef, LineageTree, BackendCapabilities, SeedOptions, NeutralSession } from "@my-harness-desktop/shared";
 import { AbstractBackend, type BackendContext } from "../../core/abstract-backend";
 import type { SessionEvent, NeutralMessage } from "@my-harness-desktop/shared";
 import type { QuestionAnswer } from "@my-harness-desktop/shared";
@@ -88,14 +88,18 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   private currentSessionId: string;
 
   /** 懒探测记下的缺面方法名(session/xxx)。首次「unknown method」时记录,本进程内不再重调。 */
-  private readonly missingMethods = new Set<string>();
+  /** 已探明的缺失方法名(session/xxx)。懒探测首次「unknown method」时记录。
+   *  这是 **dsh 自己的记账**：壳从不读它（壳只经 `onMissing` 回调收降级通知），
+   *  所以它不住圆心契约——此前作为 `ThinkingCapabilities.missing` 暴露，属死契约面。
+   *  公开只读是为了 dsh 自己的测试能断言记账正确。 */
+  readonly missingMethods = new Set<string>();
 
   /** dsh 能力面(§7.6):missing 是活缺面清单,onMissing 由壳绑定后广播降级事件。
    *  getThinkingLevels:思考档位清单查询(补面,dsh-thinking-level.md)——桌面适配插件
    *  拦截 session/getThinkingLevels 提供;旧版插件无此面 → 懒探测记缺面 + 空清单,
    *  壳据此藏档位控件(显式降级,不伪造可切)。 */
-  override readonly capabilities: { thinking: ThinkingCapabilities } = {
-    thinking: { missing: this.missingMethods, onMissing: null, getThinkingLevels: () => this.fetchThinkingLevels() },
+  override readonly capabilities: BackendCapabilities = {
+    thinking: { onMissing: null, getThinkingLevels: () => this.fetchThinkingLevels() },
   };
 
   /** 能力轴(docs/model-switching.md §11.2):运行时切模型 = session/setModel 不缺面。
@@ -193,7 +197,7 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
   private recordMissing(method: string): void {
     if (this.missingMethods.has(method)) return;
     this.missingMethods.add(method);
-    this.capabilities.thinking.onMissing?.(method);
+    this.capabilities.thinking?.onMissing?.(method);
   }
 
   /** 判定是否为「方法不存在」错误(sdk server handleRequest default 分支)。 */
@@ -365,14 +369,9 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
     return { lineageId, entryId };
   }
 
-  async resume(anchor: Anchor): Promise<string> {
-    const res = await this.requestSession<{ lineageId: string }>(DSH_METHODS.sessionResume, { anchor });
-    // 身份守卫:回切结果必须是有效 lineageId,空响应即显式报错(不静默错绑)。
-    if (typeof res?.lineageId !== "string" || !res.lineageId) {
-      throw new Error("dsh resume 返回了无效的 lineageId");
-    }
-    return res.lineageId;
-  }
+  // ⚠ 此处曾有 `resume(anchor)`（走 DSH_METHODS.sessionResume 的服务端回切），r72 随契约一起删除：
+  //   壳的锚点重启走中立层派生（SessionStore.resume → deriveSession），从不调用后端这个面，
+  //   于是它是唯一实现了该面的内核——既是死代码，也是内核间的功能不对称。详见 backend.ts 的说明。
 
   /** 删除书签:坐标书签无副本要回收,dsh 侧 deleteBookmark 是 no-op。 */
   async deleteBookmark(anchor: Anchor): Promise<void> {

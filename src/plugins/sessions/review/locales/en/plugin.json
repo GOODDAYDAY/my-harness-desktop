@@ -1,0 +1,4 @@
+{
+  "plugin.review.displayName": "Review",
+  "plugin.review.description": "Select a passage in the session stream, attach a comment, and send it all to the model with the next message"
+}

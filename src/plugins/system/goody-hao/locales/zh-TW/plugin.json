@@ -1,0 +1,4 @@
+{
+  "plugin.goody-hao.displayName": "GoodyHao",
+  "plugin.goody-hao.description": "內建工程原則隨會話注入：貢獻 systemPrompts 槽，由殼在核心支援「附加系統 prompt」時注入其 system prompt。移除即停止注入。"
+}

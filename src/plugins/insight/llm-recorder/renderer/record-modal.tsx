@@ -25,7 +25,7 @@ export function RecordDetail({ pair }: { pair: RecordPair }): ReactNode {
         <div style={labelStyle}>{t("panel.response")}</div>
         {/* 失败事实必须在内容之上先看到——dsh 的失败行没有 status，只有 error。 */}
         {summary !== undefined && (
-          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-danger, #f38ba8)", marginBottom: 4, wordBreak: "break-all" }}>
+          <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-accent-danger, #f38ba8)", marginBottom: 4, wordBreak: "break-all" }}>
             {summary}
           </div>
         )}

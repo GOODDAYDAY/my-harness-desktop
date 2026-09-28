@@ -34,6 +34,9 @@ export function EntryDivider({ kind, i18nKey, i18nArgs, detail, tone }: {
         <div className="flex-1 h-px bg-[var(--color-border)]" />
         <button
           onClick={() => detail && setOpen(!open)}
+          // 只有**有详情可展开**时才声明 aria-expanded：没有 detail 的分隔条点了不动，
+          // 给它挂 aria-expanded="false" 等于宣称"这里可以展开"，是错误承诺。
+          {...(detail ? { "aria-expanded": open } : {})}
           className={`flex items-center gap-1.5 text-xs ${colorClass} bg-transparent border-none p-0 ${detail ? "cursor-pointer hover:text-[var(--color-fg)]" : "cursor-default"}`}
         >
           {DIVIDER_ICONS[kind] ?? DIVIDER_ICONS.info}

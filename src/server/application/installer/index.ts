@@ -1,5 +1,6 @@
 import { existsSync, renameSync, rmSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { t } from "../i18n/translator";   // 服务端 i18n（r78 接线）
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import * as zlib from "node:zlib";
@@ -48,7 +49,9 @@ async function extractArchive(buf: Buffer, targetDir: string): Promise<void> {
     const extract = tar.x({ cwd: targetDir });
     await pipeline(Readable.from([buf]), gunzip, extract);
   } else if (isZip(buf)) {
-    throw new Error("ZIP 格式暂不支持，请使用 .tar.gz");
+    // 面向用户（r91）：安装链路的失败会被 plugin-manager 的 runOp（r80）交给 showFeedback 显示，
+    // 且这条带**用户可执行的指引**（改用 .tar.gz）⇒ 必须本地化。壳级文案 ⇒ shell.*（system/i18n）。
+    throw new Error(t("shell.installZipUnsupported"));
   } else {
     throw new Error("未知的压缩格式（magic bytes 不匹配 tar.gz 或 zip）");
   }

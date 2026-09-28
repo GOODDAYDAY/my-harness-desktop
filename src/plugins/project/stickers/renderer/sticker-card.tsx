@@ -114,7 +114,7 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
           <div className="min-w-0 flex-1">
             {/* banner 图:主视觉,缩小展示;无标题时上方带 sending 指示 */}
             {bannerUri && (
-              <img src={bannerUri} alt={sticker.title ?? "贴纸图"} className="w-full max-h-20 object-cover rounded-[var(--radius-sm)] mb-1.5" />
+              <img src={bannerUri} alt={sticker.title ?? t("stickers.imageAlt")} className="w-full max-h-20 object-cover rounded-[var(--radius-sm)] mb-1.5" />
             )}
             {sending && <Loader2 className="size-3.5 animate-spin text-[var(--color-muted)] mb-1" />}
             <div
@@ -135,7 +135,7 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
                 </button>
               )}
               {onEdit && (
-                <button className={actionBtnClass} onClick={onEdit}><Pencil className="size-3.5" />编辑</button>
+                <button className={actionBtnClass} onClick={onEdit}><Pencil className="size-3.5" />{t("stickers.edit")}</button>
               )}
               <button className={actionBtnClass} onClick={copyContent}>
                 {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}
@@ -143,7 +143,7 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
               {onMoveLayer && (
                 <button className={actionBtnClass} onClick={onMoveLayer}>
                   {sticker.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
-                  {sticker.layer === "project" ? "设为全局" : "移到项目"}
+                  {sticker.layer === "project" ? t("stickers.moveToGlobal") : t("stickers.moveToProject")}
                 </button>
               )}
               {onDelete && (
@@ -158,7 +158,7 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
                     }
                   }}
                 >
-                  <Trash2 className="size-3.5" />{confirmingDelete ? "确认删除？" : "删除"}
+                  <Trash2 className="size-3.5" />{confirmingDelete ? t("stickers.confirmDelete") : t("stickers.delete")}
                 </button>
               )}
             </div>
@@ -171,13 +171,13 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
             className="text-[10px] leading-none text-[var(--color-muted)] opacity-70"
             title={
               sticker.layer === "builtin"
-                ? "内置：随壳自带、所有项目可见、不可编辑、可删除"
+                ? t("stickers.builtinBadgeHint")
                 : sticker.layer === "global"
                   ? "全局层：所有项目可见（存在 ~/.my-harness-desktop/）"
                   : "项目层：仅当前项目可见（存在项目目录 .my-harness-desktop/），可“设为全局”分享给所有项目"
             }
           >
-            {sticker.layer === "builtin" ? "内置" : sticker.layer === "global" ? "全局" : "项目"}
+            {sticker.layer === "builtin" ? t("stickers.layerBuiltin") : sticker.layer === "global" ? t("stickers.layerGlobal") : t("stickers.layerProject")}
           </span>
         </div>
         {/* hover 操作钮右下角浮出：收进贴纸内部跟着一起歪；展开态由操作行接管不重复渲染 */}
@@ -186,27 +186,27 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
             className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => e.stopPropagation()}
           >
-            <PanelIconButton title={copied ? "已复制" : "复制内容"} onClick={copyContent}>
+            <PanelIconButton title={copied ? t("stickers.copied") : t("stickers.copy")} onClick={copyContent}>
               {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
             </PanelIconButton>
             {onFillComposer && (
-              <PanelIconButton title="加入输入框（不发送，可改后再发）" onClick={onFillComposer}>
+              <PanelIconButton title={t("stickers.fillComposer")} onClick={onFillComposer}>
                 <TextCursorInput className="size-3.5" />
               </PanelIconButton>
             )}
             {onMoveLayer && (
-              <PanelIconButton title={sticker.layer === "project" ? "设为全局" : "移到项目"} onClick={onMoveLayer}>
+              <PanelIconButton title={sticker.layer === "project" ? t("stickers.moveToGlobal") : t("stickers.moveToProject")} onClick={onMoveLayer}>
                 {sticker.layer === "project" ? <Globe className="size-3.5" /> : <Folder className="size-3.5" />}
               </PanelIconButton>
             )}
             {onEdit && (
-              <PanelIconButton title="编辑" onClick={onEdit}>
+              <PanelIconButton title={t("stickers.edit")} onClick={onEdit}>
                 <Pencil className="size-3.5" />
               </PanelIconButton>
             )}
             {onDelete && (
               <PanelIconButton
-                title={confirmingDelete ? "确认删除？" : "删除"}
+                title={confirmingDelete ? t("stickers.confirmDelete") : t("stickers.delete")}
                 danger
                 onClick={() => {
                   if (confirmingDelete) {
@@ -281,10 +281,10 @@ export function StickerEditor({ initial, onSave, onCancel }: StickerEditorProps)
     <StickerCard>
       {preview ? (
         <div className="relative mb-1.5">
-          <img src={preview} alt="banner 预览" className="w-full max-h-28 object-cover rounded-[var(--radius-sm)]" />
+          <img src={preview} alt={t("stickers.bannerAlt")} className="w-full max-h-28 object-cover rounded-[var(--radius-sm)]" />
           <button
             type="button"
-            title="移除图片"
+            title={t("stickers.removeImage")}
             onClick={() => { setUploaded(null); setRemoved(true); }}
             className="absolute top-1 right-1 flex items-center justify-center size-5 rounded-full border-none bg-[var(--color-bg)]/80 text-[var(--color-muted)] hover:text-[var(--color-fg)] cursor-pointer"
           >
@@ -297,7 +297,7 @@ export function StickerEditor({ initial, onSave, onCancel }: StickerEditorProps)
           onClick={() => void pickBanner()}
           className="w-full flex items-center justify-center gap-1 py-1.5 mb-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-fg)] bg-transparent cursor-pointer text-xs"
         >
-          <ImagePlus className="size-3.5" />上传 banner 图（可选）
+          <ImagePlus className="size-3.5" />{t("stickers.uploadBanner")}
         </button>
       )}
       <input

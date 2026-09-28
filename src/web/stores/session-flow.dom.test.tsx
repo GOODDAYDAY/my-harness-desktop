@@ -28,7 +28,7 @@ function mockWindow(): void {
       sync: async () => ({}),
       list: async () => [],
       getStats: async () => null,
-      getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+      getCapabilities: async () => ({ kernel: "pi", locked: false, faces: { steering: true, retry: true, thinking: true }, thinkingCycle: true, levelsSemantics: "approximate" }),
       getNeutral: async () => baseline,
       onEvent: (cb: EventHandler) => { eventCb = cb; return () => {}; },
       onNeutralChange: (cb: (c: NeutralChange) => void) => { neutralCb = cb; return () => {}; },
@@ -36,6 +36,9 @@ function mockWindow(): void {
       onKernelEvent: () => () => {},
       onHeaderChanged: () => () => {},
     },
+    // window.kernel 的顶层面（r19 起 initSessionStore 会订阅它：内核集合变了要重拉
+    // sessionInfos，否则会话行的 kernelLoaded 旗标 stale）。替身形状要跟真（skill §11.12）。
+    onRefreshRequested: () => () => {},
     models: { getFallbackModel: async () => null },
     kernel: { fitPiExtensionAvailable: async () => true },
   };

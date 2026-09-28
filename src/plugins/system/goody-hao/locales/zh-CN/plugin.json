@@ -1,0 +1,4 @@
+{
+  "plugin.goody-hao.displayName": "GoodyHao",
+  "plugin.goody-hao.description": "内置工程原则随会话注入：贡献 systemPrompts 槽，由壳在内核支持「追加系统 prompt」时注入其 system prompt。卸载即停止注入。"
+}

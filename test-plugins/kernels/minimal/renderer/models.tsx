@@ -15,7 +15,7 @@ export function MinimalModelsPage(props: SettingsComponentProps): React.ReactNod
     <ModelConfigPage
       api={ctx.kernelModels.minimal}
       i18nPrefix="minimalModels"
-      capabilities={{ reasoning: false }}
+      capabilities={{ reasoning: false, developerRole: false }}
       config={props.config}
       dirty={props.dirty ?? false}
       onChange={props.onChange}

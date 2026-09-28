@@ -237,6 +237,12 @@ export function SessionTreeTab(): React.ReactNode {
               {row.hasKids ? (
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleIn(collapsed, setCollapsed, n.entryId); }}
+                  // ⚠ 可访问名 + 展开态**必需**（实测缺陷，timeline-panel-audit 抓到 5 处）：
+                  //   这个按钮里只有一个 chevron 图标，既无文本也无 title/aria-label，屏幕阅读器读到的是
+                  //   一个空按钮；而「当前展开还是折叠」此前**只靠图标方向**表达（ChevronRight/ChevronDown），
+                  //   纯视觉。补 aria-label（随状态换文案）与 aria-expanded（语义化状态，AT 直接播报）。
+                  aria-label={t(collapsed.has(n.entryId) ? "system.expandNode" : "system.collapseNode")}
+                  aria-expanded={!collapsed.has(n.entryId)}
                   style={caretBtnStyle}
                 >
                   {collapsed.has(n.entryId) ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}

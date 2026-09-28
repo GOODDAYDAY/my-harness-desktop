@@ -14,5 +14,12 @@
   "pinColors.locateMessage": "定位到消息",
   "pinColors.previewMissing": "无预览",
   "pinColors.quickPin": "钉图钉",
-  "pinColors.quickUnpin": "拔图钉"
+  "pinColors.quickUnpin": "拔图钉",
+  "pinColors.color.f38ba8": "红",
+  "pinColors.color.fab387": "橙",
+  "pinColors.color.f9e2af": "黄",
+  "pinColors.color.a6e3a1": "绿",
+  "pinColors.color.89b4fa": "蓝",
+  "pinColors.color.cba6f7": "紫",
+  "pinColors.color.f5c2e7": "粉"
 }

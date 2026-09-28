@@ -8,8 +8,8 @@
 import { join, dirname, resolve } from "node:path";
 import { DshConfigSource } from "./backend/dsh-config-source";
 import { migrateZstdSessionArtifacts } from "./backend/dsh-artifact-migration";
-import { createDshBackend, createDshCatalog } from "../factories/kernel-factories";
-import { createDshKernelManager } from "../factories/kernel-managers";
+import { createDshBackend, createDshCatalog } from "./backend/dsh-backend-factory";
+import { createDshKernelManager } from "./manager/dsh-kernel";
 import { DshExtensionManager } from "./extension/dsh-extension-manager";
 import { createDshModelsApi } from "./manager/dsh-kernel-api";
 import { createDshConfigApi } from "./manager/dsh-kernel-config";

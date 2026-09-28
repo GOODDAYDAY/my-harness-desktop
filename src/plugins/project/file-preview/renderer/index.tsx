@@ -128,11 +128,14 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
     void (async () => {
       try {
         if (!ctx.fs) {
-          throw new Error("File system access is not available");
+          // ⚠ 这条消息会被 `setError(err.message)` 存下、并按
+          //   `${t("preview.loadFailed")}: ${error}` 显示 —— 写死英文会让用户看到
+          //   "加载失败: File system access is not available"（一句话里两种语言）。
+          throw new Error(t("preview.fsUnavailable"));
         }
         if (route === "text" || route === "markdown") {
           const text = await ctx.fs.readFile(path);
-          if (text == null) throw new Error("No content returned");
+          if (text == null) throw new Error(t("preview.noContent"));
           if (alive) setContent(text);
           return;
         }

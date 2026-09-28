@@ -1,5 +1,6 @@
 {
   "shell.continue": "继续",
   "shell.continueFailed": "继续失败：{{error}}",
-  "shell.continueStreamingBlocked": "生成进行中，无法继续"
+  "shell.continueStreamingBlocked": "生成进行中，无法继续",
+  "continue.prompt": "继续未完成的工作。请根据会话历史与 todo 清单判断当前进度，从上次中断处继续。"
 }

@@ -33,5 +33,6 @@
   "remote.copied": "Kopiert",
   "remote.qr": "QR-Code",
   "remote.qrDesc": "Lokaler Zugriff ohne Passwort; LAN-Geräte scannen, öffnen und melden sich mit dem Passwort an.",
-  "remote.qrDisabledHint": "Nach Aktivierung des LAN-Zugriffs erscheinen hier LAN-Adresse und Zugriffs-QR-Code."
+  "remote.qrDisabledHint": "Nach Aktivierung des LAN-Zugriffs erscheinen hier LAN-Adresse und Zugriffs-QR-Code.",
+  "settings.remote-access": "Fernzugriff"
 }

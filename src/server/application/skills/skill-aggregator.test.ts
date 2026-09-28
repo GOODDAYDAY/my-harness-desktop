@@ -38,7 +38,7 @@ describe("技能聚合器:开关按**来源**路由（不按「谁支持该轴�
   it("★ 第二来源支持的轴被启用时，开关仍必须落在**它自己**身上", async () => {
     const a = makeProvider("a", [skill("skill-a", "kern-a")]);
     const b = makeProvider("b", [skill("skill-b", "kern-b")]);
-    const agg = new SkillAggregator([a.provider, b.provider]);
+    const agg = new SkillAggregator(() => [a.provider, b.provider]);
     const rows = await agg.listSkills("/proj");
 
     const rowB = rows.find((r) => r.name === "skill-b")!;
@@ -57,12 +57,12 @@ describe("技能聚合器:开关按**来源**路由（不按「谁支持该轴�
   it("每行带**它自己来源**的能力标志（不是全局 OR）—— 面板据此按行渲染", async () => {
     const a = makeProvider("a", [skill("skill-a", "kern-a")], BOTH);
     const b = makeProvider("b", [skill("skill-b", "kern-b")], NONE);
-    const rows = await new SkillAggregator([a.provider, b.provider]).listSkills("/proj");
+    const rows = await new SkillAggregator(() => [a.provider, b.provider]).listSkills("/proj");
 
     expect(rows.find((r) => r.name === "skill-a")!.capabilities).toEqual(BOTH);
     expect(rows.find((r) => r.name === "skill-b")!.capabilities, "b 不支持任何轴，它的行上就必须是 false（否则面板会按 a 的能力给它画开关）").toEqual(NONE);
     // 全局仍是 OR（问的是"有没有任何来源支持"），但**行级渲染不该用它**
-    expect(new SkillAggregator([a.provider, b.provider]).capabilities).toEqual(BOTH);
+    expect(new SkillAggregator(() => [a.provider, b.provider]).capabilities).toEqual(BOTH);
   });
 
   it("★ 技能对象经 **IPC 反序列化**（structuredClone）后开关仍要落到来源上", async () => {
@@ -71,7 +71,7 @@ describe("技能聚合器:开关按**来源**路由（不按「谁支持该轴�
     // 而单测如果只传同一个引用就会一路绿。这条用例专门钉住"认的是标识，不是引用"。
     const a = makeProvider("a", [skill("skill-a", "kern-a")]);
     const b = makeProvider("b", [skill("skill-b", "kern-b")]);
-    const agg = new SkillAggregator([a.provider, b.provider]);
+    const agg = new SkillAggregator(() => [a.provider, b.provider]);
     const rows = await agg.listSkills("/proj");
 
     const roundTripped = structuredClone(rows.find((r) => r.name === "skill-b")!);
@@ -83,7 +83,7 @@ describe("技能聚合器:开关按**来源**路由（不按「谁支持该轴�
   it("来源不支持该轴 → 显式跳过并留痕，不路由到别的 provider", async () => {
     const a = makeProvider("a", [skill("skill-a", "kern-a")], NONE);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const agg = new SkillAggregator([a.provider]);
+    const agg = new SkillAggregator(() => [a.provider]);
     const row = (await agg.listSkills("/proj"))[0];
 
     await agg.setEnabled(row, true);
@@ -95,7 +95,7 @@ describe("技能聚合器:开关按**来源**路由（不按「谁支持该轴�
   it("来源未知的技能对象（不是本次聚合列出的）→ 不猜、不动任何内核，并留痕", async () => {
     const a = makeProvider("a", [skill("skill-a", "kern-a")]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const agg = new SkillAggregator([a.provider]);
+    const agg = new SkillAggregator(() => [a.provider]);
     await agg.listSkills("/proj");
 
     await agg.setEnabled(skill("陌生人", "unknown"), true);
@@ -108,7 +108,7 @@ describe("技能聚合器:开关按**来源**路由（不按「谁支持该轴�
     const shared = skill("dup", "kern-a");
     const a = makeProvider("a", [shared, skill("zeta", "kern-a")]);
     const b = makeProvider("b", [shared, skill("alpha", "kern-b")]);
-    const rows = await new SkillAggregator([a.provider, b.provider]).listSkills("/proj");
+    const rows = await new SkillAggregator(() => [a.provider, b.provider]).listSkills("/proj");
     expect(rows.map((r) => r.name)).toEqual(["alpha", "dup", "zeta"]);
   });
 });

@@ -6,7 +6,7 @@
 // 失败不阻塞 render(超时兜底,i18next 未 init 时 t 返回完整 key)。
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
-import { useUiStore } from "./ui-store";
+import { useUiStore, PREF_KEYS } from "../stores/ui-store";
 
 let inited = false;
 
@@ -16,12 +16,20 @@ export async function initI18n(): Promise<void> {
   inited = true;
   try {
     const { resources, ns, supportedLngs } = await window.kernel.i18n.resources();
-    const store = useUiStore.getState();
-    // 检测:navigator.language → 支持 locale;若 prefs 已有 currentLocale 优先用之
-    let lng = store.currentLocale;
+    // ⚠ 语言偏好的**事实源是 prefs（持久层）**，不是 ui-store。原实现读 `store.currentLocale`
+    //   有两个各自成立、合起来致命的问题（实测：prefs 里存着 zh-TW、renderer 也读得到 zh-TW，
+    //   界面却是 zh-CN，`document.documentElement.lang` 也是 zh-CN）：
+    //   ① `initI18n()` 与 `hydrateFromPrefs()` 是**并行**的（app-main.tsx:216 的 Promise.all），
+    //      所以这里读 store 读到的很可能是它的初始默认值 `"zh-CN"`（ui-store.ts:178）而非用户选的；
+    //      而 `if (!lng)` 那个"没有就检测浏览器语言"的兜底，因为默认值**非空**，永远不会触发。
+    //   ② 自愈机制也失效：`subscribeLocaleChange()` 在 Promise.race 的 `.finally()` 里才安装
+    //      （app-main.tsx:222），那时水合早已把 store 改成用户的 locale，它的 `prev` 初值
+    //      就等于最终值，于是永远观察不到"变化"，`changeLanguage` 一次都不会被调用。
+    //   改成直接读 prefs 就把这个竞态整个消掉了：不依赖水合顺序，也不依赖订阅是否赶得上。
+    let lng = await window.kernel.prefs.get<string>(PREF_KEYS.currentLocale);
     if (!lng) {
       lng = await window.kernel.i18n.detect(navigator.language);
-      store.setCurrentLocale(lng);
+      useUiStore.getState().setCurrentLocale(lng);
     }
     await i18next.use(initReactI18next).init({
       resources,

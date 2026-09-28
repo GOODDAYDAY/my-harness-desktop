@@ -23,6 +23,36 @@
     ],
     "languages": [
       {
+        "id": "im-graph.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "im-graph.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "im-graph.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "im-graph.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "im-graph.panel",
+        "locale": "de",
+        "resources": "./locales/de/panel.json"
+      },
+      {
+        "id": "im-graph.panel",
+        "locale": "en",
+        "resources": "./locales/en/panel.json"
+      },
+      {
         "id": "im-graph.panel",
         "locale": "zh-CN",
         "resources": "./locales/zh-CN/panel.json"
@@ -33,14 +63,24 @@
         "resources": "./locales/zh-TW/panel.json"
       },
       {
-        "id": "im-graph.panel",
-        "locale": "en",
-        "resources": "./locales/en/panel.json"
+        "id": "im-graph.sidePanel",
+        "locale": "de",
+        "resources": "./locales/de/sidePanel.json"
       },
       {
-        "id": "im-graph.panel",
-        "locale": "de",
-        "resources": "./locales/de/panel.json"
+        "id": "im-graph.sidePanel",
+        "locale": "en",
+        "resources": "./locales/en/sidePanel.json"
+      },
+      {
+        "id": "im-graph.sidePanel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sidePanel.json"
+      },
+      {
+        "id": "im-graph.sidePanel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sidePanel.json"
       }
     ]
   }

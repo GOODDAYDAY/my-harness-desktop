@@ -25,8 +25,24 @@ export interface KernelExtensionInfo {
 
 /** 内核拓展能力缝:哪些可选能力被支持(两个内核都先报 false)。 */
 export interface KernelExtensionCapabilities {
-  update: boolean;
-  reorder: boolean;
+  // ⚠ 此处曾另有 `update` / `reorder` 两轴（三个内核都声明 false），r46 全仓核实
+  //   **零消费者**（UI 与 controller 都不读）——那是死契约面，而且有害：
+  //   读到 `{update:false, reorder:false}` 的人会以为 UI 据此做了降级，实际什么也没发生
+  //   （与 r25 查出的"声明了没人读的能力轴"同型）。已删除。
+  //   要重新加时的纪律：**轴与它的消费者同一批落地**，不加"为将来准备"的轴。
+  /** 该内核**能否安装**扩展（r46 新增）。
+   *
+   *  为什么必须有这一轴：共享的 `KernelExtensionsPage` 对三个内核都渲染「安装扩展」区块，
+   *  而 minimal 的内核插件系统第一版根本没落地（`MinimalExtensionSource.install()` 直接
+   *  返回 `{ok:false, error:"…不支持安装拓展"}`）。此前 UI 无从得知，用户要填完来源、
+   *  点安装、等一轮，才在**事后**看到失败——§7.6 要求的"显式降级（隐藏/置灰 + 说明）"没做到。
+   *  更糟的是 `minimal-extension.ts` 的文件头注释还写着「壳据此置灰入口」，
+   *  而壳从来没读过 capabilities：**注释描述了一个不存在的行为**。
+   *
+   *  ⚠ 设为**必填**（不是可选）：可选会让"忘了声明"静默等同于 undefined（判假），
+   *  于是新内核接入时默默失去安装入口却没人报错。必填 ⇒ 漏声明 = TS2739 编译错，
+   *  必须当场表态（与 r38 分页 label、r44 developerRole 同一手法）。 */
+  install: boolean;
 }
 
 /** 安装/卸载结果。 */

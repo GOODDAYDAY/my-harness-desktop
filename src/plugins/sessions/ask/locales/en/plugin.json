@@ -1,0 +1,4 @@
+{
+  "plugin.ask.displayName": "Ask",
+  "plugin.ask.description": "ask_user_question capability: the model pauses to ask (with options or a custom answer) and the answer is fed back. Questions render inline in the timeline as a bubble with option chips — no modal."
+}

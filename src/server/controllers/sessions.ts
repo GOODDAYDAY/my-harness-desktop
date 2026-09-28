@@ -62,8 +62,8 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.session.copySession, async (_e, srcPath: string, targetPath: string) => {
     const src = expandDesktopPath(srcPath, ctx.paths.homeDir, ctx.paths.myHarnessDesktopDir);
     const target = expandDesktopPath(targetPath, ctx.paths.homeDir, ctx.paths.myHarnessDesktopDir);
-    assertSessionPathAllowed(src, ctx.paths, ctx.kernelConfigRoots);
-    assertSessionPathAllowed(target, ctx.paths, ctx.kernelConfigRoots);
+    assertSessionPathAllowed(src, ctx.paths, ctx.kernelConfigRoots());
+    assertSessionPathAllowed(target, ctx.paths, ctx.kernelConfigRoots());
     // 必须 await:此前 void 派发,复制失败(源缺失等)变 main 未捕获拒绝,
     // renderer 永远 resolve——调用方照写元数据,产出指向不存在副本的幽灵记录。
     await sessionStore.copySession(src, target);

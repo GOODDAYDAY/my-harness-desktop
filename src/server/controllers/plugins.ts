@@ -16,30 +16,11 @@ import { notifyPluginsChanged, notifyPluginUnloaded } from "../routing/broadcast
 import type { MainContext } from "../application/context/main-context";
 
 export function registerPlugins(gateway: Gateway, ctx: MainContext): void {
-  const { registry, configStore, paths, pluginSkillsEnsure, pluginExtensionEnsure } = ctx;
-
-  // 评估 P1-A2:此前 main 侧 pluginLoader 按 source 分轨——builtin 走 import.meta.glob
-  // (编译期),第三方走 file:// 动态 import。但 main 进程不渲染插件 UI(React 组件在 renderer
-  // 进程),main 侧 load renderer chunk 是死代码(且 main 是 CJS,import React ESM chunk 会失败)。
-  // 真正的插件 renderer 加载在 renderer 侧 plugins-host(经 import.meta.glob 统一加载内置,
-  // 无 if-builtin 分支)。main 侧 loader 改 no-op:只管注册/通知,不碰 renderer chunk。
-  // 这消除 main 侧的 if(source==="builtin") 双轨分支(违反 §1.4 无特权差异)。
-  const pluginLoader = {
-    async load(_manifest: PluginManifest, _pluginPath: string): Promise<void> {
-      // no-op:renderer 侧 plugins-host 负责加载插件 renderer。main 只管注册 + notifyPluginsChanged。
-    },
-    unload(_pluginId: string): void {},
-  };
-
-  const lifecycleDeps: PluginLifecycleDeps = {
-    registry,
-    configStore,
-    loader: pluginLoader,
-    notifyPluginsChanged: () => notifyPluginsChanged(gateway),
-    notifyPluginUnloaded: (pluginId: string, components: string[]) => notifyPluginUnloaded(gateway, pluginId, components),
-    skillsEnsure: pluginSkillsEnsure,
-    pluginExtensionEnsure,
-  };
+  // `lifecycleDeps` 由组装根的 `50-wiring` 步骤构造并整体挂在 MainContext 上（§5.1.3）——
+  // 冷启动的 `75-plugin-boot` 步骤与暖启动的 `lifecycle.activate`/`deactivate` 必须共用同一份
+  // `skillsEnsure`/`pluginExtensionEnsure` 实现，否则就是同一逻辑在两个入口各写一遍（判别气味三）。
+  // 此前本文件自己拼一份（见 git 历史里的 pluginLoader + lifecycleDeps 字面量），已上提。
+  const { registry, configStore, paths, lifecycleDeps } = ctx;
 
   function rediscoverPlugin(pluginId: string): { manifest: PluginManifest; path: string; source: "builtin" | "user" | "installed" | "project" } | undefined {
     // 与启动发现同一条递归下降(按 manifest.id 匹配)。根因:旧码 join(dir, pluginId)

@@ -11,6 +11,8 @@
 import { create } from "zustand";
 import { readGeneralConfig, writeGeneralConfig } from "./general-config";
 import { eventBus } from "../../../packages/react/src/event-bus";
+import { announceTransient } from "@my-harness-desktop/react";
+import { i18next } from "../app/i18n-init";
 import {
   ROOT_SPLIT_ID,
   DEFAULT_GROUP_IDS,
@@ -134,7 +136,17 @@ function schedulePersist(tree: LayoutNode): void {
   persistTimer = setTimeout(() => {
     persistTimer = null;
     const skeleton = stripDynamicViews(tree);
-    void writeGeneralConfig({ layout: skeleton });
+    // ⚠ 必须接住失败（r84）：这是防抖的布局持久化，`void` 发射后不管时，
+    //   写盘失败（服务端 handler 抛错 ⇒ transport reject）会变成 unhandled rejection，
+    //   用户侧的表现是"布局改了、下次打开没记住"，而且**一点提示都没有**（§7.6 禁止静默）。
+    //   用 announceTransient（r82 的命令式原语）播报：非组件代码、且宿主是常驻 live region，
+    //   所以读屏也能听到。不重试：布局是可重放的 UI 状态，用户下一次拖动会再触发持久化。
+    void writeGeneralConfig({ layout: skeleton }).catch((err: unknown) => {
+      announceTransient(
+        i18next.t("shell.layoutSaveFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
+    });
   }, 300);
 }
 

@@ -18,8 +18,11 @@ export type ComposerCommandResult = boolean | { send: string };
 export interface ComposerCommand {
   /** 命令名(不带前导 /),如 "goal"。输入 "/goal ..." 命中;名字比较大小写不敏感。 */
   name: string;
-  /** 一句话说明(进斜杠弹窗)。 */
-  description?: string;
+  /** 一句话说明的 **i18n 键**(进斜杠弹窗)。
+   *  ⚠ 是键不是文本(r56 改,与 `ChannelMeta.labelKey` 同批同理):此前是 `description?: string`
+   *  且插件直接写中文,于是 en/de/zh-TW 用户在斜杠弹窗里看到中文。改成键之后
+   *  "直接写文本"在字段名上就说不通,且可用守卫核对四语言齐全。 */
+  descriptionKey?: string;
   /** 处理以 /name 开头的原始输入全文。抛错按未处理(放行)兜底。 */
   handle: (input: string) => ComposerCommandResult | Promise<ComposerCommandResult>;
 }

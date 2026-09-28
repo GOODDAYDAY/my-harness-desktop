@@ -9,5 +9,6 @@
   "settings.totalBytes": "总大小",
   "settings.cleanup": "清理全部记录",
   "settings.cleanupConfirm": "再点一次确认删除",
-  "settings.cleanupCancel": "取消"
+  "settings.cleanupCancel": "取消",
+  "settings.llm-recorder": "请求记录"
 }

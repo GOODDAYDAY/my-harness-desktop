@@ -671,9 +671,13 @@ src/plugins/{domain}/{feature}/
 
 分工是「容器 vs 内容」。`src/web/components/` 的五个文件是**空容器**：只做布局（怎么分栏、怎么查槽、怎么激活 Tab），不画任何业务内容。`timeline` 插件画的是**内容**：会话消息流、工具卡、思考链、气泡这些业务渲染。容器是机制（不变，留在壳里），内容是功能（会变，外挂插件）。判据还是那句「一年后会不会换」：分栏容器不会换，消息流怎么渲染会换。
 
-**Q：`src/server/kernel/factories/` 为什么不叫 `registry/` 或 `assemblers/`？**
+**Q：为什么没有 `src/server/kernel/factories/`（共享组装目录）？组装不该集中在最外层吗？**
 
-因为它做的是「把接口和实现绑起来」这个**组装**动作，而组装被纪律钉死为「只能发生在最外层」。`kernel-factories.ts` 把 `BaseBackend` 接口和 `PiBackend`/`DshBackend` 实现绑起来，`kernel-managers.ts` 把 `KernelManager` 基类和两个子类绑起来，`kernel-logos.ts` 把 logo 数据绑成映射。这些文件「同时 import 圆心契约和具体实现」是合法的，因为组装是它们的职责；`core/` 和 `application/` 没有这个资格。命名上 `factories` 比 `registry` 更准确地表达了「生产实例」而非「登记查询」。
+组装确实「只能发生在最外层」，但**最外层是每个内核自己**，不是一个共享目录。这条纪律的正确落点是：`kernel/<id>/plugin.ts` 是该内核唯一被允许「同时 import 圆心契约和自己具体实现」的文件，它把 `BaseBackend` 接口与 `<Id>Backend` 实现绑起来、把 `KernelManager` 基类与 `<Id>KernelManager` 绑起来、把 logo 数据交出去；`bootstrap/` 只经 `KernelRegistry` 拿到插件、调 `plugin.createBackend(opts)`，一行不 import 具体内核。
+
+> ⚠ 本节此前的问题是「`factories/` 为什么不叫 `registry/` 或 `assemblers/`」，答的是命名。那个目录**已删除**，而删除理由不是命名，是结构：共享组装目录必须同时 import 所有内核，于是 `kernel/pi/plugin.ts → factories → kernel/dsh/backend/*` 形成传递依赖——删掉 dsh 会让 pi 编译不过，「内核可整体卸载」（§ 内核无特权的检验方式）当场变成假的。检验⑧只扫内核目录**内部**的互引，`factories` 不在其列，所以这条依赖长期免检；现由检验⑪（内核目录自包含）守住。
+>
+> 判据可以一句话记住：**「同时 import 契约和实现」的资格属于「一个内核的组装点」，不属于「所有内核的组装点」**——后者必然把 N 个内核焊在一起，加第 N+1 个要改它，删任一个要牵动其余。
 
 **Q：`src/server/remote/`（鉴权）为什么单独一个目录，而不是塞进 `transport/` 或 `controllers/`？**
 

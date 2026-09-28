@@ -1,0 +1,4 @@
+{
+  "plugin.session-colors.displayName": "Session Pins",
+  "plugin.session-colors.description": "Pin colored markers to session rows and messages, anywhere, following their host as it moves"
+}

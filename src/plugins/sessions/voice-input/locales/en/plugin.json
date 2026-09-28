@@ -1,0 +1,4 @@
+{
+  "plugin.voice-input.displayName": "Voice Input",
+  "plugin.voice-input.description": "Speech-to-text input: click the composer microphone to record, transcribe locally with a Whisper model, then fill and send. The model is downloaded on demand and kept out of git."
+}

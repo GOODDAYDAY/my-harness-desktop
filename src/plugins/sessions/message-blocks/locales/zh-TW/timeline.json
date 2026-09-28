@@ -11,5 +11,8 @@
   "timeline.divider": "分隔",
   "timeline.thinkingLevel": "思考強度 → {{level}}",
   "timeline.sessionRenamed": "工作階段重新命名為 \"{{name}}\"",
-  "timeline.compaction": "上下文已壓縮{{#if tokens}}({{tokens}} tokens){{/if}}"
+  "timeline.compaction": "上下文已壓縮{{#if tokens}}({{tokens}} tokens){{/if}}",
+  "timeline.linesCollapsed": "…（已摺疊 {{count}} 行）",
+  "timeline.exitCode": "結束碼 {{code}}",
+  "timeline.outputTruncated": "（輸出已截斷）"
 }

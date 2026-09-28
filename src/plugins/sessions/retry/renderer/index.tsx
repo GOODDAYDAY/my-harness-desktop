@@ -1,3 +1,4 @@
+import { Announce } from "@my-harness-desktop/react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RotateCcw } from "lucide-react";
@@ -81,7 +82,12 @@ export function RetryAction({ message }: MessageActionProps): React.ReactNode {
         {armed ? t("shell.retryArmed") : t("shell.retry")}
       </button>
       {toast && (
-        <span className="text-xs text-[var(--color-accent-error)]">{toast}</span>
+        <>
+          {/* 错误文本是瞬时的（几秒后消失），必须走 alert live region，否则读屏用户
+              永远不会知道「重试失败/续跑失败」——而这类失败恰恰没有其它可见后果。 */}
+          <Announce message={toast} variant="error" />
+          <span className="text-xs text-[var(--color-accent-error)]">{toast}</span>
+        </>
       )}
     </>
   );

@@ -9,5 +9,6 @@
   "settings.totalBytes": "Gesamtgröße",
   "settings.cleanup": "Alle Aufzeichnungen löschen",
   "settings.cleanupConfirm": "Zum Bestätigen erneut klicken",
-  "settings.cleanupCancel": "Abbrechen"
+  "settings.cleanupCancel": "Abbrechen",
+  "settings.llm-recorder": "Anfrageprotokoll"
 }

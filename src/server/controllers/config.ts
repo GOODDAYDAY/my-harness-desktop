@@ -46,7 +46,7 @@ export function registerConfig(gateway: Gateway, ctx: MainContext): void {
   // ~/.my-harness-desktop 是逻辑前缀(expandDesktopPath 映射到当前数据根,dev 态 -dev 目录)。
   function resolveConfigFilePath(path: string): string {
     const abs = expandDesktopPath(path, paths.homeDir, paths.myHarnessDesktopDir);
-    const allowed = [paths.myHarnessDesktopDir, ...kernelConfigRoots];
+    const allowed = [paths.myHarnessDesktopDir, ...kernelConfigRoots()];
     const ok = allowed.some((root) => abs === root || abs.startsWith(root + sep));
     if (!ok) throw new Error(`configFile 路径越界:仅允许 ~/.my-harness-desktop/ 或任一内核配置根前缀,收到 ${path}`);
     return abs;

@@ -7,5 +7,7 @@
   "preview.refresh": "重新整理",
   "preview.viewSource": "原始碼",
   "preview.viewRendered": "渲染",
-  "preview.loadFailed": "載入失敗"
+  "preview.loadFailed": "載入失敗",
+  "preview.fsUnavailable": "檔案系統存取不可用",
+  "preview.noContent": "沒有回傳內容"
 }

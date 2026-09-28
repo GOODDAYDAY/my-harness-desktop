@@ -67,7 +67,7 @@ flowchart TB
 flowchart TB
     subgraph 产生["① 产生:内容侧"]
         P1["skill 块:底座 /skill:name args 展开<br/>&lt;skill name=&quot;…&quot; location=&quot;…&quot;&gt;正文&lt;/skill&gt;<br/>+ 双换行 args,成为消息 content"]
-        P2["review 块:评论篮 buildReviewBlock 拼装<br/>&lt;pi-review&gt;引导语 + &lt;item seq quote&gt;…&lt;/item&gt;&lt;/pi-review&gt;<br/>随消息发送"]
+        P2["review 块:评论篮 buildReviewBlock 拼装<br/>&lt;review&gt;引导语 + &lt;item seq quote&gt;…&lt;/item&gt;&lt;/review&gt;<br/>随消息发送"]
     end
     subgraph 解析["② 解析:内容侧提供 parser,机制侧汇总"]
         R1["skill parser(skill-manager)"]
@@ -161,7 +161,7 @@ flowchart LR
 
 - **`raw` 字段删除，`start/end` 由 parser 给**。渲染层不消费原始文本字段(渲染用的是 `data`),剥离靠切片不靠文本替换。parser 的 `parse` 签名不变(`(text) => { blocks } | null`),只要求构造 `AuxBlock` 时填上 `start/end`--正则 `matchAll` 循环里 `m.index` 和 `m.index + m[0].length` 直接就是。
 - **排序、剥离全走数值索引，重复块天然正确**——两条内容完全相同的块（用户对同一段文字评两次同样的话，是正当场景）各有唯一的 `[start, end)` 区间，切片互不干扰。`1b6a027` 骨架的 `indexOf(raw)` 在重复块上永远指向第一个，剥离错乱。
-- **区间不重叠由 parser 自扫自的类型保证**（skill parser 只认 `<skill>` 标签、review parser 只认 `<pi-review>` 标签，同一文本位置不会被两个 parser 同时认领）。若真有 parser 写坏导致重叠，属 parser 缺陷（bug），不是契约兜底——机制按 parser 给的区间切片，重叠时后切的内容可能漏回正文，由 parser 的测试拦住，机制不猜。
+- **区间不重叠由 parser 自扫自的类型保证**（skill parser 只认 `<skill>` 标签、review parser 只认 `<review>`（及历史 `<pi-review>`）标签，同一文本位置不会被两个 parser 同时认领）。若真有 parser 写坏导致重叠，属 parser 缺陷（bug），不是契约兜底——机制按 parser 给的区间切片，重叠时后切的内容可能漏回正文，由 parser 的测试拦住，机制不猜。
 
 ### 3.2 `packages/react/src/aux-block-parsers.ts`（renderer 注册表）
 
@@ -216,7 +216,7 @@ export const auxParsers: AuxBlockParser[] = [{
 ```
 
 - 去 `^`/`$`，`g` 标志 + `matchAll` 扫全文，每个匹配的 `m.index` 直接填 `start/end`——正文在前的组合场景天然识别。
-- args 捕获改非贪婪 `([\s\S]+?)` + 前瞻 `(?=\n<|$)`：args 从双换行后开始、非贪婪增长，停在**第一个满足 `\n<` 的位置之前**——单 skill 消息时 args 一路收到串尾（普通正文不以 `<` 开头，不触发前瞻），组合场景时 args 在 `<pi-review>` 前停住，review 块留给 review parser 独立提取，skill 条的 args 摘要不被污染。
+- args 捕获改非贪婪 `([\s\S]+?)` + 前瞻 `(?=\n<|$)`：args 从双换行后开始、非贪婪增长，停在**第一个满足 `\n<` 的位置之前**——单 skill 消息时 args 一路收到串尾（普通正文不以 `<` 开头，不触发前瞻），组合场景时 args 在 `<review>` 前停住，review 块留给 review parser 独立提取，skill 条的 args 摘要不被污染。
 - **前瞻保持宽匹配 `\n<`，不收紧成"只认已知块标签"**：收紧意味着 skill parser 的正则要引用 review 的标签名——内容插件之间互相感知格式，横向耦合。args 里出现以 `<` 开头的行导致截断是已知边界，见 QA。
 - `data = { name, location, content, args }`；location 是 data 字段但不渲染（Windows 反斜杠路径是噪声）。
 
@@ -284,11 +284,11 @@ review 比 skill 复杂一步：块带**结构化数据**，渲染不是"显示�
 ### 6.1 块格式（构造与解析同源，在 review 插件内）
 
 ```
-<pi-review>
+<review>
 以下是用户对之前回复的评论,请据此修改:
 <item seq="①" quote="被评论的代码原文摘录">评审意见一</item>
 <item seq="②" quote="另一段原文">评审意见二</item>
-</pi-review>
+</review>
 ```
 
 - `seq`/`quote` 是 `item` 属性，评论文本是 `item` 内容；
@@ -297,7 +297,7 @@ review 比 skill 复杂一步：块带**结构化数据**，渲染不是"显示�
 
 ### 6.2 模型侧引导语（待实施）
 
-评论块是发给模型的内容，但裸 `<pi-review>` 块里模型只看到一串 `seq`/`quote` 属性，没有一句话告诉它"这是用户对之前回复的评论"。旧机制里 `promptHeader`（设置页可配的提示语）就是干这个的，`1b6a027` 删设置页时把它一起删了。
+评论块是发给模型的内容，但裸 `<review>` 块里模型只看到一串 `seq`/`quote` 属性，没有一句话告诉它"这是用户对之前回复的评论"。旧机制里 `promptHeader`（设置页可配的提示语）就是干这个的，`1b6a027` 删设置页时把它一起删了。
 
 方案：`buildReviewBlock` 在 items 之前输出一行引导语，文案走 i18n（新增 key `shell.reviewPromptHeader`，补 zh-CN / zh-TW / en / de 四语言）：
 
@@ -473,7 +473,7 @@ review 标签化后，评论数据（seq/quote/comment）就在消息文本的�
 唯一——`matchAll` 对全局正则逐次前进，每次匹配的 `m.index` 递增，两条相同内容的块有各自独立的区间，切片剥离互不干扰。这正是契约硬化要解决的场景。
 
 **Q：组合场景（skill + review 同一条消息）块顺序怎么保证？args 会不会吞掉 review？**
-两个层面。解析层：skill 的 args 捕获是非贪婪 + 前瞻 `(?=\n<|$)`，在 `<pi-review>` 前停住，review 块留给 review parser 独立提取（§4.1）；渲染序：`parseUserBlocks` 按 `start` 排序，与文本出现顺序一致，与解析器注册顺序无关——skill 块在开头（pos 0），review 块在尾部，渲染序 skill 条在前。
+两个层面。解析层：skill 的 args 捕获是非贪婪 + 前瞻 `(?=\n<|$)`，在 `<review>` 前停住，review 块留给 review parser 独立提取（§4.1）；渲染序：`parseUserBlocks` 按 `start` 排序，与文本出现顺序一致，与解析器注册顺序无关——skill 块在开头（pos 0），review 块在尾部，渲染序 skill 条在前。
 
 **Q：skill 块去锚定后，args 捕获在“args 后面不是块开头”的文本上怎么表现？**
 非贪婪 `([\s\S]+?)` + 前瞻 `(?=\n<|$)`：args 从双换行后开始、逐字符增长，停在第一个满足 `\n<` 的位置之前。如果 args 之后是普通正文（不以 `<` 开头的行），前瞻不满足，捕获继续增长直到串尾，普通正文被完整收进 args。"停在下一个块开头"只在 args 后面真的跟了另一个块（组合场景）时触发。
@@ -490,8 +490,8 @@ args 在那一行截断，剩余部分掉回 main 正文显示——不丢数据
 **Q：streaming 中发评论，流式重渲染会不会把块弄丢？**
 不会。块在 `message.content` 里，发送即落盘，流式重渲染只替换 DOM 不碰消息数据——评论块不是流式产物，它随用户消息一次成型，后续任何重渲染都从同一份 content 解析。review 的划词浮钮在流式期有 400ms 宽限 + 缓存选区（review 插件内部机制，与块展示无关），不在此方案范围。
 
-**Q：正文恰好含 `<pi-review>` 或 `<skill` 字样怎么办？**
-解析器要求完整标签形态（`<pi-review>` 必须配 `</pi-review>` 闭合，`<skill` 必须匹配完整块正则），残缺的按正文处理。用户手输完整标签块的概率趋近于零；真撞上了，引用条也是合理展示。
+**Q：正文恰好含 `<review>` / `<pi-review>` 或 `<skill` 字样怎么办？**
+解析器要求完整标签形态（`<review>` 必须配 `</review>` 闭合，且正则用反向引用 `\1` 保证开闭**同名**，所以 `<review>…</pi-review>` 这种错配也不算块；`<skill` 必须匹配完整块正则），残缺的按正文处理。用户手输完整标签块的概率趋近于零；真撞上了，引用条也是合理展示。
 
 **Q：skill 块的 location 是 Windows 反斜杠路径，展开显示时怎么办？**
 引用条摘要只显示技能名 + args 首行；展开显示正文（SKILL.md body，底座已剥 frontmatter）。location 是 data 字段，不渲染。

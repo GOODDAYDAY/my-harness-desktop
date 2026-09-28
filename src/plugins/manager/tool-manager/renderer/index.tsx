@@ -5,6 +5,7 @@ import { Wrench, Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Clock, 
 import {
   usePluginContext,
   useUiStore,
+  useSessionStore,
   usePendingToolConfig,
   EmptyState,
   Button,
@@ -21,6 +22,18 @@ import {
   type ToolGroup,
   type SessionToolConfig,
 } from "../core/types";
+
+/** 展示名/说明的解析：**有 key 就翻译，没有就用字面值**。
+ *  内置预设（PRESET_GROUPS / BUILTIN_TOOLS）带 key，用户自建组与内核播报来的工具不带——
+ *  同一条渲染路径服务两种来源，**不按 builtIn 分支**（那是身份分支，CLAUDE.md §1.5 判别气味）。
+ *  `defaultValue` 用字面值兜底：key 缺译文时退回原中文，不至于显示裸 key。 */
+type Translate = (k: string, o?: Record<string, unknown>) => string;
+const groupName = (g: { name: string; nameKey?: string }, t: Translate): string =>
+  g.nameKey ? t(g.nameKey, { defaultValue: g.name }) : g.name;
+const groupDesc = (g: { description?: string; descriptionKey?: string }, t: Translate): string =>
+  g.descriptionKey ? t(g.descriptionKey, { defaultValue: g.description ?? "" }) : (g.description ?? "");
+const toolDesc = (x: { description: string; descriptionKey?: string }, t: Translate): string =>
+  x.descriptionKey ? t(x.descriptionKey, { defaultValue: x.description }) : x.description;
 
 
 
@@ -231,6 +244,7 @@ function ToolRow({ tool, toolGroups }: {
   tool: KnownTool;
   toolGroups: ToolGroup[];
 }): React.ReactNode {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <div style={{ ...toolRowStyle, cursor: "pointer" }} onClick={() => setOpen(!open)}>
@@ -242,7 +256,7 @@ function ToolRow({ tool, toolGroups }: {
         <span style={{ ...toolSrcStyle(tool.source), marginLeft: "auto" }}>{tool.source}</span>
       </div>
       <div className="flex flex-wrap gap-1 mt-1.5" style={{ paddingLeft: "18px" }}>
-        {toolGroups.map((g) => <span key={g.id} style={groupTagStyle}>{g.name}</span>)}
+        {toolGroups.map((g) => <span key={g.id} style={groupTagStyle}>{groupName(g, t)}</span>)}
       </div>
       <AnimatePresence initial={false}>
         {open && (
@@ -257,7 +271,7 @@ function ToolRow({ tool, toolGroups }: {
               className="mt-1.5 text-[length:var(--font-size-xs)] text-[var(--color-muted)]"
               style={{ paddingLeft: "18px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
             >
-              {tool.description || "—"}
+              {toolDesc(tool, t) || "—"}
             </div>
           </motion.div>
         )}
@@ -295,8 +309,10 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
 }): React.ReactNode {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const [editName, setEditName] = useState(group.name);
-  const [editDesc, setEditDesc] = useState(group.description ?? "");
+  // 初始化用**解析后的展示值**（不是 group.name 字面量）：否则德语用户点开内置组的编辑框
+  // 会看到中文默认名，一保存就把中文写进了他的配置。
+  const [editName, setEditName] = useState(groupName(group, t));
+  const [editDesc, setEditDesc] = useState(groupDesc(group, t));
   const [editToolIds, setEditToolIds] = useState<Set<string>>(new Set(group.toolIds));
   const [editDefaultEnabled, setEditDefaultEnabled] = useState(group.defaultEnabled);
 
@@ -336,6 +352,10 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
               ...group,
               name: editName || t("toolManager.unnamedGroup"),
               description: editDesc,
+              // 用户保存过之后，展示值以他写下的字面值为准 —— 清掉 key，
+              // 否则切换语言时译文会把用户的自定义名覆盖回去。
+              nameKey: undefined,
+              descriptionKey: undefined,
               toolIds: [...editToolIds],
               defaultEnabled: editDefaultEnabled,
             })}
@@ -355,7 +375,7 @@ function GroupRow({ group, toolCount, isEditing, allTools, onEdit, onDelete, onS
           {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </span>
         <GroupIcon group={group} />
-        <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{group.name}</span>
+        <span className="text-[length:var(--font-size-sm)] font-medium text-[var(--color-fg)]">{groupName(group, t)}</span>
         {group.builtIn && <span style={badgeBuiltInStyle}>{t("toolManager.system")}</span>}
         <span style={defaultBadgeStyle(group.defaultEnabled)}>
           {group.defaultEnabled ? t("toolManager.defaultOn") : t("toolManager.defaultOff")}
@@ -460,6 +480,8 @@ export function ToolPanelTab(): React.ReactNode {
   // 工具偏好从会话作用域读(设计 docs/design/session-scope.md §4.6.5):key 由作用域承担,
   // 此前形态是「单值内嵌 sessionPath + 读取侧比对」——那正是手动实现作用域的样子。
   const [pending, setPendingToolConfig] = usePendingToolConfig();
+  // 当前会话的内核归属（发布面 useSessionStore；null = 尚未选模型）。
+  const sessionKernel = useSessionStore((s) => s.capabilities.kernel);
   const allTools = useDiscoveredTools();
   const { groups, loading } = useToolGroups(currentCwd);
   const headerConfig = useSessionToolConfig(currentSessionPath);
@@ -472,9 +494,20 @@ export function ToolPanelTab(): React.ReactNode {
   const allToolsRef = useRef(allTools);
   allToolsRef.current = allTools;
 
+  // 问**当前会话的内核**：它能不能强制执行工具白名单。踩过两个坑（详见壳前端 send 路径的同名注释）：
+  // ① 曾写死 `ctx.kernels.pi`，于是本页面报告的是别的内核的状态；② 改成问会话内核后仍问
+  // "桌面适配扩展装没装"——那是某个内核的实现手段，不是能力本身，导致自带工具门控的内核
+  // 被误显示为"无工具过滤能力"。现轴为 `toolFilterEnforced`。
+  // 内核未知（尚未选模型）或该内核不声明此面 → 按「不可强制」处理，与壳侧发送路径同一判据。
   useEffect(() => {
-    void ctx.kernels.pi.fitPiExtensionAvailable?.().then(setGateAvailable);
-  }, [ctx]);
+    const api = sessionKernel ? ctx.kernels[sessionKernel] : undefined;
+    if (!api?.toolFilterEnforced) { setGateAvailable(false); return; }
+    let cancelled = false;
+    void api.toolFilterEnforced()
+      .then((v) => { if (!cancelled) setGateAvailable(v); })
+      .catch(() => { if (!cancelled) setGateAvailable(false); });
+    return () => { cancelled = true; };
+  }, [ctx, sessionKernel]);
 
   // 偏好/落盘两态(composerApplyTiming 同语义):开关只写 pending(内存偏好),
   // timeline send() 才 flush 到头行。flushed 的 pending 仍作显示值——它等于最新落盘值,避免跳变。
@@ -581,7 +614,7 @@ export function ToolPanelTab(): React.ReactNode {
                     onClick={() => setExpanded(expanded === g.id ? null : g.id)}
                   >
                     {expanded === g.id ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-                    <span className={`text-sm font-medium ${isOn ? "" : "text-[var(--color-muted)]"}`}>{g.name}</span>
+                    <span className={`text-sm font-medium ${isOn ? "" : "text-[var(--color-muted)]"}`}>{groupName(g, t)}</span>
                     <span style={defaultBadgeStyle(g.defaultEnabled)}>
                       {g.defaultEnabled ? t("toolManager.defaultOn") : t("toolManager.defaultOff")}
                     </span>

@@ -87,9 +87,13 @@ export function ThemePreviewCard({ themeId, label, active, onSelect }: ThemePrev
           <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", background: "color-mix(in srgb, var(--color-bg) 55%, var(--color-border))", padding: "var(--spacing-xs) var(--spacing-sm)", fontFamily: "var(--font-family-mono)", fontSize: "var(--font-size-sm)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "var(--spacing-xs)" }}>
               <Terminal size={12} style={{ color: "var(--color-muted)" }} />
-              <span>$ pi --version</span>
+              {/* ⚠ 样本命令与元信息走 locale 键，不硬编码：此前这里写死 `$ pi --version` 与
+                  `0.90.2 · rpc mode` —— 一个**通用**主题预览插件里出现某个内核的 CLI 名与
+                  写死版本号（内核身份泄漏 + 版本会腐烂）。同一张卡片其余文案
+                  （previewBashSuccess 等）本来就都走 locale，这两行是漏网的。 */}
+              <span>{t("settings.previewBashCommand")}</span>
             </div>
-            <div style={{ color: "var(--color-muted)", marginTop: 2 }}>0.90.2 · rpc mode</div>
+            <div style={{ color: "var(--color-muted)", marginTop: 2 }}>{t("settings.previewBashMeta")}</div>
             <div style={{ color: "var(--color-accent-success)" }}>{t("settings.previewBashSuccess")}</div>
           </div>
         </div>

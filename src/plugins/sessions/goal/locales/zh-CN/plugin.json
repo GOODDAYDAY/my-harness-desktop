@@ -1,0 +1,4 @@
+{
+  "plugin.goal.displayName": "目标",
+  "plugin.goal.description": "goal 能力：内核无关的同会话持久目标（set_goal/achieve_goal）+ 壳层续跑驱动"
+}

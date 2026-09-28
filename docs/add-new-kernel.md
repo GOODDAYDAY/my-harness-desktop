@@ -7,6 +7,33 @@
 > + `registry.register` 一行，圆心与壳零改动。**现行指引见 `docs/design/kernel-plugin.md`**。
 > 本文保留的价值在于：它记录了这一串「假泛化」当初长什么样，以及为什么必须收掉。
 
+## 0.1 五条断言的**现状复核**（r49，逐条对着代码取证）
+
+正文 §4 列了五处"不合理/需要补"。它们大多已在后续轮次修完，但文档一直没回写结论——
+于是读者要自己去代码里对一遍。这里给出复核结果（取证方式写在每条后面）：
+
+| § | 断言 | 现状 | 证据 |
+|---|---|---|---|
+| 4.1 | `capabilities` 只有 pi/dsh 两个硬桶 | ✅ **已修** | `backend.ts:156` 现为 `readonly capabilities: BackendCapabilities`（十一个语义轴 + `fileBacked`，圆心单源）；r47 全仓普查：15 个能力契约 44 个字段、**死轴 0** |
+| 4.2 | `BackendCreateOptions` 有三个字段各服务一个内核 | 🔶 **不对称仍在，但已不再静默**（见下方专节） | `maxTokens` 只被 dsh 的 factory 消费；`systemPromptPaths/Texts` 只被 pi 的 factory 消费。**r50 已加 `BackendCapabilities.systemPrompt` 轴 + 插件管理页显式降级**，所以缺面不再"静默"；但字段本身仍在中性契约里（未做拆分） |
+| 4.3 | 内核身份在圆心之外被复制了字面量 | ✅ **已修** | `asPi`/`piSend`/`KERNEL_IDS`/`newPiSessionPath` 现在只出现在**说明其退役的注释**里；`KernelId = string`，清单由 `KernelRegistry` 运行时驱动 |
+| 4.4 | pi 特权在 application 层残留 | ✅ **已修** | 同上；现为按轴取面的 `faceOf(proc, 轴, 标签)` / `viaFace(轴, 标签, fn)`，错误消息点名**轴**不点名内核（CLAUDE.md §1.5） |
+| 4.5 | manifest 的 `piExtension`/`dshExtension` 把内核焊进壳插件契约 | ✅ **已修** | 两个字段名只出现在 `contributions.ts:541` / `kernel-plugin.ts:200` 的**解释性注释**里；实际形状是按内核 id 的映射 |
+
+**§1.1 的判定也已被推翻**：当时写「不要改成 `string`（那会丢掉编译期穷尽检查）」，
+而现行代码正是 `KernelId = string`。r48 用**实测**回答了这场取舍：造第四个内核 `probe4`
+（`minimal` 的整体克隆）后，圆心与壳机制层**零文件改动**，构建自动产出它的 `plugin.js`
+与三个 renderer chunk，`minimal-smoke.e2e.mjs --kernel probe4` 与 `--kernel minimal`
+跑**同一组 24 条判据双双通过**（详见 `docs/plugins/kernels/probe4.md`）。
+代价不在壳，而在**验证层**：4 处守卫/测试把"内核恰好三个"写死了，其中一处
+（`locale-kernel-identity` 的跨内核提及检测循环）更危险——清单里没有的内核名
+**永远不会被当成跨内核提及**，守卫会静默放过。这批写死已全部改为派生。
+
+> 取舍的结论：`string` + 运行时注册表换来了"加内核不动圆心"，代价是失去编译期穷尽检查；
+> 而这个代价在本仓是**可接受**的，因为内核身份早已不该出现在 `switch` 里
+> （CLAUDE.md §6.3 检验⑤：壳机制层不许出现内核名字面量，已归零）——
+> 既然没有穷尽分支，穷尽检查也就无从失去。**§1.1 当初的前提（存在大量 `switch(kernel)`）已经不成立了。**
+
 
 本文回答一个具体问题：如果要接第三个内核（假设的 "kimi"，或任何新 agent 运行时），要交什么、现有抽象哪里够用、哪里不合理需要补。论证对象是 my-harness-desktop 的多内核壳——`packages/shared/src/domain`（圆心契约）+ `src/server/kernel/`（内核层）+ `src/server/application/sessions/session-store.ts`（编排）+ `src/server/bootstrap/assemble.ts`（组装根）。每一句论断都落到具体文件/函数/类型名，不空谈。
 
@@ -48,23 +75,45 @@
 
 判定：**合理，三样东西是必要充分条件，不是可选项。** 但注意：第 1.2 的"适配器"和第 1.1 的"身份字面量"之间还缺一层——`SessionCatalog` 的 `seed` 投影不归 `SessionCatalog` 管，它归 `BackendFactory.seed`（圆心契约，`backend.ts:255`）管。这个归属的分裂是 §4.6 要讨论的缺陷，但清单本身是对的。
 
-### 1.3 注册表绑定（4 个工厂文件 + assemble 里的 3 个映射）
+### 1.3 注册与装配（**零个共享文件**：加内核 = 加目录 + 加 manifest）
 
-- `src/server/kernel/factories/kernel-factories.ts`：加 `createKimiBackend(opts: KimiFactoryOptions)`（翻译中性 `BackendCreateOptions` → kimi spawn 参数）、`createKimiCatalog(opts)`、按需导出 `kimiSeedSession`。
-  - 参照 `createPiBackend`（line 38-52，把 `systemPromptPaths` 拼成 `--append-system-prompt`、`ephemeral` 拼成 `--no-session`）与 `createDshBackend`（line 63-86，`ephemeral` 建临时 `DSH_SESSION_ROOT`、`provider/model/maxTokens` 进 initialize 握手）。
-  - 这是内核专属 spawn 翻译的唯一落点——"中性字段 → 内核专属 args"的翻译只允许在这里发生。
-- `src/server/kernel/factories/kernel-managers.ts`：加 `createKimiKernelManager(installDir)`。
-  - 参照 `createPiKernelManager`/`createDshKernelManager`，各一行 `new XxxKernelManager(XXX_SPEC, installDir)`。
-  - `KIMI_SPEC: KernelSpec` 填在 `src/server/kernel/kimi/manager/kimi-kernel.ts`，只填数据（`pkg`/`pkgJsonPath`/`cliWithinPkg`/`srcCli`/`srcPkgJson`/`cliJsLabel`/`distTag`/`extraPackages`）。
-- `src/server/kernel/factories/kernel-logos.ts`：`KERNEL_LOGOS: Record<KernelId, KernelLogo>` 加 `kimi: KIMI_LOGO`。
-  - 这是编译期穷尽的 `Record<KernelId, ...>`，加 `KernelId` 字面量后这里漏补会编译错——好。
-  - `KIMI_LOGO` 数据声明在 `src/server/kernel/kimi/manager/kimi-logo.ts`（数据，非 React 组件，参照 `pi-logo.ts`/`dsh-logo.ts`）。
-- `src/server/bootstrap/assemble.ts` 里的 3 个 `Record<KernelId, ...>`/映射：
-  - `kernelModels`（line 304-310，`{ pi: ..., dsh: ... }`）→ 加 `kimi: createKimiModelsApi(...)`。类型是 `KernelModelsRegistry`。
-  - `kernelConfig`（line 319-322，`Record<KernelId, KernelConfigApi>`）→ 加 `kimi: createKimiConfigApi(...)`。这是编译期穷尽，加字面量后漏补会错——好。
-  - `kernelExtensions`（line 449-452，`{ pi: piExtensionManager, dsh: dshExtensionManager }`）→ 加 `kimi: kimiExtensionManager`。**注意这个映射不是 `Record<KernelId,...>` 类型**，是普通对象字面量，漏补不编译错——坏（见 §4.5）。
+> ⚠ 本节曾 titled「注册表绑定（4 个工厂文件 + assemble 里的 3 个映射）」，要求改
+> `kernel/factories/kernel-factories.ts`、`kernel-managers.ts`、`kernel-logos.ts` 与
+> `assemble.ts` 里的三个 `Record<KernelId, …>`。**那套形状已全部废除**：
+> `KernelId` 已去字面量化为不透明 `string`（`packages/shared/src/domain/kernel.ts:13`，
+> `KERNEL_IDS` 字面量数组已删），所以那些 `Record<KernelId, …>` 编译期穷尽表根本不存在了；
+> 而 `kernel/factories/` 整个目录已删除——它把三个内核绑在一个共享文件里，导致
+> 「删掉一个内核目录会牵连其它内核编译」，`CLAUDE.md` §1.4「内核无特权/可整体卸载」变成假的
+> （检验⑧扫不到这条**传递**依赖，现由检验⑪守住）。
 
-判定：**注册表绑定这个机制合理（每个内核一个工厂文件，一行构造），但"注册"的强类型程度参差**——`KERNEL_LOGOS`/`kernelConfig`/`kernelModels` 是 `Record<KernelId,...>` 编译期穷尽，`kernelExtensions`/`skillAggregator` 的数组/字面量不是。统一成 `Record<KernelId,...>` 是廉价的改进。
+现在接一个内核，装配侧**一个共享文件都不用改**。三样东西各自归位：
+
+| 要交什么 | 落在哪 | 谁消费 |
+|---|---|---|
+| **后端 + 目录工厂** | `src/server/kernel/kimi/backend/kimi-backend-factory.ts`：`createKimiBackend(opts: KimiFactoryOptions)`（中性 `BackendCreateOptions` → kimi spawn 参数的翻译**只允许在这里发生**）、`createKimiCatalog(opts)`、按需 re-export `kimiSeedSession` | 只被 `kimi/plugin.ts` import |
+| **版本管理实例** | `src/server/kernel/kimi/manager/kimi-kernel.ts`：`KIMI_SPEC: KernelSpec`（只填数据）+ `class KimiKernelManager extends KernelManager` + `createKimiKernelManager(installDir)`（一行 `new`） | 只被 `kimi/plugin.ts` import |
+| **身份标** | `src/server/kernel/kimi/manager/kimi-logo.ts`：`KIMI_LOGO: KernelLogo`（数据，非 React 组件） | 经 `plugin.ts` 的 `logo` 字段交出 |
+
+三者都由 **`src/server/kernel/kimi/plugin.ts`（`KernelPluginFactory`）** 组装成 `KernelPlugin` 交出——这是内核目录对外暴露的**唯一**面（`validateKernelPlugin` 强制 7 个 `create*` + `id` + `logo`，`kernel/core/kernel-registry.ts:44-64`）。
+
+壳侧完全不用改，因为装配是**扫描驱动**的：
+
+| 环节 | 机制 | 加内核要不要改 |
+|---|---|---|
+| 发现 | `scanKernelPlugins` 递归扫插件根，命中带 `kernel` 块的 `plugin.json` 即止（`kernel-plugin-loader.ts:44-81`） | 不改（加 `src/plugins/kernels/kimi/plugin.json`） |
+| 装载 | `loadKernelPlugin` 按 `<构建根>/<manifest.id>/plugin.js` 动态 require（`:97-123`） | 不改 |
+| 构建产物 | `electron.vite.config.ts` 的 `kernelPluginInputs` 按**内容判据**（一级子目录含 `plugin.ts`）生成 rollup input | 不改（守卫：`src/kernel-build-inputs.test.ts`） |
+| 投影 | `buildKernelSurfaces(registry)` 循环注册表产出壳需要的全部中性面，**含 logo**（`kernel-surfaces.ts:85-113`）；函数体内零内核名 | 不改（守卫：`kernel-surfaces.test.ts` 的第四内核 describe + 源码扫描断言 0 处内核字面量） |
+| 清单下发 | `kernelIds` 由注册表运行时提供，renderer 经 `kernel.list` IPC 拿 | 不改 |
+
+**已实测**（本轮端到端验证）：临时造一个第四内核目录 + manifest，`electron.vite.config.ts` 与任何核心文件**一行未改**，`npm run build` 自动产出 `out/main/server/kernel/<id>/plugin.js`，`src/kernel-build-inputs.test.ts` 的两侧判据自动纳入它。
+
+剩下的强类型穷尽表只有一处，且它在**内核自己目录内**：`KIMI_SPEC` 的字段由 `KernelSpec` 契约约束，漏填编译错。壳侧不再有「加字面量后漏补某张表会编译错」的位置——因为壳侧没有按内核枚举的表了。
+
+> §4.5 曾记录 `kernelExtensions`（`{ pi: …, dsh: … }` 普通对象字面量，漏补不编译错）是"坏"的一处。
+> 它已随 `assemble.ts` 的映射一起消失：现在是 `surfaces.extensionSyncs`（`{ kernel, sync }[]`，
+> 由各内核的 `createPluginExtensionSync()` 交出，`kernel-surfaces.ts:105-107`），加内核自动纳入。
+
 
 ### 1.4 模型源合流
 
@@ -155,6 +204,77 @@
 
 ### 4.2 `BackendCreateOptions` 里有三个字段各自只服务一个内核
 
+> **r49 复核：这条断言仍然成立，而且已经产生了一个活的后果。**
+>
+> 取证（`grep` 消费点，不含测试）：
+> - `maxTokens`：只有 `dsh/backend/dsh-backend-factory.ts:51` 消费（经 `initialize` 握手下发）；
+> - `systemPromptPaths` / `systemPromptTexts`：只有 `pi/backend/pi-backend-factory.ts:45-46`
+>   消费（拼成 `--append-system-prompt`）；`src/server/kernel/dsh/backend/*.ts` 对
+>   `systemPrompt*` **零匹配**，minimal / probe4 同样零匹配。
+> - 生产侧却是**中性**的：`session-store.ts:612/613`（及 1583/1584、2697）对每个内核都无分支地注入。
+>
+> **活的后果**：`systemPromptPaths` 来自 `registry.systemPromptPaths()`，即壳插件贡献的
+> `systemPrompts` 槽——`src/plugins/system/goody-hao` 正在用它（贡献 `./CLAUDE.md`）。
+> 于是该插件在 pi 下真的注入、在 dsh/minimal/probe4 下**静默不注入**，而它的 manifest
+> 描述此前向用户承诺「随会话注入……卸载即停止注入」，还写死了 pi 的 CLI 旗标。
+> 这是 §1.5 唯一禁止的状态「**静默缺面**」（既不翻译、也不补面、也不降级）。
+> r49 已先把两处**说谎的文案**改掉（manifest + 四语言描述改为「由壳在内核支持
+> 『追加系统 prompt』时注入」；圆心 `sessions.ts` 的 `roleToPrompt` 注释去掉 pi 旗标），
+> 但**根因未修**——见下。
+>
+> **正确修法（三条出路按 §1.5 优先级）**：
+> 1. *适配器翻译*：查 dsh 上游有没有承接系统 prompt 的机制（`initialize` 握手当前只有
+>    `provider/model/maxTokens/sessionId`，`session/prompt` 是发消息方法不是系统 prompt）。
+>    若有 → 在 `dsh-backend-factory` 里翻译；这是首选。
+> 2. *内核插件补面*：dsh 侧写一个 cordis 插件承接（§1.6 的唯一合法通道，不改内核源码）。
+> 3. *显式降级*：给 `BackendCapabilities` 加一轴（如 `systemPrompt`），
+>    经 `projectCapabilityFlags` 自动流进 `SessionCapabilities.faces`
+>    （投影是 `Object.entries(caps)` 泛型实现，加轴无需改投影），
+>    再在 renderer 侧对"贡献了 systemPrompts 的插件"给出「在部分内核下不生效」的明示。
+>
+> ⚠ **r49 当时没有顺手把轴加上**，理由是：轴必须有**生产消费者**，否则就是 r46/r47 刚清掉的
+> "死轴"（`src/capability-axis-consumers.test.ts` 的普查会把只有声明、无人读取的轴判红，
+> 且它的语料**排除测试文件**——只被测试读的轴同样算死轴）；而消费者落在哪一层还没定
+> （插件管理页是全局页，用"当前会话的内核"去判一份全局插件列表并不贴切；
+> 静态描述里列举内核名又违反内核中性）。**宁可延后并写清依据，也不为了"这轮有产出"而加死轴。**
+>
+> ### 4.2.1 r50 的落地（走的是上面第 3 条出路：显式降级）
+>
+> 全局页 vs 会话级能力的语义错配，解法是**把作用域写进文案**而不是回避它：提示条明说
+> 「**当前内核**不承接追加系统 prompt」，并在能力面未知时（`caps.kernel == null`，
+> 例如还没有会话）**不显示**——三态而不是布尔，因为把"没取到"当成"不支持"会
+> 误伤真正支持的内核（用户会在 pi 下看到假警告）。
+>
+> - 契约：`BackendCapabilities.systemPrompt?: boolean`（纯布尔，与 `fileBacked` 同范式；
+>   注入发生在 spawn 期、没有可在运行期调用的方法，所以不造空对象面）。
+> - 投影：`faces` 是映射类型 `{ [K in keyof BackendCapabilities]?: boolean }`、
+>   `projectCapabilityFlags` 是 `Object.entries` 泛型实现 ⇒ **加轴不需要改这两处**。
+> - 消费者：插件管理页对"贡献了 `systemPrompts` 槽的插件"显示降级提示
+>   （锚点 `data-plugin-systemprompt-inert`，文案 `pluginManager.systemPromptInert` × 4 语言）。
+>   归类为 **renderer 门控**而非服务端强制，理由：注入发生在 spawn 期且**没有任何用户可见反馈**，
+>   "服务端不产数据"在这里等于什么都不发生——那正是本轴要消灭的东西本身。
+> - 通路：走 `useSessionStore(s => s.capabilities)`（timeline 同一条），**不是**
+>   `ctx.sessions.getCapabilities()`——后者在 `SessionsApi` 上并不存在（那是
+>   `window.kernel.sessions` 的形状）。
+> - 验证：`minimal-smoke.e2e.mjs`（24 → **28 项**，minimal 与 probe4 双双通过）新增
+>   "插件页的 systemPrompts 降级提示"段，含反空转（先确认 goody-hao 在场）与
+>   "提示必须是译文而不是裸 key"。
+>
+> **仍未做的部分**：`BackendCreateOptions` 里那三个字段**本身**没有从中性契约里拆出去
+> （§4.2 原文建议的"只留真中性字段"）。当前状态是"不对称被显式告知"而不是"不对称被消除"。
+> 要彻底消除需要 §1.5 的前两条出路（适配器翻译 / 内核插件补面），二者都取决于 dsh 上游
+> 有没有承接系统 prompt 的机制——`initialize` 握手当前只有 `provider/model/maxTokens/sessionId`，
+> `session/prompt` 是发消息方法而不是系统 prompt。
+>
+> 守卫：`src/system-prompt-asymmetry.test.ts`（**7 测**）。r49 建的是①–④（棘轮：支持面
+> 不得静默变化 + 文案不得假承诺 + 生产侧保持中性）；r50 补了⑤⑥：
+> ⑤ **声明必须与事实一致**（消费 `systemPrompt*` 的内核 ⇔ 声明 `systemPrompt: true`），
+> 同时挡住"声明 true 但不消费"（假承诺）与"消费但不声明"（静默缺面复活）；
+> ⑥ 显式降级链路仍在（圆心有轴 + renderer 读 `faces?.systemPrompt` + 锚点在），
+> 防止有人把降级悄悄拆掉——①–④ 全都察觉不到那种回潮。反向注入已验（dsh 声明 true 但不消费 → ⑤ 红）。
+
+
+
 > **已落地（本轮收口）**：`agentDir` 已从 `BackendCreateOptions` **删除**——实测三个内核**全都忽略**壳传进来的那个值，各自在插件工厂里从 `KernelPluginContext`（`homedir`/`dataRoot`）解析自己的数据根；它现在只是各内核工厂入参里的专属字段（`PiFactoryOptions.agentDir` 等）。一个"每个实现都忽略"的字段留在中立契约里的害处是**误导**：读者会以为壳管内核的数据根，而真相是内核自己管（§1.6 内核是被壳管理的外部资源）。下面这段分析记录的就是当初为什么要盯这类字段。
 
 - **证据**：`backend.ts:222-240` 的 `BackendCreateOptions`：
@@ -164,7 +284,7 @@
   - `ephemeral`：pi=`--no-session`，dsh=临时 `DSH_SESSION_ROOT`（两者都有语义，这一个是真中性）。
 - **缺陷**：中性契约的定义是"壳必须向每一个内核索要的字段"。`maxTokens` 只有 dsh 要、pi 忽略，`systemPromptTexts`/`systemPromptPaths` 只有 pi 要、dsh 忽略——**这两个方向各自有一个"另一个内核当空气"的字段混进了契约**。加 kimi 后，kimi 大概率也要它自己的某两个字段（比如 `thinkingBudget`、`toolsAllowlist`），照这个模式，契约会随着内核数量线性膨胀成"所有内核专属字段的大杂烩"。
 - **为什么不早点修**：因为现在只有两个内核，每个"偏一方"的字段恰好能解释成"这就是两个内核的最小公约 + 一个多余"，成本低。第三个内核会把"最小公约"这个借口彻底拆穿。
-- **正确形状**：`BackendCreateOptions` 只留真中性字段（`cwd`/`agentDir`/`kernel`/`neutralSessionId`/`ephemeral`），把 `provider`/`model`/`maxTokens`/`systemPromptPaths`/`systemPromptTexts` 挪进**每个内核的工厂入参**（`PiFactoryOptions`/`DshFactoryOptions` 已经在做这件事——`kernel-factories.ts:33-59` 分别 extends 了 `BackendCreateOptions` 加专属字段）。方向已经走了一半：工厂入参已经 extends 了，只是圆心契约还在替它们保留着一份"提前泄漏"。
+- **正确形状**：`BackendCreateOptions` 只留真中性字段（`cwd`/`agentDir`/`kernel`/`neutralSessionId`/`ephemeral`），把 `provider`/`model`/`maxTokens`/`systemPromptPaths`/`systemPromptTexts` 挪进**每个内核的工厂入参**（`PiFactoryOptions`/`DshFactoryOptions`/`MinimalFactoryOptions` 已经在做这件事——各自 `<id>/backend/<id>-backend-factory.ts` 里 extends `BackendCreateOptions` 加专属字段（此前同住 `kernel/factories/kernel-factories.ts`，该目录已删））。方向已经走了一半：工厂入参已经 extends 了，只是圆心契约还在替它们保留着一份"提前泄漏"。
 
 裁定：**不合理，需补（方向已对，收尾即可）。** 把契约里的"半中性字段"下放到工厂入参，`BaseBackend` 的 `create` 只收真中性字段。这不是破坏性重构——工厂已经 extends，只是圆心契约该瘦身。
 
@@ -273,11 +393,36 @@
 
 **Q1：加 kimi 到底要改几个文件？能给个精确数吗？**
 
-必改 6 个：`kernel.ts`（字面量 + KERNEL_IDS）、`kernel-factories.ts`、`kernel-managers.ts`、`kernel-logos.ts`、`assemble.ts`（3 个映射 + 2 个工厂 + 1 个 entries + installDir）、`controllers/kernel.ts`（getFallbackModel）。新建 1 个目录 `src/server/kernel/kimi/`（约 8-10 个文件：backend/catalog/protocol/manager/model/extension/logo）。若走 §4 的补丁（capabilities 泛化、manifest extensions 泛化），再追加 `backend.ts`、`contributions.ts`、`sessions.ts`、`kernel-event.ts`、`lifecycle/index.ts`、`session-store.ts` 共 6 个文件的结构性改动。**结论：MVP 接入 12-16 个文件，若要抽象健康则 22 个文件左右。**
+**必改 0 个既有文件。** 这条答案曾被写成「必改 6 个」（`kernel.ts` 字面量 + `KERNEL_IDS`、`kernel-factories.ts`、`kernel-managers.ts`、`kernel-logos.ts`、`assemble.ts` 的 3 个映射 + 2 个工厂 + entries + installDir、`controllers/kernel.ts` 的 `getFallbackModel`）——那 6 处**已全部消失**，逐个交代去向：
+
+| 曾经的必改点 | 现在 |
+|---|---|
+| `kernel.ts` 的 `KernelId` 字面量 + `KERNEL_IDS` | `KernelId = string`（不透明），`KERNEL_IDS` 已删；清单由 `KernelRegistry` 运行时提供 |
+| `kernel-factories.ts` / `kernel-managers.ts` / `kernel-logos.ts` | 整个 `kernel/factories/` 目录已删；工厂归各内核 `<id>/backend/<id>-backend-factory.ts`，manager 构造归 `<id>/manager/`，logo 由 `plugin.logo` 交出经 `buildKernelSurfaces` 投影 |
+| `assemble.ts` 的 3 个映射 + 2 个工厂 + entries + installDir | 无按内核枚举的映射了：`kernelModels`/`kernelConfig`/`extensionSyncs`/`logos` 全由 `buildKernelSurfaces(registry)` 循环注册表产出；installDir 由各内核插件自报 |
+| `controllers/kernel.ts` 的 `getFallbackModel` | 已移到插件侧（`ctx.modelsConfig.getFallbackModel()`，`timeline/renderer/index.tsx:284`）；该文件按内核分支数实测为 0 |
+
+新建的东西只有两处，都在**内核自己名下**：
+
+- `src/server/kernel/kimi/`：实现目录。规模参照现有内核——`minimal` 11 个 `.ts`（最简，可当模板）、`dsh` 20 个、`pi` 31 个。含 `plugin.ts`（对外的唯一面）与 `backend/kimi-backend-factory.ts`。
+- `src/plugins/kernels/kimi/`：内核插件（`plugin.json` 带 `kernel` 块 + `renderer/` + `locales/`）。`pi` 侧实测 32 个文件（含设置页与文案）。
+
+**结论：MVP 接入 = 新建 2 个目录、改 0 个既有文件。** §4 讨论的那些「补丁式泛化」（`backend.ts` / `contributions.ts` / `sessions.ts` / `kernel-event.ts` / `lifecycle/index.ts` / `session-store.ts`）也不需要了——它们当初要解决的就是「按内核名分字段」，而那些字段已统一成 `extensions: { 内核 id: 路径 }` + 各内核自报面。
+
+守卫：`src/kernel-build-inputs.test.ts`（构建期判据与运行期判据必须选中同一批内核 + 构建配置零内核名字面量）、`src/server/bootstrap/kernel-surfaces.test.ts`（第四内核投影 + 源码扫描 0 处内核字面量）、`npm run audit:deps` 检验⑩⑪（机制层零内核名字面量 + 内核目录自包含）。
 
 **Q2："加第三个内核一行不改"到底哪句是真的、哪句是假的？**
 
-真：`ModelCatalog`（一行不改）、`AbstractBackend`（不 import 新内核）、`KernelManager`/`KernelRuntime`/`KernelReconcile`（不 import 新内核）、`BaseBackend` 接口（若不修 capabilities）。假：`assemble.ts`（必须补工厂分叉和映射）、`controllers/kernel.ts`（默认模型策略）、`session-store.ts`（若 kimi 是文件型，`capabilities.pi` 判定会错）、圆心契约（若修 capabilities/manifest）。
+**现在整句都是真的。** 曾假的四处已逐个消解：
+
+| 曾经的「假」 | 现在 |
+|---|---|
+| `assemble.ts` 必须补工厂分叉和映射 | 无分叉、无按内核映射：工厂由 `plugin.createBackend()` 交出，映射由 `buildKernelSurfaces` 循环注册表产出 |
+| `controllers/kernel.ts` 的默认模型策略 | 默认模型策略移到插件侧（`ctx.modelsConfig.getFallbackModel()`）；该文件按内核分支数实测 0 |
+| `session-store.ts` 的 `capabilities.pi` 判定 | 已改为 `capabilities.extensions` 桶探测（不按内核身份）。⚠ **但仍是未清债务**：`session-store.ts` 有 `private asPi()` / `piSend()`（19 处调用点）与对 `kernel/pi/backend/pi-backend-extensions` 的 type-only import —— `CLAUDE.md` §1.5 的判别气味原文点名 `asPi()` 就是泄漏。它是 `npm run audit:deps` 检验⑪ allowlist 里唯一那条，清理方向见该 allowlist 注释 |
+| 圆心契约（若修 capabilities/manifest） | `KernelId = string`、`extensions: { 内核 id: 路径 }`，圆心不再按内核枚举 |
+
+真的一直真的：`ModelCatalog`（持 `KernelModelSource[]`，加内核 = 加一个 source）、`AbstractBackend`、`KernelManager`/`KernelRuntime`/`KernelReconcile`、`BaseBackend` 契约。
 
 **Q3：kimi 如果是"文件型"内核（像 pi），能直接复用 pi 的 SessionCatalog 吗？**
 

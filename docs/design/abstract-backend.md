@@ -1,5 +1,13 @@
 # AbstractBackend:契约骨架 + 缺面默认（abstract / pi / dsh 同级别）
 
+> ⚠️ **本文为设计记录（快照），不是现行架构描述。** 其中提到的
+> `BackendExtensions` / `capabilities.extensions` / `asPi()` / `piSend()` / `kernel-factories`
+> 等符号**已退役**：opaque 扩展面桶已拆成圆心的**逐轴中性能力面** `BackendCapabilities`
+> （steering / retry / compaction / snapshot / stats / modelCycle / toolExec / busFrames /
+> questions / thinking + fileBacked），壳改为按轴探测（`SessionStore.faceOf` / `viaFace`），
+> `kernel/pi/backend/pi-backend-extensions.ts` 与 `kernel/factories/` 已删除。
+> 现行描述见 `CLAUDE.md` §6.2/§6.3 与 `docs/add-new-kernel.md` §1.3。
+
 > 依据 `CLAUDE.md` §9.4（继承 + 实现的三段式）。**注:原写的是 kernel-layer.md 的 §9.4,但那篇只到 §7、没有 §9;**
 > "接口 → 抽象基类 → 具体实现"三段式的正文在 `CLAUDE.md` §9.4。本文把「计划中」的 `AbstractBackend`
 > 落成具体设计：abstract / pi / dsh 三个同级别的后端，一条一条对应实现。

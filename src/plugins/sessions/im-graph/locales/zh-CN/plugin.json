@@ -1,0 +1,4 @@
+{
+  "plugin.im-graph.displayName": "IM",
+  "plugin.im-graph.description": "Session Bus 会话关系图——房间成员、spawn 父子、消息流动实时可视"
+}

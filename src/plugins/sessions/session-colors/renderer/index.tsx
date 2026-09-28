@@ -32,7 +32,7 @@ function isRowVisible(path: string): boolean {
   if (!el) return false;
   let node: Element | null = el;
   while (node && node !== document.body) {
-    if (node.classList.contains("pi-collapsible") && node.getAttribute("data-state") === "closed") {
+    if (node.classList.contains("shell-collapsible") && node.getAttribute("data-state") === "closed") {
       return false;
     }
     node = node.parentElement;
@@ -249,6 +249,15 @@ export function SessionColorsPanel(): React.ReactNode {
             <div key={color} className="relative">
               <button
                 onClick={() => handleSelectColor(color)}
+                // ⚠ 可访问名**必需**（实测缺陷，dom-audit 抓到）：这个按钮里只有一个 <PinSVG>，
+                //   没有任何文本/title/aria-label，屏幕阅读器读到的是一个空按钮；而它的
+                //   **唯一语义就是颜色**（未选中时 background 与 border 都是 transparent，
+                //   视觉上只剩那枚图钉的颜色）。故 aria-label 用颜色名，键以 hex 值为索引
+                //   （色板增删不会错位；缺译文时降级为 hex 本身，仍比空名强）。
+                //   选中态此前只靠 borderColor/background 表达（纯视觉），补 aria-pressed 让
+                //   非视觉用户也能知道当前选的是哪个颜色。
+                aria-label={t(`pinColors.color.${color.slice(1)}`, { defaultValue: color })}
+                aria-pressed={selectedColor === color}
                 className="flex items-center justify-center rounded-[var(--radius-sm)] border-2 transition-all"
                 style={{
                   width: 30, height: 34,

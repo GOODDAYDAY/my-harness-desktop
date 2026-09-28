@@ -18,8 +18,10 @@ import { join } from "node:path";
 import ts from "typescript";
 import { deepMergeJson } from "../../../application/config/json-merge";
 import { withDirLock } from "../../../application/config/config-file";
-import type { SchemaField } from "@my-harness-desktop/shared";
-export type { SchemaField } from "@my-harness-desktop/shared";
+// SchemaField 是 pi 的**内部表示**（解析 pi 的 .d.ts 得到），单源在 ../manager/pi-settings-contract；
+// 此处 re-export 是为了既有引用路径不变（发布面是投影不是副本，§1.3）。
+import type { SchemaField } from "../manager/pi-settings-contract";
+export type { SchemaField } from "../manager/pi-settings-contract";
 
 /**
  * 解析内核 settings-manager.d.ts,返回 Settings 接口的所有字段(含嵌套展平)。
@@ -120,24 +122,37 @@ function schemaFieldsOf(checker: ts.TypeChecker, key: string, type: ts.Type): Sc
     return [{ key, type: "object" }]; // 复杂数组(PackageSource[] 等)→ object
   }
 
-  // 联合:全字符串字面量 → enum;全数字字面量 → number;否则 object
+  // 联合的映射（四条，按特异性从高到低）：
+  //   · 全字符串字面量      → enum（既有行为，不带 kinds）
+  //   · 全数字字面量        → number（既有行为）
+  //   · 全布尔字面量        → boolean（TS 把 `boolean` 表示成 `true | false` 联合时会走到这里；
+  //                            比映射成"两个选项的 enum"更忠实，也比旧实现的 object 好）
+  //   · **混合**字面量      → enum + enumValueKinds（新增：`boolean | "auto"`、
+  //                            `"kitty" | "iterm2" | "auto" | false` 这类。旧实现一律 object，
+  //                            于是壳只能给裸 JSON 编辑器，用户得手敲 true / "auto"）
+  //   · 含非字面量成员      → object（不透明，交给 JSON 编辑器；PackageSource 等属于这类）
   if (type.isUnion()) {
-    const strValues: string[] = [];
-    let allStringLiteral = true;
-    let allNumberLiteral = true;
+    const values: string[] = [];
+    const kinds: ("string" | "boolean" | "number")[] = [];
+    let allLiteral = true;
     for (const t of type.types) {
       if (t.flags & ts.TypeFlags.StringLiteral) {
-        strValues.push((t as ts.StringLiteralType).value);
-        allNumberLiteral = false;
+        values.push((t as ts.StringLiteralType).value); kinds.push("string");
       } else if (t.flags & ts.TypeFlags.NumberLiteral) {
-        allStringLiteral = false;
+        values.push(String((t as ts.NumberLiteralType).value)); kinds.push("number");
+      } else if (t.flags & ts.TypeFlags.BooleanLiteral) {
+        // 布尔字面量的值不在公开 API 上（intrinsicName 是内部的），用 checker 转字符串最稳。
+        values.push(checker.typeToString(t)); kinds.push("boolean");
       } else {
-        allStringLiteral = false;
-        allNumberLiteral = false;
+        allLiteral = false; break;
       }
     }
-    if (allStringLiteral) return [{ key, type: "enum", enumValues: strValues }];
-    if (allNumberLiteral) return [{ key, type: "number" }];
+    if (allLiteral && values.length > 0) {
+      if (kinds.every((k) => k === "string")) return [{ key, type: "enum", enumValues: values }];
+      if (kinds.every((k) => k === "number")) return [{ key, type: "number" }];
+      if (kinds.every((k) => k === "boolean")) return [{ key, type: "boolean" }];
+      return [{ key, type: "enum", enumValues: values, enumValueKinds: kinds }];
+    }
     return [{ key, type: "object" }];
   }
 

@@ -123,7 +123,7 @@ describe("startNewChat → 清空中立主键 + 叠加层(防止新会话锚到�
       kernel: {
         sessions: {
           setContext: async () => {},
-          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, faces: { steering: true, retry: true, thinking: true }, thinkingCycle: true, levelsSemantics: "approximate" }),
         },
       },
     });
@@ -310,7 +310,7 @@ describe("sendMessage → 新会话无默认模型兜底(根因修复回归)", (
             promptPrefs.push(prefs);
           },
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, faces: { steering: true, retry: true, thinking: true }, thinkingCycle: true, levelsSemantics: "approximate" }),
         },
         kernel: { fitPiExtensionAvailable: async () => true },
       },
@@ -394,7 +394,7 @@ describe("sendMessage → pending 回灌(改模型后发送用新模型)", () =>
             promptPrefs.push(prefs);
           },
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, faces: { steering: true, retry: true, thinking: true }, thinkingCycle: true, levelsSemantics: "approximate" }),
         },
         kernel: { fitPiExtensionAvailable: async () => true },
       },
@@ -504,7 +504,7 @@ describe("sendMessage → 乐观 content 含块(评论真相源回归)", () => {
           setContext: async () => {},
           prompt: async () => {},
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, faces: { steering: true, retry: true, thinking: true }, thinkingCycle: true, levelsSemantics: "approximate" }),
         },
         kernel: { fitPiExtensionAvailable: async () => true },
       },
@@ -601,7 +601,7 @@ describe("sendMessage → 新会话草稿清账(「enter 后要清理」根因�
           setContext: async () => {},
           prompt: async () => {},
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, faces: { steering: true, retry: true, thinking: true }, thinkingCycle: true, levelsSemantics: "approximate" }),
         },
         kernel: { fitPiExtensionAvailable: async () => true },
       },
@@ -622,7 +622,7 @@ describe("sendMessage → 新会话草稿清账(「enter 后要清理」根因�
           setContext: async () => {},
           prompt: async () => {},
           list: async () => [],
-          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, faces: { steering: true, retry: true, thinking: true }, thinkingCycle: true, levelsSemantics: "approximate" }),
         },
       },
     });
@@ -664,7 +664,7 @@ describe("切项目:记忆上次会话 + 恢复(不再无条件新会话)", () =
         sessions: {
           setContext: async () => {},
           getStats: async () => null,
-          getCapabilities: async () => ({ kernel: "pi", locked: false, extension: true, thinking: false }),
+          getCapabilities: async () => ({ kernel: "pi", locked: false, faces: { steering: true, retry: true, thinking: true }, thinkingCycle: true, levelsSemantics: "approximate" }),
           openSession: async (id: string) => { opened.push(id); return detailFor(id); },
         },
       },
@@ -776,11 +776,12 @@ describe("切项目:记忆上次会话 + 恢复(不再无条件新会话)", () =
 describe("refreshThinkingLevels → 档位清单跟着 session 的内核走(3:空清单置空,不串味)", () => {
   it("内核回空清单 → thinkingLevels 置空(非保留上一个内核的档位)", async () => {
     vi.stubGlobal("window", {
-      kernel: { sessions: { pi: { getThinkingLevels: async () => [] } } },
+      // 平铺后的 IPC 面：`sessions.pi.getThinkingLevels` → `sessions.getThinkingLevels`
+      kernel: { sessions: { getThinkingLevels: async () => [] } },
     });
     // 前一个内核残留三档 + 当前会话有 thinking 面
     useSessionStore.setState({
-      capabilities: { kernel: "dsh", locked: false, extension: false, thinking: true },
+      capabilities: { kernel: "dsh", locked: false, faces: { thinking: true }, thinkingCycle: false, levelsSemantics: "precise" },
       thinkingLevels: ["off", "low", "high"],
     });
     refreshThinkingLevels();

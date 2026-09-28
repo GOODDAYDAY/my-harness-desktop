@@ -385,7 +385,7 @@ sequenceDiagram
 - **声明能力**（pluginId 首参 + main 门控）：`fs/git/gitWrite/llm/bus`。`buildKernel` 里这些方法的第一个参数就是 `pluginId`，main 侧 `registry.assertPermission(pluginId, permission)` 在 handler 里查 manifest 权限。
 - **用户手势驱动**：`dialog`。
 
-一个值得注意的细节：`kernels.pi` 和 `kernels.dsh` 是两个同构但**物理上分开写的对象**（pi 多 `fitPiExtensionAvailable`），而 `kernelModels.pi/dsh` 走 `kernelModelsFor("pi"/"dsh")` 共用一个形状——这反映了「版本管理是内核专属面、模型配置是中性面」的边界：模型配置（`KernelModelsApi`）是中立契约，pi/dsh 各交一个适配器；版本管理（`KernelVersionApi`）是 pi/dsh 同构但各自实现的。
+一个值得注意的细节：`kernels.pi` 和 `kernels.dsh` 是两个同构但**物理上分开写的对象**（pi 多声明 `toolFilterEnforced`，旧名 `fitPiExtensionAvailable` 已退役并换轴），而 `kernelModels.pi/dsh` 走 `kernelModelsFor("pi"/"dsh")` 共用一个形状——这反映了「版本管理是内核专属面、模型配置是中性面」的边界：模型配置（`KernelModelsApi`）是中立契约，pi/dsh 各交一个适配器；版本管理（`KernelVersionApi`）是 pi/dsh 同构但各自实现的。
 
 ### 6.4 基线 + 增量：前端零拉取
 

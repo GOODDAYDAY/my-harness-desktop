@@ -1,0 +1,4 @@
+{
+  "plugin.debug-bar.displayName": "Debug Bar",
+  "plugin.debug-bar.description": "Debug-Button in der Titelleiste: kopiert das Seiten-DOM in die Zwischenablage; gesteuert über debugMode in general-config"
+}

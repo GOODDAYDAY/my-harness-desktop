@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Bookmark, GitFork } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, useArmConfirm, type MessageActionProps } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, useArmConfirm, Announce, type MessageActionProps } from "@my-harness-desktop/react";
 
 const STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-muted)] hover:text-[var(--color-fg)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer";
 const ARMED_STYLE = "flex items-center gap-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs text-[var(--color-accent-error)] hover:bg-[var(--color-surface)] bg-transparent border-none cursor-pointer";
@@ -94,6 +94,8 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
         <GitFork className="size-3.5" />
         {armed ? t("shell.forkArmed") : t("shell.fork")}
       </button>
+      {/* 错误提示是瞬时的，必须走 alert live region（r59；与 retry/continue 同型同修法） */}
+      {toast && <Announce message={toast} variant="error" />}
       {toast && <span className="text-xs text-[var(--color-accent-error)]">{toast}</span>}
     </>
   );

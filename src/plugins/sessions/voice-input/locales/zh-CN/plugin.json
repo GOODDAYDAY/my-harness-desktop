@@ -1,0 +1,4 @@
+{
+  "plugin.voice-input.displayName": "语音输入",
+  "plugin.voice-input.description": "语音转文字输入：点击输入框麦克风录音，本地 Whisper 模型转写后回填文字发送。模型按需下载不进 git。"
+}

@@ -13,13 +13,14 @@
 // 用法: npm run build && node scripts/demo/kernel-thinking-matrix.e2e.mjs [--port 9338] [--keep]
 // 注意: 花真实 token(三条 prompt);pi/dsh 内核与凭证从真实 HOME 链接+拷贝进隔离区。
 import { parseArgs } from "node:util";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, readFileSync, writeFileSync } from "node:fs";
+// copyFileSync / symlinkSync 已随"dsh 三件套收敛到 setupDshKernel"一起不再需要（r13）。
+import { existsSync, mkdirSync, readdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { assertPortFree, launchApp, killApp } from "./lib/app.mjs";
-import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
+import { makeRunRoot, setupBaseline, setupDshKernel } from "./lib/home.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -68,16 +69,15 @@ const generalFile = join(home, ".my-harness-desktop-dev", "config", "general.jso
 const general = JSON.parse(readFileSync(generalFile, "utf-8"));
 general.defaultThinkingLevel = "high";
 writeFileSync(generalFile, JSON.stringify(general, null, 2));
-// dsh 三件套(内核目录符号链接;配置/凭证拷贝防写回;node_modules 符号链接供适配插件解析)
+// dsh 三件套走**共用助手**（此前这里是同一套逻辑的内联复制）。
+// 为什么必须共用而不是各写一份：home.mjs 的注释写得很重——「少任何一件都不是"少一点功能"，
+// 是"内核起不来"，抄漏一件的排查成本远高于共用一份」。实测对比过：内联版 7 个要素一个不缺，
+// 所以这次收敛不是修 bug，是**消除将来抄漏的机会**（r13 新写的 composer-session-audit 就漏调了
+// dsh 准备，于是把"dsh 没有模型 → 下拉没有 dsh TAB"这个正确行为误报成 H 级缺陷）。
+// 助手还返回 `available`，让"本机没装 dsh"能被显式跳过而不是伪造断言。
+const dshSetup = setupDshKernel(home, realHome);
 const realDsh = join(realHome, ".my-harness-desktop-dev", "dsh");
-if (existsSync(realDsh)) symlinkSync(realDsh, join(home, ".my-harness-desktop-dev", "dsh"), platform() === "win32" ? "junction" : undefined);
-mkdirSync(join(home, ".dsh"), { recursive: true });
-for (const f of ["cordis.yml", "settings.yaml", ".credentials.yaml"]) {
-  const src = join(realHome, ".dsh", f);
-  if (existsSync(src)) copyFileSync(src, join(home, ".dsh", f));
-}
-const realDshNm = join(realHome, ".dsh", "node_modules");
-if (existsSync(realDshNm)) symlinkSync(realDshNm, join(home, ".dsh", "node_modules"), platform() === "win32" ? "junction" : undefined);
+if (!dshSetup.available) console.log("  · 警告: 本机 dsh 不可用(缺 bin.js 或 cordis.yml)，幕C/幕D 会失败");
 // 幕D 前置:给隔离区 dsh settings.yaml 的 us-new 全模型补 reasoningEfforts(推理元数据
 // 是档位清单/校验的前提——dsh-thinking-level.md §5;真实用户的模型经模型页 reasoning 开关写入)。
 {
@@ -141,7 +141,8 @@ async function startNewChat() {
 }
 
 /** 打开 composer 模型下拉 → (可选)点内核 TAB → 按显示名点模型项。
- *  Radix DropdownMenu 需要真实 pointer 序列;模型项 role=menuitem。 */
+ *  Radix DropdownMenu 需要真实 pointer 序列;模型项 role=menuitemradio(r35 起,单选语义),
+ *  思考档位项仍是 role=menuitem——所以定位一律用 `[role^='menuitem']` 同时覆盖两者。 */
 async function pickModel(modelName, kernelTab) {
   // 1. 开下拉(幂等:已开则跳过——触发器是 toggle,重复点击会把它关掉,实测踩过)
   const alreadyOpen = await page.evaluate(() => !!document.querySelector("[role='menu']"));
@@ -192,10 +193,10 @@ async function pickModel(modelName, kernelTab) {
     if (!tabbed) console.warn(`   [pickModel] 内核 TAB「${kernelTab}」未找到(可能已锁定/单内核)`);
     await new Promise((r) => setTimeout(r, 300));
   }
-  // 3. 点模型项(role=menuitem,文本含显示名,且必须可见+未禁用——隐藏内核清单是 inert div、
+  // 3. 点模型项(role=menuitemradio,文本含显示名,且必须可见+未禁用——隐藏内核清单是 inert div、
   //  锁内核的项 aria-disabled,点了 Radix 也不触发 onSelect)
   const picked = await page.evaluate((name) => {
-    const item = [...document.querySelectorAll("[role='menuitem']")].find((el) =>
+    const item = [...document.querySelectorAll("[role^='menuitem']")].find((el) =>
       (el.textContent || "").includes(name)
       && el.getBoundingClientRect().width > 0
       && el.getAttribute("aria-disabled") !== "true");
@@ -206,7 +207,7 @@ async function pickModel(modelName, kernelTab) {
   }, modelName);
   if (!picked) {
     const inventory = await page.evaluate(() =>
-      [...document.querySelectorAll("[role='menuitem']")].map((el) => `${(el.textContent || "").trim().slice(0, 26)}${el.getAttribute("aria-disabled") === "true" ? "(禁)" : ""}`));
+      [...document.querySelectorAll("[role^='menuitem']")].map((el) => `${(el.textContent || "").trim().slice(0, 26)}${el.getAttribute("aria-disabled") === "true" ? "(禁)" : ""}`));
     throw new Error(`模型项「${modelName}」未找到/不可点;当前项: ${JSON.stringify(inventory)}`);
   }
   await page.keyboard.press("Escape").catch(() => {});
@@ -325,8 +326,8 @@ try {
     const menu = document.querySelector("[role='menu']");
     const tabs = [...(menu?.querySelectorAll("button") ?? [])].filter((b) => /^(pi|dsh)$/i.test((b.textContent || "").trim()))
       .map((b) => ({ k: (b.textContent || "").trim(), disabled: b.disabled, title: b.title || "" }));
-    // menuitem 带禁用态与可见性(inert 内核清单是 div 不占 menuitem 角色)
-    const items = [...document.querySelectorAll("[role='menuitem']")].map((el) => ({
+    // menuitem* 带禁用态与可见性(inert 内核清单是 div,不占任何 menuitem 角色)
+    const items = [...document.querySelectorAll("[role^='menuitem']")].map((el) => ({
       t: (el.textContent || "").trim().slice(0, 30),
       disabled: el.getAttribute("aria-disabled") === "true",
       w: Math.round(el.getBoundingClientRect().width),
@@ -391,11 +392,11 @@ try {
     btn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
   await page.waitForSelector("[role='menu']", { timeout: 5000 });
-  const d2items = await page.evaluate(() => [...document.querySelectorAll("[role='menuitem']")].map((el) => (el.textContent || "").trim()));
+  const d2items = await page.evaluate(() => [...document.querySelectorAll("[role^='menuitem']")].map((el) => (el.textContent || "").trim()));
   note("幕D 档位清单", JSON.stringify(d2items));
   ok(d2items.some((t) => /^(低|low)$/i.test(t)), "幕D 档位清单含 low/低(来自扩展的精确模型清单)");
   await page.evaluate(() => {
-    const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => (el.textContent || "").trim() === "低" || /^low$/i.test((el.textContent || "").trim()));
+    const item = [...document.querySelectorAll("[role^='menuitem']")].find((el) => (el.textContent || "").trim() === "低" || /^low$/i.test((el.textContent || "").trim()));
     item?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
     item?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });

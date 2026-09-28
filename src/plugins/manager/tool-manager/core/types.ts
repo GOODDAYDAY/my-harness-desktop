@@ -1,15 +1,29 @@
 export interface KnownTool {
   id: string;
   name: string;
+  /** 工具说明。**内置工具**同时带 `descriptionKey`，渲染时优先翻译（`name` 是内核注册名，
+   *  各语言同形，故不需要 key）。内核经 listTools 播报来的工具没有 key，直接用本字段。 */
   description: string;
+  /** 说明文案的 i18n key（仅内置工具有）。 */
+  descriptionKey?: string;
   source: "builtin" | "extension" | "cordis";
   extensionId?: string;
 }
 
 export interface ToolGroup {
   id: string;
+  /** 展示名。**内置预设**同时带 `nameKey`，渲染时优先翻译；用户自建组没有 key，直接用本字段。
+   *  为什么两个都要：`name` 是**可改的用户数据**（重命名会写回它），而内置预设的默认名
+   *  又是**界面文案**（该随语言变）。只留 `name` 就会把中文写死进德语界面（实测过：
+   *  工具面板在 de 下显示「只读 / 只写」）；只留 `nameKey` 则用户改名后无处存放自定义值。
+   *  规则：有 key 用 key（`t(nameKey, { defaultValue: name })`），一旦用户保存过就清掉 key、
+   *  以 `name` 为准——用户显式写下的值优先于任何翻译。 */
   name: string;
+  /** 展示名的 i18n key（仅内置预设有）。 */
+  nameKey?: string;
   description?: string;
+  /** 说明文案的 i18n key（仅内置预设有）。语义同 `nameKey`。 */
+  descriptionKey?: string;
   toolIds: string[];
   builtIn: boolean;
   icon?: string;
@@ -29,7 +43,9 @@ export const PRESET_GROUPS: ToolGroup[] = [
   {
     id: "readonly",
     name: "只读",
+    nameKey: "toolManager.group.readonly.name",
     description: "读取与搜索，不改动任何文件",
+    descriptionKey: "toolManager.group.readonly.desc",
     toolIds: ["read", "find", "grep", "ls"],
     builtIn: true,
     icon: "eye",
@@ -38,7 +54,9 @@ export const PRESET_GROUPS: ToolGroup[] = [
   {
     id: "writeonly",
     name: "只写",
+    nameKey: "toolManager.group.writeonly.name",
     description: "写入、编辑与命令执行",
+    descriptionKey: "toolManager.group.writeonly.desc",
     toolIds: ["write", "edit", "bash"],
     builtIn: true,
     icon: "pencil",
@@ -48,6 +66,7 @@ export const PRESET_GROUPS: ToolGroup[] = [
     id: "bus",
     name: "bus",
     description: "Session Bus 会话编排",
+    descriptionKey: "toolManager.group.bus.desc",
     toolIds: ["bus_status", "session_create", "session_abort", "channel_member", "tap_start", "tap_stop"],
     builtIn: true,
     icon: "radio",
@@ -57,6 +76,7 @@ export const PRESET_GROUPS: ToolGroup[] = [
     id: "subagent",
     name: "subagent",
     description: "子代理派生与协作",
+    descriptionKey: "toolManager.group.subagent.desc",
     toolIds: ["spawn_subagent", "send_to_subagent", "wait_subagent", "list_subagents", "abort_subagent"],
     builtIn: true,
     icon: "bot",
@@ -88,13 +108,13 @@ export function computeDefaultEnabledGroupIds(groups: ToolGroup[]): string[] {
 }
 
 export const BUILTIN_TOOLS: KnownTool[] = [
-  { id: "bash", name: "bash", description: "执行 shell 命令", source: "builtin" },
-  { id: "read", name: "read", description: "读取文件内容", source: "builtin" },
-  { id: "write", name: "write", description: "写入新文件", source: "builtin" },
-  { id: "edit", name: "edit", description: "编辑文件", source: "builtin" },
-  { id: "find", name: "find", description: "按模式搜索文件路径", source: "builtin" },
-  { id: "grep", name: "grep", description: "搜索文件内容", source: "builtin" },
-  { id: "ls", name: "ls", description: "列出目录内容", source: "builtin" },
+  { id: "bash", name: "bash", description: "执行 shell 命令", descriptionKey: "toolManager.tool.bash", source: "builtin" },
+  { id: "read", name: "read", description: "读取文件内容", descriptionKey: "toolManager.tool.read", source: "builtin" },
+  { id: "write", name: "write", description: "写入新文件", descriptionKey: "toolManager.tool.write", source: "builtin" },
+  { id: "edit", name: "edit", description: "编辑文件", descriptionKey: "toolManager.tool.edit", source: "builtin" },
+  { id: "find", name: "find", description: "按模式搜索文件路径", descriptionKey: "toolManager.tool.find", source: "builtin" },
+  { id: "grep", name: "grep", description: "搜索文件内容", descriptionKey: "toolManager.tool.grep", source: "builtin" },
+  { id: "ls", name: "ls", description: "列出目录内容", descriptionKey: "toolManager.tool.ls", source: "builtin" },
 ];
 
 export function computeEnabledToolIds(

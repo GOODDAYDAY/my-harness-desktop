@@ -7,5 +7,7 @@
   "preview.refresh": "刷新",
   "preview.viewSource": "源码",
   "preview.viewRendered": "渲染",
-  "preview.loadFailed": "加载失败"
+  "preview.loadFailed": "加载失败",
+  "preview.fsUnavailable": "文件系统访问不可用",
+  "preview.noContent": "没有返回内容"
 }

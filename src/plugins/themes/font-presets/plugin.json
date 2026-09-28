@@ -123,14 +123,29 @@
     ],
     "languages": [
       {
-        "id": "font-presets.fonts",
+        "id": "font-presets.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "font-presets.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "font-presets.plugin",
         "locale": "zh-CN",
-        "resources": "./locales/zh-CN/fonts.json"
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "font-presets.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
       },
       {
         "id": "font-presets.fonts",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/fonts.json"
+        "locale": "de",
+        "resources": "./locales/de/fonts.json"
       },
       {
         "id": "font-presets.fonts",
@@ -139,8 +154,13 @@
       },
       {
         "id": "font-presets.fonts",
-        "locale": "de",
-        "resources": "./locales/de/fonts.json"
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/fonts.json"
+      },
+      {
+        "id": "font-presets.fonts",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/fonts.json"
       }
     ]
   }

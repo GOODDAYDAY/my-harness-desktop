@@ -15,7 +15,6 @@
     "sidebar": [
       {
         "id": "sub-agents",
-        "title": "子 Agent",
         "component": "SubAgentSection",
         "order": 20,
         "group": "main"
@@ -51,7 +50,7 @@
     "sessionGroupings": [
       {
         "id": "subagent",
-        "parentPathKey": "subagent.parent_session",
+        "parentPathField": "subagent.parent_session",
         "childLabelKey": "sub-agent.childLabel",
         "childIcon": "git-fork"
       }
@@ -59,7 +58,7 @@
     "composerPolicies": [
       {
         "id": "subagent",
-        "customKey": "subagent",
+        "customField": "subagent",
         "readonlyMessageKey": "sub-agent.composerReadonly"
       }
     ],
@@ -76,24 +75,34 @@
     ],
     "languages": [
       {
-        "id": "sub-agent.sub-agent",
-        "locale": "zh-CN",
-        "resources": "./locales/zh-CN/sub-agent.json"
-      },
-      {
-        "id": "sub-agent.sub-agent",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/sub-agent.json"
-      },
-      {
-        "id": "sub-agent.sub-agent",
-        "locale": "en",
-        "resources": "./locales/en/sub-agent.json"
-      },
-      {
-        "id": "sub-agent.sub-agent",
+        "id": "sub-agent.plugin",
         "locale": "de",
-        "resources": "./locales/de/sub-agent.json"
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "sub-agent.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "sub-agent.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "sub-agent.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "sub-agent.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
+      },
+      {
+        "id": "sub-agent.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
       },
       {
         "id": "sub-agent.settings",
@@ -106,14 +115,44 @@
         "resources": "./locales/zh-TW/settings.json"
       },
       {
-        "id": "sub-agent.settings",
-        "locale": "en",
-        "resources": "./locales/en/settings.json"
+        "id": "sub-agent.sidePanel",
+        "locale": "de",
+        "resources": "./locales/de/sidePanel.json"
       },
       {
-        "id": "sub-agent.settings",
+        "id": "sub-agent.sidePanel",
+        "locale": "en",
+        "resources": "./locales/en/sidePanel.json"
+      },
+      {
+        "id": "sub-agent.sidePanel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sidePanel.json"
+      },
+      {
+        "id": "sub-agent.sidePanel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sidePanel.json"
+      },
+      {
+        "id": "sub-agent.sub-agent",
         "locale": "de",
-        "resources": "./locales/de/settings.json"
+        "resources": "./locales/de/sub-agent.json"
+      },
+      {
+        "id": "sub-agent.sub-agent",
+        "locale": "en",
+        "resources": "./locales/en/sub-agent.json"
+      },
+      {
+        "id": "sub-agent.sub-agent",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sub-agent.json"
+      },
+      {
+        "id": "sub-agent.sub-agent",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sub-agent.json"
       }
     ]
   }

@@ -1,0 +1,84 @@
+{
+ "id": "probe4",
+ "version": "0.1.0",
+ "tier": "official",
+ "displayName": "Probe4 Manager",
+ "description": "probe4 内核的 desktop 对接面：内核版本 + 配置 + 拓展 + 模型（一个入口三个 TAB，与 pi/dsh 同级）。测试专用插件：只随测试装载，不在生产内核清单里。",
+ "kernel": {
+  "order": 3,
+  "enabled": true
+ },
+ "contributes": {
+  "settings": [
+   {
+    "id": "probe4",
+    "title": "Probe4",
+    "icon": "probe4",
+    "order": 2,
+    "tabs": [
+     {
+      "id": "probe4-kernel",
+      "title": "Probe4",
+      "component": "Probe4ManagerPage",
+      "kernelConfig": "probe4"
+     },
+     {
+      "id": "probe4-ext",
+      "title": "Probe4 拓展",
+      "component": "Probe4ExtensionsPage",
+      "saveMode": "manual"
+     },
+     {
+      "id": "probe4-models",
+      "title": "Probe4 模型",
+      "component": "Probe4ModelsPage",
+      "saveMode": "framework",
+      "kernelModels": "probe4"
+     }
+    ]
+   }
+  ],
+  "languages": [
+   {
+    "id": "probe4.kernel",
+    "locale": "zh-CN",
+    "resources": "./locales/zh-CN/probe4.json"
+   },
+   {
+    "id": "probe4.models",
+    "locale": "zh-CN",
+    "resources": "./locales/zh-CN/probe4-models.json"
+   },
+   {
+    "id": "probe4.kernel",
+    "locale": "zh-TW",
+    "resources": "./locales/zh-TW/probe4.json"
+   },
+   {
+    "id": "probe4.models",
+    "locale": "zh-TW",
+    "resources": "./locales/zh-TW/probe4-models.json"
+   },
+   {
+    "id": "probe4.kernel",
+    "locale": "en",
+    "resources": "./locales/en/probe4.json"
+   },
+   {
+    "id": "probe4.models",
+    "locale": "en",
+    "resources": "./locales/en/probe4-models.json"
+   },
+   {
+    "id": "probe4.kernel",
+    "locale": "de",
+    "resources": "./locales/de/probe4.json"
+   },
+   {
+    "id": "probe4.models",
+    "locale": "de",
+    "resources": "./locales/de/probe4-models.json"
+   }
+  ]
+ }
+}

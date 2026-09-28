@@ -1,0 +1,4 @@
+{
+  "plugin.continue.displayName": "Weiter",
+  "plugin.continue.description": "Weiter-Button: setzt nach einem abnormalen Stopp (Tool-Fehler / LLM-Fehler / Abbruch) an derselben Stelle fort — kein Fork, kein erneutes Senden alter Nachrichten"
+}

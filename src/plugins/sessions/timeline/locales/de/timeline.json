@@ -27,5 +27,19 @@
   "timeline.attachSkipped": "{{count}} nicht referenzierbare Datei(en) übersprungen",
   "timeline.removeFile": "Datei entfernen",
   "timeline.image": "Bild",
-  "timeline.imageLost": "Bilddatei verloren: {{src}}"
+  "timeline.imageLost": "Bilddatei verloren: {{src}}",
+  "timeline.removeImage": "Bild entfernen",
+  "timeline.pendingImageAlt": "Zu sendendes Bild",
+  "timeline.channel.focusComposer.label": "Eingabefeld fokussieren",
+  "timeline.channel.focusComposer.desc": "Cursor ins Sitzungs-Eingabefeld setzen, um sofort zu tippen.",
+  "timeline.channel.scrollTo.label": "Zeitleiste scrollen",
+  "timeline.channel.scrollTo.desc": "payload: { position: \"top\" | \"bottom\" } scrollt nach oben/unten, oder { messageId } springt zu einer Nachricht.",
+  "timeline.channel.rewindRequested.label": "Rewind öffnen",
+  "timeline.channel.rewindRequested.desc": "payload: { message, text } sendet ab der angegebenen Nachricht als Rewind-Punkt erneut. Benötigt ein Nachrichtenobjekt, daher normalerweise nicht auf eine Taste gelegt.",
+  "timeline.channel.composerAttachments.label": "Anhänge des Eingabefelds",
+  "timeline.channel.composerAttachments.desc": "payload ist eine Anhangliste und ersetzt die Anhänge des Eingabefelds.",
+  "timeline.channel.cycleModel.label": "Modell wechseln",
+  "timeline.channel.cycleModel.desc": "payload: { direction?: 1 | -1 } wechselt zyklisch durch die Modellliste (Standard: nächstes).",
+  "timeline.channel.cycleThinking.label": "Denktiefe wechseln",
+  "timeline.channel.cycleThinking.desc": "payload: { direction?: 1 | -1 } wechselt zyklisch durch die Denktiefen (Standard: nächste)."
 }

@@ -235,7 +235,7 @@ transport 层是 HTTP（静态 + `/rpc`）+ WS（`session:event` 等广播），
 
 判断该翻译还是补面，只问一句：内核有没有「同一个语义、只是形状不同」的对应物。有 → 翻译；没有 → 补面；补不了 → 降级。不允许的状态只有一种：**静默缺面**——壳调了内核没有的能力，既不翻译也不补面也不降级，静默吞掉或假装成功。
 
-能力探测靠 `capabilities` 而不是内核身份硬分支：壳经 `backend.capabilities.extensions`（`BackendExtensions`，pi 扩展面形状定义在 src/server/kernel/pi/backend，application 经 type-only import 收窄）和 `backend.capabilities.thinking`（`ThinkingCapabilities`，懒探测缺面方法）探测「有则用、无则降级」。会话意图链路上出现 `if (kernel === "pi")` 或 `asPi()` 类型守卫，就是壳在漏内核身份。
+能力探测靠 `capabilities` 而不是内核身份硬分支：壳经 `backend.capabilities.<轴>` 逐轴探测「有则用、无则降级」。轴集由圆心 `BackendCapabilities` 单源定义——`steering`（多路并发）/ `retry` / `compaction` / `snapshot`（内核实况快照）/ `stats` / `modelCycle` / `toolExec` / `busFrames` / `questions` / `thinking`（懒探测缺面）+ `fileBacked`（独立布尔轴）。**此前的 opaque 桶 `capabilities.extensions`（形状定义在 `kernel/pi/backend/pi-backend-extensions.ts`、application 经 type-only import 收窄）已退役、该文件已删**：桶让 application 跨界 import 内核内部，还把「有没有某个能力」和「是不是文件态内核」两件事混成一个判据。会话意图链路上出现 `if (kernel === "pi")`，或按内核身份取能力面的助手（曾经的 `asPi()`，已退役为按轴取面的 `faceOf()` / `viaFace()`），就是壳在漏内核身份。
 
 `ThinkingCapabilities` 的懒探测值得一提：装上的 dsh 版本可能缺某些 `session/*` 方法，首次调用失败（unknown method）时记录进 `missing`，之后壳据此显式降级——不静默、不伪造成功。这是「运行时能力探测」而不是「版本号硬编码」的落地。
 

@@ -33,5 +33,6 @@
   "remote.copied": "Copied",
   "remote.qr": "QR Code",
   "remote.qrDesc": "Local access needs no password; LAN devices scan, open, then sign in with the password.",
-  "remote.qrDisabledHint": "Once LAN access is enabled, the LAN address and access QR code appear here."
+  "remote.qrDisabledHint": "Once LAN access is enabled, the LAN address and access QR code appear here.",
+  "settings.remote-access": "Remote Access"
 }

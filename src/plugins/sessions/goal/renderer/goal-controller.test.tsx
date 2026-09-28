@@ -13,7 +13,28 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SessionEvent } from "@my-harness-desktop/shared";
+
+// i18n 给**真字典**（直接读插件自己的 zh-CN locale，不在测试里另抄一份——另抄必然漂移）。
+// ⚠ r54 之前本文件**没有**这个 mock：`useTranslation` 走真实模块（未初始化）⇒ `t(k)` 返回 k 本身。
+//   那时所有通知正文都是写死中文，所以"返回 key"这件事看不出来；一旦把文案改走 i18n，
+//   替身与真实形状的差别就暴露了（断言"正文含 /goal"拿到的是 `goal.usage`）。
+//   这正是 CLAUDE.md §5.6 要求给真字典、以及"测试替身必须与真实形状一致"的理由。
+const __here = dirname(fileURLToPath(import.meta.url));
+const GOAL_DICT = JSON.parse(readFileSync(join(__here, "../locales/zh-CN/goal.json"), "utf-8")) as Record<string, string>;
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (k: string, vars?: Record<string, unknown>): string => {
+      let v = GOAL_DICT[k] ?? k;
+      for (const [n, val] of Object.entries(vars ?? {})) v = v.split(`{{${n}}}`).join(String(val));
+      return v;
+    },
+    i18n: { exists: (k: string) => k in GOAL_DICT, language: "zh-CN" },
+  }),
+}));
 
 const mocks = vi.hoisted(() => ({
   prompt: vi.fn(),

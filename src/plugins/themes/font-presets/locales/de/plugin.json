@@ -1,0 +1,4 @@
+{
+  "plugin.font-presets.displayName": "Font Presets",
+  "plugin.font-presets.description": "Schrift-Voreinstellungen: Gruppen für Monospace, lateinische und CJK-Schriften plus Texte je Sprache. Schriftstapel sind veränderliche Inhalte und liegen als Plugin-Beitrag vor — eine neue Option ist eine Manifest-Zeile."
+}

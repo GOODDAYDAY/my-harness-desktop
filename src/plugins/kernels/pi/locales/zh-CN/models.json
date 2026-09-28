@@ -35,7 +35,7 @@
   "models.showKey": "显示",
   "models.hideKey": "隐藏",
   "models.modelsCount": "模型 ({{count}})",
-  "models.desc": "管理 pi 底座的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经页面内「保存」写回。",
+  "models.desc": "管理 pi 内核的模型供应商与模型(~/.pi/agent/models.json)。增删改 provider 与 model,改动经页面内「保存」写回。",
   "models.displayName": "displayName",
   "models.baseUrl": "baseUrl",
   "models.api": "api",
@@ -61,5 +61,7 @@
   "models.discoverNoBaseUrl": "先填写 Base URL 再扫描",
   "models.discoverToggle": "发现模型",
   "models.discoverCollapse": "收起",
-  "models.discoverUseConfigured": "端点不支持列表发现 · 改用已配置的 {{count}} 个模型"
+  "models.discoverUseConfigured": "端点不支持列表发现 · 改用已配置的 {{count}} 个模型",
+  "models.devRoleIncompatible": "devRole 不兼容",
+  "models.devRoleHint": "部分 OpenAI 兼容网关只认 system 角色;内核对 reasoning 模型默认发 developer 会被 400 拒——勾选则退回 system。"
 }

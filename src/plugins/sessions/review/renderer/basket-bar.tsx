@@ -29,7 +29,7 @@ export function ReviewBasketBar({ payload }: ComposerAttachmentProps): React.Rea
     <div className="px-4 pt-2 pb-1 flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: `${basketVisibleCount * 36}px` }}>
       {items.map((item) => (
         <div key={item.id} className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[length:var(--font-size-sm)]">
-          <span className="text-[var(--color-accent)] font-semibold flex-none">{item.seq}</span>
+          <span className="text-[var(--color-primary)] font-semibold flex-none">{item.seq}</span>
           <span
             className="text-[var(--color-muted)] italic truncate max-w-[45%] hover:text-[var(--color-fg)]"
             style={item.messageId ? { cursor: "pointer" } : undefined}

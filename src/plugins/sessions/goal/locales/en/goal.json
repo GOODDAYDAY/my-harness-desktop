@@ -18,5 +18,14 @@
   "goal.note.clear": "Goal cleared",
   "goal.note.auto_pause_error": "Turn ended with an error; goal auto-paused",
   "goal.note.auto_pause_interrupt": "Turn interrupted; goal auto-paused",
-  "goal.note.send_failed": "Continuation send failed; goal auto-paused: {{detail}}"
+  "goal.note.send_failed": "Continuation send failed; goal auto-paused: {{detail}}",
+  "goal.roundCard.achieved": "goal achieved",
+  "goal.usage": "/goal <objective> set a goal and start auto-continuing\n/goal stop pause · /goal resume resume · /goal edit <new objective> edit · /goal limit <n> change the round limit · /goal clear delete · /goal show status",
+  "goal.continueSendFailed": "Continuation send failed, goal paused: {{msg}}",
+  "goal.roundAborted": "Round ended abnormally, goal paused (/goal resume to resume)",
+  "goal.noGoal": "No goal yet. Use /goal <objective> to set one.",
+  "goal.achievedNotEditable": "Goal achieved and not editable (/goal clear to delete, then set a new one)",
+  "goal.channel.state.label": "Goal state",
+  "goal.channel.state.desc": "Full snapshot of the current session's goal { goal: GoalState | null }. timeline subscribes and tints the composer by phase.",
+  "goal.command.desc": "Set/manage this session's goal (auto-continue). /goal <objective> to set; stop·resume·edit·clear to control"
 }

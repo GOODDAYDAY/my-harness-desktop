@@ -27,5 +27,19 @@
   "timeline.attachSkipped": "已忽略 {{count}} 个不可参考的文件",
   "timeline.removeFile": "移除文件",
   "timeline.image": "图片",
-  "timeline.imageLost": "图片文件已丢失: {{src}}"
+  "timeline.imageLost": "图片文件已丢失: {{src}}",
+  "timeline.removeImage": "移除图片",
+  "timeline.pendingImageAlt": "待发送图片",
+  "timeline.channel.focusComposer.label": "聚焦输入框",
+  "timeline.channel.focusComposer.desc": "把光标移入会话输入框，直接开打。",
+  "timeline.channel.scrollTo.label": "滚动时间线",
+  "timeline.channel.scrollTo.desc": "payload: { position: \"top\" | \"bottom\" } 滚到顶/底，或 { messageId } 跳到指定消息。",
+  "timeline.channel.rewindRequested.label": "打开回退（rewind）",
+  "timeline.channel.rewindRequested.desc": "payload: { message, text } 以指定消息为回退点重发。需要消息对象，一般不由快捷键直接触发。",
+  "timeline.channel.composerAttachments.label": "输入框附件",
+  "timeline.channel.composerAttachments.desc": "payload 为附件列表，更新输入框附件。",
+  "timeline.channel.cycleModel.label": "切换模型",
+  "timeline.channel.cycleModel.desc": "payload: { direction?: 1 | -1 } 在模型清单中循环切换（默认下一个）。",
+  "timeline.channel.cycleThinking.label": "切换思考深度",
+  "timeline.channel.cycleThinking.desc": "payload: { direction?: 1 | -1 } 在思考深度清单中循环切换（默认下一个）。"
 }

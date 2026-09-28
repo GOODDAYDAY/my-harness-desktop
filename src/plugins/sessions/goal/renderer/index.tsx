@@ -47,8 +47,8 @@ export const channels = ["goal:state"] as const;
 export const channelMeta = {
   "goal:state": {
     scope: "session" as const,
-    label: "目标状态",
-    description: "当前会话目标的全量快照 { goal: GoalState | null }。timeline 订阅后按 phase 给输入框着色。",
+    labelKey: "goal.channel.state.label",
+    descriptionKey: "goal.channel.state.desc",
   },
 };
 
@@ -71,7 +71,7 @@ import { runGoalCommand } from "./goal-controller";
 export const composerCommands: ComposerCommand[] = [
   {
     name: GOAL_COMMAND_NAME,
-    description: "设置/管理本会话目标(自动续跑)。/goal <目标> 设置;stop·resume·edit·clear 控制",
+    descriptionKey: "goal.command.desc",
     handle: (input) => runGoalCommand(input),
   },
 ];

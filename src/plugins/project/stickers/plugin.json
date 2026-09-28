@@ -38,6 +38,36 @@
     ],
     "languages": [
       {
+        "id": "stickers.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "stickers.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "stickers.plugin",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "stickers.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "stickers.notes",
+        "locale": "de",
+        "resources": "./locales/de/stickers.json"
+      },
+      {
+        "id": "stickers.notes",
+        "locale": "en",
+        "resources": "./locales/en/stickers.json"
+      },
+      {
         "id": "stickers.notes",
         "locale": "zh-CN",
         "resources": "./locales/zh-CN/stickers.json"
@@ -48,14 +78,14 @@
         "resources": "./locales/zh-TW/stickers.json"
       },
       {
-        "id": "stickers.notes",
-        "locale": "en",
-        "resources": "./locales/en/stickers.json"
+        "id": "stickers.settings",
+        "locale": "de",
+        "resources": "./locales/de/settings.json"
       },
       {
-        "id": "stickers.notes",
-        "locale": "de",
-        "resources": "./locales/de/stickers.json"
+        "id": "stickers.settings",
+        "locale": "en",
+        "resources": "./locales/en/settings.json"
       },
       {
         "id": "stickers.settings",
@@ -68,14 +98,24 @@
         "resources": "./locales/zh-TW/settings.json"
       },
       {
-        "id": "stickers.settings",
-        "locale": "en",
-        "resources": "./locales/en/settings.json"
+        "id": "stickers.sidePanel",
+        "locale": "de",
+        "resources": "./locales/de/sidePanel.json"
       },
       {
-        "id": "stickers.settings",
-        "locale": "de",
-        "resources": "./locales/de/settings.json"
+        "id": "stickers.sidePanel",
+        "locale": "en",
+        "resources": "./locales/en/sidePanel.json"
+      },
+      {
+        "id": "stickers.sidePanel",
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/sidePanel.json"
+      },
+      {
+        "id": "stickers.sidePanel",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/sidePanel.json"
       }
     ]
   }

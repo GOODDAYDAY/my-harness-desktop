@@ -144,10 +144,10 @@ try {
           const r = tab.getBoundingClientRect();
           return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
         },
-        () => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes("Mock DSH") && el.getBoundingClientRect().width > 0),
+        () => [...document.querySelectorAll("[role^='menuitem']")].some((el) => (el.textContent || "").includes("Mock DSH") && el.getBoundingClientRect().width > 0),
       )
     : await page.waitForFunction(
-        () => [...document.querySelectorAll("[role='menuitem']")].some((el) => (el.textContent || "").includes("Mock DSH")),
+        () => [...document.querySelectorAll("[role^='menuitem']")].some((el) => (el.textContent || "").includes("Mock DSH")),
         { timeout: 15000, polling: 300 },
       ).then(() => true).catch(() => false);
   ok(itemReady, "dsh 的模型（Mock DSH，来自隔离 settings.yaml）出现在下拉里");
@@ -155,7 +155,7 @@ try {
   // "Cannot read properties of undefined (reading 'getBoundingClientRect')" —— 看不出是"没等到"）。
   if (!itemReady) throw new Error("dsh 的模型项「Mock DSH」始终没出现（看上面的下拉诊断）");
   const itemRect = await page.evaluate(() => {
-    const item = [...document.querySelectorAll("[role='menuitem']")].find((el) => (el.textContent || "").includes("Mock DSH") && el.getBoundingClientRect().width > 0);
+    const item = [...document.querySelectorAll("[role^='menuitem']")].find((el) => (el.textContent || "").includes("Mock DSH") && el.getBoundingClientRect().width > 0);
     const r = item.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });

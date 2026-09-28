@@ -68,7 +68,7 @@
 依赖箭头永远指向圆心；跨层协作靠依赖倒置（接口定义在内层、实现在外层、启动期注入）。三条物理防线：
 
 - `packages/shared/src/domain/` 零 import——放不下 electron/react/任何内核，物理上 import 不了。
-- `src/server/application/` 对 `kernel/{pi,dsh}` 具体实现**非 type-only** import 归零——`session-store.ts` 只 import `BackendExtensions` 接口（`import type`），不 import `PiBackend` 类。
+- `src/server/application/` 对 `kernel/{pi,dsh}` 具体实现的 import **完全归零**（含 type-only）——`session-store.ts` 曾 type-only import `BackendExtensions`（住在 `kernel/pi/backend/`），那是最后一处跨界；随能力面分轴上移圆心，该文件已删、该 import 已消失。守卫：`npm run audit:deps` 检验⑪（内核目录自包含，allowlist 现为空）。
 - `src/server/kernel/core/` 只 import `packages/shared`，绝不 import `pi`/`dsh`——`AbstractBackend`、`KernelManager` 是机制不是内容。
 
 内核层的位置：`src/server/kernel/pi` 与 `src/server/kernel/dsh` 是洋葱里同一层（内核层）的两个实现，与 `src/server/client/{fs,git,npm,remote}` 并列——内核和 git、文件系统是同一层抽象，都是"被壳管理的资源"。内核连接是双向的（命令出、事件入），但它是应用驱动的外部资源——我们 spawn 它、持有它、kill 它——所以执行件（`rpc-adapter.ts`、`json-rpc.ts`、`subprocess-lifecycle.ts`）都归各自内核目录。
@@ -89,7 +89,7 @@
 
 `AbstractBackend`（`src/server/kernel/core/abstract-backend.ts`）把其中 **14 个声明为 abstract**（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`），加第 N 个内核时编译器逼着它实现全量意图，漏一条就编译错；**3 个给默认成员**（`capabilities={}`、`configDepPaths` getter→`[]`、`sessionId` getter→`ctx.sessionId`）；**4 条可缺面给缺面默认**（`listTools`→`null`、`answerQuestion`/`continue`/`setThinkingLevel`→`Promise.reject`，不静默吞、不伪造成功）。
 
-> 注：CLAUDE.md 的"15 必实现 + 4 缺面 + 3 默认成员"口诀里那个第 15 条是 `fork`，但 `fork` 实际上**从未进过 `BaseBackend`**——pi 的 fork 是扩展面 `PiBackend.forkCommand`（`implements BackendExtensions`），返回 `RpcResponse` 让 `SessionStore` 查 `cancelled`。`resume?` 也不在基类——dsh 覆盖、pi 不实现，属可选意图。本文以代码为准。
+> 注：CLAUDE.md 的"15 必实现 + 4 缺面 + 3 默认成员"口诀里那个第 15 条是 `fork`，但 `fork` 实际上**从未进过 `BaseBackend`**——pi 的 fork 是 `PiBackend.forkCommand`（pi 私有方法，返回 `RpcResponse` 让 `SessionStore` 查 `cancelled`；它不属任何圆心能力面——曾经的 `BackendExtensions` 桶已退役为逐轴中性面）。`resume?` 也不在基类——dsh 覆盖、pi 不实现，属可选意图。本文以代码为准。
 
 ### 2.2 六条核心意图 + 之上叠的意图，逐条说明
 
@@ -141,7 +141,7 @@
 | seed | `seed` | `piSeedSession` 写 JSONL 文件（返回派生路径，幂等） | `buildDshSeedSession` 包树 + `session/seed` RPC（**重绑 `this.sessionId`**） |
 | 工具发现 | `listTools?` | `readKnownTools(cwd)`（tool-gate 播报） | 继承缺面默认 `null` |
 | 提问 | `answerQuestion?` | `extension_ui_response` 帧（stdin 写回） | `writeDshAnswer`（写 answer 文件侧车） |
-| 能力面 | `capabilities` | `{ pi: this }`（`BackendExtensions`） | `{ dsh: { missing, onMissing } }` |
+| 能力面 | `capabilities` | 逐轴交出十一个面（`steering`/`retry`/`compaction`/`snapshot`/`stats`/`modelCycle`/`toolExec`/`busFrames`/`questions`/`thinking` + `fileBacked: true`），`this` 直接满足各轴接口故无需断言 | `{ thinking: { onMissing, getThinkingLevels } }`（缺面清单 `missingMethods` 是 dsh 私有记账，不进圆心契约） |
 | 配置依赖 | `configDepPaths` | `[agentDir/models.json, agentDir/settings.json]` | `[cordisConfig, settingsPath]` |
 
 ### 2.4 `SessionCatalog`：per-kernel 跨会话目录/CRUD 的中立面
@@ -297,7 +297,7 @@ dsh 内核是 **Cordis 插件树**——`cordis.yml` 声明插件组成 + 出厂
 
 ### 4.3 settings.yaml 与模型路由
 
-`DshConfigSource`（`implements KernelModelSource, DshConfigApi`）读写两处：`cordisPath`（cordis.yml）+ `settingsPath`（settings.yaml）+ `installDir`（列可用插件）。模型路由两条：`llm-deepseek` → 单路由 `deepseek-official`（`apiKeyEnv` 缺省 `DEEPSEEK_API_KEY`）；`llm-pi-ai` → `providers` 字典（用户按 route 覆盖 base）。`listProviders()` 合并 settings.yaml 覆盖 + cordis.yml base 兜底；`listModels()` 合流成 `ModelInfo[]`（`kernel:"dsh"`）。`assertPiAiRouteServiceable` 只拦"空 models"这一确定性毒源（空路由让 dsh 运行时拒绝整个 llm-pi-ai 段，连带其它合法路由一起失效）。`getDefaultModel`/`setDefaultModel` 管 `agent-default-model` 命名空间（含 `reasoningEffort`）。
+`DshConfigSource`（`implements KernelModelSource, DshConfigApi`；`DshConfigApi` 是 **dsh 内部契约**，已下移到 `kernel/dsh/backend/dsh-config-contract.ts`——它此前声明在圆心，而真实消费者全在 `kernel/dsh/` 内、壳侧 import 是死的。壳只认中性 `KernelConfigApi`）读写两处：`cordisPath`（cordis.yml）+ `settingsPath`（settings.yaml）+ `installDir`（列可用插件）。模型路由两条：`llm-deepseek` → 单路由 `deepseek-official`（`apiKeyEnv` 缺省 `DEEPSEEK_API_KEY`）；`llm-pi-ai` → `providers` 字典（用户按 route 覆盖 base）。`listProviders()` 合并 settings.yaml 覆盖 + cordis.yml base 兜底；`listModels()` 合流成 `ModelInfo[]`（`kernel:"dsh"`）。`assertPiAiRouteServiceable` 只拦"空 models"这一确定性毒源（空路由让 dsh 运行时拒绝整个 llm-pi-ai 段，连带其它合法路由一起失效）。`getDefaultModel`/`setDefaultModel` 管 `agent-default-model` 命名空间（含 `reasoningEffort`）。
 
 ### 4.4 session forest + append-only log（`dsh-catalog.ts`）
 
@@ -409,7 +409,7 @@ dsh 内核插件是 Cordis 插件，两条挂载路径（`dsh-extension-installe
 
 写了/启用了插件还拉不平的，壳把该能力入口隐藏/置灰 + tooltip，不静默、不伪造成功。
 
-- **pi 专属扩展面在 dsh 下**：`steer`/`followUp`/`cycleModel`/`getThinkingLevels`/`compact`/`setAutoCompaction`/`setAutoRetry`/`exportHtml`/`bash`/`clone` 等（`BackendExtensions`）在 dsh 下经 `asPi` 抛错降级——`SessionStore.asPi(proc)` 探测 `proc.backend.capabilities.extensions`，无则抛"当前后端不支持 pi 专属命令"。renderer 据 `SessionCapabilities.piExtension` 置灰入口。
+- **能力面缺席时的降级**：`steer`/`followUp`（多路并发）、`cycleModel`、`compact`/`setAutoCompaction`、`setAutoRetry`、`bash` 等按**语义轴**分面（圆心 `BackendCapabilities`），dsh 未声明的轴 → `SessionStore.faceOf(proc, 轴, 标签)` 抛可行动错误「当前内核不支持<轴名>」（点名轴、不点名内核）。renderer 据 `SessionCapabilities.faces.<轴>` **逐轴**置灰入口——此前是单个 `extension` bit（且曾叫 `piExtension`），一次性显隐全部功能，于是「缺多路并发」连带禁掉了本可有的压缩与统计；现已退役为逐轴。
 - **思考强度**：`setThinkingLevel` 已进契约（dsh 继承缺面默认抛错），档位清单/循环切换（`getThinkingLevels`/`cycleThinkingLevel`）仍留 pi 扩展面。
 - **工具发现**：dsh `listTools` 缺面默认 null，壳走降级。
 - **copy 复制**：dsh `DshSessionCatalog.copy` 抛 `NOT_WIRED` 降级。
@@ -483,7 +483,7 @@ src/server/kernel/pi/manager/pi-kernel.ts       PiKernelManager extends（PI_SPE
 src/server/kernel/dsh/manager/dsh-kernel.ts     DshKernelManager extends（DSH_SPEC + installPlugin）
 ```
 
-三条纪律：① 基类只 import `packages/shared`，绝不 import 具体内核；② 子类只填差异（`PI_SPEC`/`DSH_SPEC` 数据 + `postInstall`/`installPlugin` 行为差异）；③ 组装归 `kernel-managers.ts`（`createPiKernelManager`/`createDshKernelManager` 各一行构造）。
+三条纪律：① 基类只 import `packages/shared`，绝不 import 具体内核；② 子类只填差异（`PI_SPEC`/`DSH_SPEC` 数据 + `postInstall`/`installPlugin` 行为差异）；③ 组装归**各内核自己的** manager 目录（`createDshKernelManager` 在 `kernel/dsh/manager/dsh-kernel.ts`；pi 侧由插件工厂直接 `new PiKernelManager(PI_SPEC, installDir)`）。曾经的共享 `kernel-managers.ts` 已退役删除——它一个文件同时 import 两个内核，删掉任一内核目录会牵连另一个编译不过。
 
 ### 8.2 `KernelManager` 基类机制
 
@@ -560,7 +560,7 @@ src/server/kernel/dsh/manager/dsh-kernel.ts     DshKernelManager extends（DSH_S
 - **壳不读任何内核的存储**（pi 的 JSONL、dsh 的 session log 都不碰，只认 `NeutralSessionStore` 的中立层 + 不透明 `sessionId` + `LineageTree`）。会话列表/打开/树读的唯一源是中立层，内核目录降级为兜底（`getTree` 中立层缺失才走 `catalog.getTree`）。
 - **壳只认中性事件**（内核事件由适配器投喂，翻译器是喂线、不是第二套语义）。
 - **壳的渲染是纯函数**（给定同一条中性事件流，timeline 怎么画与内核无关）。
-- **会话意图链路上不出现 `if (kernel === "pi")`**——理想是能力接口（`backend.capabilities.extensions`）探测。例外是 `session-store.ts` 里少量 `capabilities.extensions` 探测（如 `!proc.backend.capabilities.extensions` 判断 dsh），这是能力探测不是身份硬分支。
+- **会话意图链路上不出现 `if (kernel === "pi")`**——理想是逐轴能力面（`backend.capabilities.<轴>`）探测。`session-store.ts` 里的探测都属此类（如 `!capabilities.snapshot` 判「无内核实况快照面 → 状态由壳记账组装」），是按能力探测、不是按身份硬分支。⚠ 此前这里写的是 `capabilities.extensions`（opaque 桶），且其中一处**实际在判文件态**（该轴是 `fileBacked`）——桶当代理会让 minimal 这类「文件态但无 pi 面」的内核被误判，现已按轴分开。
 - **内核 = 模型的派生量**：选模之前不起任何内核进程（`kernel-follows-model`），选模型 = 激活对应内核的槽位。
 - **dsh 的 `session/prompt` 只新建空会话、不加载磁盘日志**：app 重启后重开旧会话再发会撞 "id collision"，须先 `session/continue` 把持久化会话载入新进程（`prompt` 里 `neutralHasHistory` 时 `backend.continue?.()`）。
 - **pi 的 `session_start`/`model_select`/`thinking_level_select` 是纯扩展事件**（RPC stdout 永不见），`session-store` 在 `setContext`/`prompt`/`sync` 主动推 synthetic `sessionStart` 水合 renderer。

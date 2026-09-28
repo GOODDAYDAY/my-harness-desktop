@@ -98,12 +98,12 @@ try {
   // 只断 TAB 不够——本 e2e 的基础设施不带 dsh 安装,可能一个 TAB 都不渲染(TAB=[]),
   // 「没有 minimal TAB」就退化成恒真;模型项缺席才是"这个内核没装载"的用户可见证据。
   const modelTexts = await page.evaluate(() =>
-    [...document.querySelectorAll("[role='menuitem']")].map((el) => (el.textContent || "")));
+    [...document.querySelectorAll("[role^='menuitem']")].map((el) => (el.textContent || "")));
   ok(!modelTexts.some((t) => /minimal/i.test(t)), `日常态无 minimal:模型清单无 Minimal 项(实际 ${modelTexts.length} 项)`);
 
   // 选真实模型(按显示名匹配)。
   const itemRect = await page.evaluate((name) => {
-    const item = [...document.querySelectorAll("[role='menuitem']")].find((el) =>
+    const item = [...document.querySelectorAll("[role^='menuitem']")].find((el) =>
       (el.textContent || "").includes(name) && el.getBoundingClientRect().width > 0);
     if (!item) return null;
     const r = item.getBoundingClientRect();

@@ -1,0 +1,4 @@
+{
+  "plugin.font-presets.displayName": "Font Presets",
+  "plugin.font-presets.description": "字体预设:等宽/英文/中文三组字体选项 + 各语言文案。字体栈是会变的内容,从圆心外推为插件贡献——新增字体选项 = 改本 manifest 一行。"
+}

@@ -70,9 +70,29 @@
     ],
     "languages": [
       {
-        "id": "goal",
+        "id": "goal.plugin",
+        "locale": "de",
+        "resources": "./locales/de/plugin.json"
+      },
+      {
+        "id": "goal.plugin",
+        "locale": "en",
+        "resources": "./locales/en/plugin.json"
+      },
+      {
+        "id": "goal.plugin",
         "locale": "zh-CN",
-        "resources": "./locales/zh-CN/goal.json"
+        "resources": "./locales/zh-CN/plugin.json"
+      },
+      {
+        "id": "goal.plugin",
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/plugin.json"
+      },
+      {
+        "id": "goal",
+        "locale": "de",
+        "resources": "./locales/de/goal.json"
       },
       {
         "id": "goal",
@@ -81,13 +101,13 @@
       },
       {
         "id": "goal",
-        "locale": "zh-TW",
-        "resources": "./locales/zh-TW/goal.json"
+        "locale": "zh-CN",
+        "resources": "./locales/zh-CN/goal.json"
       },
       {
         "id": "goal",
-        "locale": "de",
-        "resources": "./locales/de/goal.json"
+        "locale": "zh-TW",
+        "resources": "./locales/zh-TW/goal.json"
       }
     ]
   }

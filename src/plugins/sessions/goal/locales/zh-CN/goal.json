@@ -18,5 +18,14 @@
   "goal.note.clear": "已删除目标",
   "goal.note.auto_pause_error": "回合异常结束，目标已自动暂停",
   "goal.note.auto_pause_interrupt": "回合被中断，目标已自动暂停",
-  "goal.note.send_failed": "续跑发送失败，目标已自动暂停：{{detail}}"
+  "goal.note.send_failed": "续跑发送失败，目标已自动暂停：{{detail}}",
+  "goal.roundCard.achieved": "目标达成",
+  "goal.usage": "/goal <目标> 设置目标并开始续跑\n/goal stop 暂停 · /goal resume 恢复 · /goal edit <新目标> 改 · /goal limit <n> 改上限 · /goal clear 删除 · /goal 查看状态",
+  "goal.continueSendFailed": "续跑发送失败，目标已暂停：{{msg}}",
+  "goal.roundAborted": "回合异常结束，目标已暂停（/goal resume 恢复）",
+  "goal.noGoal": "当前没有目标。用 /goal <目标内容> 设置。",
+  "goal.achievedNotEditable": "目标已达成，不可编辑（/goal clear 删除后可设新目标）",
+  "goal.channel.state.label": "目标状态",
+  "goal.channel.state.desc": "当前会话目标的全量快照 { goal: GoalState | null }。timeline 订阅后按 phase 给输入框着色。",
+  "goal.command.desc": "设置/管理本会话目标（自动续跑）。/goal <目标> 设置；stop·resume·edit·clear 控制"
 }

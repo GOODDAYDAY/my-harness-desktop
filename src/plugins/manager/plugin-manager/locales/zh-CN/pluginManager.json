@@ -33,5 +33,6 @@
   "pluginManager.tag.review": "评审",
   "pluginManager.tag.dev": "开发",
   "pluginManager.tag.productivity": "效率",
-  "pluginManager.tag.insight": "洞察"
+  "pluginManager.tag.insight": "洞察",
+  "pluginManager.systemPromptInert": "当前内核不承接追加系统 prompt，此插件贡献的 systemPrompts 暂不生效"
 }

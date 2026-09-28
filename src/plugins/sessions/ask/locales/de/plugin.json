@@ -1,0 +1,4 @@
+{
+  "plugin.ask.displayName": "Fragen",
+  "plugin.ask.description": "ask_user_question-Fähigkeit: Das Modell hält an und stellt eine Frage (mit Optionen oder eigener Antwort); die Antwort fließt zurück. Fragen erscheinen inline im Verlauf als Blase mit Options-Chips — kein Modal."
+}

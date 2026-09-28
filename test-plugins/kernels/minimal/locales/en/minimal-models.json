@@ -1,12 +1,12 @@
 {
-  "minimalModels.title": "DSH model config",
+  "minimalModels.title": "Minimal model config",
   "minimalModels.desc": "minimal model config (~/.minimal/agent/models.json): providers, their models, and the default. API keys go to a separate credentials file, never into models.json.",
   "minimalModels.providerId": "providerId",
   "minimalModels.displayName": "displayName",
   "minimalModels.api": "api",
   "minimalModels.baseUrl": "baseURL",
   "minimalModels.apiKey": "API Key",
-  "minimalModels.apiKeyDesc": "The key literal is written per provider into dsh's credential store (~/.dsh/.credentials.yaml) and read directly by the dsh runtime. It is not injected as a process environment variable nor written into models.json/cordis.yml.",
+  "minimalModels.apiKeyDesc": "The key literal is written per provider into minimal's credential file (~/.minimal/agent/.credentials.json) and read directly by the minimal runtime. It is not injected as a process environment variable nor written into models.json.",
   "minimalModels.addProvider": "+ Add provider",
   "minimalModels.copyProvider": "Copy provider",
   "minimalModels.deleteProvider": "Delete provider",
@@ -52,5 +52,6 @@
   "minimalModels.discoverNoBaseUrl": "Fill in Base URL first",
   "minimalModels.discoverToggle": "Discover",
   "minimalModels.discoverCollapse": "Collapse",
-  "minimalModels.discoverUseConfigured": "Listing not supported · use {{count}} configured models instead"
+  "minimalModels.discoverUseConfigured": "Listing not supported · use {{count}} configured models instead",
+  "settings.minimal-models": "Minimal Models"
 }

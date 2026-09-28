@@ -1,0 +1,4 @@
+{
+  "plugin.goody-hao.displayName": "GoodyHao",
+  "plugin.goody-hao.description": "Injects the built-in engineering principles per session: contributes the systemPrompts slot, which the shell feeds into the kernel's system prompt when that kernel supports appending one. Uninstall to stop injecting."
+}

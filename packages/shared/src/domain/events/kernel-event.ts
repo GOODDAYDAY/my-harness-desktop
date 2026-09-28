@@ -13,6 +13,7 @@
 
 import type { SessionEvent } from "./session-state";
 import type { KernelId } from "../kernel";
+import type { BackendCapabilities } from "../backend";
 
 // ============ 来源一:内核推送 ============
 
@@ -141,10 +142,44 @@ export interface SessionCapabilities {
   /** 会话是否已锁定内核(活跃进程且已发消息)——锁定后不可跨内核切换(§7.6 显式降级)。
    *  判据与 session-store.setModel 的跨内核降级一致(§3.2),保证 UI 置灰与主侧拒绝同步。 */
   locked: boolean;
-  /** 扩展能力面(steer/followUp/thinkingLevel/队列/导出/abortRetry 等)是否可用。 */
-  extension: boolean;
-  /** 思考档位能力面(懒探测缺面)是否可用。 */
-  thinking: boolean;
+  /** **逐轴**能力可用性(取代此前的单个 `extension: boolean`)。
+   *  键集与圆心 `BackendCapabilities` 同源(映射类型),加一个轴自动纳入,不会漏。
+   *  为什么要拆:那一个 bit 曾让 renderer 一次性显隐 steer/压缩/统计/重试/队列等**全部**功能,
+   *  于是「某内核缺多路并发」连带禁掉了它本可有的压缩与统计——违背「内核同等地位、同等功能」。
+   *  拆开后 renderer 逐轴置灰,且某内核将来补上一个面(如 dsh 补压缩,
+   *  `docs/design/kernel-parity-audit.md:80` 的 P1)时**不需要改 renderer**。 */
+  faces: { [K in keyof BackendCapabilities]?: boolean };
+  /** 运行时**轮转**思考档位是否可用(`thinking.cycleThinkingLevel` 在)。
+   *  单列是因为它是**成员级**而非轴级的区分:有内核能查档位清单却不能运行时轮转,
+   *  renderer 据此只置灰「思考开关」并给真实原因,不笼统置灰整个思考域。 */
+  thinkingCycle: boolean;
+  /** 档位清单语义(见 `ThinkingCapabilities.levelsSemantics`):决定渲染层把「空清单」
+   *  解读为「回落已知默认」还是「如实不渲染」。缺省 `precise`(诚实优先)。 */
+  levelsSemantics: "precise" | "approximate";
+}
+
+/**
+ * 把后端能力面投影成 renderer 消费的旗标 —— **纯函数**（圆心：类型 + 纯函数，零依赖）。
+ *
+ * 抽出来而不是内联在 `SessionStore.sessionCapabilitiesOf` 里，有两个理由：
+ *   ① 它是「逐轴降级」这条性质的**唯一实现**，可裸单测（不必搭 SessionStore + 假后端脚手架）；
+ *   ② `faces` 由后端**实际声明的面派生**（`Object.entries`），不重列一遍轴名——
+ *      圆心加一个轴时这里零改动，也不会出现「圆心加了轴、投影忘了带」的漂移（开闭原则）。
+ *
+ * `Boolean(v)` 的语义：对象面恒真；`fileBacked` 保留其真值（`false` 不会被误读成"有此面"）；
+ * 未声明的轴自然缺席，消费方读 `undefined` 即"无"。
+ */
+export function projectCapabilityFlags(caps: BackendCapabilities | undefined): {
+  faces: SessionCapabilities["faces"];
+  thinkingCycle: boolean;
+  levelsSemantics: "precise" | "approximate";
+} {
+  return {
+    faces: Object.fromEntries(Object.entries(caps ?? {}).map(([k, v]) => [k, Boolean(v)])),
+    // 成员级：能查档位清单 ≠ 能运行时轮转（有内核只有前者），renderer 据此只置灰开关。
+    thinkingCycle: caps?.thinking?.cycleThinkingLevel != null,
+    levelsSemantics: caps?.thinking?.levelsSemantics ?? "precise",
+  };
 }
 
 /** 内核能力缺面(desktop 自产;dsh 懒探测首次发现某 session/* 方法缺失时广播,

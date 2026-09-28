@@ -8,85 +8,27 @@
 // rpc/events/i18n/management 等子对象随各阶段补,在此先占位最小集。
 
 import type {
-  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, PiExtensions, BashApi,
+  SessionsApi, MessagingApi, ModelApi, SessionTreeApi, BashApi,
   FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, ImageInput, BashResult, HeaderPatch, SessionInfo,
   KnownToolInfo,
 } from "./sessions";
 import type { ModelInfo } from "./events/session-state";
 
-/** dsh 模型单条(dsh 侧模型字段:id/name/contextWindow/maxTokens + reasoning)。
- *  对齐官方 dsh-llm-pi-ai 的 PiAiModelProfile 公共子集。
- *  reasoning=true 在写回 settings.yaml 时展开成 reasoningEfforts 档位映射
- *  (dsh 侧的推理能力声明形状;docs/design/dsh-thinking-level.md §5)。 */
-export interface DshModelSpec {
-  id: string;
-  name?: string;
-  contextWindow?: number;
-  maxTokens?: number;
-  /** 推理能力标记(读回时由 reasoningEfforts 存在性反推)。 */
-  reasoning?: boolean;
-}
+// ⚠ 此处曾声明 `DshModelSpec` / `DshProvider` / `DshDefaultModel` / `DshConfigApi` 四个
+// **dsh 专属**类型——已下移到 `src/server/kernel/dsh/backend/dsh-config-contract.ts`。
+// 理由：它们的真实消费者全部在 `kernel/dsh/` 内部，壳侧三处 import 经核实全是死 import；
+// 而 `addPluginBlock`（cordis 插件块）、`~/.dsh/.credentials.yaml` 的密钥语义、
+// `reasoningEfforts` 档位映射都是 dsh 的私有知识，按 §4.2「圆心 = 拿掉所有会变的东西之后
+// 还剩什么」，换掉 dsh 它们就该消失。壳驱动内核配置走中性 `KernelConfigApi`
+// （`get`/`set`/`fields()`，三个内核各自实现），dsh 的 provider CRUD 由 dsh 自己的
+// 内核插件（`src/plugins/kernels/dsh/renderer/models.tsx`）经该中性面消费。
 
-/** dsh 一个 provider 路由 + 连接事实(apiKey/displayName/api/baseURL)+ 模型列表。
- *  对齐官方 dsh-llm-pi-ai 的 PiAiProviderProfile 公共子集。apiKey 是密钥字面值——
- *  由桌面端输入,经 DshConfigSource 写入 dsh 的凭证库(~/.dsh/.credentials.yaml)供 dsh 解析,
- *  不再经进程环境变量注入。 */
-export interface DshProvider {
-  provider: string;
-  /** 密钥字面值(凭证库读回;不落 settings.yaml)。 */
-  apiKey?: string;
-  /** 配置面显示名,缺省 = provider route key。 */
-  displayName?: string;
-  api?: string;
-  baseURL?: string;
-  models: DshModelSpec[];
-}
-
-/** dsh 默认模型选择(agent-default-model 命名空间)。 */
-export interface DshDefaultModel {
-  provider: string;
-  model: string;
-  reasoningEffort?: string;
-}
-
-/** dsh 原生配置管理面(provider CRUD + 默认模型 + settings)。DshConfigSource 实现；
- *  api/ipc 经此中性面驱动 dsh 配置，不 import client 具体类(§6.3)。 */
-export interface DshConfigApi {
-  listProviders(): DshProvider[];
-  setProvider(provider: string, detail: Omit<DshProvider, "provider">): Promise<void>;
-  renameProvider(oldId: string, newId: string): Promise<void>;
-  removeProvider(provider: string): Promise<void>;
-  getDefaultModel(): DshDefaultModel | null;
-  setDefaultModel(sel: DshDefaultModel): Promise<void>;
-  /** 清掉 agent-default-model 指针(删除 default provider 时调用,避免悬空指向已删路由)。 */
-  clearDefaultModel(): Promise<void>;
-  getSettings(): Record<string, unknown>;
-  setSettings(obj: Record<string, unknown>): Promise<void>;
-  /** cordis 插件块管理（api/ipc 同步壳插件携带的 dsh 扩展用）。 */
-  addPluginBlock(id: string, name: string): void;
-  removePluginBlock(id: string): void;
-}
-
-/** 内核 settings schema 字段(解析内核 .d.ts 得;中性形状:key + 通用数据型 + 枚举值)。 */
-export interface SchemaField {
-  key: string;
-  /** 通用数据型(不是 UI 控件型):boolean/number/string/string[]/enum/object。 */
-  type: "boolean" | "number" | "string" | "string[]" | "enum" | "object";
-  /** enum 型的枚举字面值(从 .d.ts 的字面量联合/外部类型别名解析)。 */
-  enumValues?: string[];
-}
-
-/**
- * pi 内核 settings.json 的中性读写面(pi 专属存储,壳经此面访问,不 import client/pi 具体类)。
- * get 同步读整份、set 深合并写、schema 解析内核 .d.ts 拿字段清单(bootstrap 绑定实现与解析路径)。
- */
-export interface PiSettingsApi {
-  get(): Record<string, unknown>;
-  set(patch: Record<string, unknown>): Promise<void>;
-  /** 全量替换写回(删除字段随之消失;配置表单 set 用,深合并会保留已删字段)。 */
-  replace(obj: Record<string, unknown>): Promise<void>;
-  schema(): Promise<SchemaField[]>;
-}
+// ⚠ 此处曾声明 `SchemaField` 与 `PiSettingsApi`——已下移到
+// `src/server/kernel/pi/manager/pi-settings-contract.ts`。理由：两者的真实消费者全在
+// `kernel/pi/` 内部（pi 的 settings store 解析 .d.ts 产出 SchemaField，pi-kernel-config
+// 再把它翻成**中性** `KernelConfigField` 包进中性 `KernelConfigApi`），壳侧唯一的 import
+// 是死 import。`SchemaField` 是 pi 的内部表示（"解析内核 .d.ts 得到的字段"——dsh 不解析 .d.ts），
+// `KernelConfigField` 才是中性契约；把内部表示放圆心 = 让圆心认识"某个内核怎么解析自己的配置"。
 
 /** pi 内核 models.json 的中性读写面(整份读/写;pi 专属存储,壳经此面访问)。 */
 export interface ModelsConfigApi {
@@ -160,6 +102,19 @@ export interface KernelModelsApi {
 /** 模型配置能力旗标(数据,UI 据以显式降级,不据内核身份分支)。 */
 export interface KernelModelsCapabilities {
   reasoning: boolean;
+  /** 该内核的模型配置里**是否有「developer 角色兼容性」这一维**。
+   *
+   *  为什么需要这一轴（r44）：共享的 `ModelConfigPage` 里有一个「developer role 不兼容」勾选框，
+   *  它写的是 `supportsDeveloperRole`——而这个字段**只有 pi 消费**
+   *  （`src/server/kernel/pi/model/models-config.ts` 的 `compat.supportsDeveloperRole`，
+   *  作用是让 reasoning 模型用 system 而非 developer 角色）。dsh 与 minimal 都没有消费者，
+   *  但控件此前**无条件渲染**，于是它们的模型配置页上出现一个勾了也没任何作用的开关
+   *  ——§7.6 说的"该显式降级却没降级"，也是典型的功能漂移（控件在，语义不在）。
+   *
+   *  ⚠ 设为**必填**而不是可选：可选会让"忘了声明"静默等同于 false（或 undefined 被判假），
+   *  必填则让新内核接入时**必须当场表态**（编译期 TS2739），与 r38 给分页部件的
+   *  `prevLabel`/`nextLabel` 设为必填是同一个手法。 */
+  developerRole: boolean;
 }
 
 // ===== 内核原生配置的中性契约(kernel 配置 TAB 用)=====
@@ -176,8 +131,17 @@ export interface KernelConfigField {
   label?: string;
   /** 说明文案 i18n key。 */
   description?: string;
-  /** enum 型的选项(value 是内核枚举字面值,label 是 i18n key,缺省 = value)。 */
-  options?: { value: string; label?: string }[];
+  /** enum 型的选项(value 是内核枚举字面值,label 是 i18n key,缺省 = value)。
+   *
+   *  `kind` 是**写回时的值种类**，缺省 `"string"`（向后兼容：既有内核不声明即全字符串）。
+   *  为什么需要它：内核的配置字段可能是**混合字面量联合**，例如 `boolean | "auto"`、
+   *  `"kitty" | "iterm2" | "auto" | false`。下拉框的选项值只能是字符串（HTML `<option value>`
+   *  的约束），但写回配置文件时 `true`/`false`/`1` 必须是**真布尔/真数字**，否则内核读到
+   *  字符串 `"true"` 会当成真值处理甚至类型不符。没有 `kind` 时这类字段只能整体降级成
+   *  `object`（裸 JSON 编辑器，用户得手敲 `true` / `"auto"`）——实测 pi 有 3 个字段因此降级
+   *  （`terminal.hyperlinks` / `terminal.images` / `terminal.trueColor`），而同一个表单对
+   *  **纯字符串**联合却给的是下拉框：同一张表单里能力不一致，那是缺陷不是取舍。 */
+  options?: { value: string; label?: string; kind?: "string" | "boolean" | "number" }[];
   /** 分组 i18n key(表单按组渲染,缺省进「其他」)。 */
   group?: string;
 }
@@ -193,7 +157,7 @@ export interface KernelConfigApi {
 import type { BusApi } from "./events/session-bus";
 import type { ModelProbeApi } from "./model-probe";
 import type { PluginListItem, FontPresetContribution } from "./contributions";
-import type { KernelExtensionInfo } from "./extensions";
+import type { KernelExtensionInfo , KernelExtensionCapabilities } from "./extensions";
 import type { KernelId } from "./kernel";
 import type { SkillInfo, SkillCapabilities } from "./skills";
 import type { LayoutApi } from "./layout";
@@ -294,8 +258,23 @@ export interface KernelVersionApi {
   setCustomCliDir(dir: string): Promise<{ ok: boolean; error: string | null; pendingCount: number; status: KernelStatusView | null }>;
   listVersions(forceRefresh?: boolean): Promise<{ versions: string[]; latest: string | null }>;
   install(version: string, onProgress: (line: string) => void, onDone: (r: { ok: boolean; error: string | null }) => void): Promise<{ ok: boolean; error: string | null }>;
-  /** tool-gate 内核扩展可用性(pi 专属;dsh 无此面 → 可选方法,据以显式降级)。 */
-  fitPiExtensionAvailable?(): Promise<boolean>;
+  /** **该内核能否强制执行工具白名单**（壳下发的 `SessionToolConfig.enabledToolIds`）。
+   *
+   *  每个内核按**自己的机制**回答同一个中性问题：
+   *  - 靠装桌面适配扩展来硬过滤的内核：答"那个扩展装好了没"；
+   *  - 工具系统是内核本体的内核：答 true（它自己把 `enabledToolIds` 翻译成自己的工具集/开关
+   *    语义，见 `docs/design/minimal-kernel.md` §5.6.1，并自带档位门控 §5.7.1）；
+   *  - 没有工具配置面的内核：不声明（缺面）→ 调用方显式降级，不静默、不伪造。
+   *
+   *  壳用它决定两件事：① 发送前要不要把工具限制**软注入**进 prompt（不能硬过滤时的散文补偿）；
+   *  ② 工具管理页要不要显示"当前内核无工具过滤能力"的降级警告。
+   *
+   *  ⚠ 本方法曾叫 `fitPiExtensionAvailable`、后改 `fitExtensionAvailable`——两版都**问错了问题**：
+   *  "桌面适配扩展装没装"只是**某一个内核**实现强制过滤的手段，不是"能不能强制过滤"本身。
+   *  用前者代理后者的后果是实测到的：一个自带工具门控的内核被判为"不能过滤"，于是每次发送
+   *  都被拼上一段冗余的散文限制说明（echo 内核会把它原样回显到时间线，弄坏 DOM 对账）。
+   *  更早的版本还固定问某一个内核，于是答案取决于**别的内核**装没装扩展——环境依赖。 */
+  toolFilterEnforced?(): Promise<boolean>;
 }
 
 export interface PluginContext {
@@ -304,8 +283,12 @@ export interface PluginContext {
   messaging: MessagingApi;
   models: ModelApi;
   tree: SessionTreeApi;
-  /** pi 内核专属扩展面(§7.6):壳插件经 capabilities.extensions 探测「有则用、无则降级」。 */
-  pi: PiExtensions;
+  // ⚠ 此处曾有 `pi: PiExtensions`（内核名命名的能力袋子）——**已退役**：12 个方法按语义域
+  // 归位到 `messaging`（steer/followUp/两个 mode/abortRetry/setAutoRetry）、`models`
+  // （cycleModel/getThinkingLevels/cycleThinkingLevel）、`sessions`（compact/setAutoCompaction/
+  // getLastAssistantText）。可用性判据改为**逐轴**能力面 `capabilities.faces.<轴>`，
+  // 不再是「有没有那个袋子」的一个 bit。同时删掉了 `SessionsApi.pi` 那条重复访问路径
+  // （同一个接口曾有两个入口）。
   i18n: I18nApi;
   fs?: FsApi;
   git?: GitReadApi;
@@ -321,7 +304,7 @@ export interface PluginContext {
    *  插件不感知 IPC/注册表——只看到返回的数据(id/category/labelKey/stack/generic)。 */
   fonts: { list: () => Promise<FontPresetContribution[]> };
   /** 内核版本管理(统一对外面,按 KernelId 键控):pi/dsh 各交一个 KernelVersionApi。
-   *  pi 多 fitPiExtensionAvailable,dsh 缺面(工具发现经 sessions.listTools 契约)。 */
+   *  pi 多 fitExtensionAvailable,dsh 缺面(工具发现经 sessions.listTools 契约)。 */
   kernels: Record<KernelId, KernelVersionApi>;
   /** 中性内核管理 API(pi/dsh/minimal 各一个适配器;settings 三 TAB 共享 base 消费,kernel-design-spec §12.4/§12.5/§12.6)。 */
   kernelModels: KernelModelsRegistry;
@@ -346,6 +329,8 @@ export interface PluginContext {
   /** 内核拓展管理(中性,按 kernel 作用域):pi/dsh 各交一个 KernelExtensionSource,壳经此访问。 */
   kernelExtensions: {
     list: (kernel: KernelId) => Promise<KernelExtensionInfo[]>;
+    /** 该内核的扩展能力面（装/卸/更新/重排）。UI 据此**显式降级**，不做事后报错。 */
+    capabilities: (kernel: KernelId) => Promise<KernelExtensionCapabilities>;
     enable: (kernel: KernelId, id: string) => Promise<void>;
     disable: (kernel: KernelId, id: string) => Promise<void>;
     install: (kernel: KernelId, source: string, onProgress: (line: string) => void) => Promise<{ ok: boolean; error?: string }>;
