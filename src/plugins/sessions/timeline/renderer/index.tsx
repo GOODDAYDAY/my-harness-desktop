@@ -421,8 +421,17 @@ export function TimelineView(): React.ReactNode {
     }
   }, [ctx.events, setPendingImage, setInput]);
 
-  // 兜底模型(新会话无显式选择时实际会用到的模型):dsh agent-default-model 优先,否则 pi 兜底。
-  // 与 main 的 models.getFallbackModel 同源;currentModel 链据此显示,不再落到 models[0] 的 pi 首项。
+  // 兜底模型（新会话无显式选择时实际会用到的模型）。
+  //
+  // ⚠ 注释更正（r146）：此处原文写的是「dsh agent-default-model 优先，否则 pi 兜底」，
+  //   读起来像**渲染层在按内核挑模型**——而实情不是：本组件只是消费服务端
+  //   `models.getFallbackModel` 返回的中性结果 `{ provider, model, kernel }`（见 :306），
+  //   那套"哪个内核的默认模型优先"的规则**住在服务端**，渲染层不认识任何内核名。
+  //   为什么值得改：把内核专属的优先级规则写进通用插件的注释，等于在这层植入内核知识
+  //   （§1.2 机制与内容分离、§1.5 判别气味"壳在漏内核身份"）——下一个人读到这条注释，
+  //   很可能以为可以在这里加 `if (kernel === …)` 分支。与 r138 更正账本错理由同族：
+  //   **错的注释和错的理由一样，是会被复用的错误结论**。
+  //   currentModel 链据此显示，不再落到 models[0] 的首项。
   const [fallbackModel, setFallbackModel] = useState<{ provider?: string; modelId?: string; kernel?: KernelId }>({});
   // 内核重试上限:折叠条目的展示分母。
   //
