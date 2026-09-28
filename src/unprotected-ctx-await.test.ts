@@ -69,8 +69,28 @@ const LEDGER: { api: string; count: number; consequence: string; disposition: "a
     consequence: "两处消费方均已显式处理失败：image-block 与 sticker-card 都渲染 lost 态（§7.6 降级要解释）；永久失败不再被当成瞬时失败" },
   { api: "ctx.config.all", count: 3, disposition: "acceptable",
     consequence: "读取失败 ⇒ 该插件面板显示空态；用户重开面板即恢复" },
-  { api: "ctx.config.getScope", count: 1, disposition: "acceptable", consequence: "stickers 分层配置读取失败 ⇒ 该层显示空态；不影响其它层，用户重开面板即恢复" },
-  { api: "ctx.configFile.get", count: 1, disposition: "acceptable", consequence: "stickers 读取配置文件失败 ⇒ 表情包列表显示空态；用户重开面板即恢复，不会误以为已保存了什么" },
+  { api: "ctx.config.getScope", count: 1, disposition: "acceptable",
+    // ⚠ **可达性说明（r142 实测，与 r102 对 settings-page 加载链、r142 对 ctx.config.all 的处置同款）**：
+    //   这条路径当前**触发不了**——服务端 ConfigStore 的内部读取器是
+    //   `if (!existsSync) return {}; try { JSON.parse(…) } catch { console.warn(…); return {} }`
+    //   （config-store.ts:167-176），与 readJsonFile 同一策略：**一切读/解析失败都被吞掉、回落空对象**。
+    //   所以 renderer 侧的 await 永远拿到值、不会 reject（除非传输层本身坏了）。
+    //   保留兜底属**防御纵深**（传输层故障、或将来服务端改成抛错——那是更好的设计：
+    //   静默回落默认值会让用户以为配置丢了）。
+    //   ⚠ 原理由两处错：① 它描述的"读取失败"不可达；② "重开面板即恢复"假设失败是瞬时的，
+    //   而权限/文件损坏下重开也不会好（把永久失败当瞬时失败处理）。
+    consequence: "当前不可达（服务端吞错回落空对象）；兜底属防御纵深，见上方可达性说明" },
+  { api: "ctx.configFile.get", count: 1, disposition: "acceptable",
+    // ⚠ **可达性说明（r142 实测，与 r102 对 settings-page 加载链、r142 对 ctx.config.all 的处置同款）**：
+    //   这条路径当前**触发不了**——服务端 ConfigStore 的内部读取器是
+    //   `if (!existsSync) return {}; try { JSON.parse(…) } catch { console.warn(…); return {} }`
+    //   （config-store.ts:167-176），与 readJsonFile 同一策略：**一切读/解析失败都被吞掉、回落空对象**。
+    //   所以 renderer 侧的 await 永远拿到值、不会 reject（除非传输层本身坏了）。
+    //   保留兜底属**防御纵深**（传输层故障、或将来服务端改成抛错——那是更好的设计：
+    //   静默回落默认值会让用户以为配置丢了）。
+    //   ⚠ 原理由两处错：① 它描述的"读取失败"不可达；② "重开面板即恢复"假设失败是瞬时的，
+    //   而权限/文件损坏下重开也不会好（把永久失败当瞬时失败处理）。
+    consequence: "当前不可达（configFile.get 走 readJsonFile，同样 catch { return {} }）；兜底属防御纵深" },
   // r137 删除本条目：3 处调用点已收敛到发布面原语 pickDirectory（try/catch + 播报）。
   //   原理由『多数情况是用户取消选择；真失败时对话框自身会报错』与 r136 删掉的
   //   openImages 那条**一模一样地错**：远程/浏览器宿主下对话框能力是 UNSUPPORTED_HOST，
