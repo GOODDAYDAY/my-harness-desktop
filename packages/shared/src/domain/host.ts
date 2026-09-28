@@ -11,6 +11,22 @@ import type { AppInfo } from "./context";
 
 /** 应用生命周期(§20.1)。 */
 export interface HostLifecycle {
+  /** ⚠ 已知状态（r132 实测）：**契约与三个宿主实现都在，但全仓没有调用方**。
+   *  取证：`onReady` 只出现在 ① 本契约 ② `src/server/host/node-host.ts`
+   *  ③ `src/server/host/electron-host.ts` ④ `scripts/e2e-inmem.mjs` 的宿主桩——
+   *  四处全是**声明/实现**，没有一处 `host.lifecycle.onReady(...)` 调用。
+   *
+   *  为什么**不删**：设计文档 `docs/design/web-service-architecture.md` §20.1 明确要求它
+   *  （第 164 行的能力映射表、第 729 行的接口清单、第 735 行的语义
+   *  「服务器：onReady 立即触发；Electron：app.whenReady」）。
+   *  按纪律（r102）：**有文档背书的成员，删之前要先推翻文档的理由**——
+   *  而这里的理由是成立的（宿主就绪是启动时序的一环，Electron 下对应 app.whenReady）。
+   *
+   *  所以这是一处**文档与代码的分歧**，不是单纯的死成员。两条出路（都需单独一轮验证）：
+   *    ① **接上**：bootstrap 在冷启动/起 HTTP 服务之前先 `await` 宿主就绪
+   *       （Electron 下这能消除"app 未 ready 就建窗口"的潜在时序问题）；
+   *    ② **双删**：同时改契约与 §20.1 文档，并说明为什么不再需要宿主就绪钩子。
+   *  在做出选择之前，本注释就是这处状态的单源记录（避免下一个人再花一轮重新查）。 */
   onReady(cb: () => void): void;
   onBeforeQuit(cb: (e: { preventDefault(): void }) => void): void;
   quit(): void;
