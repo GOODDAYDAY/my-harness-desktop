@@ -140,7 +140,13 @@ const nodeHost = {
 let assembled;
 try {
   process.chdir(ROOT); // builtin 插件目录/静态目录/DSH 适配插件源都相对 cwd
-  assembled = assemble(nodeHost, { isPackaged: false });
+  // ⚠ r117 修：assemble 已变成 **async** 且 `rendererDir` 为**必填**（bootstrap/assemble.ts）。
+  //   此前同步调用 ⇒ assembled 是个 Promise ⇒ 下一行解构出的 ctx/gateway/localToken 全是 undefined，
+  //   报错点却落在 `gateway.channelCount()`（TypeError: Cannot read properties of undefined），
+  //   看上去像 gateway 没了，实际是**整个返回值都没等到**。
+  //   rendererDir 用 out/renderer（本脚本第 257 行读的就是那里的 index.html），
+  //   与 bootstrap/server.ts 的 `resolve(__dirname, "../renderer")` 同一语义（构建产物目录）。
+  assembled = await assemble(nodeHost, { isPackaged: false, rendererDir: join(ROOT, "out", "renderer") });
 } catch (err) {
   check("服务: assemble 组装", false, String(err.message ?? err));
   saveReport();
