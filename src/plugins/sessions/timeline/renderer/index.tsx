@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon, getInflightToolCalls } from "@my-harness-desktop/react";
-import { parseSessionModelPrefs, phaseFromView, partitionReferenceFiles, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
+import { parseSessionModelPrefs, phaseFromView, partitionReferenceFiles, resolveAttachmentSource, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
 // messageActions 槽宿主(消费方渲染 + 圆心适用性判定)。抽出成模块是为了可测:
 // 「在飞的 pending 行不渲染锚点类按钮」是 UI 行为,得有 DOM 交互 test 守着(§5.6)。
 import { Announce } from "@my-harness-desktop/react";
@@ -900,9 +900,10 @@ export function TimelineView(): React.ReactNode {
     if (!currentCwd) return false;
     // 附件来源:活篮子有货以活篮子为准(排队后用户可能增删评论);
     // 活篮子空了回落入队快照(活篮子被上一次发送消费后,队列里的评论不丢)。
-    const src = (matched?.items?.length ?? 0) > 0
-      ? matched
-      : (attSnapshot ? { ...attSnapshot, sessionKey: curKey } : null);
+    // r145：择一逻辑抽成圆心纯函数 resolveAttachmentSource（可裸单测）。
+    //   语义不变：活篮子优先（排队后用户可能增删评论）→ 活篮子空了回落入队快照
+    //   （上一次发送消费掉活篮子后，队列里的附件不丢）→ 回落时把 sessionKey 重绑到当前会话。
+    const src = resolveAttachmentSource(matched, attSnapshot, curKey);
     const store = useSessionStore.getState();
     // 待发送图:外部传入(表情包直接发送,与发送按钮走同一动作)优先;
     // 否则消费 composer 挂图 ref(表情包"加入输入框"的待发送图)。

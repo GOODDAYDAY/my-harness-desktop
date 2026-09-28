@@ -276,6 +276,44 @@ export interface ComposerAttachmentPayload {
   editorActive?: boolean;
 }
 
+/**
+ * 发送时**择一**附件来源（r145，纯函数）。
+ *
+ * ## 为什么抽出来
+ *
+ * 原先这段三元表达式内联在 `timeline/renderer/index.tsx` 的 `doSend` 里（1400 行组件），
+ * 于是没法单测——而它承载的是一条容易搞错的**回落语义**：
+ *
+ * · **活篮子优先**：用户排队之后可能又增删了评论，所以以当前活篮子为准；
+ * · **活篮子空了回落入队快照**：活篮子被上一次发送消费清空后，
+ *   队列里那条消息自带的附件快照不能丢（否则排队的评论会静默失去附件）；
+ * · 回落时要把快照的 `sessionKey` **重新绑定到当前会话**——快照可能是在别的会话入队的
+ *   （切会话后队列仍在），沿用旧 key 会让附件挂到错的会话上。
+ *
+ * 按 §4.5 的可测性判据：这段逻辑没有任何外层依赖（纯数据择一 + 一次字段覆盖），
+ * 所以它本该在圆心，内联在组件里只是历史形状。
+ */
+export function resolveAttachmentSource<
+  L extends { items?: readonly unknown[] },
+  S extends { items?: readonly unknown[] },
+>(
+  live: L | null | undefined,
+  snapshot: S | null | undefined,
+  sessionKey: string,
+): L | (S & { sessionKey: string }) | null {
+  if ((live?.items?.length ?? 0) > 0) return live!;
+  return snapshot ? { ...snapshot, sessionKey } : null;
+}
+// ⚠ 为什么是泛型而不是直接吃 `ComposerAttachmentPayload`（r145 实测）：
+//   调用方 `doSend` 作用域里的 `matched` 是**本地形状**
+//   `{ items?: CommentAttachment[]; promptFragment?: string; channels?: Record<string,string> }`
+//   ——它是 `att`（ComposerAttachmentPayload）经会话匹配后**收窄**出来的对象，
+//   多了 `channels`、少了 `sessionKey`。若签名写死成 payload 类型就编不过；
+//   而按 §1.3 不该在调用点 cast（cast 会把类型漂移藏起来）。
+//   泛型只要求「有个可选的 items 数组」这一最小结构，运行时语义与抽出前**逐字相同**。
+//   ⚠ 而且要**两个**类型参数（L / S）：`live` 与 `snapshot` 是两种不同形状
+//   （前者是收窄后的本地对象、后者是入队时的 payload），单个 P 推不出来。
+
 /** composerActions 槽(设计 docs/design/sticker-plugin.md §5.1):插件往 composer 底部工具栏
  *  的 children 渲染点贡献按钮(表情包快速入口等)。机械镜像 titlebar 槽:manifest 静态声明 + 查槽,
  *  消费方(timeline)查槽后按 getPluginComponent 匹配组件、渲染进 Composer 的 children。
