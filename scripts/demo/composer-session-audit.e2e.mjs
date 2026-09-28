@@ -158,7 +158,8 @@ try {
 
   // 空输入 → 发送应当禁用（或点击无效）；键入后 → 可用
   const before = await page.evaluate(() => {
-    const b = document.querySelector("button[aria-label*='发送']");
+    // r120：改用稳定锚点（此前 button[aria-label*='发送'] 是语言绑定探针，见 r119）
+    const b = document.querySelector("[data-composer-send]");
     return b ? { disabled: b.disabled, ariaDisabled: b.getAttribute("aria-disabled") } : null;
   });
   await page.click("[data-timeline-composer]");

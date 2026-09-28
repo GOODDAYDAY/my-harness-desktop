@@ -159,7 +159,11 @@ try {
   await page.click("[data-timeline-composer]");
   await page.keyboard.type("pin check");
   const sendRect = await page.evaluate(() => {
-    const b = document.querySelector("button[aria-label^='发送']") || document.querySelector("button[aria-label*='发送']");
+    // r120：改用稳定锚点。此前是 button[aria-label^='发送'] || button[aria-label*='发送']——
+    //   语言绑定探针，且下一行 b.getBoundingClientRect() 在 b 为 null 时**直接抛**，
+    //   所以换 locale 它不是静默失效而是崩溃（比 r118 那两个更响，但也更晚才发现）。
+    const b = document.querySelector("[data-composer-send]");
+    if (!b) throw new Error("找不到 [data-composer-send]：发送钮锚点缺失（不要退回按 aria-label 文案定位）");
     const r = b.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
