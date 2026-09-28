@@ -122,8 +122,8 @@ try {
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
   await page.mouse.click(sendRect.x, sendRect.y);
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 30000, polling: 500 }).catch(() => {});
 
   // 工具卡:时间线出现工具 args(note.txt 文件路径)+ 回环完成后的最终文本「读到了」。
   // (工具名 read 是图标非文本、结果是折叠态,故断言 args + 最终文本,不按工具名/结果断言)

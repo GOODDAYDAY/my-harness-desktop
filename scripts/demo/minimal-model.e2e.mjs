@@ -134,8 +134,8 @@ try {
   });
   await page.mouse.click(sendRect.x, sendRect.y);
 
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 30000, polling: 500 }).catch(() => {});
 
   // 真模型回复(非 echo)。
   const modelText = await page.waitForFunction(

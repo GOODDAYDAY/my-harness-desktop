@@ -43,7 +43,7 @@ const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME
 const page = app.page;
 const errs = []; page.on("pageerror", (e) => errs.push(e.message));
 
-const streaming = () => page.evaluate(() => !!document.querySelector("[aria-label*='停止']"));
+const streaming = () => page.evaluate(() => !!document.querySelector("[data-composer-stop]"));
 const thinkingStuck = () => page.evaluate(() => document.body.innerText.includes("思考中"));
 const msgTexts = () => page.evaluate(() => [...document.querySelectorAll("[data-message-id]")].map((e) => (e.textContent || "").trim().slice(0, 40)));
 
@@ -83,7 +83,7 @@ try {
   await page.keyboard.press("Enter");
 
   // ① 前提:必须真的进到流式态(等不到就跳过,不假绿/不假红)
-  const live = await page.waitForSelector("[aria-label*='停止']", { timeout: 30000 }).then(() => true).catch(() => false);
+  const live = await page.waitForSelector("[data-composer-stop]", { timeout: 30000 }).then(() => true).catch(() => false);
   if (!live) {
     console.log("  ⚠ 30s 内未进入流式态(模型慢/网络),本条 e2e 的前提不成立 → 跳过,不计通过");
     await killApp(app);

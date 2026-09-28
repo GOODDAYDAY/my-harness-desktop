@@ -170,7 +170,7 @@ try {
     ta.dispatchEvent(new Event("input", { bubbles: true }));
     ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
   });
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 120000, polling: 500 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 120000, polling: 500 }).catch(() => {});
   await waitForDomIdle(page, { quietMs: 600, timeoutMs: 8000 }).catch(() => {});
 
   // 文件对账:派生会话(derivedFrom.kind=fork)的 header.kernel=dsh(不漂 pi)

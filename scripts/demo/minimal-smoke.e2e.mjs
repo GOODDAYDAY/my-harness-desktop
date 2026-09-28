@@ -154,8 +154,8 @@ try {
   await page.mouse.click(sendRect.x, sendRect.y);
 
   // 两阶段收敛(§3.4):先等「停止」起跑,再等「停止」消失。
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 30000, polling: 500 }).catch(() => {});
   const echoed = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes(window.__K.echo + " " + window.__K.hello)),
     // ⚠ 这条是整条链上**唯一不吞超时、且最紧**的预算(第 241/242 轮定位):
@@ -207,8 +207,8 @@ try {
   await page.click("[data-timeline-composer]");
   await page.keyboard.type(K.second);
   await page.mouse.click(sendRect.x, sendRect.y);
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 30000, polling: 500 }).catch(() => {});
   const echoed2 = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes(window.__K.echo + " " + window.__K.second)),
     { timeout: 10000, polling: 300 },
@@ -274,8 +274,8 @@ try {
   await page.click("[data-timeline-composer]");
   await page.keyboard.type("第三条续跑");
   await page.mouse.click(sendRect.x, sendRect.y);
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 30000, polling: 500 }).catch(() => {});
   const echoed3 = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes(window.__K.echo + " 第三条续跑")),
     { timeout: 10000, polling: 300 },

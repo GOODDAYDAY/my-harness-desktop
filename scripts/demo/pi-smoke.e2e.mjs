@@ -128,8 +128,8 @@ try {
   await page.mouse.click(sendRect.x, sendRect.y);
 
   // 真实 LLM 回复:等「停止」起跑再消失(真实生成需更长时间)。
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 30000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 120000, polling: 1000 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 30000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 120000, polling: 1000 }).catch(() => {});
   const replied = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => {
       const t = (el.textContent || "").trim();

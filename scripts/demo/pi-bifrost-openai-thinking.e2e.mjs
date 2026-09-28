@@ -77,8 +77,8 @@ try {
   await setComposer("1+1=? 想一想再回答");
   await clickSend();
   // 收敛
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 25000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 150000, polling: 500 });
+  await page.waitForSelector("[data-composer-stop]", { timeout: 25000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 150000, polling: 500 });
   await waitForDomIdle(page, { quietMs: 600, timeoutMs: 8000 }).catch(() => {});
 
   // 等思考块落定(按钮或降级提示)

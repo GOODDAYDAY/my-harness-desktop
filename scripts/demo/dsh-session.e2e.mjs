@@ -77,21 +77,21 @@ const clickSend = (page) => page.evaluate(() => {
  *  再等它消失(收敛)——只等消失有竞态:发送后停止钮尚未挂载的几百 ms 里查询即通过,
  *  断言打在在飞回合上(端点慢时必现,2026-09-03 实测)。 */
 async function settle(page, timeoutMs = 120000) {
-  const appeared = await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).then(() => true).catch(() => false);
+  const appeared = await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).then(() => true).catch(() => false);
   if (!appeared) {
     // 停止钮从未出现:回合可能根本没起跑(发送失败/模型未选上)——不在这里炸,
     // 留给后续断言拿更具体的现场。
     console.warn("   [settle] 20s 内停止钮未出现,回合可能未起跑");
   }
   await page.waitForFunction(
-    () => !document.querySelector("[aria-label*='停止']"),
+    () => !document.querySelector("[data-composer-stop]"),
     { timeout: timeoutMs, polling: 500 },
   );
   // 事件驱动收尾:流式标记消失后再确认无「思考中」残留(连续两次观察,不赌单帧)
   const deadline = Date.now() + 30000;
   for (;;) {
     const stuck = await page.evaluate(() => document.body.innerText.includes("agent 思考中"));
-    const streaming = await page.evaluate(() => !!document.querySelector("[aria-label*='停止']"));
+    const streaming = await page.evaluate(() => !!document.querySelector("[data-composer-stop]"));
     if (!stuck && !streaming) return;
     if (Date.now() > deadline) throw new Error("收敛后仍有「思考中」残留(超时不清)");
     await new Promise((r) => setTimeout(r, 500));

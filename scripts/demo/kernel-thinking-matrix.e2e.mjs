@@ -118,9 +118,9 @@ const clickSend = () => page.evaluate(() => {
 
 /** 等回合收敛:停止钮出现(真起跑)→ 消失(收敛)。端点挂起时两阶段超时会给出明确现场。 */
 async function settle(timeoutMs = 150000) {
-  const appeared = await page.waitForSelector("[aria-label*='停止']", { timeout: 25000 }).then(() => true).catch(() => false);
+  const appeared = await page.waitForSelector("[data-composer-stop]", { timeout: 25000 }).then(() => true).catch(() => false);
   if (!appeared) console.warn("   [settle] 25s 内停止钮未出现,回合可能未起跑");
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: timeoutMs, polling: 500 });
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: timeoutMs, polling: 500 });
 }
 
 /** 开新会话:点会话列表所在侧栏的「新会话」按钮。

@@ -182,8 +182,8 @@ try {
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
   await page.mouse.click(sendRect.x, sendRect.y);
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 30000, polling: 500 }).catch(() => {});
   const echoed = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("[minimal echo] 分叉后的消息")),
     // 与 minimal-smoke 的同类等待同源：这条前面已经耗掉两阶段收敛（各 20s/30s 且**失败会被吞**），
@@ -196,7 +196,7 @@ try {
     const diag = await page.evaluate(() => ({
       composerModel: document.querySelector("[data-composer-model]")?.dataset.composerModel ?? "",
       messages: [...document.querySelectorAll("[data-message-id]")].map((el) => (el.textContent || "").replace(/\s+/g, " ").slice(0, 60)),
-      busy: !!document.querySelector("[aria-label*='停止']"),
+      busy: !!document.querySelector("[data-composer-stop]"),
     }));
     console.error("  诊断(页面):", JSON.stringify(diag));
     console.error("  页面报错:", JSON.stringify(consoleTail.slice(0, 3)));

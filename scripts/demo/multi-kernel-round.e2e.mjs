@@ -189,8 +189,8 @@ async function send(text, expected) {
   });
   if (!sendRect) throw new Error("未找到发送按钮");
   await page.mouse.click(sendRect.x, sendRect.y);
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 30000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 90000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 30000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 90000, polling: 500 }).catch(() => {});
   return page.waitForFunction(
     (exp) => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes(exp)),
     { timeout: 60000, polling: 300 }, expected,

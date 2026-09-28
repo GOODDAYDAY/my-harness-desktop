@@ -174,8 +174,8 @@ try {
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
   await page.mouse.click(sendRect.x, sendRect.y);
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 30000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 90000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 30000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 90000, polling: 500 }).catch(() => {});
 
   const replied = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => (el.textContent || "").includes("这是 dsh")),
@@ -362,8 +362,8 @@ try {
   await page.click("[data-timeline-composer]");
   await page.keyboard.type("这轮不该被记录");
   await page.mouse.click(sendRect.x, sendRect.y);
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 60000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 60000, polling: 500 }).catch(() => {});
   await waitForDomIdle(page, { quietMs: 1200, timeoutMs: 15000 }).catch(() => {});
   const afterOff = readLogs().length;
   ok(afterOff === beforeToggle, `关掉之后这一轮没有新增记录（${beforeToggle} → ${afterOff}）`);

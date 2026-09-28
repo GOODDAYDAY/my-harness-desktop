@@ -190,8 +190,8 @@ try {
     });
     if (!sendRect) throw new Error("未找到发送按钮");
     await page.mouse.click(sendRect.x, sendRect.y);
-    await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
-    await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
+    await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).catch(() => {});
+    await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 30000, polling: 500 }).catch(() => {});
   }
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 20000 }).catch(() => {});
   ok(true, `已发送 ${sent.length} 轮（minimal echo，零 token）`);

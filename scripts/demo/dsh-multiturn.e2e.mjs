@@ -53,7 +53,7 @@ async function main() {
     let idle = 0;
     for (let i = 0; i < 45; i++) {
       await sleep(2000);
-      const streaming = await page.evaluate(() => !!document.querySelector("[aria-label*='停止']"));
+      const streaming = await page.evaluate(() => !!document.querySelector("[data-composer-stop]"));
       if (!streaming) { idle += 2000; if (idle >= 4000) return; } else idle = 0;
     }
   };

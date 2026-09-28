@@ -58,9 +58,9 @@ const clickSend = (page) => page.evaluate(() => {
 /** 等回合收敛:先等「停止」出现(回合真的起跑),再等它消失(收敛)。
  *  两步都事件驱动,不赌固定 sleep。 */
 async function settle(page, timeoutMs = 120000) {
-  const appeared = await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).then(() => true).catch(() => false);
+  const appeared = await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).then(() => true).catch(() => false);
   if (appeared) {
-    await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: timeoutMs, polling: 500 });
+    await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: timeoutMs, polling: 500 });
   }
 }
 

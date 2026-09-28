@@ -112,8 +112,8 @@ try {
   if (!sendRect) throw new Error("未找到发送按钮");
   await page.mouse.click(sendRect.x, sendRect.y);
 
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 30000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 120000, polling: 1000 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 30000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 120000, polling: 1000 }).catch(() => {});
   const replied = await page.waitForFunction(
     () => [...document.querySelectorAll("[data-message-id]")].some((el) => {
       const t = (el.textContent || "").trim();

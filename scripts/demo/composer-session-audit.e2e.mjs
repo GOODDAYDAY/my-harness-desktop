@@ -122,7 +122,7 @@ try {
   const composer = await page.evaluate(() => {
     const ta = document.querySelector("[data-timeline-composer]");
     const form = ta?.closest("form") ?? document.body;
-    // ⚠ r119：改用稳定锚点。此前是 button[aria-label*='发送'] / [aria-label*='停止']——
+    // ⚠ r119：改用稳定锚点。此前是 button[aria-label*='发送'] / [data-composer-stop]——
     //   对**本地化 aria-label 做子串匹配**，即语言绑定探针：换 --locale en 就静默失效
     //   （r118 刚修掉两个同类）。现在产品侧有 data-composer-send / data-composer-stop（r119 补）。
     const send = document.querySelector("[data-composer-send], [data-composer-stop]");
@@ -294,8 +294,8 @@ try {
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
   await page.mouse.click(sendRect.x, sendRect.y);
-  await page.waitForSelector("[aria-label*='停止']", { timeout: 20000 }).catch(() => {});
-  await page.waitForFunction(() => !document.querySelector("[aria-label*='停止']"), { timeout: 30000, polling: 500 }).catch(() => {});
+  await page.waitForSelector("[data-composer-stop]", { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector("[data-composer-stop]"), { timeout: 30000, polling: 500 }).catch(() => {});
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 20000 }).catch(() => {});
   const rowsAfter = await page.evaluate(() => [...document.querySelectorAll("[data-session-path]")].map((e) => ({
     path: e.getAttribute("data-session-path"),
