@@ -114,9 +114,6 @@ const LEDGER: { anchor: string; why: string; next: string }[] = [
   { anchor: "data-settings-load-error",
     why: "r97 加的：设置页加载失败提示。但 r102 查明**服务端三条读取路径都吞错回落空值**，这条路径当前不可达（见 settings-page.tsx 里的可达性分析注释）",
     next: "若哪天服务端改成抛错（那是更好的设计），立刻用它写剧本；在此之前保留锚点即可" },
-  { anchor: "data-settings-saving",
-    why: "保存中的瞬时态（几百毫秒），确定性捕捉需要拦慢服务端",
-    next: "在 settings-controls-audit 里点保存后**立即**采样（不等 idle），可稳定命中" },
   { anchor: "data-toast-kind",
     why: "r61 加的：瞬时提示的语义级别。严重级分类由 transient-severity-classification 单测覆盖，DOM 侧还没断言",
     next: "write-failure-feedback 剧本里已经查了 role=alert，可顺手断言 data-toast-kind=error" },
@@ -171,11 +168,11 @@ describe("data-* 探针锚点：发出 ⇔ 消费对账", () => {
     expect(gone, `账本里这些锚点生产代码已不再发出（连同条目一起删）：${gone.join()}`).toEqual([]);
   });
 
-  it("③ 棘轮：死锚点总数只许减少（r111 基线 8）", () => {
+  it("③ 棘轮：死锚点总数只许减少（r115 基线 7）", () => {
     expect(dead.length, [
-      `无消费方的 data-* 锚点从 8 涨到了 ${dead.length}。`,
+      `无消费方的 data-* 锚点从 7 涨到了 ${dead.length}。`,
       "      每消化一条（补消费方或删锚点）就下调这个数字；账本条目的 why/next 必须具体到能照着做。",
-    ].join("\n")).toBeLessThanOrEqual(8);
+    ].join("\n")).toBeLessThanOrEqual(7);
     expect(LEDGER.length, "账本条目数应与死锚点数一致（每条都是一个待办）").toBe(dead.length);
   });
 });

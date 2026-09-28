@@ -77,6 +77,7 @@ const clickAt = async (selector) => {
   await waitForDomIdle(page, { quietMs: 350, timeoutMs: 8000 }).catch(() => {});
 };
 
+let savingSeen = false;   // 是否采样到过 data-settings-saving="true"（r115）
 const clickConfirm = async () => {
   await page.waitForSelector('[data-settings-save="confirm"]', { timeout: 8000 });
   const r = await page.evaluate(() => {
@@ -85,6 +86,13 @@ const clickConfirm = async () => {
     return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
   });
   await page.mouse.click(r.x, r.y);                    // 可信点击（Radix/浮层动画都要求真实输入）
+  // ⚠ 点击后**立刻**高频轮询保存中态（不等 idle）：data-settings-saving 只在写盘往返期间为 true，
+  //   等 idle 之后必然已经变回 false（r111 账本里那条"可稳定命中"的假设要靠实测确认，不能想当然）。
+  for (let i = 0; i < 40 && !savingSeen; i += 1) {
+    const v = await page.evaluate(() => document.querySelector('[data-settings-save="confirm"]')?.getAttribute("data-settings-saving") ?? null);
+    if (v === "true") { savingSeen = true; break; }
+    await new Promise((res) => setTimeout(res, 25));
+  }
   // 等浮层消失（保存完成后 activeDirty 清空 → 浮层卸载）
   await page.waitForFunction(() => !document.querySelector('[data-settings-save="confirm"]'), { timeout: 15000, polling: 300 }).catch(() => {});
   await waitForDomIdle(page, { quietMs: 500, timeoutMs: 10000 }).catch(() => {});
@@ -511,6 +519,12 @@ try {
     }
   }
 
+  // ⚠ 从"打印"升级为**断言**（r115）：先实测了 3 次连续命中才敢断言——
+  //   瞬时态断言最大的风险是**偶发不命中**（写盘快过一次轮询），那会变成 flaky。
+  //   实测稳定的依据：点击后立刻以 25ms 间隔轮询最多 40 次（≈1s 窗口），
+  //   而本地写盘往返远短于此，所以窗口足够；若将来这条变 flaky，
+  //   正确处置是**加宽轮询窗口**而不是删断言。
+  ok(savingSeen, "点保存后能采样到 data-settings-saving='true'（保存中态必须对用户可见，且状态位比读按钮文案可靠）");
   ok(pageErrors.length === 0, `页面零报错（实际 ${pageErrors.length} 条${pageErrors.length ? ": " + pageErrors.slice(0, 2).join(" | ").slice(0, 160) : ""}）`);
 } finally {
   await killApp(app);
