@@ -392,9 +392,13 @@ try {
     const entryIds = await page.evaluate(() =>
       [...document.querySelectorAll("[data-settings-id]")].map((e) => e.getAttribute("data-settings-id")));
     ok(entryIds.length >= 2, `设置页至少有两个条目可做"离开"动作（实际 ${entryIds.length}）`);
+    // ⚠ r111 修掉一个**空探针**：此前这里查 `[data-settings-id][data-active]` 与 `[aria-current]`，
+    //   但设置页的条目**从来不带这两个属性**（r89 的诊断早就显示"当前激活=(无显式激活标记)"）。
+    //   选择器永不匹配 ⇒ 这行日志恒打印 null，看着像"产品没给激活标记"，实际是探针查错了属性。
+    //   真正的激活标记是 r93 补在**内容面板**上的 data-settings-pane-active（条目行本身没有激活态语义）。
     const cur = await page.evaluate(() =>
-      document.querySelector("[data-settings-id][data-active], [data-settings-id][aria-current]")?.getAttribute("data-settings-id") ?? null);
-    console.log(`  · 条目 ${entryIds.length} 个；当前激活=${cur ?? "(无显式激活标记)"}`);
+      document.querySelector('[data-settings-pane-active="true"]')?.getAttribute("data-settings-pane") ?? null);
+    console.log(`  · 条目 ${entryIds.length} 个；当前激活面板=${cur ?? "(尚未激活任何面板)"}`);
 
     // ① 把表单弄脏：往一个可见的文本类字段里打字
     const dirtyKey = await page.evaluate(() => {
