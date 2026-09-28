@@ -21,7 +21,6 @@
   "stickers.moveToProject": "Ins Projekt verschieben",
   "stickers.delete": "Löschen",
   "stickers.confirmDelete": "Löschen bestätigen?",
-  "stickers.dragHint": "Zum Sortieren ziehen; zum Verschieben auf die andere Gruppe ziehen",
   "stickers.titlePlaceholder": "Titel (optional) — bei Leerung zeigt die Karte den Inhaltsanfang",
   "stickers.contentPlaceholder": "Inhalt — wird beim Klick auf die Karte unverändert an die aktuelle Sitzung gesendet",
   "stickers.cancel": "Abbrechen",

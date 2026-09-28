@@ -1,10 +1,6 @@
 {
-  "stats.input": "Input tokens",
-  "stats.output": "Output tokens",
-  "stats.total": "Total",
   "stats.turns": "Turns done",
   "stats.steps": "Steps",
-  "stats.cumulative": "Cumulative tokens (persisted)",
   "stats.thisTurnLive": "This turn",
   "stats.contextUsed": "Context",
   "stats.sessionTotal": "This session",
@@ -16,7 +12,5 @@
   "stats.cacheWrite": "Cache write",
   "stats.tps": "TPS (output)",
   "stats.cost": "Cost",
-  "stats.sessionCount": "Sessions",
-  "stats.tpsCap": "Limit",
-  "stats.effort": "effort"
+  "stats.sessionCount": "Sessions"
 }

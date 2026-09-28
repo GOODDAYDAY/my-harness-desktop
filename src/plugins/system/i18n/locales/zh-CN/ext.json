@@ -20,7 +20,6 @@
   "ext.tag.protected": "受保护",
   "ext.installUnsupported": "该内核不支持安装扩展",
   "ext.installUnsupportedHint": "这个内核没有提供扩展安装能力，所以这里不给安装入口（而不是让你填完来源再失败）。",
-  "ext.uninstallUnsupported": "该内核不支持卸载扩展",
   "ext.toggleFailed": "切换拓展状态失败：{{detail}}",
   "ext.restartFailed": "重启失败：{{detail}}"
 }

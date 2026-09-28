@@ -13,7 +13,6 @@
   "system.closeView": "Schließen",
   "system.collapsedEvents": "{{count}} Ereignisse",
   "system.laneCurrent": "Aktueller Zweig",
-  "system.laneOther": "Zweig {{n}}",
   "system.laneOtherCount": "Zweig {{n}} · {{count}}",
   "system.statBranches": "⑂ {{n}} Verzweigungen",
   "system.statUser": "{{n}} du",

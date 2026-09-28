@@ -13,7 +13,6 @@
   "system.closeView": "关闭",
   "system.collapsedEvents": "{{count}} 条事件",
   "system.laneCurrent": "当前分支",
-  "system.laneOther": "分支 {{n}}",
   "system.laneOtherCount": "分支 {{n}} · {{count}} 条",
   "system.statBranches": "⑂ {{n}} 分叉",
   "system.statUser": "{{n}} 你",

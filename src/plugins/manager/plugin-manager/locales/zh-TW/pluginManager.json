@@ -1,5 +1,4 @@
 {
-  "pluginManager.title": "外掛",
   "pluginManager.install": "安裝外掛",
   "pluginManager.installPlaceholder": "輸入 URL 或選擇本地檔案",
   "pluginManager.selectFile": "選擇檔案",
@@ -12,8 +11,6 @@
   "pluginManager.uninstall": "解除安裝",
   "pluginManager.reload": "重載",
   "pluginManager.protectedTooltip": "受保護，不可解除安裝",
-  "pluginManager.pagePrev": "上一頁",
-  "pluginManager.pageNext": "下一頁",
   "pluginManager.total": "共 {{count}} 個外掛",
   "pluginManager.tierOfficial": "官方",
   "pluginManager.tierVerified": "認證",

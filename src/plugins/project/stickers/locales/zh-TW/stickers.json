@@ -21,7 +21,6 @@
   "stickers.moveToProject": "移到專案",
   "stickers.delete": "刪除",
   "stickers.confirmDelete": "確認刪除？",
-  "stickers.dragHint": "拖曳排序；拖到另一分組可遷移",
   "stickers.titlePlaceholder": "標題（可選）——留空時卡片直接顯示內容開頭",
   "stickers.contentPlaceholder": "內容——點擊卡片時原樣發送給目前工作階段",
   "stickers.cancel": "取消",

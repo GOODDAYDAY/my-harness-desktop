@@ -13,7 +13,6 @@
   "system.closeView": "Close",
   "system.collapsedEvents": "{{count}} events",
   "system.laneCurrent": "Current branch",
-  "system.laneOther": "Branch {{n}}",
   "system.laneOtherCount": "Branch {{n}} · {{count}}",
   "system.statBranches": "⑂ {{n}} branches",
   "system.statUser": "{{n}} you",

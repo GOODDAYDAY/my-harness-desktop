@@ -1,5 +1,4 @@
 {
-  "pluginManager.title": "插件",
   "pluginManager.install": "安装插件",
   "pluginManager.installPlaceholder": "输入 URL 或选择本地文件",
   "pluginManager.selectFile": "选择文件",
@@ -12,8 +11,6 @@
   "pluginManager.uninstall": "卸载",
   "pluginManager.reload": "重载",
   "pluginManager.protectedTooltip": "受保护，不可卸载",
-  "pluginManager.pagePrev": "上一页",
-  "pluginManager.pageNext": "下一页",
   "pluginManager.total": "共 {{count}} 个插件",
   "pluginManager.tierOfficial": "官方",
   "pluginManager.tierVerified": "认证",

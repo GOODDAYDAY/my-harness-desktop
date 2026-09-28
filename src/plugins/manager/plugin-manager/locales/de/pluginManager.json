@@ -1,5 +1,4 @@
 {
-  "pluginManager.title": "Plugins",
   "pluginManager.install": "Plugin installieren",
   "pluginManager.installPlaceholder": "URL eingeben oder lokale Datei auswählen",
   "pluginManager.selectFile": "Datei auswählen",
@@ -12,8 +11,6 @@
   "pluginManager.uninstall": "Deinstallieren",
   "pluginManager.reload": "Neu laden",
   "pluginManager.protectedTooltip": "Geschützt, kann nicht deinstalliert werden",
-  "pluginManager.pagePrev": "Zurück",
-  "pluginManager.pageNext": "Weiter",
   "pluginManager.total": "{{count}} Plugins",
   "pluginManager.tierOfficial": "Offiziell",
   "pluginManager.tierVerified": "Verifiziert",

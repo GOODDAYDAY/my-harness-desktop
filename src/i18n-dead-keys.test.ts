@@ -51,7 +51,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const LOCALES = ["zh-CN", "zh-TW", "en", "de"];
 /** r105 实测基线（删掉 80 条死键后）。只许减少；每核实并删一批就下调。 */
-const CEILING = 26;   // r105 六类 231 → r106 七类 190 → r107 删4键+八类 186 → r108 语料补 test-plugins（消除 160 个假阳性）26（只许继续减少）   // r105 六类 231 → r106 补第七类 190 → r107 删 4 个确证死键 + 补第八类 186（只许继续减少）   // r105 建模六类后 231 → r106 补第七类（键作变量传递）后 190（只许继续减少）
+const CEILING = 0;   // r105 六类 231 → r106 七类 190 → r107 186 → r108 语料对称 26 → r109 逐个核实并删净 **0**
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -224,15 +224,18 @@ describe("i18n 死键普查（六类消费方建模 + 棘轮）", () => {
     expect(notCovered, `这些在用的键被判成死键 ⇒ 判据在漏：${notCovered.join()}`).toEqual([]);
   });
 
-  it("② 棘轮：未被任何消费方覆盖的键数只许减少（r108 基线 26）", () => {
-    expect(dead.length, [
+  it("② 死键必须为 0（r109 起：八类消费方建模 + 语料对称后已核实删净，不再是棘轮）", () => {
+    // ⚠ 从"≤N 棘轮"翻成"必须为空"（r109，仿 r83 对 todo 的做法）：
+    //   清零是进展、不是判据失效。将来若新增了第九类消费方式而没建模，这条会红——
+    //   那时正确的处置是**先把新消费方式补进模型**，而不是把断言改回 ≤N。
+    expect(dead, [
       `疑似死键从 ${CEILING} 涨到了 ${dead.length}。`,
       "      新增的键要么真的没人用（该删或该接上消费方），要么引入了一种**本判据没建模的消费方式**。",
       "      后者更常见也更危险：删掉会造成运行时缺文案。已建模的六类见文件头注释；",
       "      若新增了第七类（例如某处开始直接遍历 resources、或把键存进配置文件再查），",
       "      **先把它加进模型**再看数字，不要直接加豁免。",
-      `      当前前 12 个：${dead.slice(0, 12).join(", ")}`,
-    ].join("\n")).toBeLessThanOrEqual(CEILING);
+      `      当前 ${dead.length} 个：${dead.slice(0, 12).join(", ")}`,
+    ].join("\n")).toEqual([]);
   });
 
   it("③ 账本：已核实为死键并删除的两族**不得复活**", () => {

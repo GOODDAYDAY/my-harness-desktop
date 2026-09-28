@@ -20,7 +20,6 @@
   "ext.tag.protected": "Geschützt",
   "ext.installUnsupported": "Dieser Kernel unterstützt keine Erweiterung-Installation",
   "ext.installUnsupportedHint": "Der Kernel stellt keine Installationsfähigkeit bereit, daher wird das Formular hier nicht angeboten — statt Sie eine Quelle eingeben und danach scheitern zu lassen.",
-  "ext.uninstallUnsupported": "Dieser Kernel unterstützt keine Deinstallation",
   "ext.toggleFailed": "Erweiterung konnte nicht umgeschaltet werden: {{detail}}",
   "ext.restartFailed": "Neustart fehlgeschlagen: {{detail}}"
 }

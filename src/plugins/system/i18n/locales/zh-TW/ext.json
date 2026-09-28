@@ -20,7 +20,6 @@
   "ext.tag.protected": "受保護",
   "ext.installUnsupported": "該核心不支援安裝擴充",
   "ext.installUnsupportedHint": "這個核心沒有提供擴充安裝能力，所以這裡不給安裝入口（而不是讓你填完來源再失敗）。",
-  "ext.uninstallUnsupported": "該核心不支援移除擴充",
   "ext.toggleFailed": "切換拓展狀態失敗：{{detail}}",
   "ext.restartFailed": "重啟失敗：{{detail}}"
 }

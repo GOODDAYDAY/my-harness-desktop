@@ -1,6 +1,5 @@
 {
   "debug.inspectTitle": "Debug: element inspect mode (annotate all elements, click to copy DOM)",
-  "debug.copied": "Copied to clipboard",
   "debug.copyFailed": "Copy failed",
   "debug.inspectHint": "{{count}} elements annotated · click an element to copy its DOM · Esc to exit",
   "debug.inspectTruncated": "Too many elements, only first {{count}} annotated · click to copy · Esc to exit",

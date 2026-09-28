@@ -21,7 +21,6 @@
   "stickers.moveToProject": "Move to project",
   "stickers.delete": "Delete",
   "stickers.confirmDelete": "Confirm delete?",
-  "stickers.dragHint": "Drag to reorder; drop onto the other group to move",
   "stickers.titlePlaceholder": "Title (optional) — the card shows the content preview when empty",
   "stickers.contentPlaceholder": "Content — sent as-is to the current session when the card is clicked",
   "stickers.cancel": "Cancel",

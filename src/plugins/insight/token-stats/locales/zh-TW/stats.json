@@ -1,10 +1,6 @@
 {
-  "stats.input": "輸入 tokens",
-  "stats.output": "輸出 tokens",
-  "stats.total": "合計",
   "stats.turns": "完成輪次",
   "stats.steps": "步數",
-  "stats.cumulative": "累計 token(持久化)",
   "stats.thisTurnLive": "本輪",
   "stats.contextUsed": "上下文",
   "stats.sessionTotal": "本會話",
@@ -16,7 +12,5 @@
   "stats.cacheWrite": "緩存寫",
   "stats.tps": "TPS(輸出)",
   "stats.cost": "費用",
-  "stats.sessionCount": "會話數",
-  "stats.tpsCap": "上限",
-  "stats.effort": "effort"
+  "stats.sessionCount": "會話數"
 }

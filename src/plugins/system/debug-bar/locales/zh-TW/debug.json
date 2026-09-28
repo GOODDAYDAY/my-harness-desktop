@@ -1,6 +1,5 @@
 {
   "debug.inspectTitle": "Debug: 元素審查模式(標註所有元素,點擊複製其 DOM)",
-  "debug.copied": "已複製到剪貼簿",
   "debug.copyFailed": "複製失敗",
   "debug.inspectHint": "已標註 {{count}} 個元素 · 點擊元素複製其 DOM · Esc 退出",
   "debug.inspectTruncated": "元素過多,僅標註前 {{count}} 個 · 點擊複製 · Esc 退出",

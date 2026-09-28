@@ -30,7 +30,6 @@
   "shell.voice": "Spracheingabe (offen)",
   "shell.stop": "Stoppen",
   "shell.send": "Senden",
-  "shell.cache": "Cache-Lesen+Schreiben",
   "shell.thinking": "Agent denkt…",
   "shell.requesting": "Anfrage läuft…",
   "shell.toolExecuting": "Tool wird ausgeführt…",

@@ -30,7 +30,6 @@
   "shell.voice": "Voice input (TBD)",
   "shell.stop": "Stop generating",
   "shell.send": "Send",
-  "shell.cache": "Cache read+write",
   "shell.thinking": "agent thinking…",
   "shell.requesting": "requesting…",
   "shell.toolExecuting": "running tool…",

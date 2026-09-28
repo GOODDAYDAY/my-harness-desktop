@@ -5,7 +5,6 @@
   "timeline.autoRetryFailed": "Auto-Wiederholung {{count}}/{{max}} fehlgeschlagen",
   "timeline.collapse": "Einklappen",
   "timeline.branchSummary": "Zweigzusammenfassung",
-  "timeline.entry": "{{type}}",
   "timeline.modelChange": "Modell → {{provider}}/{{modelId}}",
   "timeline.autoRetryRecovered": "Nach Auto-Wiederholung {{count}}/{{max}} wiederhergestellt",
   "timeline.divider": "—",

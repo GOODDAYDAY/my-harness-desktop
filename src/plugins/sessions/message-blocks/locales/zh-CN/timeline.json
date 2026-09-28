@@ -5,7 +5,6 @@
   "timeline.autoRetryFailed": "自动重试 {{count}}/{{max}} 次仍未成功",
   "timeline.collapse": "收起",
   "timeline.branchSummary": "分支摘要",
-  "timeline.entry": "{{type}}",
   "timeline.modelChange": "模型 → {{provider}}/{{modelId}}",
   "timeline.autoRetryRecovered": "自动重试 {{count}}/{{max}} 次后恢复",
   "timeline.divider": "分隔",
