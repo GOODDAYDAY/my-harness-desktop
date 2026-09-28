@@ -28,7 +28,9 @@ export interface DshFactoryOptions extends BackendCreateOptions {
 }
 
 /** dsh 工厂：ephemeral 时创建临时 DSH_SESSION_ROOT（stop 时由后端清理），
- *  中性字段经 initialize 握手（provider/model/maxTokens/sessionId）。 */
+ *  中性字段经 initialize 握手（provider/model/sessionId）。 */
+// ⚠ 曾透传 maxTokens（r128 删）：契约里那个字段从来没有生产方（详见 BackendCreateOptions 的退役说明），
+//   所以这条透传传的永远是 undefined；删字段时同批删透传，不留半截链路。
 export function createDshBackend(opts: DshFactoryOptions): BaseBackend {
   let tempDir: string | undefined;
   const env: Record<string, string> = { ...opts.env };
@@ -48,7 +50,6 @@ export function createDshBackend(opts: DshFactoryOptions): BaseBackend {
     // （agent-default-model → 首个 provider/模型）显式传入，空串 = 调用方未提供（initialize 会诚实报错）。
     provider: opts.provider ?? "",
     model: opts.model ?? "",
-    maxTokens: opts.maxTokens,
     sessionId: opts.lineageId ?? opts.neutralSessionId,
     tempDir,
     cordisConfig: opts.cordisConfig,

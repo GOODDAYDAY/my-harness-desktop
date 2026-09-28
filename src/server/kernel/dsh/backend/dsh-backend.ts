@@ -25,14 +25,14 @@ import { writeDshAnswer } from "../manager/dsh-question-bridge";
 import { DSH_METHODS } from "../protocol/dsh-methods";
 
 /** dsh 后端的会话级配置(initialize 握手参数)。cwd/sessionId 来自中性 BackendContext,
- *  provider/model/maxTokens/tempDir 是 dsh 专属的 initialize/清理字段。 */
+ *  provider/model/tempDir 是 dsh 专属的 initialize/清理字段。
+ *  ⚠ 曾有 maxTokens（r128 删）：上游契约字段无生产方 ⇒ 恒 undefined，连同透传一起清掉。 */
 export interface DshBackendConfig extends BackendContext {
   /** dsh 侧模型 provider(initialize 握手)。 */
   provider: string;
   /** dsh 侧模型(initialize 握手)。 */
   model: string;
   /** 输出 token 上限(initialize 握手)。 */
-  maxTokens?: number;
   /** 临时会话目录(ephemeral 时由工厂创建;stop 时连同子进程一起清理)。 */
   tempDir?: string;
   /** dsh 原生配置路径(cordis.yml/settings.yaml;configDepPaths 用,spawn 依赖快照)。 */
@@ -161,7 +161,6 @@ export class DshBackend extends AbstractBackend<DshBackendConfig> {
           cwd: this.ctx.cwd,
           provider: this.ctx.provider,
           model: this.ctx.model,
-          maxTokens: this.ctx.maxTokens,
         });
         return;
       } catch (e) {

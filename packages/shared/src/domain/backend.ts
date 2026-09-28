@@ -376,6 +376,7 @@ export interface BackendCapabilities {
    *  ⚠ 是**成员级**语义而非"面对象":系统 prompt 的注入发生在 spawn 期(工厂层),
    *  没有可在运行期调用的方法,所以用纯布尔(与 `fileBacked` 同范式),不造一个空对象面。 */
   systemPrompt?: boolean;
+
 }
 
 /**
@@ -456,8 +457,23 @@ export interface BackendCreateOptions {
   systemPromptTexts?: string[];
   /** 临时会话(测试/oneshot,不落正式会话):pi=--no-session,dsh=临时 DSH_SESSION_ROOT(stop 清理)。 */
   ephemeral?: boolean;
-  /** 输出 token 上限(dsh initialize 握手用;pi 忽略)。 */
-  maxTokens?: number;
+
+  /** **`maxTokens` 已从契约删除**（r128，勿加回）：它是"消费方存在、生产方从不存在"的死字段。
+   *  四条取证：
+   *    ① `src/server/application/` 全目录**零引用**（没有任何地方构造它）；
+   *    ② 全仓搜 `maxTokens:` 的赋值，命中的全是**模型规格**里的同名概念
+   *       （`DshModelSpec.maxTokens` / `ModelInfo.maxTokens` / 模型配置页的每模型上限），
+   *       与"本次会话的输出上限"不是一回事；
+   *    ③ 唯一的消费方是 `dsh-backend-factory.ts` → `dsh-backend.ts` 的 initialize 握手，
+   *       而它拿到的永远是 `undefined`；
+   *    ④ 没有任何 UI/pref 暴露"会话级输出 token 上限"这个设置。
+   *  害处与 `agentDir`（见上方退役说明）同类：**读者以为壳能设输出上限，而真相是从来没人设过**；
+   *  更糟的是它还诱导"给缺面加能力轴"这种错处置——r128 本轮就先走错了这一步
+   *  （加了 `BackendCapabilities.maxTokens` 轴，随后被取证①②推翻并撤销）。
+   *  ⚠ 与 `agentDir` 的差别要记清：`agentDir` 是**每个实现都忽略**；
+   *  `maxTokens` 是**有实现会消费、但没人生产**。两者都是死字段，判据都是"契约字段必须有人填"。
+   *  将来若真要支持会话级输出上限，正确顺序是：先有生产方（UI/pref → application 传入），
+   *  再把字段加回契约，并**同批**给不支持的内核补能力轴（§1.5 显式降级）——不要反过来。 */
 }
 
 /**
