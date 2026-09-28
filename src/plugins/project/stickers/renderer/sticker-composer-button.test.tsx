@@ -47,7 +47,7 @@ vi.mock("../client/stickers-store", () => ({
 }));
 
 vi.mock("./sticker-card", () => ({
-  useBannerDataUri: () => null,
+  useBannerDataUri: () => ({ uri: null, lost: false }),   // r140：hook 返回三态
   readBannerDataUri: vi.fn(async () => undefined),
 }));
 

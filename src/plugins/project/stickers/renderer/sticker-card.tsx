@@ -17,20 +17,37 @@ function bannerMime(banner: string): string {
   return IMAGE_MIME[banner.slice(i + 1).toLowerCase()] ?? "image/png";
 }
 
-/** 读 banner 文件 → data URI(卡片/选择器/填输入框共用;文件缺失返回 null)。 */
-export function useBannerDataUri(banner: string | undefined): string | null {
+/** 读 banner 文件 → data URI（卡片/选择器/填输入框共用）。
+ *
+ *  返回 `{ uri, lost }` 而不再是裸 `uri`（r140）：**"没有图"与"图读失败"必须可区分**。
+ *  此前只有 `uri: string | null`，于是读取失败（服务端 `readBinaryFile` **不吞错**——
+ *  与 `readJsonFile` 的 `catch { return {} }` 不同，EACCES/IO 错误会抛出来 ⇒ transport reject）
+ *  与"这张贴纸本来就没图"在 UI 上**完全一样**，用户看不出差别；而且 `.then()` 没有 `.catch`，
+ *  rejection 会变成 unhandled rejection。账本里那条『读取失败 ⇒ 图片渲染为空（已有占位/alt）』
+ *  因此是**半真**的：对 timeline 的 `image-block.tsx` 真（它有 `.catch(() => setLost(true))`
+ *  且渲染显式的 lost 态），对本 hook 假。
+ *  现按 §3.3 收敛到仓内已有的更好形态（image-block 的三态：loading / ok / lost）。
+ *  ⚠ 失败态还修正了另一处错判：账本说"用户重开面板即恢复"——那假设失败是**瞬时**的，
+ *  而权限/只读文件系统下重开也不会好，属于把永久失败当瞬时失败处理。 */
+export function useBannerDataUri(banner: string | undefined): { uri: string | null; lost: boolean } {
   const ctx = usePluginContext();
   const [uri, setUri] = useState<string | null>(null);
+  const [lost, setLost] = useState(false);
   useEffect(() => {
     let alive = true;
     setUri(null);
+    setLost(false);
     if (!banner) return;
-    void ctx.configFile.readBinary(banner).then((b64) => {
-      if (alive && b64) setUri(`data:${bannerMime(banner)};base64,${b64}`);
-    });
+    void ctx.configFile.readBinary(banner)
+      .then((b64) => {
+        if (!alive) return;
+        if (b64) setUri(`data:${bannerMime(banner)};base64,${b64}`);
+        else setLost(true);          // 文件不存在（readBinaryFile 返回 null）也算"图不在"
+      })
+      .catch(() => { if (alive) setLost(true); });   // 读取抛错（权限/IO）⇒ 显式失败态，不再静默
     return () => { alive = false; };
   }, [ctx, banner]);
-  return uri;
+  return { uri, lost };
 }
 
 /** 事件/回调里读 banner → data URI(非 hook 版本,填输入框时用)。 */
@@ -83,7 +100,7 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
   const { t } = useTranslation();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { copied, copy: copyContent } = useCopyFeedback(sticker.content);
-  const bannerUri = useBannerDataUri(sticker.banner);
+  const { uri: bannerUri, lost: bannerLost } = useBannerDataUri(sticker.banner);
   const disabled = Boolean(activateDisabledReason);
   const sendDisabled = Boolean(sendDisabledReason);
   return (
@@ -113,6 +130,16 @@ export function StickerDisplay({ sticker, onActivate, activateDisabledReason, se
           )}
           <div className="min-w-0 flex-1">
             {/* banner 图:主视觉,缩小展示;无标题时上方带 sending 指示 */}
+            {bannerLost && !bannerUri && (
+              /* r140：显式失败态（照 timeline/image-block 的形态）。此前读取失败与"没有图"
+                 在 UI 上完全一样，用户无法区分；§7.6 要求降级必须**解释**。 */
+              <div
+                data-sticker-banner-lost=""
+                className="w-full h-12 mb-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] text-[var(--color-muted)] text-[length:var(--font-size-xs)] flex items-center justify-center"
+              >
+                {t("stickers.bannerLost")}
+              </div>
+            )}
             {bannerUri && (
               <img src={bannerUri} alt={sticker.title ?? t("stickers.imageAlt")} className="w-full max-h-20 object-cover rounded-[var(--radius-sm)] mb-1.5" />
             )}
@@ -253,7 +280,7 @@ export function StickerEditor({ initial, onSave, onCancel }: StickerEditorProps)
   const [uploaded, setUploaded] = useState<{ base64: string; mimeType: string } | null>(null);
   const [removed, setRemoved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const existingUri = useBannerDataUri(removed ? undefined : initial.existingBanner);
+  const { uri: existingUri, lost: existingLost } = useBannerDataUri(removed ? undefined : initial.existingBanner);
   const preview = uploaded ? `data:${uploaded.mimeType};base64,${uploaded.base64}` : existingUri;
 
   const pickBanner = async (): Promise<void> => {

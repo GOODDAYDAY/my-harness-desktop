@@ -30,7 +30,7 @@ function StickerCell({ sticker, selected, onSelect, onSend, onFill }: {
   onFill: () => void;
 }): ReactNode {
   const { t } = useTranslation();
-  const uri = useBannerDataUri(sticker.banner);
+  const { uri } = useBannerDataUri(sticker.banner);   // r140：hook 改三态；这里只需 uri（按钮位置小，失败态由卡片承担）
   const label = sticker.title || sticker.content.split("\n")[0] || t("stickers.untitled");
   return (
     <div

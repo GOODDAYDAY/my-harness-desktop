@@ -57,8 +57,16 @@ const LEDGER: { api: string; count: number; consequence: string; disposition: "a
     // 用的是 r82 为框架兜底建的命令式原语（本组件没有自己的瞬时提示态：flash/msg 住在
     // useStickerTransfer 里，作用域不通），本轮它有了第一个插件侧消费方，故补进发布面导出。
     consequence: "表情包图片/配置写入失败 ⇒ 播报「保存失败：<原因>」（role=alert），并 reload 让列表回到真实状态；编辑器不再卡在半提交态" },
-  { api: "ctx.configFile.readBinary", count: 2,   // r139: 4 → 2（stickers 遗留四函数整族删除带走了 2 处读图） disposition: "acceptable",
-    consequence: "读取失败 ⇒ 图片渲染为空（已有占位/alt），不影响其它功能；调用方多为渲染期批量读，逐条弹提示会更吵" },
+  { api: "ctx.configFile.readBinary", count: 2, disposition: "acceptable",
+    // r140 更正理由（原理由『读取失败 ⇒ 图片渲染为空（已有占位/alt），不影响其它功能』是**半真**的）：
+    //   服务端 readBinaryFile **不吞错**（与 readJsonFile 的 catch{return{}} 不同：
+    //   EACCES/IO 错误会抛 ⇒ transport reject），所以失败确实会传到 renderer。
+    //   而两处消费方的处理**不一致**：timeline 的 image-block 有 .catch + 显式 lost 态（正确），
+    //   stickers 的 useBannerDataUri 只有 .then 无 .catch（失败与"没有图"不可区分 + unhandled rejection）。
+    //   本轮已把后者收敛到前者的三态形态（{ uri, lost } + 虚线失败态 + stickers.bannerLost 文案）。
+    //   ⚠ 另一处错判也一并更正：原理由说"用户重开面板即恢复"——那假设失败是**瞬时**的，
+    //   而权限/只读文件系统下重开也不会好（把永久失败当瞬时失败处理）。
+    consequence: "两处消费方均已显式处理失败：image-block 与 sticker-card 都渲染 lost 态（§7.6 降级要解释）；永久失败不再被当成瞬时失败" },
   { api: "ctx.config.all", count: 3, disposition: "acceptable",
     consequence: "读取失败 ⇒ 该插件面板显示空态；用户重开面板即恢复" },
   { api: "ctx.config.getScope", count: 1, disposition: "acceptable", consequence: "stickers 分层配置读取失败 ⇒ 该层显示空态；不影响其它层，用户重开面板即恢复" },

@@ -54,5 +54,6 @@
   "stickers.exportFailed": "Export failed: {{detail}}",
   "stickers.importFailed": "Import failed: {{detail}}",
   "stickers.saveFailed": "Save failed: {{detail}}",
-  "stickers.pickImageFailed": "Could not open the image picker: {{detail}} (system dialogs are not available over remote/browser access — use the local window)"
+  "stickers.pickImageFailed": "Could not open the image picker: {{detail}} (system dialogs are not available over remote/browser access — use the local window)",
+  "stickers.bannerLost": "Image could not be loaded"
 }
