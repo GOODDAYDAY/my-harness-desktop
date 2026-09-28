@@ -78,8 +78,24 @@ const LEDGER: { api: string; count: number; consequence: string; disposition: "a
   //   所以没有任何东西会替它报错；而 handler 裸 await 抛错 ⇒ unhandled rejection ⇒ 零反馈。
   //   > 教训：账本里 acceptable 的理由也要能被证伪。这条理由听起来合理（本地确实如此），
   //   > 但它默认了"对话框总是能打开"，而这正是 Host 抽象存在的原因（多宿主）。
-  { api: "ctx.dialog.openZip", count: 1, disposition: "acceptable", consequence: "多数情况是用户取消选择压缩包；真失败时系统对话框自身会报错，且导入是用户主动发起的、没有产出他就会重试" },
-  { api: "ctx.dialog.writeImages", count: 1, disposition: "acceptable", consequence: "导出失败 ⇒ 无文件产出；用户会立刻发现（导出是他主动发起的）" },
+  { api: "ctx.dialog.openZip", count: 1, disposition: "acceptable",
+    // r138 更正理由（原理由『真失败时系统对话框自身会报错』被 r137 的逐宿主检验证伪：
+    //   远程/浏览器宿主下能力是 UNSUPPORTED_HOST，对话框根本没打开，没有东西会替它报错）。
+    //   真实理由是**分层**：这处 await 在 store 层（stickers-store.ts 的 importStickersZip），
+    //   按 r83/r84 的结论 store 就该把失败抛给调用方；而它的 UI 调用方
+    //   stickers/renderer/index.tsx 的 doImport **确实兜住了**（try/catch + flash(…, "error")
+    //   + console.error），所以用户会看到「导入失败：<原因>」。已逐行核实（r138）。
+    consequence: "store 层抛出 ⇒ UI 调用方 doImport 的 try/catch 接住并 flash 错误（含原因）；远程宿主下对话框不可用也会走这条路径，不会静默" },
+  { api: "ctx.dialog.writeImages", count: 1, disposition: "acceptable",
+    // r138 更正理由（原理由『导出失败 ⇒ 无文件产出，用户会立刻发现』在远程宿主下不成立：
+    //   点了导出什么都没发生，用户只会以为"没反应"）。
+    //   真实情况更好也更该写清：这处 await 在 store 层的 `exportStickerImages` 里，
+    //   而该函数**全仓零调用方**——它是 docs/plugins/project/stickers.md:106/357 明确记载的
+    //   「遗留代码（已不接线，别误当功能）」之一（zip 方案上线前的旧入口，同族还有
+    //   exportStickers / importStickers / importImages）。所以这条路径**用户根本走不到**。
+    //   ⚠ 不删的理由：删除要同批更新文档（§5.5 结构改动随批义务），且涉及 4 个函数的整族，
+    //   半删会留下更糟的"删了一半的遗留族"。已记入待办：整族一起删 + 同批改文档。
+    consequence: "所在函数 exportStickerImages 全仓零调用方（文档记载的遗留死代码，用户走不到这条路径）；待整族删除时一并消失" },
   // ⚠ `ctx.plugins.list` 的条目在 r83 被**删除**（不是改成 acceptable）：
   //   那处已在调用点包了 try/catch，扫描不再命中它。账本只登记"仍然存在的未保护点"，
   //   留着一条扫不到的条目会让 ② 的腐烂检查永久红——这正是 ② 的作用（守卫自己提醒我删）。
