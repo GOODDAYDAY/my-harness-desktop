@@ -17,15 +17,26 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** e2e 里用到的锚点名(不含 `data-` 前缀)。 */
 function anchorsUsedByE2e(): Set<string> {
   const out = new Set<string>();
-  const dir = join(ROOT, "scripts/demo");
-  for (const f of readdirSync(dir)) {
-    if (!f.endsWith(".e2e.mjs")) continue;
+  // ⚠ 语料含两处（r116）：scripts/demo/*.e2e.mjs（常规 e2e）与 scripts/*.mjs（顶层的
+  //   e2e-inmem.mjs —— 沙箱模式：禁 bind/connect 时用内存桥替代 TCP/WS 层，其余全真）。
+  //   首版只扫 scripts/demo，于是 e2e-inmem 里引用的库属性从未被对账（r108 的语料对称纪律）。
+  const files: string[] = [];
+  const demoDir = join(ROOT, "scripts/demo");
+  for (const f of readdirSync(demoDir)) if (f.endsWith(".e2e.mjs")) files.push(join(demoDir, f));
+  const topDir = join(ROOT, "scripts");
+  for (const f of readdirSync(topDir)) {
+    if (!f.endsWith(".mjs")) continue;
+    const st = statSync(join(topDir, f));
+    if (st.isFile()) files.push(join(topDir, f));
+  }
+  for (const full of files) {
+    const f = full;
     // ⚠ 必须**剥注释**再抽(r113)：判据两侧要对称(发出侧已剥，r108 的教训)。
     //   实测反例：settings-controls-audit 里那段"记录 r112 修掉空探针"的注释中
     //   引用了旧选择器 [data-settings-id][data-active]，于是**注释被当成探针**，
     //   报出 data-active / data-panel 两个"e2e 依赖但源码没有"的锚点——
     //   而它们其实一个都没被真的查询。文档性注释引用旧锚点是合法的(退役说明就该这么写)。
-    const raw = readFileSync(join(dir, f), "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const raw = readFileSync(f, "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
     const text = raw.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
     for (const m of text.matchAll(/\[data-([a-z0-9-]+)[\]=]/g)) out.add(m[1]);
   }
@@ -91,6 +102,14 @@ describe("e2e 锚点 ↔ 源码 data-* 存在性", () => {
     ["panel-group", "react-resizable-panels 的 <PanelGroup>"],
     ["panel-size", "react-resizable-panels（尺寸态）"],
     ["panel-resize-handle", "react-resizable-panels 的 <PanelResizeHandle>"],
+    // r116 把语料扩到 scripts/*.mjs 后新抓到的一个（e2e-inmem.mjs:617 用它打印主区结构诊断）
+    ["panel-id", "react-resizable-panels 的 <Panel>（dist 里可 grep 到 data-panel-id）"],
+    // react-virtuoso（timeline 的虚拟列表）发出的属性；scripts/e2e-inmem.mjs 用它们
+    // 判断"这个盒子是虚拟列表的滚动容器"从而给出等价尺寸（沙箱内 jsdom 没有真实布局）。
+    // 实测证据：node_modules/react-virtuoso/dist/index.cjs 与 index.mjs 里都能 grep 到。
+    ["virtuoso-scroller", "react-virtuoso 的滚动容器"],
+    ["viewport-type", "react-virtuoso 的视口类型标记"],
+    ["testid", "react-virtuoso 的 data-testid='virtuoso-item-list'（库内部测试锚点）"],
   ]);
 
   it("e2e 用到的每个锚点在源码里都存在（或登记为库发出）", () => {
