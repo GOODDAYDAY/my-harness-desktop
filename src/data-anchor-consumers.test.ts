@@ -96,9 +96,9 @@ const REF = /(data-[a-z][\w-]*)/g;
  *   条目只许减少；新增必须当场写明理由（与 r68/r79/r105 的账本同款纪律）。
  */
 const LEDGER: { anchor: string; why: string; next: string }[] = [
-  { anchor: "data-sticker-banner-lost",
-    why: "r140 新加：贴纸卡片 banner **读取失败**的显式失败态（此前失败与'没有图'在 UI 上不可区分）。要渲染它需要 StickerCard 整卡片的脚手架（usePluginContext + 图层/事件 mock），而 sticker-composer-button.test.tsx 的 mock 只覆盖选择器按钮；真机侧又造不出读失败（r100–r102：服务端 readJsonFile 吞错，而 readBinaryFile 需要只读文件系统 + 命中缓存问题）",
-    next: "写一个 StickerCard 的 DOM 测试：mock ctx.configFile.readBinary 为 rejected ⇒ 断言 [data-sticker-banner-lost] 出现且文案是 stickers.bannerLost 的译文（不是裸键）。脚手架可从 sticker-composer-button.test.tsx 复制 mock 块" },
+  // r141 删除 data-sticker-banner-lost 条目：r140 登记时写的 next 已兑现——
+  //   sticker-card.test.tsx 的 5 测消费了它（reject / null / 成功 / 无 banner 四种情形），
+  //   其中「无 banner 不显示失败态」那条正是 r140 要区分的两种空态。
   { anchor: "data-child-group-label",
     why: "r71 加的：子会话分组的标题行。分组只在**真的有子 agent 会话**时才渲染，零 token 剧本造不出来",
     next: "要么在需要真机起子会话的剧本里消费它，要么删（它目前没有第二种用途）" },
@@ -241,11 +241,11 @@ describe("data-* 探针锚点：发出 ⇔ 消费对账", () => {
     expect(thin.map((l) => l.anchor), "账本条目的共享语义写得太短（等于没写）").toEqual([]);
   });
 
-  it("④ 棘轮：死锚点总数只许减少（r140 基线 8）", () => {
+  it("④ 棘轮：死锚点总数只许减少（r141 基线 7）", () => {
     expect(dead.length, [
-      `无消费方的 data-* 锚点从 8 涨到了 ${dead.length}。`,
+      `无消费方的 data-* 锚点从 7 涨到了 ${dead.length}。`,
       "      每消化一条（补消费方或删锚点）就下调这个数字；账本条目的 why/next 必须具体到能照着做。",
-    ].join("\n")).toBeLessThanOrEqual(8);
+    ].join("\n")).toBeLessThanOrEqual(7);
     expect(LEDGER.length, "账本条目数应与死锚点数一致（每条都是一个待办）").toBe(dead.length);
   });
 });
