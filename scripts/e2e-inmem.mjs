@@ -709,8 +709,28 @@ if (!ta) {
 // ---------- 6b. 消息时间/指标徽标(message-meta) ----------
 // 发送完成后 user/assistant 消息都应带可 hover 的元信息徽标(时间 + 时长 + token)。
 // aria-label="message-meta" 是 timeline 消息行的时间/指标挂载点(设计 §1.1 中间位)。
-const metaCount = doc.querySelectorAll('[aria-label="message-meta"]').length;
-check("消息: 时间/指标徽标(message-meta)已渲染", metaCount > 0, `count=${metaCount}`);
+// ⚠ r118 修掉一个**过期选择器**：这里曾查 `[aria-label="message-meta"]`，
+//   但该 aria-label 已被**正确地移除**（MessageMeta.tsx:13 的注释：机器标识符不该当可访问名——
+//   aria-label 会覆盖元素内容，读屏于对这个 span 念 "message-meta" 而不是时间/指标），
+//   锚点改成了 `data-message-meta`（"锚点归 data-*，可访问名归内容"）。
+//   剧本没跟上 ⇒ 恒查不到 ⇒ 报 count=0，看着像"徽标没渲染"（r117 因此把它记成待定级联项）。
+//   > a11y 修复把 aria-label 改成 data-* 时，**所有按旧 aria-label 定位的探针都会静默失效**——
+//   > 这类改动必须同批全仓搜一遍旧选择器（本轮就是这么发现的）。
+const metaCount = doc.querySelectorAll("[data-message-meta]").length;
+// ⚠ r118：这条断言必须能**区分两种失败**，否则级联与真缺陷长得一样：
+//   · 有消息行（data-message-id）却无徽标 ⇒ **真缺陷**（徽标没挂上/渲染条件错）；
+//   · 连消息行都没有 ⇒ 发送没成功（本剧本沙箱无外网，模型 API 不可达）⇒ **级联**，
+//     按脚本头部声明归入"尽力而为"（report.ok 的判据会排除名字含"尽力而为"的项）。
+//   把依赖写进断言名字与现场，而不是笼统报 count=0 —— 后者会让人以为徽标坏了
+//   （r117 就是这样把它当成待定项记下来的）。
+const msgRows = doc.querySelectorAll("[data-message-id]").length;
+if (msgRows > 0) {
+  check("消息: 时间/指标徽标(message-meta)已渲染", metaCount > 0,
+    `消息行=${msgRows} 徽标=${metaCount}${metaCount > 0 ? "" : "（有消息行却无徽标 ⇒ 真缺陷，不是网络级联）"}`);
+} else {
+  check("消息: 时间/指标徽标(message-meta)已渲染(尽力而为:无消息行可挂)", false,
+    `消息行=0 ⇒ 发送未产生任何消息（沙箱无外网，模型 API 不可达）；徽标无从验证`);
+}
 
 // ---------- 6c. 输入框草稿按会话隔离(切走保留,切回恢复) ----------
 {
@@ -719,9 +739,15 @@ check("消息: 时间/指标徽标(message-meta)已渲染", metaCount > 0, `coun
     setter.call(ta, text);
     ta.dispatchEvent(new window.Event("input", { bubbles: true }));
   };
-  const NEW_SESSION_TITLES = ["新会话", "New session", "新增工作階段", "Neue Sitzung"];
-  const findNewSessionBtn = () => [...doc.querySelectorAll("button")]
-    .find((b) => NEW_SESSION_TITLES.some((s) => (b.getAttribute("title") ?? "").includes(s)));
+  // ⚠ r118 修掉一个**空转探针**：此前靠 title 文案匹配四种语言的"新会话"来找按钮，
+  //   而真实按钮的 title 是 t("sessions.new")（当前语言包里的文案与这四个字面量都不一致）
+  //   ⇒ findNewSessionBtn() 恒返回 undefined ⇒ 第 2/5 步**从未真的切换会话** ⇒
+  //   三个断言值全是"没切走"的产物（newChatEmpty=false 因为草稿A 还在框里、
+  //   restoredA=false 因为框里是草稿B、restoredB=true 因为压根没离开），
+  //   于是这条 FAIL 看着像"草稿隔离坏了"，实际是**这段测试根本没跑**。
+  //   改用稳定锚点 data-session-new（sessions-list/renderer/index.tsx:456）——
+  //   skills §10.3：探针必须靠稳定锚，不靠文本子串（文本会随语言/措辞漂移）。
+  const findNewSessionBtn = () => doc.querySelector("[data-session-new]");
   const findSessionRow = () => [...doc.querySelectorAll("[data-session-path]")]
     .find((el) => !(el.getAttribute("data-session-path") ?? "").startsWith("new:"));
 
@@ -735,6 +761,7 @@ check("消息: 时间/指标徽标(message-meta)已渲染", metaCount > 0, `coun
     await sleep(300);
     // 2) 切到「新对话」:草稿 A 保存,新对话输入框为空
     const newBtn1 = findNewSessionBtn();
+    if (!newBtn1) check("草稿: 找到新会话按钮", false, "[data-session-new] 不存在");
     if (newBtn1) newBtn1.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await sleep(1200);
     const taNew = doc.querySelector("textarea[data-timeline-composer]");
