@@ -215,3 +215,35 @@ describe("eventBus scoped channel(会话作用域坐标)", () => {
     eventBus.unregisterPlugin("p1");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// on() 对**未注册 channel** 抛错（r171）
+//
+// 为什么要钉这条：它是 timeline 那三处 `try { return ctx.events.on(…) } catch { return undefined }`
+// 存在的**前提**（r168/r171 的普查追到这里）。若 on() 从不抛，那三处 catch 就是不可达的防御
+// （该按 r102 写可达性分析）；实测它**确实会抛**——声明该 channel 的插件没装载/被禁用时，
+// 订阅会抛 `channel X 未被任何已加载插件注册`，而那三处 catch 让 timeline 组件仍能挂载
+// （只是收不到那个事件）。所以这条抛出契约一旦漂移（比如改成静默返回 no-op），
+// 消费方的韧性逻辑就失去意义、而没人会发现。
+// ─────────────────────────────────────────────────────────────────────────────
+describe("eventBus.on：未注册 channel 的失败形态（消费方韧性逻辑的前提）", () => {
+  it("① 订阅未注册 channel ⇒ **抛错**且消息点名该 channel（可行动）", () => {
+    const unknown = ch("没注册过");
+    expect(() => eventBus.on(unknown, () => {})).toThrow(/未被任何已加载插件注册/);
+    expect(() => eventBus.on(unknown, () => {}), "消息要含 channel 名，否则无从下手").toThrow(new RegExp(unknown.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  });
+
+  it("② 注册之后同一 channel 订阅 ⇒ 不抛、且返回**退订函数**", () => {
+    const c = ch("已注册");
+    eventBus.registerChannels("p1", [c]);
+    const off = eventBus.on(c, () => {});
+    expect(typeof off, "on() 的返回值必须是退订函数（useEffect 直接把它当清理函数返回）").toBe("function");
+    expect(() => off()).not.toThrow();
+  });
+
+  it("③ 反证：不是『任何订阅都抛』（否则①没有意义）", () => {
+    const c = ch("正常");
+    eventBus.registerChannels("p2", [c]);
+    expect(() => eventBus.on(c, () => {})).not.toThrow();
+  });
+});
