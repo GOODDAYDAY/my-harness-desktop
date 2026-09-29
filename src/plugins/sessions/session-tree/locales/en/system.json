@@ -31,5 +31,6 @@
   "system.branchRoot": "Root {{id}}",
   "system.branchFork": "Branch {{id}} (forked from {{parent}} at {{boundary}})",
   "system.expandNode": "Expand children",
-  "system.collapseNode": "Collapse children"
+  "system.collapseNode": "Collapse children",
+  "system.refreshFailed": "Could not refresh the sessions: {{detail}} (the list still shows the last successful refresh)"
 }

@@ -11,7 +11,7 @@ import {
   ListTree, RefreshCw, Maximize2, Crosshair, ChevronRight, ChevronDown,
   GitFork, Bookmark, Copy, Check,
 } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfirmInput, useArmConfirm , copyToClipboard } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, EmptyState, InlineConfirmInput, useArmConfirm , copyToClipboard, announceTransient,} from "@my-harness-desktop/react";
 import type { TreeNode } from "@my-harness-desktop/react";
 import type { LineageTree } from "@my-harness-desktop/shared";
 import { FullscreenMap } from "./fullscreen-map";
@@ -198,7 +198,19 @@ export function SessionTreeTab(): React.ReactNode {
         <button onClick={() => setMapOpen(true)} title={t("system.mapView")} style={iconBtnStyle}>
           <Maximize2 className="size-3.5" />
         </button>
-        <button onClick={() => void ctx.sessions.sync().catch(() => {})} title={t("common.refresh")} style={iconBtnStyle}>
+        {/* ⚠ r218：此前是 `.catch(() => {})`——**静默吞掉**（r203 的第三种形态：有 catch、无反馈）。
+            这是用户点"刷新"按钮的动作，失败时列表保持旧数据、用户以为刷新成功了。
+            改成播报（error 级 ⇒ role=alert 可打断，r202 的守卫）。 */}
+        <button
+          onClick={() => void ctx.sessions.sync().catch((err: unknown) => {
+            announceTransient(
+              t("system.refreshFailed", { detail: (err as Error)?.message ?? String(err) }),
+              "error",
+            );
+          })}
+          title={t("common.refresh")}
+          style={iconBtnStyle}
+        >
           <RefreshCw className="size-3.5" />
         </button>
       </div>

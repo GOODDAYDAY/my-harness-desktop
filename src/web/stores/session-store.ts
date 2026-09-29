@@ -885,7 +885,14 @@ export function initSessionStore(): void {
       // 首发时 extension 转真由该事件带到,此处不散拉 refreshCapabilities。
     }
     if (event.type === "compactionEnd") {
-      void window.kernel.sessions.sync();
+      // r218：这是**事件驱动的后台同步**（不是用户动作），失败不该弹提示打扰用户；
+      //   但也不能成为未处理 rejection（会污染控制台并可能触发全局错误处理）。
+      //   按 r208 的两问：① 错误去哪了 ⇒ console.warn（可排查）；
+      //   ② 用户知道了吗 ⇒ 不需要：压缩结束后还有 messageEnd/agentSettled 等事件会再触发刷新，
+      //   且会话树本身有手动刷新按钮（失败会播报，见 session-tree）。
+      void window.kernel.sessions.sync().catch((err: unknown) => {
+        console.warn("[session-store] compactionEnd 后的后台同步失败:", err);
+      });
     }
     if (event.type === "messageEnd" || event.type === "agentSettled" || event.type === "agentEnd" || event.type === "agentStart") {
       refreshStats();

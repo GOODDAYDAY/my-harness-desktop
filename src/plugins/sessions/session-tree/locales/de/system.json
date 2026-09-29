@@ -31,5 +31,6 @@
   "system.branchRoot": "Wurzel {{id}}",
   "system.branchFork": "Branch {{id}} (von {{parent}} an {{boundary}} abgezweigt)",
   "system.expandNode": "Unterknoten aufklappen",
-  "system.collapseNode": "Unterknoten einklappen"
+  "system.collapseNode": "Unterknoten einklappen",
+  "system.refreshFailed": "Sitzungen konnten nicht aktualisiert werden: {{detail}} (die Liste zeigt weiterhin den Stand der letzten erfolgreichen Aktualisierung)"
 }
