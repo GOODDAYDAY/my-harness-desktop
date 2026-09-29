@@ -32,5 +32,6 @@
   "system.branchFork": "Branch {{id}} (forked from {{parent}} at {{boundary}})",
   "system.expandNode": "Expand children",
   "system.collapseNode": "Collapse children",
-  "system.refreshFailed": "Could not refresh the sessions: {{detail}} (the list still shows the last successful refresh)"
+  "system.refreshFailed": "Could not refresh the sessions: {{detail}} (the list still shows the last successful refresh)",
+  "system.forkFailed": "Could not fork from that entry: {{detail}} (no new session was created; you can try again)"
 }

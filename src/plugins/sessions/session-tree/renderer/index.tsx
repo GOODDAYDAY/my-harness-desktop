@@ -143,7 +143,17 @@ export function SessionTreeTab(): React.ReactNode {
     ctx.events.invoke("timeline:scrollTo", { messageId: node.entryId });
   };
   const fork = (node: TreeNode): void => {
-    void ctx.tree.fork(currentNeutralSessionId ?? "", node.entryId).catch(() => {});
+    // ⚠ r221：此前是 `.catch(() => {})`，而 fork 是**用户点树节点上的分叉按钮**触发的动作
+    //   （r218/r220 的判据：有"正在等它的用户动作"⇒ 失败必须可感知）。静默吞的后果是
+    //   用户点了分叉、什么都没发生、也没有任何解释，只能反复点或以为界面坏了（§7.6）。
+    //   同文件的复制预览（copyPreview）在 r134 已经改成"失败由原语自己播报"，
+    //   刷新按钮在 r218 也已补播报——这一处是 r200 那类漂移的又一例（同文件已有正确形态）。
+    void ctx.tree.fork(currentNeutralSessionId ?? "", node.entryId).catch((err: unknown) => {
+      announceTransient(
+        t("system.forkFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
+    });
   };
   const copyPreview = (node: TreeNode): void => {
     // r134：改走统一原语。此前 .then 无 catch ⇒ 失败时既不显示"已复制"也无提示（静默）；

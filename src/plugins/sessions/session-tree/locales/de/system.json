@@ -32,5 +32,6 @@
   "system.branchFork": "Branch {{id}} (von {{parent}} an {{boundary}} abgezweigt)",
   "system.expandNode": "Unterknoten aufklappen",
   "system.collapseNode": "Unterknoten einklappen",
-  "system.refreshFailed": "Sitzungen konnten nicht aktualisiert werden: {{detail}} (die Liste zeigt weiterhin den Stand der letzten erfolgreichen Aktualisierung)"
+  "system.refreshFailed": "Sitzungen konnten nicht aktualisiert werden: {{detail}} (die Liste zeigt weiterhin den Stand der letzten erfolgreichen Aktualisierung)",
+  "system.forkFailed": "Abzweigen von diesem Eintrag fehlgeschlagen: {{detail}} (es wurde keine neue Sitzung erstellt; erneut versuchen)"
 }
