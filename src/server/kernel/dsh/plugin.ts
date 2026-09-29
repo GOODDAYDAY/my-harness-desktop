@@ -46,7 +46,7 @@ export const dshKernelPlugin: KernelPluginFactory = (ctx) => {
   void (async () => {
     const def = configSource.getDefaultModel();
     if (def && !configSource.listProviders().some((p) => p.provider === def.provider)) {
-      await configSource.clearDefaultModel().catch(() => {});
+      await configSource.clearDefaultModel().catch((err: unknown) => console.warn("[plugin] 后台操作失败(非用户动作,不弹提示):", err));
     }
   })();
   // 启用 dsh 技能消费方(幂等;失败只 warn 不炸启动)。

@@ -113,7 +113,7 @@ async function runOne(
   const text = await ctx.sessions.getLastAssistantText();
   if (!text.trim()) throw new Error("empty");
   const sp = useUiStore.getState().currentSessionPath;
-  if (sp) void ctx.sessions.renameSession(sp, `${labels.sessionMark} ${markName}`).catch(() => {});
+  if (sp) void ctx.sessions.renameSession(sp, `${labels.sessionMark} ${markName}`).catch((err: unknown) => console.warn("[squad-runner] 后台操作失败(非用户动作,不弹提示):", err));
   return text;
 }
 

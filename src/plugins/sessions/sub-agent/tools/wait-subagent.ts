@@ -21,7 +21,7 @@ export async function handleWaitSubagent(orch: SubagentOrchestrator, frame: Sess
         if (idx >= 0) arr.splice(idx, 1);
         if (arr.length === 0) orch.waiters.delete(rec.addr);
       }
-      void orch.ports.bus.send(waiter.from, "bus_response", { subagent: rec.addr, status: "wait_timeout" }, waiter.requestId).catch(() => {});
+      void orch.ports.bus.send(waiter.from, "bus_response", { subagent: rec.addr, status: "wait_timeout" }, waiter.requestId).catch((err: unknown) => console.warn("[wait-subagent] 后台操作失败(非用户动作,不弹提示):", err));
     }, p.timeout_ms);
   }
   const arr = orch.waiters.get(rec.addr) ?? [];

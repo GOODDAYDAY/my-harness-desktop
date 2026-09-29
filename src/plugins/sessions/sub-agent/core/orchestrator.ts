@@ -172,7 +172,7 @@ export class SubagentOrchestrator {
   }
 
   async reply(req: SessionBusMessage, payload: unknown): Promise<void> {
-    await this.ports.bus.send(req.from, "bus_response", payload, req.id).catch(() => {});
+    await this.ports.bus.send(req.from, "bus_response", payload, req.id).catch((err: unknown) => console.warn("[orchestrator] 后台操作失败(非用户动作,不弹提示):", err));
   }
 
   /** 每次 spawn 现场读,不缓存——配置页保存即生效,免变更通知。 */
@@ -251,7 +251,7 @@ export class SubagentOrchestrator {
 
     const latest = await this.readSubDomain(rec);
     const domain: SubagentDomain = { ...latest, status, ...(rec.abortReason ? { abort_reason: rec.abortReason } : {}) };
-    await this.ports.sessions.updateHeader(rec.sessionPath, { custom: { subagent: domain } }).catch(() => {});
+    await this.ports.sessions.updateHeader(rec.sessionPath, { custom: { subagent: domain } }).catch((err: unknown) => console.warn("[orchestrator] 后台操作失败(非用户动作,不弹提示):", err));
 
     await this.ports.configFile.append(rec.parentSessionPath, {
       id: this.ports.uuid(), type: "custom_message", customType: "subagent_done", display: true,
@@ -260,11 +260,11 @@ export class SubagentOrchestrator {
         output_preview: output.slice(0, 500), cwd: rec.cwd,
       }),
       timestamp: new Date(this.ports.now()).toISOString(),
-    }).catch(() => {});
+    }).catch((err: unknown) => console.warn("[orchestrator] 后台操作失败(非用户动作,不弹提示):", err));
 
     await this.ports.bus.send(rec.parentAddr, "subagent_done", {
       subagent: rec.addr, name: rec.name, task: rec.task, status, output, session_path: rec.sessionPath,
-    }).catch(() => {});
+    }).catch((err: unknown) => console.warn("[orchestrator] 后台操作失败(非用户动作,不弹提示):", err));
 
     const batch = this.batches.get(rec.batchId);
     if (batch && batch.remaining.delete(rec.addr)) {
@@ -272,7 +272,7 @@ export class SubagentOrchestrator {
       batch.results.push({ subagent: rec.addr, status, output });
       if (batch.remaining.size === 0) {
         this.batches.delete(rec.batchId);
-        await this.ports.bus.send(batch.from, "bus_response", { subagents: batch.results }, batch.requestId).catch(() => {});
+        await this.ports.bus.send(batch.from, "bus_response", { subagents: batch.results }, batch.requestId).catch((err: unknown) => console.warn("[orchestrator] 后台操作失败(非用户动作,不弹提示):", err));
       }
     }
 
@@ -283,7 +283,7 @@ export class SubagentOrchestrator {
         if (w.timer) clearTimeout(w.timer);
         await this.ports.bus.send(w.from, "bus_response", {
           subagent: rec.addr, status, output,
-        }, w.requestId).catch(() => {});
+        }, w.requestId).catch((err: unknown) => console.warn("[orchestrator] 后台操作失败(非用户动作,不弹提示):", err));
       }
     }
     this.notify();

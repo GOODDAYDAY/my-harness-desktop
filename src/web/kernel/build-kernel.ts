@@ -127,7 +127,7 @@ async function reloadKernelIds(): Promise<KernelId[]> {
 // 换一个入口装配就会漏）。语义依据见 §3.6.4：`refresh.requested` 是"外部状态变了，重探"，
 // 而内核清单正是 renderer 在 boot 时探过、之后不会自己变新鲜的东西。
 // 代价是每次刷新信号多一个 IPC 往返（`kernel.list` 很轻：只回 id + logo），换来的是不会 stale。
-void transport.on(IPC.refresh.requested, () => { void reloadKernelIds().catch(() => {}); });
+void transport.on(IPC.refresh.requested, () => { void reloadKernelIds().catch((err: unknown) => console.warn("[build-kernel] 后台操作失败(非用户动作,不弹提示):", err)); });
 
 /** 暴露到 renderer 的 kernel 全局对象(window.kernel)。 */
 const kernel = {

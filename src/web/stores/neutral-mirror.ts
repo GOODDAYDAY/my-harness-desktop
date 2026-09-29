@@ -82,7 +82,7 @@ export function initNeutralMirror(): void {
     const cur = useNeutralMirror.getState();
     if (change.ns !== cur.ns) return;
     if (!cur.session) {
-      void loadBaseline(change.ns).catch(() => {});
+      void loadBaseline(change.ns).catch((err: unknown) => console.warn("[neutral-mirror] 后台操作失败(非用户动作,不弹提示):", err));
       return;
     }
     // 活跃 lineage 跟随:条目写到哪条 lineage,哪条就是当前活跃(fork 后首发即换轨);
@@ -100,5 +100,5 @@ export function initNeutralMirror(): void {
 
   // 首次挂载:已有激活会话则补基线
   const initial = useUiStore.getState().currentNeutralSessionId;
-  if (initial) void loadBaseline(initial).catch(() => {});
+  if (initial) void loadBaseline(initial).catch((err: unknown) => console.warn("[neutral-mirror] 后台操作失败(非用户动作,不弹提示):", err));
 }

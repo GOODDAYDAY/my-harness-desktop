@@ -441,13 +441,13 @@ export class SessionStore implements
       if (prevKernels) {
         const prevProcs = [...prevKernels.values()];
         if (prevProcs.every((p) => !p.touched) && prevProcs.some((p) => p.backend.alive)) {
-          void Promise.all(prevProcs.map((p) => p.backend.stop().catch(() => {}))).then(() => { this.procs.delete(prevKey); });
+          void Promise.all(prevProcs.map((p) => p.backend.stop().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err)))).then(() => { this.procs.delete(prevKey); });
         }
       }
     }
     if (this.isAlive(key)) {
       // 激活会话 pi 活着:resync 推基线(切回流式中的会话拿实时状态)
-      void this.sync().catch(() => {});
+      void this.sync().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
     } else {
       // 没活:清基线,renderer 走文件读
       this.latestSnapshot = null;
@@ -743,14 +743,14 @@ export class SessionStore implements
     const key = sessionPath != null ? this.resolveProcKey(sessionPath) : this.activeKey;
     const kernels = this.procs.get(key);
     if (!kernels) return;
-    await Promise.all([...kernels.values()].map((p) => p.backend.stop().catch(() => {})));
+    await Promise.all([...kernels.values()].map((p) => p.backend.stop().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err))));
     this.procs.delete(key);
     if (key === this.activeKey) this.latestSnapshot = null;
   }
 
   /** 停所有会话的全部进程(应用退出兜底)。 */
   async stopAll(): Promise<void> {
-    const ps = [...this.procs.values()].flatMap((kernels) => [...kernels.values()].map((p) => p.backend.stop().catch(() => {})));
+    const ps = [...this.procs.values()].flatMap((kernels) => [...kernels.values()].map((p) => p.backend.stop().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err))));
     await Promise.all(ps);
     this.procs.clear();
     this.latestSnapshot = null;
@@ -1551,7 +1551,7 @@ export class SessionStore implements
     const key = proc.key;
     try {
       // 1. abort + 落定(§6):事件驱动等在飞回合收尾,不丢半截消息
-      await proc.backend.abort().catch(() => {});
+      await proc.backend.abort().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
       await this.waitSettled(proc, ABORT_TIMEOUT_MS);
       // 2. 读中立层(唯一真相源,§kernel-forkless §15.3/§22);中立层缺失才快照兜底重建。
       //    常规路径不读内核树——中立层随上行同步持续新鲜,快照只是损坏兜底。
@@ -1609,7 +1609,7 @@ export class SessionStore implements
       if (proc.lastModelRef && this.modelCatalog) {
         const resolved = this.modelCatalog.resolveModel(target, proc.lastModelRef);
         if (resolved) {
-          await newBackend.setModel(resolved.provider, resolved.model).catch(() => {});
+          await newBackend.setModel(resolved.provider, resolved.model).catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
         } else {
           console.warn(`[session-store] 目标内核 ${target} 无对应档位模型(${proc.lastModelRef.ref}),回落默认`);
         }
@@ -1628,7 +1628,7 @@ export class SessionStore implements
       proc.configSnapshot = this.captureConfigSnapshot(proc.backend.configDepPaths ?? []);
       this.bindProcEvents(proc);
       // 7. 周边收尾(§9.2/§9.3)
-      await this.writeKernelToHeader(proc).catch(() => {});
+      await this.writeKernelToHeader(proc).catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
       this.latestSnapshot = newBackend.capabilities.snapshot ? await this.sync().catch(() => null) : null;
       this.dispatchKernel({ kind: "kernelChanged", sessionKey: proc.key, kernel: target, capabilities: this.sessionCapabilitiesOf(proc) });
     } finally {
@@ -1668,7 +1668,7 @@ export class SessionStore implements
   private async writeKernelToHeader(proc: SessionProc): Promise<void> {
     if (proc.boundSessionPath) {
       // 按 proc 内核归属取目录(非写死 pi):minimal 会话的头行写回走 minimal 目录。
-      await this.catalogFor(proc.kernel).updateHeader(proc.boundSessionPath, { custom: { kernel: proc.kernel } }).catch(() => {});
+      await this.catalogFor(proc.kernel).updateHeader(proc.boundSessionPath, { custom: { kernel: proc.kernel } }).catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
     }
   }
 
@@ -1875,7 +1875,7 @@ export class SessionStore implements
       let wrote = false;
       if (rec.toolCallId && catalog.appendToolResult) {
         const proc = this.procForRecord(rec);
-        if (proc?.backend.alive) await proc.backend.stop().catch(() => {}); // H5:活进程不重读存储,先停
+        if (proc?.backend.alive) await proc.backend.stop().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err)); // H5:活进程不重读存储,先停
         try {
           await catalog.appendToolResult(rec.sessionKey, rec.toolCallId, outcome, rec.cwd);
           wrote = true;
@@ -1980,7 +1980,7 @@ export class SessionStore implements
         throw new Error("存在未作答的提问，请先在会话流中回答或放弃后再发送");
       }
       if (liveProc?.backend.alive) {
-        await liveProc.backend.stop().catch(() => {});
+        await liveProc.backend.stop().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
         this.procs.get(this.activeProcKey)?.delete(rec.kernel);
       }
       try {
@@ -2141,7 +2141,7 @@ export class SessionStore implements
     } catch {
       // abort 超时(工具未响应 agent signal 中断,如 Windows taskkill 偶发失败)
       // → 杀进程强制停止:进程死了工具必停;会话是文件,重启即恢复,不丢数据。
-      proc.backend.stop().catch(() => {});
+      proc.backend.stop().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
     }
   }
 
@@ -2207,7 +2207,7 @@ export class SessionStore implements
     await this.writeNeutralModelPrefs(sessionPath, {
       provider, modelId, kernel,
       thinkingLevel: existing?.thinkingLevel ?? "",
-    }).catch(() => {});
+    }).catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
   }
 
   /** 从快照拼全量三字段 + kernel;凑不齐(进程未就绪边界)返回 null——交给下一次 sync 回写。 */
@@ -2311,7 +2311,7 @@ export class SessionStore implements
     // 新会话壳进程刚起(模型在 spawn 参数里定死,alreadyEffective 恒真不走 set_model RPC,
     // 内核仍会在 spawn 时落 model_change/thinking_level_change 条目)——基线 sync 把它们
     // 带进视图流,否则这两条分隔线只在刷新后补现(违反「刷新前后一致」实测)。
-    if (!alreadyEffective || !proc.touched) void this.sync().catch(() => {});
+    if (!alreadyEffective || !proc.touched) void this.sync().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
   }
 
   /** 模型连通性测试(ModelApi.test):起独立临时进程发一条 ping。
@@ -2455,7 +2455,7 @@ export class SessionStore implements
       // 对称 setModel:thinking_level_change 条目同样被基线守卫挡住 live——直投视图流。
       this.dispatchViewDivider({ type: "thinking_level_change", thinkingLevel: level });
       // 对称 setModel:thinking_level_select 是纯扩展事件,RPC stdout 收不到,主动 sync 取真值。
-      void this.sync().catch(() => {});
+      void this.sync().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
     } else if (!proc.touched) {
       // 新会话壳:spawn 已落 thinking_level_change,补视图流(同 model_change 根因)。
       this.dispatchViewDivider({ type: "thinking_level_change", thinkingLevel: level });
@@ -2574,7 +2574,7 @@ export class SessionStore implements
     if (!this.isBusy(proc.key)) return proc;
     if (!proc.backend.alive) throw new Error("源会话进程已退出,无法中断后再分叉");
     // 复用 switchKernel 的同一段编排(abort → 事件驱动等落定 → 超时兜底),不另写一套。
-    await proc.backend.abort().catch(() => {});
+    await proc.backend.abort().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
     await this.waitSettled(proc, ABORT_TIMEOUT_MS);
     return proc;
   }
@@ -2721,7 +2721,7 @@ export class SessionStore implements
     } catch (err) {
       // 投影失败收尾(kernel-switch-projection §4.4):新进程已 start 而未挂到 proc.backend,
       // 不 stop 就成孤儿进程(实弹:dsh seed 抛错时旧进程已停、新进程泄漏)。stop 兜底再外抛。
-      if (newBackend) await newBackend.stop().catch(() => {});
+      if (newBackend) await newBackend.stop().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
       throw err;
     }
     proc.backend = newBackend;
@@ -3013,7 +3013,7 @@ export class SessionStore implements
       // 判据永远成立 → 每条消息都重命名一遍(改名分隔线刷屏)。中立层 header.name 是两内核
       // 共享的「是否已命名」真相源,事件到了就记(fire-and-forget,失败下次再写)。
       if (typeof name === "string" && name && this.activeSessionPath) {
-        void this.writeNeutralHeader(this.activeSessionPath, { name }).catch(() => {});
+        void this.writeNeutralHeader(this.activeSessionPath, { name }).catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
       }
     }
     // ask 落账对账(ask-design §4.3):ask_user_question 的 toolCallStart 捕获 toolCallId +

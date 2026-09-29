@@ -496,7 +496,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => {
 
       void window.kernel.slots.mainView()
         .then((result) => applyMainViewSlot(mainVid, result))
-        .catch(() => {});
+        .catch((err: unknown) => console.warn("[layout-store] 后台操作失败(非用户动作,不弹提示):", err));
     },
 
     // -----------------------------------------------------------------------

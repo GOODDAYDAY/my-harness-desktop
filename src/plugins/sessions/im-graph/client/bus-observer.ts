@@ -56,7 +56,7 @@ export class BusObserver {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
-    for (const { tapId } of this.tapIds.values()) await this.bus.tapStop(tapId).catch(() => {});
+    for (const { tapId } of this.tapIds.values()) await this.bus.tapStop(tapId).catch((err: unknown) => console.warn("[bus-observer] 后台操作失败(非用户动作,不弹提示):", err));
     this.tapIds.clear();
   }
 
@@ -81,7 +81,7 @@ export class BusObserver {
     const cur = this.tapIds.get(target);
     if (cur?.filter === filter) return;
     if (cur) {
-      await this.bus.tapStop(cur.tapId).catch(() => {});
+      await this.bus.tapStop(cur.tapId).catch((err: unknown) => console.warn("[bus-observer] 后台操作失败(非用户动作,不弹提示):", err));
       this.tapIds.delete(target);
     }
     try {
@@ -99,7 +99,7 @@ export class BusObserver {
     for (const key of this.model.sessions.keys()) wanted.add(`s:${key}`);
     for (const [target, { tapId }] of [...this.tapIds]) {
       if (!wanted.has(target)) {
-        await this.bus.tapStop(tapId).catch(() => {});
+        await this.bus.tapStop(tapId).catch((err: unknown) => console.warn("[bus-observer] 后台操作失败(非用户动作,不弹提示):", err));
         this.tapIds.delete(target);
       }
     }
@@ -136,7 +136,7 @@ export class BusObserver {
     if (this.refreshTimer) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
-      void this.refresh().catch(() => {});
+      void this.refresh().catch((err: unknown) => console.warn("[bus-observer] 后台操作失败(非用户动作,不弹提示):", err));
     }, REFRESH_DEBOUNCE_MS);
   }
 }

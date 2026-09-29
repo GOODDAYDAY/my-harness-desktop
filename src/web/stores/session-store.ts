@@ -835,7 +835,7 @@ export function initSessionStore(): void {
       // 跨内核切换完成:能力面直接采信推来的快照(不重拉),再刷快照基线 + 会话列表,
       // 驱动三处内核标跟着切(§9.3)。
       useSessionStore.setState({ capabilities: evt.capabilities });
-      void window.kernel.sessions.sync().catch(() => {});
+      void window.kernel.sessions.sync().catch((err: unknown) => console.warn("[session-store] 后台操作失败(非用户动作,不弹提示):", err));
       loadForCwd();
       return;
     }

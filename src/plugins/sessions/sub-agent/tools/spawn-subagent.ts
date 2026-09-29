@@ -121,7 +121,7 @@ async function spawnOne(
     // 导致左侧列表子行标题退化成 id 前 8 位、搜索也搜不到名字。header.name 是列表标题真相源。
     name,
     custom: { subagent: domain, "subagent.parent_session": parent.sessionPath },
-  }).catch(() => {});
+  }).catch((err: unknown) => console.warn("[spawn-subagent] 后台操作失败(非用户动作,不弹提示):", err));
 
   await orch.ports.configFile.append(parent.sessionPath, {
     id: spawnEntryId, type: "custom_message", customType: "subagent_spawned", display: true,
@@ -132,7 +132,7 @@ async function spawnOne(
       cwd: parent.cwd,
     }),
     timestamp: new Date(orch.ports.now()).toISOString(),
-  }).catch(() => {});
+  }).catch((err: unknown) => console.warn("[spawn-subagent] 后台操作失败(非用户动作,不弹提示):", err));
 
   rec.timeoutTimer = setTimeout(() => void orch.onTimeout(rec.addr), cfg.timeoutMs);
   batch.remaining.add(rec.addr);

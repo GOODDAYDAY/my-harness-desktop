@@ -187,7 +187,7 @@ export class SessionBus {
   }
 
   /** 按帧型分派 streamingBehavior(路由器固定策略:响应=steer 插队,事件=followUp 排队)。
-   *  失败不静默吞(根因修复,勿退回空 catch):此前 `.catch(() => {})` 把所有失败都解释成
+   *  失败不静默吞(根因修复,勿退回空 catch):此前 `.catch((err: unknown) => console.warn("[session-bus] 后台操作失败(非用户动作,不弹提示):", err))` 把所有失败都解释成
    *  「目标已死」,但真实原因至少有两种——会话不在线(合法,processExit 已广播 peer_left)
    *  与内核不支持该投递模式(缺陷,必须可见)。后者被吞掉的症状是「dsh 会话收不到任何 bus 帧
    *  且日志里看不出区别」(docs/design/bus-notification-defects-and-stats-handoff.md 缺陷 C)。 */
@@ -349,12 +349,12 @@ export class SessionBus {
     // 命名走**中性契约**的 setSessionName(BaseBackend 第七意图),不走任何能力面。
     // 此前这里取 `store.getAdapter(key)`(= pi 扩展面)再调 setSessionName —— 而该方法
     // 早已提升进契约(backend.ts:127「壳经此命名,不再经 pi 扩展面」),于是无扩展面的内核
-    // 拿到 undefined、命名**静默不发生**,且 `.catch(() => {})` 把它彻底藏住:
+    // 拿到 undefined、命名**静默不发生**,且 `.catch((err: unknown) => console.warn("[session-bus] 后台操作失败(非用户动作,不弹提示):", err))` 把它彻底藏住:
     // 这正是 CLAUDE.md §1.5 明禁的「静默缺面」。改走契约后每个内核都必实现,同等功能。
     const backend = this.store.getBackend(key);
-    if (p.name && backend) await backend.setSessionName(p.name).catch(() => {});
-    if (p.model && backend) await backend.setModel(p.model.provider, p.model.modelId).catch(() => {});
-    if (p.toolConfig) await this.store.updateHeader(sessionPath, { toolConfig: p.toolConfig }).catch(() => {});
+    if (p.name && backend) await backend.setSessionName(p.name).catch((err: unknown) => console.warn("[session-bus] 后台操作失败(非用户动作,不弹提示):", err));
+    if (p.model && backend) await backend.setModel(p.model.provider, p.model.modelId).catch((err: unknown) => console.warn("[session-bus] 后台操作失败(非用户动作,不弹提示):", err));
+    if (p.toolConfig) await this.store.updateHeader(sessionPath, { toolConfig: p.toolConfig }).catch((err: unknown) => console.warn("[session-bus] 后台操作失败(非用户动作,不弹提示):", err));
     if (p.watch) {
       const set = this.watchers.get(key) ?? new Set<string>();
       set.add(origin);

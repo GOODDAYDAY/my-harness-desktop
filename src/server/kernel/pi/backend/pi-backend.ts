@@ -202,7 +202,7 @@ export class PiBackend extends AbstractBackend<PiBackendContext> implements
     // 排在后面永远执行不到——先 abort_bash 快速断 bash,再 abort 收尾 agent。
     // 这是 pi 内核专属的中断顺序(§6.4),收进适配器;壳的 SessionStore.abort() 只调
     // backend.abort(),内核无关——dsh 走 DshBackend.abort() 各自干净。
-    await this.abortBash().catch(() => {});
+    await this.abortBash().catch((err: unknown) => console.warn("[pi-backend] 后台操作失败(非用户动作,不弹提示):", err));
     await this.adapter.send(buildAbortCommand(), { timeoutMs: ABORT_TIMEOUT_MS });
   }
 
