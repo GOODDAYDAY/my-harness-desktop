@@ -56,5 +56,6 @@
   "review.label.contentTruncated": "[Inhalt zu lang, gekürzt]",
   "review.label.treeTruncated": "…(Baum zu groß, gekürzt)",
   "review.label.treeUnavailable": "(Projektstruktur nicht verfügbar; dieses Review hat keinen Projektkontext)",
-  "review.label.sessionMark": "[Blind Review]"
+  "review.label.sessionMark": "[Blind Review]",
+  "review.abortFailed": "Generierung konnte nicht gestoppt werden: {{detail}} (sie läuft möglicherweise weiter; erneut versuchen)"
 }

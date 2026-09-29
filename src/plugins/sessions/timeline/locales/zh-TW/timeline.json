@@ -41,5 +41,6 @@
   "timeline.channel.cycleModel.label": "切換模型",
   "timeline.channel.cycleModel.desc": "payload: { direction?: 1 | -1 } 在模型清單中循環切換（預設下一個）。",
   "timeline.channel.cycleThinking.label": "切換思考深度",
-  "timeline.channel.cycleThinking.desc": "payload: { direction?: 1 | -1 } 在思考深度清單中循環切換（預設下一個）。"
+  "timeline.channel.cycleThinking.desc": "payload: { direction?: 1 | -1 } 在思考深度清單中循環切換（預設下一個）。",
+  "timeline.abortFailed": "停止產生失敗：{{detail}}（產生可能仍在繼續，可再點一次停止）"
 }

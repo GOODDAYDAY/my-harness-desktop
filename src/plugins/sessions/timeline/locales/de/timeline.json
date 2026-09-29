@@ -41,5 +41,6 @@
   "timeline.channel.cycleModel.label": "Modell wechseln",
   "timeline.channel.cycleModel.desc": "payload: { direction?: 1 | -1 } wechselt zyklisch durch die Modellliste (Standard: nächstes).",
   "timeline.channel.cycleThinking.label": "Denktiefe wechseln",
-  "timeline.channel.cycleThinking.desc": "payload: { direction?: 1 | -1 } wechselt zyklisch durch die Denktiefen (Standard: nächste)."
+  "timeline.channel.cycleThinking.desc": "payload: { direction?: 1 | -1 } wechselt zyklisch durch die Denktiefen (Standard: nächste).",
+  "timeline.abortFailed": "Generierung konnte nicht gestoppt werden: {{detail}} (sie läuft möglicherweise weiter; erneut versuchen)"
 }

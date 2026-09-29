@@ -41,5 +41,6 @@
   "timeline.channel.cycleModel.label": "Cycle model",
   "timeline.channel.cycleModel.desc": "payload: { direction?: 1 | -1 } cycles through the model list (next by default).",
   "timeline.channel.cycleThinking.label": "Cycle thinking level",
-  "timeline.channel.cycleThinking.desc": "payload: { direction?: 1 | -1 } cycles through the thinking levels (next by default)."
+  "timeline.channel.cycleThinking.desc": "payload: { direction?: 1 | -1 } cycles through the thinking levels (next by default).",
+  "timeline.abortFailed": "Could not stop the generation: {{detail}} (it may still be running; try stopping again)"
 }

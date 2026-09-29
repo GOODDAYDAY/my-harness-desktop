@@ -56,5 +56,6 @@
   "review.label.contentTruncated": "[內容過長，已截斷]",
   "review.label.treeTruncated": "…（樹過大，已截斷）",
   "review.label.treeUnavailable": "（專案結構讀取失敗，本次審查不含專案上下文）",
-  "review.label.sessionMark": "[盲審]"
+  "review.label.sessionMark": "[盲審]",
+  "review.abortFailed": "停止產生失敗：{{detail}}（產生可能仍在繼續，可再點一次停止）"
 }

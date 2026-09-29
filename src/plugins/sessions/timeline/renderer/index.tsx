@@ -3,7 +3,7 @@ import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { useTranslation } from "react-i18next";
 import { Wrench, RotateCcw, X, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon, getInflightToolCalls } from "@my-harness-desktop/react";
+import { useUiStore, useSessionStore,  type NeutralMessage, type ModelInfo, usePluginContext, getMessageRenderer, useComposerPolicies, useComposerAttachments, useComposerActions, useComposerStats, useComposerTop, useComposerVoice, getAuxParsers, getComposerCommands, runComposerCommandIfMatch, PluginIdContext, type QueuedMessage, type ComposerAttachmentProps, type ComposerVoiceProps, getPluginComponent, PluginIcon, getInflightToolCalls, fireAndReport,} from "@my-harness-desktop/react";
 import { parseSessionModelPrefs, phaseFromView, partitionReferenceFiles, resolveAttachmentSource, type ChannelMeta, type ComposerAttachmentPayload, type KernelId, type CommandItem } from "@my-harness-desktop/shared";
 // messageActions 槽宿主(消费方渲染 + 圆心适用性判定)。抽出成模块是为了可测:
 // 「在飞的 pending 行不渲染锚点类按钮」是 UI 行为,得有 DOM 交互 test 守着(§5.6)。
@@ -771,7 +771,10 @@ export function TimelineView(): React.ReactNode {
     if (retrying && capabilities.faces.retry) {
       void ctx.messaging.abortRetry();
     } else {
-      void ctx.messaging.abort();
+      fireAndReport(ctx.messaging.abort(), {   // r196：用户点「停止」而 abort 失败时不能零反馈（§7.6）
+        tag: "timeline",
+        message: (detail) => t("timeline.abortFailed", { detail }),
+      });
     }
   };
 
@@ -1177,7 +1180,10 @@ export function TimelineView(): React.ReactNode {
           if (retrying && capabilities.faces.retry) {
             void ctx.messaging.abortRetry();
           } else {
-            void ctx.messaging.abort();
+            fireAndReport(ctx.messaging.abort(), {   // r196：用户点「停止」而 abort 失败时不能零反馈（§7.6）
+        tag: "timeline",
+        message: (detail) => t("timeline.abortFailed", { detail }),
+      });
           }
         }}
         models={models}

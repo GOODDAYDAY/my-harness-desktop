@@ -10,8 +10,7 @@ import {
   Button,
   Select,
   type SettingsComponentProps,
-  type FileActionInvokePayload,
-} from "@my-harness-desktop/react";
+  type FileActionInvokePayload, fireAndReport,} from "@my-harness-desktop/react";
 import {
   resolveConfig,
   squadTeams,
@@ -336,7 +335,10 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
   useEffect(() => {
     if (running && cancelRef.current === false) {
       cancelRef.current = true;
-      void ctx.messaging.abort();
+      fireAndReport(ctx.messaging.abort(), {   // r196：用户点「停止」而 abort 失败时不能零反馈（§7.6）
+        tag: "blind-review",
+        message: (detail) => t("review.abortFailed", { detail }),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCwd]);
@@ -374,7 +376,10 @@ export function BlindReviewTab({ isActive }: { isActive: boolean }): React.React
 
   const handleAbort = (): void => {
     cancelRef.current = true;
-    void ctx.messaging.abort();
+    fireAndReport(ctx.messaging.abort(), {   // r196：用户点「停止」而 abort 失败时不能零反馈（§7.6）
+        tag: "blind-review",
+        message: (detail) => t("review.abortFailed", { detail }),
+      });
   };
 
   const handleReviewLastReply = async (): Promise<void> => {

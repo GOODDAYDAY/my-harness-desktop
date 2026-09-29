@@ -56,5 +56,6 @@
   "review.label.contentTruncated": "[内容过长，已截断]",
   "review.label.treeTruncated": "…（树过大，已截断）",
   "review.label.treeUnavailable": "（项目结构读取失败，本次审查不含项目上下文）",
-  "review.label.sessionMark": "[盲审]"
+  "review.label.sessionMark": "[盲审]",
+  "review.abortFailed": "停止生成失败：{{detail}}（生成可能仍在继续，可再点一次停止）"
 }
