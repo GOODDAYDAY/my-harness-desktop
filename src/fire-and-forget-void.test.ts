@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 224;   // r208 账本收录 onRawPaths 5 处 ⇒ 229 → 224（实测值）
+const CEILING = 208;   // r209 账本收录自保护的 refresh 11 + reload 5 ⇒ 224 → 208（实测值）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -125,6 +125,30 @@ const LEDGER: { file: string; callee: string; evidence: string; reason: string }
   { file: "src/plugins/sessions/sessions-list/renderer/index.tsx", callee: "onRawPaths",
     evidence: "src/plugins/sessions/sessions-list/renderer/index.tsx",
     reason: "onRawPaths 是实现 fetchRawPaths 的 prop（:616 处 onRawPaths={fetchRawPaths}），而 fetchRawPaths（:271-276）体内 try { await ctx.sessions.rawFilePaths(...) } catch { console.error(...); return { desktop: null, kernel: null } } ⇒ **永不 reject**，所以 5 个 void onRawPaths(...).then(...) 不会漏错误；且失败路径**最终有用户反馈**——返回的 desktop 为 null 时下游 onOpenRawFile(null) 会播报 sessions.noRawFile（r191 修的）。r208 逐个回读核实。" },
+  { file: "src/plugins/insight/llm-recorder/renderer/index.tsx", callee: "reload",
+    evidence: "src/plugins/insight/llm-recorder/renderer/index.tsx",
+    reason: "同文件内定义的 reload（r209 机械分类核实：定义体内有 catch）⇒ 它自己已兜住并处置，调用点的 void reload(...) 不会漏错误；失败时的用户可见反馈由该定义内部负责（r209 逐个回读过调用点）。" },
+  { file: "src/plugins/project/git-review/renderer/index.tsx", callee: "refresh",
+    evidence: "src/plugins/project/git-review/renderer/index.tsx",
+    reason: "同文件内定义的 refresh（r209 机械分类核实：定义体内有 catch）⇒ 它自己已兜住并处置，调用点的 void refresh(...) 不会漏错误；失败时的用户可见反馈由该定义内部负责（r209 逐个回读过调用点）。" },
+  { file: "src/plugins/manager/skill-manager/renderer/index.tsx", callee: "refresh",
+    evidence: "src/plugins/manager/skill-manager/renderer/index.tsx",
+    reason: "同文件内定义的 refresh（r209 机械分类核实：定义体内有 catch）⇒ 它自己已兜住并处置，调用点的 void refresh(...) 不会漏错误；失败时的用户可见反馈由该定义内部负责（r209 逐个回读过调用点）。" },
+  { file: "src/plugins/manager/plugin-manager/renderer/index.tsx", callee: "refresh",
+    evidence: "src/plugins/manager/plugin-manager/renderer/index.tsx",
+    reason: "同文件内定义的 refresh（r209 机械分类核实：定义体内有 catch）⇒ 它自己已兜住并处置，调用点的 void refresh(...) 不会漏错误；失败时的用户可见反馈由该定义内部负责（r209 逐个回读过调用点）。" },
+  { file: "src/plugins/system/keybindings/renderer/index.tsx", callee: "reload",
+    evidence: "src/plugins/system/keybindings/renderer/index.tsx",
+    reason: "同文件内定义的 reload（r209 机械分类核实：定义体内有 catch）⇒ 它自己已兜住并处置，调用点的 void reload(...) 不会漏错误；失败时的用户可见反馈由该定义内部负责（r209 逐个回读过调用点）。" },
+  { file: "src/plugins/system/key-hints/renderer/index.tsx", callee: "reload",
+    evidence: "src/plugins/system/key-hints/renderer/index.tsx",
+    reason: "同文件内定义的 reload（r209 机械分类核实：定义体内有 catch）⇒ 它自己已兜住并处置，调用点的 void reload(...) 不会漏错误；失败时的用户可见反馈由该定义内部负责（r209 逐个回读过调用点）。" },
+  { file: "src/plugins/sessions/sessions-list/renderer/index.tsx", callee: "refresh",
+    evidence: "src/plugins/sessions/sessions-list/renderer/index.tsx",
+    reason: "同文件内定义的 refresh（r209 机械分类核实：定义体内有 catch）⇒ 它自己已兜住并处置，调用点的 void refresh(...) 不会漏错误；失败时的用户可见反馈由该定义内部负责（r209 逐个回读过调用点）。" },
+  { file: "packages/react/src/manager/kernel-version-page.tsx", callee: "refresh",
+    evidence: "packages/react/src/manager/kernel-version-page.tsx",
+    reason: "同文件内定义的 refresh（r209 机械分类核实：定义体内有 catch）⇒ 它自己已兜住并处置，调用点的 void refresh(...) 不会漏错误；失败时的用户可见反馈由该定义内部负责（r209 逐个回读过调用点）。" },
   { file: "src/web/kernel/build-kernel.ts", callee: "onDone",
     evidence: "src/web/kernel/build-kernel.ts",
     reason: "**回调隔离**：try { onDone(r) } catch { console.error } 之后紧跟 resolveFn?.(r) 与 cleanup()——一个消费方回调抛错不该让内核安装流程断掉；安装结果本身经 resolveFn 上报，所以这里不需要用户播报（r206 核实，与 r170 的 probe4 监听器隔离同族）" },
