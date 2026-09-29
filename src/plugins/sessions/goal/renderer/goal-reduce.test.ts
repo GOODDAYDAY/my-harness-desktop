@@ -95,3 +95,53 @@ describe("goal-reduce(纯归约,续跑引擎核心)", () => {
     expect(r.goal?.phase).toBe("active");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// applyGoalEvent 的 catch 回落（r174；r173 用覆盖率确证 goal-reduce.ts:63 从未被执行）
+//
+// 那条 catch 是 `catch { return { goal: state }; }` —— 构造/编辑目标抛错时**保持原状态**
+// （不清空、不半改）。可达路径实测有一条：`opts.defaultMaxRounds` 来自用户配置
+// （goal.maxRounds），而 `parseSetGoalArgs` **只校验模型给的 max_rounds、不校验这个默认值**
+// ⇒ 配置写成 0 / 负数 / 小数时 `createGoal` 会抛（"maxRounds must be a positive safe integer"）。
+//
+// ⚠ 这条路径的意义：配置是用户手改的东西，坏值不该让归约器崩、也不该建出一个
+//   maxRounds 非法的半个目标（那会让续跑引擎立刻判定"已达上限"或永不续跑）。
+// ─────────────────────────────────────────────────────────────────────────────
+describe("applyGoalEvent：createGoal/editGoal 抛错时的 catch 回落（保持原状态）", () => {
+  it("① 无目标 + **坏的 defaultMaxRounds**（用户配置写了 0）⇒ 抛错被兜住、goal 保持 null", () => {
+    const out = applyGoalEvent(null, toolCallStart(SET_GOAL_TOOL, { objective: "做点事" }), { defaultMaxRounds: 0 });
+    expect(out.goal, "配置坏值不该建出半个目标（maxRounds 非法会让续跑引擎误判）").toBeNull();
+    expect(out.prompt, "失败时不该给出续跑提示").toBeUndefined();
+  });
+
+  it("② 无目标 + defaultMaxRounds 为负数 / 小数 ⇒ 同样兜住（正整数校验的两侧）", () => {
+    for (const bad of [-5, 1.5, Number.NaN]) {
+      const out = applyGoalEvent(null, toolCallStart(SET_GOAL_TOOL, { objective: "x" }), { defaultMaxRounds: bad });
+      expect(out.goal, `defaultMaxRounds=${bad} 应被兜住`).toBeNull();
+    }
+  });
+
+  it("③ **已有进行中目标** + 坏的 defaultMaxRounds ⇒ 保持**原目标不变**（不清空、不半改）", () => {
+    // 先正常建一个目标
+    const ok = applyGoalEvent(null, toolCallStart(SET_GOAL_TOOL, { objective: "原目标", max_rounds: 10 }));
+    expect(ok.goal, "前置：正常路径应建出目标").not.toBeNull();
+    const before = ok.goal;
+    // 已有目标时走 editGoal 分支；defaultMaxRounds 只在 createGoal 时读 ⇒ 这条不该抛，
+    // 但要钉住"编辑后仍是同一个目标身份、轮次不被重置"（注释里写明的静默覆盖根因）
+    const edited = applyGoalEvent(before, toolCallStart(SET_GOAL_TOOL, { objective: "改后的目标" }), { defaultMaxRounds: 0 });
+    expect(edited.goal, "编辑失败或成功都不该把目标清空").not.toBeNull();
+    expect(edited.goal!.round, "改目标不该把 round 归零（否则上限被静默重置）").toBe(before!.round);
+  });
+
+  it("④ 反证：正常 defaultMaxRounds ⇒ 目标建得出来（否则①②③会被『永远返回 null』的实现骗过）", () => {
+    const out = applyGoalEvent(null, toolCallStart(SET_GOAL_TOOL, { objective: "正常目标" }), { defaultMaxRounds: 20 });
+    expect(out.goal, "配置合法时必须能建出目标").not.toBeNull();
+    expect(out.goal!.maxRounds).toBe(20);
+  });
+
+  it("⑤ 模型显式给了合法 max_rounds ⇒ 不读 defaultMaxRounds（坏配置也不影响）", () => {
+    const out = applyGoalEvent(null, toolCallStart(SET_GOAL_TOOL, { objective: "带上限", max_rounds: 7 }), { defaultMaxRounds: 0 });
+    expect(out.goal, "模型显式给了合法上限 ⇒ 不该被坏配置连带拖垮").not.toBeNull();
+    expect(out.goal!.maxRounds).toBe(7);
+  });
+});
