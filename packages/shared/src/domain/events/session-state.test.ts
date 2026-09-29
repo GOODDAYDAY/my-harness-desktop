@@ -330,3 +330,63 @@ describe("withTerminalState: 终结态归一(aborted→stopped,不错标 error)"
     expect(withTerminalState(clean)).toBe(clean); // 同一引用,无新对象
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// deduplicateAdjacent 的**序列化回落**路径（r172；r168 普查排序的最后两条）
+//
+// 两个私有助手各有一处 catch 回落，都只在 content **无法 JSON 序列化**时走到
+// （循环引用、BigInt 等）：
+//   · sameContent：`try { JSON.stringify(a) === JSON.stringify(b) } catch { return false }`
+//     ⇒ 序列化失败按"**不相同**"处理 ⇒ **不去重**（宁可留重复，不可误删消息）
+//   · contentKey：`try { JSON.stringify(content) } catch { return String(content) }`
+//     ⇒ 退化成 "[object Object]" 这类字符串 ⇒ 非标准角色下**会被判为同键而去重**
+//
+// ⚠ 这两个回落的方向是**相反**的（一个偏保守、一个偏激进），而它们各自服务的规则也不同
+//   （sameContent 服务"相邻去重"、contentKey 服务"非标准角色全量去重"）。
+//   此前零覆盖 ⇒ 谁改坏了都不知道，而症状是用户可见的：**重复气泡**或**消息凭空少一条**。
+// ─────────────────────────────────────────────────────────────────────────────
+describe("deduplicateAdjacent：content 无法序列化时的回落（相邻去重 vs 全量去重方向相反）", () => {
+  /** 造一个循环引用的 content（JSON.stringify 必抛）。 */
+  function circular(tag: string): Record<string, unknown> {
+    const o: Record<string, unknown> = { tag };
+    o.self = o;
+    return o;
+  }
+  const base = { id: "x", timestamp: 0 } as Record<string, unknown>;
+
+  it("① 标准角色 + 循环 content ⇒ sameContent 回落 false ⇒ **两条都保留**（宁可重复不可误删）", () => {
+    const a = { ...base, id: "a", role: "assistant", content: circular("a") } as unknown as NeutralMessage;
+    const b = { ...base, id: "b", role: "assistant", content: circular("b") } as unknown as NeutralMessage;
+    const out = deduplicateAdjacent([a, b]);
+    expect(out, "序列化失败按『不相同』处理 ⇒ 不该被相邻去重吃掉").toHaveLength(2);
+  });
+
+  it("② 标准角色 + **同一个**循环对象重复两次 ⇒ 仍保留两条（a === b 走的是引用相等分支，但 content 不同对象时回落 false）", () => {
+    const c = circular("same");
+    const a = { ...base, id: "a", role: "user", content: c } as unknown as NeutralMessage;
+    const b = { ...base, id: "b", role: "user", content: c } as unknown as NeutralMessage;
+    // content 是**同一个引用** ⇒ sameContent 的第一条 `a === b` 直接为 true ⇒ 相邻去重生效
+    expect(deduplicateAdjacent([a, b]), "同一引用的 content 走引用相等分支，仍应去重").toHaveLength(1);
+  });
+
+  it("③ 非标准角色 + 循环 content ⇒ contentKey 回落 String() ⇒ 同形对象**全量去重**（与①方向相反）", () => {
+    const a = { ...base, id: "a", role: "bashExecution", content: circular("a") } as unknown as NeutralMessage;
+    const b = { ...base, id: "b", role: "bashExecution", content: circular("b") } as unknown as NeutralMessage;
+    const out = deduplicateAdjacent([a, b]);
+    // String(循环对象) 都是 "[object Object]" ⇒ 键相同 ⇒ 第二条被全量去重吃掉
+    expect(out, "非标准角色按 contentKey 全量去重；回落后同形对象会同键").toHaveLength(1);
+  });
+
+  it("④ 非标准角色 + **可序列化**的不同 content ⇒ 不该被误去重（回落只在序列化失败时生效）", () => {
+    const a = { ...base, id: "a", role: "bashExecution", content: { cmd: "ls" } } as unknown as NeutralMessage;
+    const b = { ...base, id: "b", role: "bashExecution", content: { cmd: "pwd" } } as unknown as NeutralMessage;
+    expect(deduplicateAdjacent([a, b]), "内容不同 ⇒ 键不同 ⇒ 都保留").toHaveLength(2);
+  });
+
+  it("⑤ 非标准角色 + 可序列化的**相同** content ⇒ 非相邻也去重（全量去重的既有规则，回退对照）", () => {
+    const a = { ...base, id: "a", role: "bashExecution", content: { cmd: "ls" } } as unknown as NeutralMessage;
+    const mid = { ...base, id: "m", role: "user", content: "隔开" } as unknown as NeutralMessage;
+    const b = { ...base, id: "b", role: "bashExecution", content: { cmd: "ls" } } as unknown as NeutralMessage;
+    expect(deduplicateAdjacent([a, mid, b]), "非标准角色全量去重：非相邻的相同内容也算冗余").toHaveLength(2);
+  });
+});
