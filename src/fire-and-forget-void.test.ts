@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 237;   // r198 修掉 session-colors 的 3 处 ⇒ 239 → 237（实测值；比算术少 1，说明有一处原本就没被计入——基线以实测为准，r123 纪律）
+const CEILING = 229;   // r207 正当账本豁免 8 处（runMutation 4 + onUpdate 4）⇒ 237 → 229（实测值；数字现在更接近"真待修数"）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -105,13 +105,35 @@ function importsFrom(raw: string, name: string): boolean {
   return false;
 }
 
+/**
+ * **已确证正当**的调用点账本（r207；此前这些站点被算进"未保护"基数，污染了数字）。
+ *
+ * 每条都要有：① `file` + `callee`（定位到具体调用点族，不用名字全局匹配——r189 的教训：
+ * 名字相同不是同一个实现）；② `evidence`（被调方兜底实现的**文件:行号**，用内容定位核对过）；
+ * ③ `reason`（为什么失败可以不告诉用户）。
+ *
+ * ⚠ 账本最容易烂掉的方式是"建时核过一次、之后再没人核"（r187）⇒ 下面第 ③ 条测试会
+ *   **回读 evidence 指向的文件**，断言那里确实还有 catch。证据消失了账本就该撤销。
+ */
+const LEDGER: { file: string; callee: string; evidence: string; reason: string }[] = [
+  { file: "packages/react/src/widgets/file-tree.tsx", callee: "runMutation",
+    evidence: "packages/react/src/widgets/file-tree.tsx",
+    reason: "同文件内定义的局部函数（:246），体内 try { await fn() } catch 已兜住并播报；4 个 void runMutation(...) 调用点因此正当（r199 逐个回读核实）" },
+  { file: "src/plugins/sessions/sessions-list/renderer/index.tsx", callee: "onUpdate",
+    evidence: "src/plugins/sessions/sessions-list/renderer/index.tsx",
+    reason: "onUpdate 的实现是同文件内的 async 回调（:618 附近），体内 try { await ctx.sessions.updateHeader } catch 已兜住 + 播报（r203/r204 补）+ reloadAfterWrite 回滚；4 个 void onUpdate(...) 因此正当（r199 核实）" },
+  { file: "src/web/kernel/build-kernel.ts", callee: "onDone",
+    evidence: "src/web/kernel/build-kernel.ts",
+    reason: "**回调隔离**：try { onDone(r) } catch { console.error } 之后紧跟 resolveFn?.(r) 与 cleanup()——一个消费方回调抛错不该让内核安装流程断掉；安装结果本身经 resolveFn 上报，所以这里不需要用户播报（r206 核实，与 r170 的 probe4 监听器隔离同族）" },
+];
+
 interface Hit { file: string; line: number; expr: string }
 
-function scan(): { hits: Hit[]; unparsed: number; total: number; withCatch: number; selfProtected: number } {
+function scan(): { hits: Hit[]; unparsed: number; total: number; withCatch: number; selfProtected: number; ledgered: number } {
   const files = ROOTS.flatMap((r) => walk(join(ROOT, r)));
   const STMT = /(?:(?<=^)|(?<=[;{}])|(?<==>\s)|(?<=\(\s)|(?<=,\s))\s*void\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*(?:\(|\b))/g;
   const hits: Hit[] = [];
-  let unparsed = 0, total = 0, withCatch = 0, selfProtected = 0;
+  let unparsed = 0, total = 0, withCatch = 0, selfProtected = 0, ledgered = 0;
   for (const f of files) {
     const rawFile = readFileSync(f, "utf-8");
     const s = strip(rawFile);
@@ -154,10 +176,12 @@ function scan(): { hits: Hit[]; unparsed: number; total: number; withCatch: numb
       const leaf = callee.split(".").pop() ?? "";
       const exempt = SELF_PROTECTING.find((x) => x.name === leaf);
       if (exempt && importsFrom(rawFile, exempt.name)) { selfProtected++; continue; }
+      // r207：账本命中（按 文件 + 被调方叶子名 双条件，不做全局名字匹配）
+      if (LEDGER.some((e) => rel === e.file && e.callee === leaf)) { ledgered++; continue; }
       hits.push({ file: rel, line: s.slice(0, m.index).split("\n").length, expr: expr.replace(/\s+/g, " ").slice(0, 90) });
     }
   }
-  return { hits, unparsed, total, withCatch, selfProtected };
+  return { hits, unparsed, total, withCatch, selfProtected, ledgered };
 }
 
 describe("`void <promise>` 发射后不管：未保护数只许减少", () => {
@@ -209,5 +233,23 @@ describe("自保护原语豁免表：豁免的前提必须持续成立（r187）
   it("② 豁免确实生效：扫到的自保护调用数 > 0（否则豁免表是死的、判据可能在漏）", () => {
     const r = scan();
     expect(r.selfProtected, "自保护原语的调用点数（r187 实测应 > 0；否则豁免表是死的）").toBeGreaterThan(0);
+  });
+});
+
+describe("正当账本：每条的证据必须持续成立（r207）", () => {
+  it("③ 账本里每条的 evidence 文件仍存在、且里面确实还有 catch（证据消失 ⇒ 账本该撤销）", () => {
+    for (const e of LEDGER) {
+      const full = join(ROOT, e.evidence);
+      expect(existsSync(full), `账本证据文件不存在：${e.evidence}（该条账本已失效，应删除或改判）`).toBe(true);
+      const src = readFileSync(full, "utf-8");
+      expect(src.includes("catch"),
+        `${e.evidence} 里已找不到 catch —— 被调方不再自兜，账本理由「${e.callee}」不再成立`).toBe(true);
+      expect(e.reason.length, "每条账本都要写明理由").toBeGreaterThan(20);
+    }
+  });
+
+  it("④ 账本确实生效：被账本豁免的调用点数 > 0（否则账本是死的、判据可能在漏）", () => {
+    const r = scan();
+    expect(r.ledgered, "账本命中数（r207 实测应 > 0：runMutation 4 + onUpdate 4 + onDone 1）").toBeGreaterThan(0);
   });
 });
