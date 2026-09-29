@@ -38,5 +38,7 @@
   "sessions.kernelNotLoadedShort": "Kernel nicht geladen",
   "sessions.stateSaveFailed": "UI-Status konnte nicht gespeichert werden: {{detail}} ({{key}} gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)",
   "sessions.deleteFailed": "Sitzung konnte nicht gelöscht werden: {{detail}} (die Liste wurde aktualisiert; die Sitzung existiert weiterhin)",
-  "sessions.deleteAllFailed": "{{count}} Sitzungen konnten nicht gelöscht werden: {{detail}} (die Liste wurde auf den tatsächlichen Zustand aktualisiert)"
+  "sessions.deleteAllFailed": "{{count}} Sitzungen konnten nicht gelöscht werden: {{detail}} (die Liste wurde auf den tatsächlichen Zustand aktualisiert)",
+  "sessions.archiveFailed": "Sitzungen konnten nicht archiviert werden: {{detail}} (die Liste wurde auf den tatsächlichen Zustand aktualisiert)",
+  "sessions.updateHeaderFailed": "Sitzung konnte nicht geändert werden: {{detail}} (die Liste wurde aktualisiert; die Änderung wurde nicht übernommen)"
 }

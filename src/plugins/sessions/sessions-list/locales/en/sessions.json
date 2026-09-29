@@ -38,5 +38,7 @@
   "sessions.kernelNotLoadedShort": "kernel not loaded",
   "sessions.stateSaveFailed": "Could not save the UI state: {{detail}} ({{key}} lasts only for this session; it reverts on restart)",
   "sessions.deleteFailed": "Could not delete the session: {{detail}} (the list has been refreshed; the session still exists)",
-  "sessions.deleteAllFailed": "Could not delete {{count}} sessions: {{detail}} (the list has been refreshed to the actual state on disk)"
+  "sessions.deleteAllFailed": "Could not delete {{count}} sessions: {{detail}} (the list has been refreshed to the actual state on disk)",
+  "sessions.archiveFailed": "Could not archive the sessions: {{detail}} (the list has been refreshed to the actual state on disk)",
+  "sessions.updateHeaderFailed": "Could not update the session: {{detail}} (the list has been refreshed; the change did not take effect)"
 }

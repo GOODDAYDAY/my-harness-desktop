@@ -38,5 +38,7 @@
   "sessions.kernelNotLoadedShort": "内核未装载",
   "sessions.stateSaveFailed": "界面状态保存失败：{{detail}}（{{key}} 只在这次会话内有效，重启后会回到上次的状态）",
   "sessions.deleteFailed": "删除会话失败：{{detail}}（列表已刷新为磁盘上的真实状态，该会话仍然存在）",
-  "sessions.deleteAllFailed": "批量删除 {{count}} 个会话失败：{{detail}}（列表已刷新为磁盘上的真实状态）"
+  "sessions.deleteAllFailed": "批量删除 {{count}} 个会话失败：{{detail}}（列表已刷新为磁盘上的真实状态）",
+  "sessions.archiveFailed": "归档会话失败：{{detail}}（列表已刷新为磁盘上的真实状态）",
+  "sessions.updateHeaderFailed": "修改会话失败：{{detail}}（列表已刷新为磁盘上的真实状态，改动未生效）"
 }

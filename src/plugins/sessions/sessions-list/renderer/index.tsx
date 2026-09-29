@@ -352,6 +352,12 @@ export function SessionsSection(): React.ReactNode {
       useSessionStore.getState().applyHeaderPatch(items.map((s) => s.path), { archived: true });
     } catch (err) {
       console.error("[sessions-list] 批量归档失败:", err);
+      // ⚠ r204：此前 catch 里只有 console + 重拉 ⇒ 用户点归档、行经重拉又回来了、
+      //   却没有任何解释（§7.6；r203 识别的**第三种形态**：有 catch 有日志有回滚、就是没有可见反馈）。
+      announceTransient(
+        t("sessions.archiveFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",   // 显式 error：默认 info ⇒ 不设 role=alert ⇒ 读屏不打断（r202 已钉成守卫）
+      );
       // 失败回滚:重拉权威真相(已写成功的部分也要可见)。
       await reloadAfterWrite();
     } finally {
@@ -613,6 +619,12 @@ export function SessionsSection(): React.ReactNode {
                     }
                   } catch (err) {
                     console.error("[sessions-list] 更新会话头失败:", err);
+                    // r204：同批量归档（第三种形态）。更新会话头 = 重命名/置顶/取消置顶/归档单条，
+                    //   都是用户刚点的动作；静默回滚会让用户以为改成功了（下次刷新才发现没改）。
+                    announceTransient(
+                      t("sessions.updateHeaderFailed", { detail: (err as Error)?.message ?? String(err) }),
+                      "error",
+                    );
                     // 失败回滚:重拉权威真相,乐观摘除不能永久吞行。
                     await reloadAfterWrite();
                   } finally {
