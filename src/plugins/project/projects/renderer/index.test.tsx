@@ -70,19 +70,23 @@ describe("ProjectsSection(左栏项目组)", () => {
     expect(h.clearCalls, "切项目时插件自己清了会话上下文(应交给壳动作内部决定)").toBe(0);
   });
 
-  // 移除控件的锚**实测得来**(不是猜):它是行内唯一带 title 的 **span**(不是 button),
-  // 且**悬停后才渲染**。以下是探针 dump 到的真身:
-  //   <span class="shrink-0 opacity-60 hover:opacity-100" title="projects.remove"><svg class="lucide-x"…>
-  // 故:先 mouseEnter,再点 span[title]。不按 title 文案查 —— mock 的 t 返回 key,
-  // 真实环境是译文,两种写法必有一种落空;按**结构**查才两边都成立。
-  const removeControl = (dir: string): Element | null => row(dir).querySelector("span[title]");
+  // 移除控件的锚（r156 更新）：现在用**稳定锚点** `[data-project-remove]`，不再按标签结构猜。
+  //   此前它是"行内唯一带 title 的 **span**、且悬停后才渲染"，所以本测试只能写
+  //   `row(dir).querySelector("span[title]")` 并先 mouseEnter —— 那是**脆弱探针**：
+  //   元素换标签（r156 把 span 改成真 button）测试就红，而产品行为其实变好了。
+  //   r156 修复后：按钮**常驻 DOM**（可见性由 hovered||focused 驱动），
+  //   所以不再需要 mouseEnter，而且键盘用户也能 Tab 到它（此前既 hover 门控、又是 span 不可聚焦）。
+  const removeControl = (dir: string): HTMLElement | null =>
+    row(dir).querySelector<HTMLElement>("[data-project-remove]");
 
   it("② 摘掉**当前**项目 → 清 cwd + 会话上下文(否则'删不干净')", async () => {
     render(<ProjectsSection />);
     await waitFor(() => expect(row("/w/alpha")).toBeTruthy());
-    fireEvent.mouseEnter(row("/w/alpha"));
     const ctl = removeControl("/w/alpha");
-    expect(ctl, "悬停后仍未出现移除控件(锚错了?)").not.toBeNull();
+    // r156：不需要 hover 就该在 DOM 里（此前是条件渲染，键盘用户够不着）
+    expect(ctl, "移除控件应常驻 DOM（r156 修 hover 门控）").not.toBeNull();
+    expect(ctl!.style.opacity, "未 hover/未聚焦时视觉隐藏但仍可聚焦").toBe("0");
+    expect(ctl!.tagName, "必须是真 button（此前是 span ⇒ 不可聚焦、Enter/Space 无效）").toBe("BUTTON");
     fireEvent.click(ctl!);
     await waitFor(() => expect(h.clearCalls, "摘掉当前项目没有清会话上下文('删不干净'的根因)").toBe(1));
     expect(h.setCwdCalls, "摘掉当前项目没有把 cwd 置空").toContain("");
@@ -91,8 +95,7 @@ describe("ProjectsSection(左栏项目组)", () => {
   it("②b 摘掉**非当前**项目 → **不得**清当前会话上下文", async () => {
     render(<ProjectsSection />);
     await waitFor(() => expect(row("/w/beta")).toBeTruthy());
-    fireEvent.mouseEnter(row("/w/beta"));
-    fireEvent.click(removeControl("/w/beta")!);
+    fireEvent.click(removeControl("/w/beta")!);   // r156：常驻 DOM，不需先 hover
     await waitFor(() => expect(h.configSets.length).toBeGreaterThan(0));
     expect(h.clearCalls, "摘掉别的项目却把当前会话清掉了").toBe(0);
   });

@@ -158,6 +158,11 @@ export function ProjectsSection(): React.ReactNode {
 function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: boolean; onClick: () => void; onRemove: () => void }): React.ReactNode {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
+  // r156：键盘焦点也揭示"移除"按钮（与 r155 修 PanelRow 同一缺陷形态、同一修法）。
+  //   此前移除按钮是 `{hovered && <span onClick>}` —— **双重缺陷**：
+  //   ① hover 门控 ⇒ 纯键盘用户看不到；② 它是 `<span>` 而不是 `<button>` ⇒ 根本不可聚焦、
+  //      不可键盘激活（Enter/Space 无效），可访问名也只靠 title（r38 的普查查不出来：元素不在 DOM）。
+  const [focused, setFocused] = useState(false);
   const name = pathBasename(dir);
   // dnd-kit 拖拽:transform/transition 由 useSortable 算,CSS.Transform 应用到 style
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dir });
@@ -168,6 +173,10 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
       {...listeners}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
+      onFocus={() => setFocused(true)}
+      // ⚠ 判 relatedTarget：焦点移到行内的移除按钮时会触发行的 blur，
+      //   无条件收起会让按钮在被点到的前一刻消失（r155 的同款边界）。
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false); }}
       onMouseLeave={() => setHovered(false)}
       title={dir}
       // 探针锚点(docs 纪律:探针的「没找到」必须与「现象不存在」可区分)。此前只有 title
@@ -199,16 +208,21 @@ function ProjectRow({ dir, active, onClick, onRemove }: { dir: string; active: b
         <div className="truncate text-[length:var(--font-size-lg)] font-semibold leading-tight text-[var(--color-fg)]">{name}</div>
         <div className="truncate text-[length:var(--font-size-sm)] leading-tight text-[var(--color-muted)] mt-0.5">{dir}</div>
       </div>
-      {hovered && (
-        <span
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          className="shrink-0 opacity-60 hover:opacity-100"
-          title={t("projects.remove")}
-        >
-          <X className="size-3.5" />
-        </span>
-      )}
+      {/* r156：常驻 DOM 的真 button（此前是 hover 才渲染的 span）。
+          可见性由 hovered||focused 驱动 = reveal-on-focus；opacity 而非 visibility，
+          因为 visibility:hidden 会把元素移出 tab 序、键盘照样够不着（r155 的三种候选对比）。 */}
+      <button
+        type="button"
+        data-project-remove=""
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        aria-label={t("projects.remove")}
+        title={t("projects.remove")}
+        className="shrink-0 cursor-pointer bg-transparent border-none p-0 text-[var(--color-muted)] hover:text-[var(--color-fg)] transition-opacity"
+        style={{ opacity: hovered || focused ? 0.6 : 0 }}
+      >
+        <X className="size-3.5" />
+      </button>
     </div>
   );
 }
