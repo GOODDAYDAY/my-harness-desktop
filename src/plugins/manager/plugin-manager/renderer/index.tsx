@@ -66,10 +66,7 @@ export function PluginManagerPage(): React.ReactNode {
   const { t } = useTranslation();
   /** UI 态落盘（r183，同 projects 的 persist）：三处此前都是 `void ctx.config.set(...)` 发射后不管。 */
   const persist = (key: string, value: unknown): void => {
-    fireAndReport(ctx.config.set(key, value, { scope: "global" }), {   // r185 收敛到框架原语
-      tag: "plugin-manager",
-      message: (detail) => t("pluginManager.stateSaveFailed", { key, detail }),
-    });
+    void ctx.config.set(key, value, { scope: "global" });   // r216 回退：框架层已播报（r82），不双重处置
   };
 
   const ctx = usePluginContext();

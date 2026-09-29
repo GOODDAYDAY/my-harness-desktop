@@ -36,7 +36,6 @@
   "sessions.unread": "Unread messages",
   "sessions.kernelNotLoaded": "This session's kernel \"{{kernel}}\" is not loaded — readable, but cannot send",
   "sessions.kernelNotLoadedShort": "kernel not loaded",
-  "sessions.stateSaveFailed": "Could not save the UI state: {{detail}} ({{key}} lasts only for this session; it reverts on restart)",
   "sessions.deleteFailed": "Could not delete the session: {{detail}} (the list has been refreshed; the session still exists)",
   "sessions.deleteAllFailed": "Could not delete {{count}} sessions: {{detail}} (the list has been refreshed to the actual state on disk)",
   "sessions.archiveFailed": "Could not archive the sessions: {{detail}} (the list has been refreshed to the actual state on disk)",

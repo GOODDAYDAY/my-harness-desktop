@@ -49,17 +49,11 @@ function isRowVisible(path: string): boolean {
 type Translate = (key: string, opts?: Record<string, unknown>) => string;
 
 function persistPins(ctx: PluginContext, pins: Record<string, Pin[]>, t: Translate): void {
-  fireAndReport(ctx.config.set("pins", pins), {
-    tag: "session-colors",
-    message: (detail) => t("pinColors.stateSaveFailed", { key: "pins", detail }),
-  });
+  void ctx.config.set("pins", pins);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
 }
 
 function persistContentPins(ctx: PluginContext, contentPins: Record<string, ContentPin[]>, t: Translate): void {
-  fireAndReport(ctx.config.set("contentPins", contentPins), {   // r198：同 persistPins
-    tag: "session-colors",
-    message: (detail) => t("pinColors.stateSaveFailed", { key: "contentPins", detail }),
-  });
+  void ctx.config.set("contentPins", contentPins);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
 }
 
 async function loadPins(ctx: PluginContext): Promise<Record<string, Pin[]>> {
@@ -584,10 +578,7 @@ export function Overlay(): React.ReactNode {
       if (state.contentPins !== prev.contentPins) persistContentPins(ctx, state.contentPins, t);
       if (state.pinsVisible !== prev.pinsVisible) {
         // r198：可见性开关也是用户动作（点眼睛图标），失败要播报（同族）
-        fireAndReport(ctx.config.set("pinsVisible", state.pinsVisible, { scope: "global" }), {
-          tag: "session-colors",
-          message: (detail) => t("pinColors.stateSaveFailed", { key: "pinsVisible", detail }),
-        });
+        void ctx.config.set("pinsVisible", state.pinsVisible, { scope: "global" });   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
       }
     });
   }, [ctx]);

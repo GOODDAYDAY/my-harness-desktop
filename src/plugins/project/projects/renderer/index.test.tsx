@@ -143,69 +143,36 @@ describe("ProjectsSection(左栏项目组)", () => {
 // 判据是 r170 那条：mock 的是**协作者**（config 写入的实现），不是被测对象
 // （persistState 的失败处置逻辑）。
 // ─────────────────────────────────────────────────────────────────────────────
-describe("persistState：UI 态落盘失败要播报（r183 那批兜底的 DOM 层断言）", () => {
-  it("① 写失败 ⇒ 播报一条 error，且文案含**可行动指引**与失败的 key", async () => {
-    h.configSetRejects = true;
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    render(<ProjectsSection />);
-    await waitFor(() => expect(row("/w/alpha")).toBeTruthy());
-    // 折叠/展开分组会触发 persistState("sectionCollapsed", …)
-    const toggle = document.querySelector("[data-project-group-toggle], button[aria-expanded]");
-    if (toggle) fireEvent.click(toggle);
-    // 若该控件不存在，退而点删除按钮也会触发 recentCwds 落盘
-    if (h.configSets.length === 0) {
-      const rm = document.querySelector("[data-project-remove]");
-      if (rm) fireEvent.click(rm as HTMLElement);
-    }
-    await waitFor(() => expect(h.configSets.length).toBeGreaterThan(0));
-    await waitFor(() => expect(h.announced.length).toBeGreaterThan(0));
-    const a = h.announced[0];
-    expect(a.variant, "落盘失败是用户可行动的故障 ⇒ 必须走 error 级（不是 info）").toBe("error");
-    expect(a.msg, "文案要点名失败的 key（否则用户不知道哪个状态没保住）").toContain("stateSaveFailed");
-    // ⚠ **不在这一层断言 console.warn**（r185 首版在这断言了、于是红）：
-    //   收敛到框架原语之后，warn 是**原语的职责**，而原语在本测试里被 mock 掉了。
-    //   它由 packages/react/src/widgets/fire-and-report.test.ts ② 单独钉住。
-    //   这正是本文件顶部写的分层原则（插件测接线、原语测机制）——断言不能越过自己那一层，
-    //   否则会因"下层被替身换掉"而假失败，且诱导人把下层的实现细节复制进上层测试。
-    expect(warn, "本层不该断言原语的内部行为").toBeDefined();
-    warn.mockRestore();
-  });
-
-  it("② 写**成功** ⇒ 不播报（不给用户假警报）", async () => {
-    h.configSetRejects = false;
-    render(<ProjectsSection />);
-    await waitFor(() => expect(row("/w/alpha")).toBeTruthy());
-    const rm = document.querySelector("[data-project-remove]");
-    if (rm) fireEvent.click(rm as HTMLElement);
-    await waitFor(() => expect(h.configSets.length).toBeGreaterThan(0));
-    expect(h.announced, "成功路径不该播报任何失败信息").toEqual([]);
-  });
-
-  it("③ 落盘失败**不影响本地 UI 生效**（§7.6：部分成功要显示已成功的部分 + 说明失败项）", async () => {
-    h.configSetRejects = true;
-    render(<ProjectsSection />);
-    await waitFor(() => expect(row("/w/beta")).toBeTruthy());
-    const rm = row("/w/beta").querySelector("[data-project-remove]") as HTMLElement | null;
-    if (rm) {
-      fireEvent.click(rm);
-      // 本地立即移除（用户的动作有反馈），同时被告知没保住
-      await waitFor(() => expect(row("/w/beta")).toBeNull());
-      await waitFor(() => expect(h.announced.length).toBeGreaterThan(0));
-    }
-  });
-});
-
-describe("persistState 的接线（r185 收敛到 fireAndReport 之后）", () => {
-  it("④ 失败时传给原语的是**本插件的 tag 与含 key 的文案**（框架零文案，内容由插件供）", async () => {
-    h.configSetRejects = true;
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+describe("persistState：UI 态落盘（r216 更正：播报归框架层，插件不二次处置）", () => {
+  // ⚠ r216 更正：r183/r184 那批测试断言的是**插件级**播报（persistState 里 fireAndReport）。
+  //   后来发现 ctx.config.set 在**框架层已经播报**（plugin-context.ts，r82：
+  //   .catch(announceTransient(shell.configWriteFailed, "error") 后重新抛出），
+  //   所以插件再播报一次是**双重播报**（一次失败弹两条）⇒ 已回退插件那一层。
+  //   本 describe 因此改成断言"写入确实被调用"（插件的职责到此为止），
+  //   播报行为由 packages/react 的框架层测试与 announce-severity 守卫负责。
+  it("① 用户动作触发落盘：摘掉项目后 recentCwds 被写入（值里不含被摘的那个）", async () => {
     render(<ProjectsSection />);
     await waitFor(() => expect(row("/w/alpha")).toBeTruthy());
     const rm = row("/w/beta")?.querySelector("[data-project-remove]") as HTMLElement | null;
-    if (rm) fireEvent.click(rm);
-    await waitFor(() => expect(h.fired.length).toBeGreaterThan(0));
-    expect(h.fired[0].tag, "tag 用于 console.warn 前缀，点名是哪个插件").toBe("projects");
-    expect(h.fired[0].msg, "文案来自插件的 i18n 键（框架不含文案，§1.2）").toContain("projects.stateSaveFailed");
-    warn.mockRestore();
+    if (!rm) return;
+    fireEvent.click(rm);
+    await waitFor(() => expect(h.configSets.length).toBeGreaterThan(0));
+    const call = h.configSets.find((c) => c[0] === "recentCwds");
+    expect(call, "应写入 recentCwds").toBeTruthy();
+    expect(call![1], "被摘掉的目录不该还在里面").not.toContain("/w/beta");
+  });
+
+  it("② 落盘失败也**不影响本地 UI 生效**（§7.6：部分成功要显示已成功的部分）", async () => {
+    h.configSetRejects = true;
+    render(<ProjectsSection />);
+    await waitFor(() => expect(row("/w/beta")).toBeTruthy());
+    const rm = row("/w/beta")?.querySelector("[data-project-remove]") as HTMLElement | null;
+    if (!rm) return;
+    fireEvent.click(rm);
+    await waitFor(() => expect(row("/w/beta")).toBeNull());
+    expect(h.configSets.length, "写仍然要发起（失败由框架层播报）").toBeGreaterThan(0);
   });
 });
+// ⚠ r216：此处原有 describe("persistState 的接线…") 断言 projects 传给 fireAndReport 的
+//   tag 与文案；随插件层回退（框架层 config.set 已播报，双重播报已移除）该断言失效 ⇒ 删除。
+//   fireAndReport 的接线对账由 src/fire-and-report-wiring.test.ts 统一负责（语料含仍在用的四处）。

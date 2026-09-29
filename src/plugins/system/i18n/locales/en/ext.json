@@ -21,6 +21,5 @@
   "ext.installUnsupported": "This kernel does not support installing extensions",
   "ext.installUnsupportedHint": "The kernel exposes no extension-install capability, so the install form is not offered here — instead of letting you fill in a source and fail afterwards.",
   "ext.toggleFailed": "Failed to toggle extension: {{detail}}",
-  "ext.restartFailed": "Restart failed: {{detail}}",
-  "ext.stateSaveFailed": "Could not save the UI state: {{detail}} (the filter lasts only for this session; it reverts on restart)"
+  "ext.restartFailed": "Restart failed: {{detail}}"
 }

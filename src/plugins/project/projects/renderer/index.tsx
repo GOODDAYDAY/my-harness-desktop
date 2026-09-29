@@ -30,11 +30,11 @@ export function ProjectsSection(): React.ReactNode {
   // ⚠ 命名：本文件原有一个 persist(next: string[])（recentCwds 专用），故本助手叫 persistState
   //   （r183 首版撞名 ⇒ TS2451 Cannot redeclare；改名而不是删掉原有的，因为原有那个语义更窄）。
   const persistState = (key: string, value: unknown): void => {
-    // r185：收敛到框架原语 fireAndReport（此前四个插件各抄一份同构的 .catch+warn+播报）。
-    fireAndReport(ctx.config.set(key, value, { scope: "global" }), {
-      tag: "projects",
-      message: (detail) => t("projects.stateSaveFailed", { key, detail }),
-    });
+    // ⚠ r216 回退：**框架层已经播报了**——plugin-context.ts 的 config.set 自带
+    //   .catch(announceTransient(shell.configWriteFailed, "error") 后重新抛出)（r82）。
+    //   所以插件再包一层 fireAndReport 会**双重播报**（一次失败弹两条），
+    //   违反 r187/r206 的"处置只应发生一次"。这里只发不兜，兜与播报归框架单点。
+    void ctx.config.set(key, value, { scope: "global" });
   };
 
   const { currentCwd, setCurrentCwd, clearSessionContext } = useUiStore();

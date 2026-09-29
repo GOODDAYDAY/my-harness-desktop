@@ -22,7 +22,6 @@
   "pinColors.color.89b4fa": "藍",
   "pinColors.color.cba6f7": "紫",
   "pinColors.color.f5c2e7": "粉",
-  "pinColors.stateSaveFailed": "色標狀態儲存失敗：{{detail}}（{{key}} 只在這次工作階段內有效，重新啟動後會回到上次的狀態）",
   "pinColors.openSessionFailed": "開啟工作階段失敗（該工作階段可能已被刪除或無法讀取），已回到原來的工作階段",
   "pinColors.openSessionFailedDetail": "開啟工作階段失敗：{{detail}}（已回到原來的工作階段）"
 }

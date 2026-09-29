@@ -114,14 +114,10 @@ function useToolGroups(cwd: string | null): {
     //   ⇒ 写失败时 UI 显示新分组、盘上还是旧的，重启后"自己变回去"且零解释
     //   （r204 说的最糟那种：乐观更新 + 静默失败）。调用方是 void save(...) ⇒ 还会成为未处理 rejection。
     setGroups(newGroups);
-    try {
-      await ctx.config.set("groups", newGroups);
-    } catch (err) {
-      announceTransient(
-        t("settings.toolGroupsSaveFailed", { detail: (err as Error)?.message ?? String(err) }),
-        "error",
-      );
-    }
+    // r216 回退：框架层 config.set 已 catch + 播报 shell.configWriteFailed（error 级）后重新抛出
+    //   （plugin-context.ts，r82）⇒ 插件再播报一次就是**双重播报**（一次失败弹两条），
+    //   违反 r187/r206 的"处置只应发生一次"。这里只发不兜。
+    await ctx.config.set("groups", newGroups);
   }, [cwd, ctx]);
 
   useEffect(() => { void load(); }, [load]);

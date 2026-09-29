@@ -36,7 +36,6 @@
   "sessions.unread": "未讀訊息",
   "sessions.kernelNotLoaded": "本會話所屬核心「{{kernel}}」未裝載：可檢視，不能傳送",
   "sessions.kernelNotLoadedShort": "核心未裝載",
-  "sessions.stateSaveFailed": "介面狀態儲存失敗：{{detail}}（{{key}} 只在這次工作階段內有效，重新啟動後會回到上次的狀態）",
   "sessions.deleteFailed": "刪除工作階段失敗：{{detail}}（清單已重新整理為磁碟上的真實狀態，該工作階段仍然存在）",
   "sessions.deleteAllFailed": "批次刪除 {{count}} 個工作階段失敗：{{detail}}（清單已重新整理為磁碟上的真實狀態）",
   "sessions.archiveFailed": "歸檔工作階段失敗：{{detail}}（清單已重新整理為磁碟上的真實狀態）",

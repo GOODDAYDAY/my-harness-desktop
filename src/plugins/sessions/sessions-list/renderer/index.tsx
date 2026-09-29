@@ -67,10 +67,7 @@ export function SessionsSection(): React.ReactNode {
    *  customOrder 尤其是用户动作（拖拽排序，r180 的收藏顺序同族）。收敛成一个助手（§3.3），
    *  失败处置复用框架原语 fireAndReport（r185）。 */
   const persist = (key: string, value: unknown): void => {
-    fireAndReport(ctx.config.set(key, value), {
-      tag: "sessions-list",
-      message: (detail) => t("sessions.stateSaveFailed", { key, detail }),
-    });
+    void ctx.config.set(key, value);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
   };
 
   const {

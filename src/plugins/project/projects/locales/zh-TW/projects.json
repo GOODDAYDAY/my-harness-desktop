@@ -2,6 +2,5 @@
   "projects.title": "專案",
   "projects.add": "新增專案",
   "projects.remove": "從列表移除",
-  "projects.stateSaveFailed": "介面狀態儲存失敗：{{detail}}（{{key}} 只在這次工作階段內有效，重新啟動後會回到上次的狀態）",
   "projects.switchFailed": "切換專案失敗：{{detail}}（仍停留在原來的專案）"
 }

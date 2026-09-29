@@ -31,6 +31,5 @@
   "pluginManager.tag.dev": "开发",
   "pluginManager.tag.productivity": "效率",
   "pluginManager.tag.insight": "洞察",
-  "pluginManager.systemPromptInert": "当前内核不承接追加系统 prompt，此插件贡献的 systemPrompts 暂不生效",
-  "pluginManager.stateSaveFailed": "界面状态保存失败：{{detail}}（{{key}} 只在这次会话内有效，重启后会回到上次的状态）"
+  "pluginManager.systemPromptInert": "当前内核不承接追加系统 prompt，此插件贡献的 systemPrompts 暂不生效"
 }

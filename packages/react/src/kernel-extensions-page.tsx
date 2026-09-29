@@ -92,10 +92,7 @@ function ListSection({ kernel, title, refreshSignal }: { kernel: KernelId; title
   /** 标签筛选落盘（r197）：此前是 `void ctx.config.set(...)` 发射后不管——用户切了筛选、
    *  写失败时静默不落盘、重启后回到旧筛选且零反馈（§7.6）。走框架原语 fireAndReport（r185）。 */
   const persistTagFilter = (value: unknown): void => {
-    fireAndReport(ctx.config.set("tagFilter", value, { scope: "global" }), {
-      tag: "kernel-extensions-page",
-      message: (detail) => t("ext.stateSaveFailed", { detail }),
-    });
+    void ctx.config.set("tagFilter", value, { scope: "global" });   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
   };
 
   const ctx = usePluginContext();

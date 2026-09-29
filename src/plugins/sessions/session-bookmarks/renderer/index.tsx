@@ -104,10 +104,7 @@ export function BookmarksTab(): React.ReactNode {
    *  收敛成一个函数（§3.3：两处调用逻辑相同、差别只在入参），失败时播报可行动信息。 */
   const persistOrder = useCallback((ids: string[]): void => {
     // r185：收敛到框架原语 fireAndReport（此前四个插件各抄一份同构的 .catch+warn+播报）。
-    fireAndReport(ctx.config.set("bookmarkOrder", ids), {
-      tag: "session-bookmarks",
-      message: (detail) => t("bookmarks.orderSaveFailed", { detail }),
-    });
+    void ctx.config.set("bookmarkOrder", ids);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
   }, [ctx, t]);
 
   const loadBookmarks = useCallback(async () => {
