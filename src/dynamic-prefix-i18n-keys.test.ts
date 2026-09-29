@@ -41,7 +41,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const LOCALES = ["zh-CN", "zh-TW", "en", "de"] as const;
-const CEILING = 68;   // r228 实测基线（17 个键 × 4 语言）；补齐一个键降 4
+const CEILING = 0;   // r229 补齐 17 个键 × 4 语言 ⇒ 68 → 0（实测；改为硬断言）
 
 function walk(dir: string, out: string[] = [], skipLocales = true): string[] {
   if (!existsSync(dir)) return out;

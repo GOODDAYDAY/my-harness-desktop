@@ -102,5 +102,13 @@
   "settings.dsh-models": "DSH 模型",
   "dsh.routeEmptyModels": "dsh 路由「{{provider}}」沒有模型：至少新增一個模型，或刪除該路由——空路由會讓 dsh 執行期拒絕整個 llm-pi-ai 段，連帶其它 provider 全部失效",
   "dsh.routeEmptyModelId": "dsh 路由「{{provider}}」存在空 model id：補全或刪除該模型",
-  "dshModels.exportFailed": "匯出模型設定失敗：{{detail}}（目前宿主可能不支援儲存對話框）"
+  "dshModels.exportFailed": "匯出模型設定失敗：{{detail}}（目前宿主可能不支援儲存對話框）",
+  "dsh.applied": "✓ 已應用 ({{version}})",
+  "dsh.apply": "應用",
+  "dsh.browse": "瀏覽…",
+  "dsh.clear": "清除",
+  "dsh.cleared": "✓ 已清除自定義目錄",
+  "dsh.failed": "應用失敗",
+  "dsh.noInstallHint": "尚未安裝任何核心版本。安裝後這裡會顯示目前版本與可用的更新。",
+  "dsh.placeholder": "輸入或選擇 dsh 目錄…"
 }

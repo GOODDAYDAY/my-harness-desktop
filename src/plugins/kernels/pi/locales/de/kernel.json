@@ -225,5 +225,14 @@
   "kernel.options.terminal.images.iterm2": "iterm2 — iTerm2-Grafikprotokoll",
   "kernel.options.terminal.trueColor.false": "false — aus",
   "kernel.options.terminal.trueColor.true": "true — immer ein",
-  "kernel.options.terminal.trueColor.auto": "auto — anhand des Terminals erkennen"
+  "kernel.options.terminal.trueColor.auto": "auto — anhand des Terminals erkennen",
+  "kernel.applied": "✓ Aktiv — Version {{version}}",
+  "kernel.appliedWithPending": "✓ Aktiv — Version {{version}} · {{count}} laufende Sitzung(en) zum Neustart markiert",
+  "kernel.apply": "Übernehmen",
+  "kernel.browse": "Durchsuchen…",
+  "kernel.clear": "Leeren",
+  "kernel.cleared": "✓ Geleert — auf Datenwurzel-Installation zurückgefallen",
+  "kernel.failed": "Übernehmen fehlgeschlagen",
+  "kernel.noInstallHint": "Es ist noch keine Kernel-Version installiert. Nach der Installation werden hier die aktuelle Version und verfuegbare Updates angezeigt.",
+  "kernel.placeholder": "Kernelverzeichnis eingeben oder wählen…"
 }

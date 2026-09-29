@@ -102,5 +102,13 @@
   "dshModels.devRoleIncompatible": "devRole 不兼容",
   "settings.dsh-ext": "DSH 扩展",
   "settings.dsh-models": "DSH 模型",
-  "dshModels.exportFailed": "导出模型配置失败：{{detail}}（当前宿主可能不支持保存对话框）"
+  "dshModels.exportFailed": "导出模型配置失败：{{detail}}（当前宿主可能不支持保存对话框）",
+  "dsh.applied": "✓ 已应用 ({{version}})",
+  "dsh.apply": "应用",
+  "dsh.browse": "浏览…",
+  "dsh.clear": "清除",
+  "dsh.cleared": "✓ 已清除自定义目录",
+  "dsh.failed": "应用失败",
+  "dsh.noInstallHint": "尚未安装任何内核版本。安装后这里会显示当前版本与可用的更新。",
+  "dsh.placeholder": "输入或选择 dsh 目录…"
 }

@@ -225,5 +225,14 @@
   "kernel.options.terminal.images.iterm2": "iterm2 — iTerm2 圖形協定",
   "kernel.options.terminal.trueColor.false": "false — 關閉",
   "kernel.options.terminal.trueColor.true": "true — 始終啟用",
-  "kernel.options.terminal.trueColor.auto": "auto — 依終端機能力自動判定"
+  "kernel.options.terminal.trueColor.auto": "auto — 依終端機能力自動判定",
+  "kernel.applied": "✓ 生效中 — 版本 {{version}}",
+  "kernel.appliedWithPending": "✓ 生效中 — 版本 {{version}} · {{count}} 個執行中會話已標記待重啟",
+  "kernel.apply": "套用",
+  "kernel.browse": "瀏覽…",
+  "kernel.clear": "清除",
+  "kernel.cleared": "✓ 已清除，回落資料根安裝",
+  "kernel.failed": "設定失敗",
+  "kernel.noInstallHint": "尚未安裝任何核心版本。安裝後這裡會顯示目前版本與可用的更新。",
+  "kernel.placeholder": "輸入或選擇核心目錄…"
 }

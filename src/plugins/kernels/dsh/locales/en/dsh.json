@@ -102,5 +102,13 @@
   "settings.dsh-models": "DSH Models",
   "dsh.routeEmptyModels": "dsh route “{{provider}}” has no models: add at least one model, or remove the route — an empty route makes the dsh runtime reject the whole llm-pi-ai section, breaking every other provider too",
   "dsh.routeEmptyModelId": "dsh route “{{provider}}” has an empty model id: fill it in or remove that model",
-  "dshModels.exportFailed": "Could not export the model config: {{detail}} (this host may not support save dialogs)"
+  "dshModels.exportFailed": "Could not export the model config: {{detail}} (this host may not support save dialogs)",
+  "dsh.applied": "✓ Active — version {{version}}",
+  "dsh.apply": "Apply",
+  "dsh.browse": "Browse…",
+  "dsh.clear": "Clear",
+  "dsh.cleared": "✓ Cleared custom directory",
+  "dsh.failed": "Failed to apply",
+  "dsh.noInstallHint": "No kernel version is installed yet. Once installed, the current version and available updates appear here.",
+  "dsh.placeholder": "Enter or choose a dsh directory…"
 }

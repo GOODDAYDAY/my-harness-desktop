@@ -225,5 +225,14 @@
   "kernel.options.terminal.images.iterm2": "iterm2 — iTerm2 图形协议",
   "kernel.options.terminal.trueColor.false": "false — 关闭",
   "kernel.options.terminal.trueColor.true": "true — 始终启用",
-  "kernel.options.terminal.trueColor.auto": "auto — 按终端能力自动判定"
+  "kernel.options.terminal.trueColor.auto": "auto — 按终端能力自动判定",
+  "kernel.applied": "✓ 生效中 — 版本 {{version}}",
+  "kernel.appliedWithPending": "✓ 生效中 — 版本 {{version}} · {{count}} 个运行中会话已标记待重启",
+  "kernel.apply": "应用",
+  "kernel.browse": "浏览…",
+  "kernel.clear": "清除",
+  "kernel.cleared": "✓ 已清除，回落数据根安装",
+  "kernel.failed": "设置失败",
+  "kernel.noInstallHint": "尚未安装任何内核版本。安装后这里会显示当前版本与可用的更新。",
+  "kernel.placeholder": "输入或选择内核目录…"
 }

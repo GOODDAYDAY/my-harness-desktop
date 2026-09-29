@@ -225,5 +225,14 @@
   "kernel.options.terminal.images.iterm2": "iterm2 — iTerm2 graphics protocol",
   "kernel.options.terminal.trueColor.false": "false — off",
   "kernel.options.terminal.trueColor.true": "true — always on",
-  "kernel.options.terminal.trueColor.auto": "auto — detect from terminal"
+  "kernel.options.terminal.trueColor.auto": "auto — detect from terminal",
+  "kernel.applied": "✓ Active — version {{version}}",
+  "kernel.appliedWithPending": "✓ Active — version {{version}} · {{count}} running session(s) marked for restart",
+  "kernel.apply": "Apply",
+  "kernel.browse": "Browse…",
+  "kernel.clear": "Clear",
+  "kernel.cleared": "✓ Cleared — fell back to data-root install",
+  "kernel.failed": "Failed to apply",
+  "kernel.noInstallHint": "No kernel version is installed yet. Once installed, the current version and available updates appear here.",
+  "kernel.placeholder": "Enter or choose a kernel directory…"
 }
