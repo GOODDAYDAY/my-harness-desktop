@@ -67,22 +67,34 @@ export function KernelVersionPage({ api, i18nPrefix }: KernelVersionPageProps): 
     setInstallOutput([]);
     setInstallResult(null);
     installDoneRef.current = false;
-    const r = await api.install(
-      targetVersion,
-      (line) => setInstallOutput((prev) => [...prev, line]),
-      (done) => {
-        installDoneRef.current = true;
-        setInstalling(false);
-        setInstallResult(done);
-        if (done.ok) {
-          void api.status().then(setStatus);
-          void api.listVersions(true).then(setRegistry).catch(() => setRegFailed(true));
-        }
-      },
-    );
-    if (!r.ok && !installDoneRef.current) {
+    // ⚠ r211：静默失败的**第四种形态**（r210 识别的）——结果对象协议 + done 回调
+    //   只覆盖"安装失败"与"安装完成"，**覆盖不到"调用没完成"**：
+    //   api.install(...) 在传输层 reject 时（ws-transport 的 failAll 在鉴权被拒/连接断开时
+    //   一律 reject，r177/r178）await 直接抛出 ⇒ done 回调不会被调、`if (!r.ok)` 也走不到
+    //   ⇒ setInstalling(true) 永久留着，**安装按钮永久卡在 installing 态**（用户只能重启）。
+    //   所以用 try/catch/finally：finally 保证旗标一定解除（幂等，done 回调已解除也无害），
+    //   catch 把 reject 也变成可见的失败结果。
+    try {
+      const r = await api.install(
+        targetVersion,
+        (line) => setInstallOutput((prev) => [...prev, line]),
+        (done) => {
+          installDoneRef.current = true;
+          setInstalling(false);
+          setInstallResult(done);
+          if (done.ok) {
+            void api.status().then(setStatus);
+            void api.listVersions(true).then(setRegistry).catch(() => setRegFailed(true));
+          }
+        },
+      );
+      if (!r.ok && !installDoneRef.current) setInstallResult(r);
+    } catch (err) {
+      if (!installDoneRef.current) {
+        setInstallResult({ ok: false, error: (err as Error)?.message ?? String(err) });
+      }
+    } finally {
       setInstalling(false);
-      setInstallResult(r);
     }
   };
 
