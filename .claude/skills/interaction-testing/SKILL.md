@@ -12046,6 +12046,10 @@ timeline 的 `blocks.ts` 经 `getAuxParsers()` 喂 `parseUserBlocks`），属发
 
 ### 18.2 e2e 剧本：怎么挑、怎么跑、怎么不打扰用户
 
+> 仓里共 **65 个** `scripts/demo/*.e2e.mjs`（r253 实测 `ls | wc -l`）；下面只列**常用入口**，
+> 不是全量清单。挑剧本前先 `ls scripts/demo | grep <关键词>` 核名字（r226 的教训：
+> 按印象写剧本名会写出 `stickers.e2e.mjs` 这种不存在的名字，实际是 `sticker-picker.e2e.mjs`）。
+
 - **零 token 剧本**（不需内核额度，随时可跑）：`minimal-smoke`（28 断言）、`minimal-fork`（11）、
   `minimal-tool`（3）、`minimal-model`、`composer-session-audit`（26）、`dom-audit`（47/48，可 `--locale`）、
   `content-pin-key`、`cwd-session-restore`、`quiet-launch`。
