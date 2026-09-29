@@ -28,5 +28,7 @@
   "panel.usageTotal": "总 tokens",
   "panel.usageCost": "费用",
   "panel.expand": "弹窗查看",
-  "panel.close": "关闭"
+  "panel.close": "关闭",
+  "panel.loadFailed": "读取 LLM 调用记录失败",
+  "panel.loadFailedHint": "这不是「没有记录」，而是没读到（分片文件读取或传输失败）。切换会话再切回来即可重试；若持续失败，请检查项目目录权限。"
 }

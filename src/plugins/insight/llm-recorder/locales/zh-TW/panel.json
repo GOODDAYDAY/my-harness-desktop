@@ -28,5 +28,7 @@
   "panel.usageTotal": "總 tokens",
   "panel.usageCost": "費用",
   "panel.expand": "彈窗檢視",
-  "panel.close": "關閉"
+  "panel.close": "關閉",
+  "panel.loadFailed": "讀取 LLM 呼叫記錄失敗",
+  "panel.loadFailedHint": "這不是「沒有記錄」，而是沒讀到（分片檔案讀取或傳輸失敗）。切換工作階段再切回來即可重試；若持續失敗，請檢查專案目錄權限。"
 }

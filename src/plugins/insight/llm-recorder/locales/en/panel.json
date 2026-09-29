@@ -28,5 +28,7 @@
   "panel.usageTotal": "Total tokens",
   "panel.usageCost": "Cost",
   "panel.expand": "View in popup",
-  "panel.close": "Close"
+  "panel.close": "Close",
+  "panel.loadFailed": "Could not read the LLM call log",
+  "panel.loadFailedHint": "This is not an empty log - the read failed (shard file or transport). Switch away and back to retry; if it keeps failing, check the project directory permissions."
 }

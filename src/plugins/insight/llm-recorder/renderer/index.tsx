@@ -160,6 +160,15 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
 
   const [pairs, setPairs] = useState<RecordPair[]>([]);
   const [loaded, setLoaded] = useState(false);
+  /** r225：装载失败态。**能与空态区分**——因为 ctx.fs.listDir 在服务端就把
+   *  「目录不存在」折成 []（src/server/controllers/fs-git.ts 的 catch return []），
+   *  所以「从未记录」走的是**成功路径**（shards 为空 ⇒ pairs 为空），
+   *  而这里的 catch 只会在**真读失败**（readFile 抛错 / 传输层 reject）时触发。
+   *  ⚠ r224 曾把这一处记为「需要 fs 契约给出可判别错误类型才能区分」的设计问题——
+   *  本轮沿链读到底（r171/r177 的纪律）发现**区分能力早就有了**，是那条注释把两种成因
+   *  混在一起讲（stale，§5.3），于是 r224 的设计问题**消解**。
+   *  教训：判定「需要新能力」之前，要先把现有链路读到底——服务端可能已经做了归一化。 */
+  const [loadFailed, setLoadFailed] = useState(false);
   const [expandedSeq, setExpandedSeq] = useState<number | null>(null);
   const [modalSeq, setModalSeq] = useState<number | null>(null);
   const sizeCacheRef = useRef<Map<number, number>>(new Map());
@@ -222,9 +231,13 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
       if (loadEpochRef.current !== epoch) return;
       cursorRef.current = cursors;
       setPairs(pairRecords(lines));
+      setLoadFailed(false);   // r225：成功后清失败态
     } catch (err) {
       if (loadEpochRef.current !== epoch) return;
-      // 目录不存在(从未记录)或读失败 → 空列表
+      // r225 更正 stale 注释（原文写「目录不存在(从未记录)或读失败 → 空列表」）：
+      //   「目录不存在」根本走不到这里——listDir 在服务端已折成 []（成功路径）。
+      //   所以这里只剩「真读失败」一种成因 ⇒ 置 loadFailed，渲染失败态（不再伪装成空态）。
+      setLoadFailed(true);
       // ⚠ r224 记为**设计问题**（不当场硬修）：这两种成因被压成同一个空态，
       //   而用户正看着这块面板 ⇒ 按 r222 的判据本该区分（"没有记录" vs "没读到"）。
       //   但要区分就需要 fs 层给出**可判别的错误类型**（ENOENT/不存在 vs 权限/传输失败），
@@ -299,6 +312,17 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
 
   if (!sessionPath) {
     return <EmptyState icon={<ScrollText size={28} />} title={t("panel.noSession")} />;
+  }
+  if (loadFailed) {
+    // r225：装载失败 ≠ 没有记录（r143/r222 的空态分语义）。此前两者都渲染成 panel.empty，
+    //   用户会以为「这个会话没有 LLM 调用记录」，而真相是「没读到」。
+    return (
+      <EmptyState
+        icon={<ScrollText size={28} />}
+        title={t("panel.loadFailed")}
+        description={t("panel.loadFailedHint")}
+      />
+    );
   }
   if (loaded && pairs.length === 0) {
     return <EmptyState icon={<ScrollText size={28} />} title={t("panel.empty")} description={t("panel.emptyHint")} />;

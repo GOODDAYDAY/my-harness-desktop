@@ -28,5 +28,7 @@
   "panel.usageTotal": "Tokens gesamt",
   "panel.usageCost": "Kosten",
   "panel.expand": "In Popup anzeigen",
-  "panel.close": "Schließen"
+  "panel.close": "Schließen",
+  "panel.loadFailed": "Das LLM-Aufrufprotokoll konnte nicht gelesen werden",
+  "panel.loadFailedHint": "Das ist kein leeres Protokoll - das Lesen ist fehlgeschlagen (Shard-Datei oder Uebertragung). Zum erneuten Versuchen die Sitzung wechseln und zurueckkehren; bei wiederholten Fehlern die Berechtigungen des Projektverzeichnisses pruefen."
 }
