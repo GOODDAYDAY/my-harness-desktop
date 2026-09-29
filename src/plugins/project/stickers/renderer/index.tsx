@@ -267,9 +267,22 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
                     initial={{ title: editing.title, content: editing.content, existingBanner: n.banner }}
                     onCancel={() => setEditing(null)}
                     onSave={async (draft) => {
-                      await updateSticker(ctx, n.id, draft);
-                      setEditing(null);
-                      await reload();
+                      // ⚠ r215：这是 r200/r201 那批的**漏网**——删除/移动/新建都修了，编辑路径没修。
+                      //   同文件的 mutate 是正确形态、但不在本组件作用域（r201 已确认 TS2304）
+                      //   ⇒ 按 r200/r201 的处置就地兜同一形态。
+                      //   教训（r193/r200）：搜同类要按**底层能力**搜（这里是"写贴纸数据"的
+                      //   createSticker/updateSticker/removeSticker/moveLayer 四个），
+                      //   只按 UI 事件名搜（onDelete/onMove）就会漏掉编辑这条。
+                      try {
+                        await updateSticker(ctx, n.id, draft);
+                        setEditing(null);
+                      } catch (err) {
+                        announceTransient(
+                          t("stickers.saveFailed", { detail: (err as Error)?.message ?? String(err) }),
+                          "error",
+                        );
+                      }
+                      await reload().catch(() => {});   // 失败也要让列表回到真实状态
                     }}
                   />
                 ) : (

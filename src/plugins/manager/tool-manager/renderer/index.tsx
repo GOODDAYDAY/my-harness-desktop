@@ -9,8 +9,7 @@ import {
   usePendingToolConfig,
   EmptyState,
   Button,
-  type SettingsComponentProps,
-} from "@my-harness-desktop/react";
+  type SettingsComponentProps, announceTransient,} from "@my-harness-desktop/react";
 import {
   BUILTIN_TOOLS,
   PRESET_GROUPS,
@@ -86,6 +85,8 @@ function useToolGroups(cwd: string | null): {
   save: (groups: ToolGroup[]) => Promise<void>;
 } {
   const ctx = usePluginContext();
+  // r215：hook 内取 t（save 的失败播报要用插件语言包；hook 可以直接用 useTranslation）
+  const { t } = useTranslation();
   const [groups, setGroups] = useState<ToolGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -109,8 +110,18 @@ function useToolGroups(cwd: string | null): {
 
   const save = useCallback(async (newGroups: ToolGroup[]) => {
     if (!cwd) return;
+    // ⚠ r215：此前是**乐观更新 + 裸 await**（先 setGroups 改 UI、再写盘且无人兜错）
+    //   ⇒ 写失败时 UI 显示新分组、盘上还是旧的，重启后"自己变回去"且零解释
+    //   （r204 说的最糟那种：乐观更新 + 静默失败）。调用方是 void save(...) ⇒ 还会成为未处理 rejection。
     setGroups(newGroups);
-    await ctx.config.set("groups", newGroups);
+    try {
+      await ctx.config.set("groups", newGroups);
+    } catch (err) {
+      announceTransient(
+        t("settings.toolGroupsSaveFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
+    }
   }, [cwd, ctx]);
 
   useEffect(() => { void load(); }, [load]);

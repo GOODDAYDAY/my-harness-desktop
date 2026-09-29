@@ -264,6 +264,10 @@ function CustomCliSection({ api, i18nPrefix, status, onStatus }: {
             ? k("appliedWithPending", { version, count: r.pendingCount })
             : k("applied", { version }),
       });
+    } catch (err) {
+      // ⚠ r215：此前这个 try 只有 finally ⇒ api.setCustomCliDir 抛错时 busy 会解除（finally），
+      //   但**零反馈**（§7.6 第三种形态）。复用本函数既有的反馈通道 setFeedback（不新造）。
+      setFeedback({ ok: false, text: (err as Error)?.message ?? String(err) });
     } finally {
       setBusy(false);
     }
