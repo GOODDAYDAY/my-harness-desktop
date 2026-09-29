@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronDown,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { CollapsibleCardHeader, ExecutionStatus, type ExecStatus } from "@my-harness-desktop/react";
+import { CollapsibleCardHeader, ExecutionStatus, fireAndReport, type ExecStatus } from "@my-harness-desktop/react";
 import { usePluginContext, type ToolCallBlock } from "@my-harness-desktop/react";
 import { StreamingCaret } from "./stream-text-reveal";
 
@@ -336,6 +336,8 @@ function CollapsibleOutput({
 }
 
 export function ReadCard({ toolCall, collapseDefault = true }: { toolCall: ToolCallItem; collapseDefault?: boolean }): ReactNode {
+  // r193：本组件此前没有 t（onOpen 的失败播报要用插件语言包；框架零文案 §1.2）
+  const { t } = useTranslation();
   const ctx = usePluginContext();
   const a = (toolCall.args as ReadArgs) ?? {};
   const path = a.path ?? a.file_path ?? "";
@@ -399,7 +401,16 @@ export function ReadCard({ toolCall, collapseDefault = true }: { toolCall: ToolC
         {!collapsed && (
           <CollapsibleOutput
             text={text}
-            onOpen={(file) => void ctx.dialog.openFile(file)}
+            // ⚠ r193：不能发射后不管。这与 r182 修的 file-preview/skill-manager 是**同一缺陷类**，
+            //   只是走了另一条 API 路径（ctx.dialog.openFile 与 ctx.openFile 都通向
+            //   window.kernel.openFile）——r182 只搜了 `void ctx.openFile` 所以漏了这处。
+            //   教训：搜同类要按**底层能力**搜（openFile），不能只按当时看到的那个门面名字搜。
+            //   失败时用户点了文件名却什么都没发生（§7.6 禁止的静默失败），
+            //   而且 openFile 在远程/Node 宿主可能 UNSUPPORTED（r191 的宿主能力判据）。
+            onOpen={(file) => fireAndReport(ctx.dialog.openFile(file), {
+              tag: "message-blocks",
+              message: (detail) => t("timeline.openFileFailed", { detail }),
+            })}
             truncated={!!result?.details?.truncation?.truncated || !!result?.details?.matchLimitReached}
           />
         )}

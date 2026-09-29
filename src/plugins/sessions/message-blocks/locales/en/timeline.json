@@ -13,5 +13,6 @@
   "timeline.compaction": "Context compacted{{#if tokens}} ({{tokens}} tokens){{/if}}",
   "timeline.linesCollapsed": "…({{count}} lines collapsed)",
   "timeline.exitCode": "exit {{code}}",
-  "timeline.outputTruncated": "(output truncated)"
+  "timeline.outputTruncated": "(output truncated)",
+  "timeline.openFileFailed": "Could not open the file: {{detail}} (you can open that path manually in your file manager)"
 }

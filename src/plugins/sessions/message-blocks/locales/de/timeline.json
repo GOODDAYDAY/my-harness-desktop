@@ -13,5 +13,6 @@
   "timeline.compaction": "Kontext komprimiert{{#if tokens}} ({{tokens}} Tokens){{/if}}",
   "timeline.linesCollapsed": "…({{count}} Zeilen eingeklappt)",
   "timeline.exitCode": "Exit-Code {{code}}",
-  "timeline.outputTruncated": "(Ausgabe gekürzt)"
+  "timeline.outputTruncated": "(Ausgabe gekürzt)",
+  "timeline.openFileFailed": "Datei konnte nicht geöffnet werden: {{detail}} (Sie können den Pfad manuell in Ihrer Dateiverwaltung öffnen)"
 }

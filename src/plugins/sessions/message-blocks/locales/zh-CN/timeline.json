@@ -13,5 +13,6 @@
   "timeline.compaction": "上下文已压缩{{#if tokens}}({{tokens}} tokens){{/if}}",
   "timeline.linesCollapsed": "…（已折叠 {{count}} 行）",
   "timeline.exitCode": "退出码 {{code}}",
-  "timeline.outputTruncated": "（输出已截断）"
+  "timeline.outputTruncated": "（输出已截断）",
+  "timeline.openFileFailed": "打开文件失败：{{detail}}（可以在系统文件管理器里手动打开该路径）"
 }
