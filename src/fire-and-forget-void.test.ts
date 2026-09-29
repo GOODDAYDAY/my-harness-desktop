@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 250;   // r188 收敛 ui-store 20 处 ⇒ 269→250；r189 豁免收紧为 import 感知（计数不变）；r190 修 git-review refresh（计数仍 250：修在定义内、调用点形态未变，见 §17.189 记的局限）
+const CEILING = 243;   // r196 修掉 4 处 abort（+收敛带来的连带减少）⇒ 250 → 243（实测值）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
