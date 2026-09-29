@@ -997,6 +997,15 @@ export function TimelineView(): React.ReactNode {
       } else {
         queueApi.markItemFailed(item.id, t("timeline.queue.sendFailed"));
       }
+    } catch (err) {
+      // ⚠ r214：此前这个 try **只有 finally、没有 catch**（r213 识别的形态）⇒ doSend 抛出时
+      //   错误冒到调用方，而调用方是 `void handleSendNow(item)` ⇒ 未处理 rejection；
+      //   更糟的是队列项**既没被移除也没被标失败**，用户看到那条排队消息卡住、没有任何解释。
+      //   所以按"失败分支"的既有形态处置：标失败（带原因）⇒ 队列 UI 会显示失败态与重试入口。
+      queueApi.markItemFailed(
+        item.id,
+        t("timeline.queue.sendFailed") + ": " + ((err as Error)?.message ?? String(err)),
+      );
     } finally {
       sendingRef.current = false;
       setSending(false);
