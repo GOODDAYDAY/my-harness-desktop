@@ -34,5 +34,9 @@
   "remote.qr": "QR 碼",
   "remote.qrDesc": "本機存取無需密碼;區域網路裝置掃碼開啟後輸入密碼登入。",
   "remote.qrDisabledHint": "開啟區域網路存取後,這裡顯示區域網路位址與存取 QR 碼。",
-  "settings.remote-access": "遠端存取"
+  "settings.remote-access": "遠端存取",
+  "remote.devicesLoadFailed": "讀取已連線裝置失敗——這不是「暫無裝置」，而是沒讀到。可切走再切回本頁重試。",
+  "remote.statusLoadFailed": "讀取遠端存取狀態失敗（頁面顯示的可能不是目前真實狀態）。",
+  "remote.qrLoadFailed": "讀取連線 QR 碼失敗（可關閉再開啟遠端存取以重新產生）。",
+  "remote.statusAndQrLoadFailed": "讀取遠端存取狀態與連線 QR 碼都失敗了（頁面顯示的可能不是目前真實狀態）。"
 }

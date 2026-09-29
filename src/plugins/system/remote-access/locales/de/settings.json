@@ -34,5 +34,9 @@
   "remote.qr": "QR-Code",
   "remote.qrDesc": "Lokaler Zugriff ohne Passwort; LAN-Geräte scannen, öffnen und melden sich mit dem Passwort an.",
   "remote.qrDisabledHint": "Nach Aktivierung des LAN-Zugriffs erscheinen hier LAN-Adresse und Zugriffs-QR-Code.",
-  "settings.remote-access": "Fernzugriff"
+  "settings.remote-access": "Fernzugriff",
+  "remote.devicesLoadFailed": "Verbundene Geraete konnten nicht geladen werden — das ist keine leere Liste, sondern ein Lesefehler. Zum erneuten Versuchen die Seite wechseln und zurueckkehren.",
+  "remote.statusLoadFailed": "Der Fernzugriffsstatus konnte nicht geladen werden (die Anzeige entspricht moeglicherweise nicht dem aktuellen Zustand).",
+  "remote.qrLoadFailed": "Der Verbindungs-QR-Code konnte nicht geladen werden (Fernzugriff aus- und wieder einschalten, um ihn neu zu erzeugen).",
+  "remote.statusAndQrLoadFailed": "Weder der Fernzugriffsstatus noch der Verbindungs-QR-Code konnten geladen werden (die Anzeige entspricht moeglicherweise nicht dem aktuellen Zustand)."
 }

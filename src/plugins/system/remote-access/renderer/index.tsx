@@ -125,6 +125,16 @@ export function RemoteAccessPage(): React.ReactNode {
   const [error, setError] = useState<string | null>(null);
   const [pwdCopied, setPwdCopied] = useState(false);
   const [devices, setDevices] = useState<DeviceRow[]>([]);
+  /** r222：装载失败态（三面各一个）。此前失败是 `.catch(() => {})` 静默吞 ⇒
+   *   用户看到"空设备列表 / 无状态 / 无二维码"，分不清是"确实没有"还是"没读到"
+   *   （r143 的空态分语义：空 ≠ 装载失败，两者要分开展示；§7.6 不静默）。 */
+  const [loadFailed, setLoadFailed] = useState<{ status: boolean; qr: boolean; devices: boolean }>(
+    { status: false, qr: false, devices: false },
+  );
+  const markLoadFailed = useCallback((which: "status" | "qr" | "devices", err: unknown) => {
+    console.warn(`[remote-access] 读取${which}失败:`, err);
+    setLoadFailed((prev) => (prev[which] ? prev : { ...prev, [which]: true }));
+  }, []);
   const pwdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (pwdTimer.current) clearTimeout(pwdTimer.current); }, []);
 
@@ -132,12 +142,13 @@ export function RemoteAccessPage(): React.ReactNode {
     void window.kernel.remote.status().then((s) => {
       const st = s as RemoteStatus & { freshPassword?: string | null };
       setStatus(st);
+      setLoadFailed((p) => (p.status ? { ...p, status: false } : p));   // r222：成功后清失败态
       // 第 20 项:服务端随广播下发可展示密码——任一端开启/刷新,所有端打开都可见,
       // 不再只有操作端看得到(此前「不展示密码」的多端盲区根因)。
       if (st.freshPassword) setFreshPassword(st.freshPassword);
-    }).catch(() => {});
-    void window.kernel.remote.qr().then((q) => setQr(q)).catch(() => {});
-  }, []);
+    }).catch((err: unknown) => markLoadFailed("status", err));
+    void window.kernel.remote.qr().then((q) => { setQr(q); setLoadFailed((p) => (p.qr ? { ...p, qr: false } : p)); }).catch((err: unknown) => markLoadFailed("qr", err));
+  }, [markLoadFailed]);
 
   useEffect(() => {
     refresh();
@@ -148,8 +159,10 @@ export function RemoteAccessPage(): React.ReactNode {
 
   // 设备列表(第 23 项):挂载拉一次 + connectionsChanged 事件驱动刷新(不轮询)。
   const loadDevices = useCallback(() => {
-    void window.kernel.remote.connections().then((l) => setDevices((l as DeviceRow[]) ?? [])).catch(() => {});
-  }, []);
+    void window.kernel.remote.connections()
+      .then((l) => { setDevices((l as DeviceRow[]) ?? []); setLoadFailed((p) => (p.devices ? { ...p, devices: false } : p)); })
+      .catch((err: unknown) => markLoadFailed("devices", err));
+  }, [markLoadFailed]);
   useEffect(() => {
     loadDevices();
     const off = window.kernel.remote.onConnectionsChanged?.((l) => setDevices((l as DeviceRow[]) ?? []));
@@ -286,10 +299,27 @@ export function RemoteAccessPage(): React.ReactNode {
         </div>
       </SettingsSection>
 
+      {/* r222：状态/二维码装载失败的显式提示（此前静默 ⇒ 页面看起来像「功能没开」）。
+          role=alert 让读屏可打断（r202 的级别纪律：失败要 error 级）。 */}
+      {(loadFailed.status || loadFailed.qr) && (
+        <p style={{ color: "var(--color-accent-danger, #e5484d)", margin: 0 }} role="alert">
+          {loadFailed.status && loadFailed.qr
+            ? t("remote.statusAndQrLoadFailed")
+            : loadFailed.status
+              ? t("remote.statusLoadFailed")
+              : t("remote.qrLoadFailed")}
+        </p>
+      )}
       {/* ── 已连接设备(第 23/24 项):列表 + 踢单个 + 踢全部 ──────── */}
       <SettingsSection title={t("remote.devices")} description={t("remote.devicesDesc")}>
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-md)" }}>
-          {devices.length === 0 ? (
+          {loadFailed.devices ? (
+            /* r222：装载失败 ≠ 空列表（r143 的空态分语义）。此前两者都显示「暂无设备」，
+               用户无从知道是「确实没有设备」还是「没读到」（§7.6 不静默）。 */
+            <p style={{ ...hintStyle, color: "var(--color-accent-danger, #e5484d)" }} role="alert">
+              {t("remote.devicesLoadFailed")}
+            </p>
+          ) : devices.length === 0 ? (
             <p style={hintStyle}>{t("remote.noDevices")}</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--spacing-sm)" }}>

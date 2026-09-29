@@ -34,5 +34,9 @@
   "remote.qr": "QR Code",
   "remote.qrDesc": "Local access needs no password; LAN devices scan, open, then sign in with the password.",
   "remote.qrDisabledHint": "Once LAN access is enabled, the LAN address and access QR code appear here.",
-  "settings.remote-access": "Remote Access"
+  "settings.remote-access": "Remote Access",
+  "remote.devicesLoadFailed": "Could not load the connected devices — this is not an empty list, the read failed. Switch away and back to retry.",
+  "remote.statusLoadFailed": "Could not load the remote-access status (what is shown may not be the current state).",
+  "remote.qrLoadFailed": "Could not load the connection QR code (toggle remote access off and on to regenerate it).",
+  "remote.statusAndQrLoadFailed": "Could not load either the remote-access status or the connection QR code (what is shown may not be the current state)."
 }

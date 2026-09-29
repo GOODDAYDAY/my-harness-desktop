@@ -34,5 +34,9 @@
   "remote.qr": "二维码",
   "remote.qrDesc": "本机访问无需密码;局域网设备扫码打开后输入密码登录。",
   "remote.qrDisabledHint": "开启局域网访问后,这里显示局域网地址与访问二维码。",
-  "settings.remote-access": "远程访问"
+  "settings.remote-access": "远程访问",
+  "remote.devicesLoadFailed": "读取已连接设备失败——这不是「暂无设备」，而是没读到。可切走再切回本页重试。",
+  "remote.statusLoadFailed": "读取远程访问状态失败（页面显示的可能不是当前真实状态）。",
+  "remote.qrLoadFailed": "读取连接二维码失败（可关闭再开启远程访问以重新生成）。",
+  "remote.statusAndQrLoadFailed": "读取远程访问状态与连接二维码都失败了（页面显示的可能不是当前真实状态）。"
 }
