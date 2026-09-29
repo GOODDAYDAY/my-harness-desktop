@@ -60,6 +60,11 @@ function sites(): Site[] {
   const files = [
     ...walk(PLUGINS),
     ...walk(join(ROOT, "packages", "react", "src")),
+    // ⚠ r195 扩语料：壳前端 src/web 也在射程内。r194 给 settings-page.tsx 加了 fireAndReport，
+    //   而它此前**不在语料里**（守卫只走 src/plugins 与 packages/react/src）⇒ 那处接线无人对账。
+    //   这正是"守卫的语料边界"要跟着代码边界走的例子：新调用点出现在新目录时，
+    //   要么扩语料、要么如实记为盲区（不能默认"守卫会覆盖"）。
+    ...walk(join(ROOT, "src", "web")),
   ];
   for (const f of files) {
     const raw = readFileSync(f, "utf-8");
@@ -109,6 +114,20 @@ describe("fireAndReport 调用点接线对账", () => {
       "      r185 是一次四处的复制式迁移，抄错 tag 的风险是真实的——而**误导性日志比没有日志更糟**：",
       "      它会把人引到错误的插件，消耗对日志的信任。",
       "      修法：把 tag 改成所在插件的目录名（src/plugins/<域>/<插件名>/…）。",
+    ].join("\n")).toEqual([]);
+  });
+
+  it("①b 非插件目录的调用点：tag 必须与**文件名**一致（壳前端/框架层没有插件目录可对账）", () => {
+    // r195：语料扩到 src/web 之后，那里的调用点没有 pluginDir 可对账（①会自动跳过它们）。
+    // 但 tag 仍然要可追溯——判据退而求其次：tag 等于所在文件名（去扩展名）。
+    // 例：src/web/components/settings-page.tsx ⇒ tag "settings-page"；
+    //     packages/react/src/widgets/file-tree.tsx ⇒ tag "file-tree"。
+    // 这比"tag 非空"强：它保证 console.warn 的前缀能**直接定位到文件**。
+    const base = (f: string): string => f.split("/").pop()!.replace(/\.tsx?$/, "");
+    const bad = S.filter((x) => !x.pluginDir && x.tag !== base(x.file));
+    expect(bad.map((x) => `${x.file}:${x.line} tag="${x.tag}" 但文件名是 "${base(x.file)}"`), [
+      "非插件目录（src/web、packages/react）的调用点，tag 应等于所在文件名（去扩展名），",
+      "      这样 console.warn 的前缀能直接定位到文件（r190 的教训：误导性日志比没有日志更糟）。",
     ].join("\n")).toEqual([]);
   });
 
