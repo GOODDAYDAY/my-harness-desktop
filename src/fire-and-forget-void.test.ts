@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 284;   // r181 守卫实测（Python 原型估 270，差在链式处理与名字边界；以守卫实测为准，r123/r152 纪律）
+const CEILING = 282;   // r182 修掉 openFile 两处 ⇒ 284 → 282（实测值）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
