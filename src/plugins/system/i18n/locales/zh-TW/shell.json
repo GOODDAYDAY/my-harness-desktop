@@ -63,5 +63,6 @@
   "shell.settingsLoadFailed": "設定載入失敗：{{detail}}",
   "shell.clipboardFailed": "複製失敗：{{detail}}",
   "shell.clipboardUnavailable": "目前環境不提供剪貼簿（瀏覽器只在安全上下文開放它：請用本機或 https 存取）",
-  "shell.directoryPickerFailed": "無法開啟目錄選擇器：{{detail}}（遠端/瀏覽器存取下不支援系統對話框，請在本機視窗裡操作）"
+  "shell.directoryPickerFailed": "無法開啟目錄選擇器：{{detail}}（遠端/瀏覽器存取下不支援系統對話框，請在本機視窗裡操作）",
+  "shell.prefSaveFailed": "偏好儲存失敗：{{detail}}（{{key}} 只在這次執行內有效，重新啟動後會回到上次的設定）"
 }

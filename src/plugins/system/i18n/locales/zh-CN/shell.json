@@ -63,5 +63,6 @@
   "shell.settingsLoadFailed": "设置加载失败：{{detail}}",
   "shell.clipboardFailed": "复制失败：{{detail}}",
   "shell.clipboardUnavailable": "当前环境不提供剪贴板（浏览器只在安全上下文开放它：请用本机或 https 访问）",
-  "shell.directoryPickerFailed": "无法打开目录选择器：{{detail}}（远程/浏览器访问下不支持系统对话框，请在本机窗口里操作）"
+  "shell.directoryPickerFailed": "无法打开目录选择器：{{detail}}（远程/浏览器访问下不支持系统对话框，请在本机窗口里操作）",
+  "shell.prefSaveFailed": "偏好保存失败：{{detail}}（{{key}} 只在这次运行内有效，重启后会回到上次的设置）"
 }

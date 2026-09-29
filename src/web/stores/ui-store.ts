@@ -22,12 +22,29 @@ import { GENERAL_CONFIG_PATH } from "@my-harness-desktop/shared";
 import { useLayoutStore } from "./layout-store";
 import { readGeneralConfig, setGeneralConfigCwd } from "./general-config";
 import { eventBus, setEventBusScopeKeyResolver } from "../../../packages/react/src/event-bus";
+import { fireAndReport } from "@my-harness-desktop/react";
+import { i18next } from "../app/i18n-init";
 import { setScopeKeyResolver, onScopeDrop } from "./session-scope";
 import { sessionScopeKey } from "@my-harness-desktop/shared";
 
 /** 主界面视图:对话页 / 设置页(整页覆盖)。
  *  评估 P1-C:原字段名 mainView 与"mainView 槽"(中区主视图槽)同名混淆,改 activeView。 */
 export type AppView = "chat" | "settings";
+
+/** 偏好落盘（r188）：此前 20 处都是 `void window.kernel.prefs.set(...)` **发射后不管**——
+ *  写失败时用户刚改的偏好（主题/字号/侧栏宽度/locale/上次目录…）静默不落盘、重启后回退，
+ *  且零反馈（§7.6 禁止的静默失败）。store 动作是同步 void、抛不出去，所以只能在这里处置。
+ *  收敛成一个函数（§3.3：20 处逻辑相同、只差 key 与值），失败处置复用框架原语
+ *  fireAndReport（r185）——**不自己再写一份 .catch+播报**，否则收敛的收益被抵消（r187）。
+ *  ⚠ 可达性按 r177/r178 逐环确认：prefs 写入走 electron-store/文件（写盘会抛），
+ *  且即使不抛，**传输层**也会 reject（ws-transport 的 failAll 在鉴权被拒/连接断开时
+ *  把所有在飞 invoke 一律 reject）。 */
+function persistPref(key: string, value: unknown): void {
+  fireAndReport(window.kernel.prefs.set(key, value as never), {
+    tag: "ui-store",
+    message: (detail) => i18next.t("shell.prefSaveFailed", { key, detail }),
+  });
+}
 
 /** 桌面偏好持久化的字段集(与 main 的 Prefs 对齐)。 */
 /** prefs 键名单源。导出以便 `app/i18n-init.ts` 直接读持久层时复用同一个键名，
@@ -192,60 +209,60 @@ export const useUiStore = create<UiState>((set, get) => ({
   hydrated: false,
   setCurrentThemeId: (id) => {
     set({ currentThemeId: id });
-    void window.kernel.prefs.set(PREF_KEYS.currentThemeId, id);
+    persistPref(PREF_KEYS.currentThemeId, id);
   },
   setTimelineThemeId: (id) => {
     set({ timelineThemeId: id });
-    void window.kernel.prefs.set(PREF_KEYS.timelineThemeId, id);
+    persistPref(PREF_KEYS.timelineThemeId, id);
   },
   setFontScale: (scale) => {
     set({ fontScale: scale });
-    void window.kernel.prefs.set(PREF_KEYS.fontScale, scale);
+    persistPref(PREF_KEYS.fontScale, scale);
   },
   setFontMonoChoice: (choice) => {
     set({ fontMonoChoice: choice });
-    void window.kernel.prefs.set(PREF_KEYS.fontMonoChoice, choice);
+    persistPref(PREF_KEYS.fontMonoChoice, choice);
   },
   setFontEnglishChoice: (choice) => {
     set({ fontEnglishChoice: choice });
-    void window.kernel.prefs.set(PREF_KEYS.fontEnglishChoice, choice);
+    persistPref(PREF_KEYS.fontEnglishChoice, choice);
   },
   setFontChineseChoice: (choice) => {
     set({ fontChineseChoice: choice });
-    void window.kernel.prefs.set(PREF_KEYS.fontChineseChoice, choice);
+    persistPref(PREF_KEYS.fontChineseChoice, choice);
   },
   setSidebarStyle: (style) => {
     set({ sidebarStyle: style });
-    void window.kernel.prefs.set(PREF_KEYS.sidebarStyle, style);
+    persistPref(PREF_KEYS.sidebarStyle, style);
   },
   setSidebarWidth: (px) => {
     const w = clampSidebarWidth(px);
     set({ sidebarWidth: w });
-    void window.kernel.prefs.set(PREF_KEYS.sidebarWidth, w);
+    persistPref(PREF_KEYS.sidebarWidth, w);
   },
   setSidebarFontScale: (scale) => {
     const s = clampAreaFontScale(scale);
     set({ sidebarFontScale: s });
-    void window.kernel.prefs.set(PREF_KEYS.sidebarFontScale, s);
+    persistPref(PREF_KEYS.sidebarFontScale, s);
   },
   setSidepanelFontScale: (scale) => {
     const s = clampAreaFontScale(scale);
     set({ sidepanelFontScale: s });
-    void window.kernel.prefs.set(PREF_KEYS.sidepanelFontScale, s);
+    persistPref(PREF_KEYS.sidepanelFontScale, s);
   },
   setTimelineFontScale: (scale) => {
     const s = clampAreaFontScale(scale);
     set({ timelineFontScale: s });
-    void window.kernel.prefs.set(PREF_KEYS.timelineFontScale, s);
+    persistPref(PREF_KEYS.timelineFontScale, s);
   },
   setFontPreviewDragging: (dragging) => set({ fontPreviewDragging: dragging }),
   setSidepanelStyle: (style) => {
     set({ sidepanelStyle: style });
-    void window.kernel.prefs.set(PREF_KEYS.sidepanelStyle, style);
+    persistPref(PREF_KEYS.sidepanelStyle, style);
   },
   setCurrentLocale: (locale) => {
     set({ currentLocale: locale });
-    void window.kernel.prefs.set(PREF_KEYS.currentLocale, locale);
+    persistPref(PREF_KEYS.currentLocale, locale);
   },
   reloadGeneralConfig: async () => {
     const cfg = await readGeneralConfig();
@@ -254,7 +271,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   setActiveView: (view) => set({ activeView: view }),
   setCurrentCwd: (cwd) => {
     set({ currentCwd: cwd });
-    void window.kernel.prefs.set(PREF_KEYS.lastCwd, cwd);
+    persistPref(PREF_KEYS.lastCwd, cwd);
     setGeneralConfigCwd(cwd);
     // 项目层随 cwd 切换:general.json 分层视图重读(项目级覆盖换到新项目)
     void get().reloadGeneralConfig();
@@ -267,7 +284,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     if (cur[cwd] === sessionId) return; // 幂等:同值不写盘(每次打开同一会话不产生 prefs 写)
     const next = { ...cur, [cwd]: sessionId };
     set({ lastSessionByCwd: next });
-    void window.kernel.prefs.set(PREF_KEYS.lastSessionByCwd, next);
+    persistPref(PREF_KEYS.lastSessionByCwd, next);
   },
   clearSessionContext: () =>
     set({ currentSessionPath: null, currentNeutralSessionId: null, sessionTitle: null }),
@@ -276,14 +293,14 @@ export const useUiStore = create<UiState>((set, get) => ({
   toggleSidePanelTab: (id) => set((s) => {
     const tabs = s.activeSidePanelTabs;
     const next = tabs.includes(id) ? tabs.filter((t) => t !== id) : [...tabs, id];
-    void window.kernel.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
+    persistPref(PREF_KEYS.activeSidePanelTabs, next);
     useLayoutStore.getState().setGroupHidden("right", next.length === 0);
     return { activeSidePanelTabs: next };
   }),
   activateSidePanelTab: (id) => set((s) => {
     const tabs = s.activeSidePanelTabs;
     const next = tabs.includes(id) ? tabs : [...tabs, id];
-    if (next !== tabs) void window.kernel.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
+    if (next !== tabs) persistPref(PREF_KEYS.activeSidePanelTabs, next);
     useLayoutStore.getState().setGroupHidden("right", false);
     return next === tabs ? s : { activeSidePanelTabs: next };
   }),
@@ -291,7 +308,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     const valid = new Set(validIds);
     const next = s.activeSidePanelTabs.filter((id) => valid.has(id));
     if (next.length === s.activeSidePanelTabs.length) return s;
-    void window.kernel.prefs.set(PREF_KEYS.activeSidePanelTabs, next);
+    persistPref(PREF_KEYS.activeSidePanelTabs, next);
     if (next.length === 0 && validIds.length === 0) {
       useLayoutStore.getState().setGroupHidden("right", true);
     }
@@ -299,7 +316,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   }),
   setSidePanelOrder: (order) => {
     set({ sidePanelOrder: order });
-    void window.kernel.prefs.set(PREF_KEYS.sidePanelOrder, order);
+    persistPref(PREF_KEYS.sidePanelOrder, order);
   },
   setSessionTitle: (title) => set({ sessionTitle: title }),
   bumpSession: () => set((s) => ({ sessionNonce: s.sessionNonce + 1 })),
@@ -344,7 +361,7 @@ export const useUiStore = create<UiState>((set, get) => ({
           ? (legacyOrder as string[])
           : [];
     if (orderFromPrefs.length === 0 && effectiveSidePanelOrder.length > 0) {
-      void window.kernel.prefs.set(PREF_KEYS.sidePanelOrder, effectiveSidePanelOrder);
+      persistPref(PREF_KEYS.sidePanelOrder, effectiveSidePanelOrder);
     }
     set({
       currentThemeId,
