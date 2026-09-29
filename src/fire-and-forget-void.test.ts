@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 243;   // r196 修掉 4 处 abort（+收敛带来的连带减少）⇒ 250 → 243（实测值）
+const CEILING = 239;   // r197 收敛 sessions-list 与 kernel-extensions-page 的 4 处 UI 态落盘 ⇒ 243 → 239（实测值）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
