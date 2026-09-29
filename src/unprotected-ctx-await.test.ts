@@ -44,7 +44,11 @@ const CORPUS = ["src/plugins", "src/web"];
 
 /** 已分类登记的未保护调用点：每条写清「失败后果」与「处置」。 */
 const LEDGER: { api: string; count: number; consequence: string; disposition: "acceptable" | "todo" }[] = [
-  { api: "ctx.config.set", count: 8,   // r215：9 → 8（tool-manager 的 save 补了 try/catch） disposition: "acceptable",
+  // r215 曾把它改成 8（tool-manager 的 save 补了 try/catch）；r216 又回退成 9——因为发现
+  //   ctx.config.set 在**框架层已播报**（plugin-context.ts，r82），插件再包一层是双重播报。
+  // ⚠ 本行注释必须**独占一行**：首版把它接在 count: 8, 后面，于是同一行后续的 disposition 被注释掉
+  //   ⇒ TS2741（而 vitest 不做类型检查、测试还全绿）——r151 那族'注释插进表达式中间'的又一次。
+  { api: "ctx.config.set", count: 9,   // r216：8 → 9（回退插件层双重播报后，tool-manager 的 save 又变回未包 try 的 await） disposition: "acceptable",
     // r82 已修：兜底收进**框架一处**（packages/react/src/plugin-context.ts 的 config.set），
     // 失败时 announceTransient 播报 shell.configWriteFailed（role=alert 可打断）并重新抛出。
     // 所以这 9 个调用点虽然语法上仍未包 try/catch，失败**不再静默**：用户会听到/看到提示。

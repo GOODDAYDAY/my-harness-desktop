@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 208;   // r209 账本收录自保护的 refresh 11 + reload 5 ⇒ 224 → 208（实测值）
+const CEILING = 213;   // r216 回退插件层双重播报（框架层 config.set 已播报）⇒ 208 → 213（实测值）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -149,6 +149,15 @@ const LEDGER: { file: string; callee: string; evidence: string; reason: string }
   { file: "packages/react/src/manager/kernel-version-page.tsx", callee: "refresh",
     evidence: "packages/react/src/manager/kernel-version-page.tsx",
     reason: "同文件内定义的 refresh（r209 机械分类核实：定义体内有 catch）⇒ 它自己已兜住并处置，调用点的 void refresh(...) 不会漏错误；失败时的用户可见反馈由该定义内部负责（r209 逐个回读过调用点）。" },
+  { file: "src/plugins/system/remote-access/renderer/index.tsx", callee: "kick",
+    evidence: "src/plugins/system/remote-access/renderer/index.tsx",
+    reason: "定义为 `const kick = (…) => run(async () => { … })`——**包装器 run 在箭头体外面**，而 run（:159-166）自带 try { await fn() } catch (e) { setError(…) } + setBusy 收尾 ⇒ 失败既有用户可见反馈（setError 渲染成错误条）也不会卡 busy。r216 逐个回读核实。⚠ 这一条也修正了 r214 机械分类的一个局限：那版判据只在**定义体内**找 run(，认不得这种包装器在箭头体外的形态，于是把这三处误归到「无catch」。" },
+  { file: "src/plugins/system/remote-access/renderer/index.tsx", callee: "kickAll",
+    evidence: "src/plugins/system/remote-access/renderer/index.tsx",
+    reason: "定义为 `const kickAll = (…) => run(async () => { … })`——**包装器 run 在箭头体外面**，而 run（:159-166）自带 try { await fn() } catch (e) { setError(…) } + setBusy 收尾 ⇒ 失败既有用户可见反馈（setError 渲染成错误条）也不会卡 busy。r216 逐个回读核实。⚠ 这一条也修正了 r214 机械分类的一个局限：那版判据只在**定义体内**找 run(，认不得这种包装器在箭头体外的形态，于是把这三处误归到「无catch」。" },
+  { file: "src/plugins/system/remote-access/renderer/index.tsx", callee: "setPassword",
+    evidence: "src/plugins/system/remote-access/renderer/index.tsx",
+    reason: "定义为 `const setPassword = (…) => run(async () => { … })`——**包装器 run 在箭头体外面**，而 run（:159-166）自带 try { await fn() } catch (e) { setError(…) } + setBusy 收尾 ⇒ 失败既有用户可见反馈（setError 渲染成错误条）也不会卡 busy。r216 逐个回读核实。⚠ 这一条也修正了 r214 机械分类的一个局限：那版判据只在**定义体内**找 run(，认不得这种包装器在箭头体外的形态，于是把这三处误归到「无catch」。" },
   { file: "src/web/kernel/build-kernel.ts", callee: "onDone",
     evidence: "src/web/kernel/build-kernel.ts",
     reason: "**回调隔离**：try { onDone(r) } catch { console.error } 之后紧跟 resolveFn?.(r) 与 cleanup()——一个消费方回调抛错不该让内核安装流程断掉；安装结果本身经 resolveFn 上报，所以这里不需要用户播报（r206 核实，与 r170 的 probe4 监听器隔离同族）" },
@@ -219,9 +228,12 @@ describe("`void <promise>` 发射后不管：未保护数只许减少", () => {
     expect(r.withCatch, "已有 .catch 的应被识别为已保护（r181 实测 40）").toBeGreaterThan(20);
     // ⚠ 反假阳性锚：类型位置的 void 一个都不该被计入（首版判据不限位置时命中 896）
     expect(r.total, "首版判据把类型位置的 void 也算进来了（896 处）；收紧后应在数百量级").toBeLessThan(600);
-    // 反空转锚：r180 修掉的那两处不该再出现（它们现在是 void …catch(…)）
-    expect(r.hits.some((h) => h.file.includes("session-bookmarks/renderer/index.tsx") && h.expr.includes("bookmarkOrder")),
-      "session-bookmarks 的顺序落盘已在 r180 加了 .catch，不该再被计入").toBe(false);
+    // ⚠ r216 更正：原先这里断言"session-bookmarks 的 bookmarkOrder 不该被计入"（因为 r180 给它
+    //   包了 .catch）。但后来发现 ctx.config.set 在**框架层已播报**（plugin-context.ts，r82），
+    //   插件那层是双重播报 ⇒ 已回退成 `void ctx.config.set(...)`，所以它**重新被计入**是正常的。
+    //   反空转锚改成断言"框架层的 config.set 自保护"这件事由 unprotected-ctx-await 的账本负责，
+    //   本守卫只负责"调用点自身有没有处理"（判据不变，见该账本的理由）。
+    expect(r.hits.length, "命中数不该为 0（判据在扫）").toBeGreaterThan(50);
   });
 
   it(`① 棘轮：未保护的 void <promise> ≤ ${CEILING}（r181 实测基线；另有 ${r.unparsed} 处提取失败未计入 ⇒ 这是下界）`, () => {

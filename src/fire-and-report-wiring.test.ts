@@ -96,11 +96,13 @@ describe("fireAndReport 调用点接线对账", () => {
   it("判据不空转：扫到了调用点、且已知的四处都在（r185 迁移的那批）", () => {
     expect(S.length, "调用点数（r186 实测 4）").toBeGreaterThan(0);
     const files = S.map((x) => x.file);
+    // ⚠ r216 更正：projects / plugin-manager / session-bookmarks 已**回退**不用 fireAndReport
+    //   （因为 ctx.config.set 在框架层已播报，插件再包一层是双重播报）⇒ 锚换成仍在用的站点。
     for (const expectFile of [
-      "src/plugins/project/projects/renderer/index.tsx",
       "src/plugins/project/file-preview/renderer/index.tsx",
-      "src/plugins/manager/plugin-manager/renderer/index.tsx",
-      "src/plugins/sessions/session-bookmarks/renderer/index.tsx",
+      "src/plugins/sessions/message-blocks/renderer/tool-cards.tsx",
+      "packages/react/src/widgets/file-tree.tsx",
+      "src/web/components/settings-page.tsx",
     ]) {
       expect(files.some((f) => f.endsWith(expectFile.split("/").slice(-3).join("/"))),
         `应扫到 ${expectFile}`).toBe(true);
