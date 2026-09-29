@@ -68,29 +68,43 @@ const LEDGER: { api: string; count: number; consequence: string; disposition: "a
     //   而权限/只读文件系统下重开也不会好（把永久失败当瞬时失败处理）。
     consequence: "两处消费方均已显式处理失败：image-block 与 sticker-card 都渲染 lost 态（§7.6 降级要解释）；永久失败不再被当成瞬时失败" },
   { api: "ctx.config.all", count: 3, disposition: "acceptable",
-    consequence: "读取失败 ⇒ 该插件面板显示空态；用户重开面板即恢复" },
+    // ⚠ **可达性说明（r142 写下，r177 更正——原结论过强）**：
+    //   r142 说"这条路径当前触发不了"，依据是服务端 ConfigStore 的内部读取器吞掉一切
+    //   读/解析失败（config-store.ts:167-176：catch { console.warn(…); return {} }，与 readJsonFile
+    //   同策略）。**这部分仍成立**：因"文件读不出来"而 reject 是不可达的。
+    //   ⚠ 但 r177 按 r176 的通则（判定可达性要读**完整条输入链**、含实参供给方）补读了
+    //   **传输层**那一环，发现另一条**真实可达**的 reject 路径：ws-transport.ts 的 failAll()
+    //   把**所有在飞 invoke 一律 reject**，触发点两个（都是真实场景）：① 鉴权被拒（:91，
+    //   shell.wsAuthRejected）② 连接断开（:109，shell.wsDisconnected；服务端重启、远程访问掉线、
+    //   网络抖动）。所以 renderer 侧的 await **会 reject**，只是原因不是"配置读失败"而是
+    //   "这次调用没送达/没回来" ⇒ 本条兜底是**活的防御代码**，不是不可达分支。
+    //   （"重开面板即恢复"对传输失败常常成立——重连后重开就好；对权限/文件损坏不成立。）
+    consequence: "文件读失败这一来源不可达（服务端吞错）；但**传输失败可达**（ws-transport failAll：鉴权被拒/连接断开）⇒ 兜底是活的防御代码" },
   { api: "ctx.config.getScope", count: 1, disposition: "acceptable",
-    // ⚠ **可达性说明（r142 实测，与 r102 对 settings-page 加载链、r142 对 ctx.config.all 的处置同款）**：
-    //   这条路径当前**触发不了**——服务端 ConfigStore 的内部读取器是
-    //   `if (!existsSync) return {}; try { JSON.parse(…) } catch { console.warn(…); return {} }`
-    //   （config-store.ts:167-176），与 readJsonFile 同一策略：**一切读/解析失败都被吞掉、回落空对象**。
-    //   所以 renderer 侧的 await 永远拿到值、不会 reject（除非传输层本身坏了）。
-    //   保留兜底属**防御纵深**（传输层故障、或将来服务端改成抛错——那是更好的设计：
-    //   静默回落默认值会让用户以为配置丢了）。
-    //   ⚠ 原理由两处错：① 它描述的"读取失败"不可达；② "重开面板即恢复"假设失败是瞬时的，
-    //   而权限/文件损坏下重开也不会好（把永久失败当瞬时失败处理）。
-    consequence: "当前不可达（服务端吞错回落空对象）；兜底属防御纵深，见上方可达性说明" },
+    // ⚠ **可达性说明（r142 写下，r177 更正——原结论过强）**：
+    //   r142 说"这条路径当前触发不了"，依据是服务端 ConfigStore 的内部读取器吞掉一切
+    //   读/解析失败（config-store.ts:167-176：catch { console.warn(…); return {} }，与 readJsonFile
+    //   同策略）。**这部分仍成立**：因"文件读不出来"而 reject 是不可达的。
+    //   ⚠ 但 r177 按 r176 的通则（判定可达性要读**完整条输入链**、含实参供给方）补读了
+    //   **传输层**那一环，发现另一条**真实可达**的 reject 路径：ws-transport.ts 的 failAll()
+    //   把**所有在飞 invoke 一律 reject**，触发点两个（都是真实场景）：① 鉴权被拒（:91，
+    //   shell.wsAuthRejected）② 连接断开（:109，shell.wsDisconnected；服务端重启、远程访问掉线、
+    //   网络抖动）。所以 renderer 侧的 await **会 reject**，只是原因不是"配置读失败"而是
+    //   "这次调用没送达/没回来" ⇒ 本条兜底是**活的防御代码**，不是不可达分支。
+    //   （"重开面板即恢复"对传输失败常常成立——重连后重开就好；对权限/文件损坏不成立。）
+    consequence: "文件读失败这一来源不可达（服务端吞错）；但**传输失败可达**（ws-transport failAll：鉴权被拒/连接断开）⇒ 兜底是活的防御代码" },
   { api: "ctx.configFile.get", count: 1, disposition: "acceptable",
-    // ⚠ **可达性说明（r142 实测，与 r102 对 settings-page 加载链、r142 对 ctx.config.all 的处置同款）**：
-    //   这条路径当前**触发不了**——服务端 ConfigStore 的内部读取器是
-    //   `if (!existsSync) return {}; try { JSON.parse(…) } catch { console.warn(…); return {} }`
-    //   （config-store.ts:167-176），与 readJsonFile 同一策略：**一切读/解析失败都被吞掉、回落空对象**。
-    //   所以 renderer 侧的 await 永远拿到值、不会 reject（除非传输层本身坏了）。
-    //   保留兜底属**防御纵深**（传输层故障、或将来服务端改成抛错——那是更好的设计：
-    //   静默回落默认值会让用户以为配置丢了）。
-    //   ⚠ 原理由两处错：① 它描述的"读取失败"不可达；② "重开面板即恢复"假设失败是瞬时的，
-    //   而权限/文件损坏下重开也不会好（把永久失败当瞬时失败处理）。
-    consequence: "当前不可达（configFile.get 走 readJsonFile，同样 catch { return {} }）；兜底属防御纵深" },
+    // ⚠ **可达性说明（r142 写下，r177 更正——原结论过强）**：
+    //   r142 说"这条路径当前触发不了"，依据是服务端 readJsonFile（configFile.get 走它）吞掉一切
+    //   读/解析失败（catch { return {} }）。**这部分仍成立**：因"文件读不出来"而 reject 是不可达的。
+    //   ⚠ 但 r177 按 r176 的通则（判定可达性要读**完整条输入链**、含实参供给方）补读了
+    //   **传输层**那一环，发现另一条**真实可达**的 reject 路径：ws-transport.ts 的 failAll()
+    //   把**所有在飞 invoke 一律 reject**，触发点两个（都是真实场景）：① 鉴权被拒（:91，
+    //   shell.wsAuthRejected）② 连接断开（:109，shell.wsDisconnected；服务端重启、远程访问掉线、
+    //   网络抖动）。所以 renderer 侧的 await **会 reject**，只是原因不是"配置读失败"而是
+    //   "这次调用没送达/没回来" ⇒ 本条兜底是**活的防御代码**，不是不可达分支。
+    //   （"重开面板即恢复"对传输失败常常成立——重连后重开就好；对权限/文件损坏不成立。）
+    consequence: "文件读失败不可达（readJsonFile 的 catch { return {} }）；但**传输失败可达**（failAll）⇒ 兜底是活的防御代码" },
   // r137 删除本条目：3 处调用点已收敛到发布面原语 pickDirectory（try/catch + 播报）。
   //   原理由『多数情况是用户取消选择；真失败时对话框自身会报错』与 r136 删掉的
   //   openImages 那条**一模一样地错**：远程/浏览器宿主下对话框能力是 UNSUPPORTED_HOST，
