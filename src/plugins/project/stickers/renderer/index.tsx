@@ -237,9 +237,21 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
                   initial={editing}
                   onCancel={() => setEditing(null)}
                   onSave={async (draft) => {
-                    await createSticker(ctx, draft);
-                    setEditing(null);
-                    await reload();
+                    // ⚠ r201：此前是裸的 createSticker → setEditing(null) → reload，
+                    //   创建失败时编辑器不关、列表不刷、零反馈（§7.6）。
+                    //   同文件的 mutate（:511）已经是正确形态，但它在**另一个组件的作用域**里、
+                    //   这里调不到（tsc 实测 TS2304）⇒ 按 r200 的处置就地兜同一形态。
+                    //   收敛（把 mutate 提到模块级）留待结构变更轮，本轮只做根因修复。
+                    try {
+                      await createSticker(ctx, draft);
+                      setEditing(null);
+                    } catch (err) {
+                      announceTransient(
+                        t("stickers.saveFailed", { detail: (err as Error)?.message ?? String(err) }),
+                        "error",
+                      );
+                    }
+                    await reload().catch(() => {});   // 失败也要让列表回到真实状态
                   }}
                 />
               )}
@@ -527,12 +539,13 @@ export function StickersSettings(): ReactNode {
     await mutate(() => updateSticker(ctx, id, draft), "stickers.saveFailed");
   };
   const del = async (id: string): Promise<void> => {
-    await removeSticker(ctx, id);
-    await reload();
+    // r201：走 mutate（此前是裸的 await removeSticker + reload ⇒ 删除失败静默）。
+    //   同文件的 saveEdit 早就走了 mutate，这一处没走——正是 r200 那类漂移
+    //   （"同文件已有正确形态、而某处没用它"）。mutate 会兜错、播报、并 reload 回真实状态。
+    await mutate(() => removeSticker(ctx, id), "stickers.deleteFailed");
   };
   const move = async (id: string): Promise<void> => {
-    await moveLayer(ctx, id);
-    await reload();
+    await mutate(() => moveLayer(ctx, id), "stickers.moveFailed");   // r201：同 del
   };
 
   const sectionProps = { editing, setEditing, expandedId, setExpandedId, streaming, onSend: (n: LayeredSticker): void => void send(n), onSaveNew: saveNew, onSaveEdit: saveEdit, onDelete: del, onMoveLayer: move, dndDisabled, searching: q !== "" };

@@ -56,5 +56,6 @@
   "stickers.saveFailed": "保存失败：{{detail}}",
   "stickers.pickImageFailed": "无法打开图片选择器：{{detail}}（远程/浏览器访问下不支持系统对话框，请在本机窗口里操作）",
   "stickers.bannerLost": "图片读取失败",
-  "stickers.deleteFailed": "删除贴纸失败：{{detail}}（列表已刷新为磁盘上的真实状态）"
+  "stickers.deleteFailed": "删除贴纸失败：{{detail}}（列表已刷新为磁盘上的真实状态）",
+  "stickers.moveFailed": "移动贴纸失败：{{detail}}（列表已刷新为磁盘上的真实状态）"
 }
