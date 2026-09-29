@@ -22,5 +22,7 @@
   "pinColors.color.89b4fa": "Blue",
   "pinColors.color.cba6f7": "Purple",
   "pinColors.color.f5c2e7": "Pink",
-  "pinColors.stateSaveFailed": "Could not save the pin state: {{detail}} ({{key}} lasts only for this session; it reverts on restart)"
+  "pinColors.stateSaveFailed": "Could not save the pin state: {{detail}} ({{key}} lasts only for this session; it reverts on restart)",
+  "pinColors.openSessionFailed": "Could not open the session (it may have been deleted or is unreadable); reverted to the previous session",
+  "pinColors.openSessionFailedDetail": "Could not open the session: {{detail}} (reverted to the previous session)"
 }

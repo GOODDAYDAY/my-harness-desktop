@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
-import { useUiStore, usePluginContext, useSessionStore, useCurrentScopeKey, currentScopeKey, type PluginContext, type SessionInfo, type MessageActionProps, fireAndReport,} from "@my-harness-desktop/react";
+import { useUiStore, usePluginContext, useSessionStore, useCurrentScopeKey, currentScopeKey, type PluginContext, type SessionInfo, type MessageActionProps, fireAndReport, announceTransient,} from "@my-harness-desktop/react";
 import { deriveSessionTitle } from "@my-harness-desktop/shared";
 import { PinSVG } from "./pin-svg";
 import { usePinStore } from "./pin-store";
@@ -144,11 +144,24 @@ export function SessionColorsPanel(): React.ReactNode {
       const ok = await useSessionStore.getState().openSession(info?.neutralSessionId ?? path);
       // 文件已删/不可读:回滚选中态,不留指向失效会话的残局(此前缺失,仅此处无回滚)
       if (!ok) {
+        // ⚠ r206：乐观更新 + 静默回滚（r204 说的最糟那种）——点击瞬间已把选中态与标题
+        //   改成目标会话，失败后下面两行改回去；不播报的话用户看到的是
+        //   "高亮跳过去 → 又自己跳回来"，没有任何解释（§7.6：回滚本身需要解释）。
+        //   store 的 openSession 失败时只有 console.warn、不播报（本轮已核实）⇒ 在这里播报不会双重
+        //   （r187：处置只应发生一次）。修在**定义处**⇒ handleOpenAndLocate 的 `if (!ok) return` 也覆盖到。
+        announceTransient(t("pinColors.openSessionFailed"), "error");
         useUiStore.getState().setCurrentSessionPath(prevPath);
         useUiStore.getState().setSessionTitle(prevTitle);
       }
       return ok;
-    } catch (err) { console.error('[session-colors] openSession failed:', err); return false; }
+    } catch (err) {
+      console.error('[session-colors] openSession failed:', err);
+      announceTransient(   // r206：同上（这条是抛错路径，detail 带上原因）
+        t("pinColors.openSessionFailedDetail", { detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
+      return false;
+    }
   };
 
   const pinCountByColor = (color: string): number =>

@@ -22,5 +22,7 @@
   "pinColors.color.89b4fa": "Blau",
   "pinColors.color.cba6f7": "Violett",
   "pinColors.color.f5c2e7": "Rosa",
-  "pinColors.stateSaveFailed": "Pin-Status konnte nicht gespeichert werden: {{detail}} ({{key}} gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)"
+  "pinColors.stateSaveFailed": "Pin-Status konnte nicht gespeichert werden: {{detail}} ({{key}} gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)",
+  "pinColors.openSessionFailed": "Sitzung konnte nicht geöffnet werden (möglicherweise gelöscht oder nicht lesbar); zurück zur vorherigen Sitzung",
+  "pinColors.openSessionFailedDetail": "Sitzung konnte nicht geöffnet werden: {{detail}} (zurück zur vorherigen Sitzung)"
 }
