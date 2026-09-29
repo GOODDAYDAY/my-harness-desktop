@@ -100,12 +100,24 @@ describe("goal-reduce(纯归约,续跑引擎核心)", () => {
 // applyGoalEvent 的 catch 回落（r174；r173 用覆盖率确证 goal-reduce.ts:63 从未被执行）
 //
 // 那条 catch 是 `catch { return { goal: state }; }` —— 构造/编辑目标抛错时**保持原状态**
-// （不清空、不半改）。可达路径实测有一条：`opts.defaultMaxRounds` 来自用户配置
-// （goal.maxRounds），而 `parseSetGoalArgs` **只校验模型给的 max_rounds、不校验这个默认值**
-// ⇒ 配置写成 0 / 负数 / 小数时 `createGoal` 会抛（"maxRounds must be a positive safe integer"）。
+// （不清空、不半改）。
 //
-// ⚠ 这条路径的意义：配置是用户手改的东西，坏值不该让归约器崩、也不该建出一个
-//   maxRounds 非法的半个目标（那会让续跑引擎立刻判定"已达上限"或永不续跑）。
+// ⚠⚠ **可达性更正（r176，推翻 r174 的说法）**：r174 曾断言"可达路径有一条——
+//   `opts.defaultMaxRounds` 来自用户配置且未被校验"。**这是错的**：
+//   `applyGoalEvent` 的两个调用点（goal-controller.ts:331/382）传的都是
+//   `configuredMaxRounds()`，而它**已经校验**了（`typeof v === "number" &&
+//   Number.isSafeInteger(v) && v >= 1 ? v : undefined`）⇒ 坏配置得到的是 `undefined`，
+//   `createGoal` 走自己的内置默认值，**不会抛**。
+//   也就是说：**这处 catch 从当前任何调用方都不可达**（r102/r142 那一类）。
+//
+// 那这 5 条测试为什么还留着？——它们钉的是**防御性行为**，不是"活的失效路径"：
+//   `applyGoalEvent` 是导出的纯 reducer，将来任何新调用方（第四个消费点、
+//   或把配置读取搬走的重构）都可能传进未校验的值；届时这处 catch 就是唯一防线，
+//   而"保持原状态、不清空、不半改、不给续跑提示"这套语义需要被钉住。
+//   ⚠ 所以本测试用的是**只有测试能构造的输入**（`{ defaultMaxRounds: 0 }`）——
+//   这违反 r174 自己写下的通则（"追遍四类都找不到口子 ⇒ 真不可达 ⇒ 不要硬造只有测试
+//   能触发的输入"）。本轮如实标注：**这是防御性钉桩，不是真实失效路径的复现**。
+//   两者的区别很重要：前者防的是"将来的调用方"，后者防的是"现在的用户"。
 // ─────────────────────────────────────────────────────────────────────────────
 describe("applyGoalEvent：createGoal/editGoal 抛错时的 catch 回落（保持原状态）", () => {
   it("① 无目标 + **坏的 defaultMaxRounds**（用户配置写了 0）⇒ 抛错被兜住、goal 保持 null", () => {
