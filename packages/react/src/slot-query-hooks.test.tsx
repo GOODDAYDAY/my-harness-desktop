@@ -31,6 +31,13 @@ import { useComposerTop } from "./composer-top";
 import { useComposerVoice } from "./composer-voice";
 import { useFileActions, fileActionInvokeChannel } from "./file-actions";
 import { useCodeBlockRenderers } from "./code-block-renderers";
+// r164 再扩三个（都逐个读源码核实过形状）：sessionGroupings / settingsGroups / fileIcons。
+//   ⚠ useFileIconIndex **不入批**：它不是同构实例，而是 useFileIcons + 圆心纯函数
+//   buildFileIconIndex 的**组合**（返回索引对象而非数组），单独测（见文件末尾）。
+//   这正是 r163 那条通则的用途：扩批前核实，不像的实例不强套家族契约。
+import { useSessionGroupings } from "./session-groupings";
+import { useSettingsGroups } from "./settings-groups";
+import { useFileIcons, useFileIconIndex } from "./file-icons";
 
 // ── ui-store：只暴露 pluginsNonce（可被测试改写以模拟插件启停）
 const uiState = { pluginsNonce: 1 };
@@ -72,6 +79,12 @@ const CASES = [
     sample: [{ pluginId: "p7", component: "Fil" }] },
   { name: "useCodeBlockRenderers", hook: useCodeBlockRenderers, slot: "codeBlockRenderers",
     sample: [{ pluginId: "p8", component: "Cod" }] },
+  { name: "useSessionGroupings", hook: useSessionGroupings, slot: "sessionGroupings",
+    sample: [{ pluginId: "p9", component: "Grp" }] },
+  { name: "useSettingsGroups", hook: useSettingsGroups, slot: "settingsGroups",
+    sample: [{ pluginId: "p10", component: "Set" }] },
+  { name: "useFileIcons", hook: useFileIcons, slot: "fileIcons",
+    sample: [{ pluginId: "p11", component: "Ico" }] },
 ];
 
 function Probe({ hook, onRender }: { hook: () => unknown[]; onRender: (v: unknown[]) => void }): React.ReactNode {
@@ -161,5 +174,37 @@ describe("fileActionInvokeChannel：文件动作回调的 channel 名（纯函�
   });
   it("③ 确定性：同输入同输出（它被用作事件路由键，不能每次不同）", () => {
     expect(fileActionInvokeChannel("x")).toBe(fileActionInvokeChannel("x"));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useFileIconIndex：不是同构实例，而是 useFileIcons + buildFileIconIndex 的组合
+// （r164 逐个核实后单写；见上方 CASES 注释里的理由）
+// ─────────────────────────────────────────────────────────────────────────────
+describe("useFileIconIndex：查槽 + 建索引一步完成", () => {
+  beforeEach(() => { installSlot("fileIcons", async () => []); });
+
+  it("① 槽为空 ⇒ 得到**空索引对象**（不是 null/undefined；消费方直接按行解析不该判空）", async () => {
+    let last: unknown = "未渲染";
+    render(<Probe hook={useFileIconIndex as unknown as () => unknown[]} onRender={(v) => { last = v; }} />);
+    await waitFor(() => expect(last).not.toBe("未渲染"));
+    expect(last).toBeTruthy();
+    expect(typeof last).toBe("object");
+  });
+
+  it("② 槽有贡献 ⇒ 索引里能解析出该扩展名的图标（组合真的把两边接上了）", async () => {
+    installSlot("fileIcons", async () => [
+      { pluginId: "p1", extensions: ["r164ext"], icon: "star", color: "#fff" },
+    ] as unknown[]);
+    // ⚠ 索引形状是 `{ byName: Map, byExt: Map }`（圆心 buildFileIconIndex 的返回值）——
+    //   **是 Map 不是普通对象**，所以不能用 JSON.stringify 断言（Map 序列化成 {}，
+    //   r164 首版就这么写、于是"索引为空"的假象让我以为槽数据没传进去）。
+    //   正确做法是直接查 Map。索引内部结构由圆心那边的单测负责，这里只钉
+    //   "组合真的把槽数据传给了建索引函数"。
+    let last: { byName: Map<string, unknown>; byExt: Map<string, unknown> } | null = null;
+    render(<Probe hook={useFileIconIndex as unknown as () => unknown[]} onRender={(v) => { last = v as unknown as { byName: Map<string, unknown>; byExt: Map<string, unknown> }; }} />);
+    await waitFor(() => expect(last?.byExt.get("r164ext")).toBeTruthy());
+    expect((last!.byExt.get("r164ext") as { icon: string }).icon, "扩展名规则应来自槽里的贡献").toBe("star");
+    expect(last!.byName.size, "本样本没有 filenames 规则 ⇒ byName 应为空（不误填）").toBe(0);
   });
 });
