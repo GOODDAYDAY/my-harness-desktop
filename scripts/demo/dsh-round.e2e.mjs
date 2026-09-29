@@ -395,7 +395,8 @@ try {
   // 上写了 `return next()` → 每次回合边界抛 TypeError → 回合被标失败。
   // 而**记录其实已经落盘**（写在前、抛在后），所以"盘上正常、界面报生成失败"——
   // 只断言文件或只断言回复都会漏掉它，必须直接断言"这一轮没被标失败"。
-  const failedBar = await page.evaluate(() => document.body.innerText.includes("生成失败"));
+  // r239：改用稳定状态锚点（此前按译文 "生成失败" 探针，换语言即失效）
+  const failedBar = await page.evaluate(() => !!document.querySelector("[data-message-error]"));
   ok(!failedBar, "时间线里没有「生成失败」—— 回合没被扩展的钩子错误带崩（serial 钩子没有 next）");
 
   ok(consoleTail.length === 0, `页面零报错（实际 ${consoleTail.length} 条）`);

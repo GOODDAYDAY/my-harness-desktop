@@ -1549,7 +1549,12 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
           </div>
         )}
         {message.error && (
-          <div className="text-[length:var(--font-size-sm)] text-[var(--color-accent-error)] mt-1">
+          // r239：稳定状态锚点（此前 e2e 只能按译文 "生成失败" 探针，语言绑定；§1.2/r113、r96 的状态位通则）。
+          //   ⚠ 同批本想给"已停止"条也加 data-message-stopped，但**当轮找不到消费者**
+          //   （没有剧本用它、也没有渲染消息行的 DOM 测试）⇒ 按 r238 的通则撤掉：
+          //   补锚点必须同轮找到消费者，否则就是死锚点（data-anchor-consumers 会报，
+          //   而没人用的锚点会在未来重构里被当"没用的属性"删掉）。等真有剧本要断言停止态时再加。
+          <div className="text-[length:var(--font-size-sm)] text-[var(--color-accent-error)] mt-1" data-message-error="">
             {t("shell.error")}
             {typeof message.errorMessage === "string" && message.errorMessage && (
               <div className="opacity-70 whitespace-pre-wrap break-all mt-0.5">{message.errorMessage}</div>
