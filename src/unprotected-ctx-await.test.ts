@@ -44,7 +44,7 @@ const CORPUS = ["src/plugins", "src/web"];
 
 /** 已分类登记的未保护调用点：每条写清「失败后果」与「处置」。 */
 const LEDGER: { api: string; count: number; consequence: string; disposition: "acceptable" | "todo" }[] = [
-  { api: "ctx.config.set", count: 9, disposition: "acceptable",
+  { api: "ctx.config.set", count: 8,   // r215：9 → 8（tool-manager 的 save 补了 try/catch） disposition: "acceptable",
     // r82 已修：兜底收进**框架一处**（packages/react/src/plugin-context.ts 的 config.set），
     // 失败时 announceTransient 播报 shell.configWriteFailed（role=alert 可打断）并重新抛出。
     // 所以这 9 个调用点虽然语法上仍未包 try/catch，失败**不再静默**：用户会听到/看到提示。
