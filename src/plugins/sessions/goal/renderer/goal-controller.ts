@@ -40,7 +40,7 @@ import { useTranslation } from "react-i18next";
 import {
   usePluginContext, useUiStore, useSessionStore,
   useSessionScope, useSessionScopeAccess, useCurrentScopeKey,
-  hasPendingUserSend,
+  hasPendingUserSend, announceTransient,
 } from "@my-harness-desktop/react";
 import { scopeKeyFromSessionKey, isShellScopeKey, type ComposerCommandResult, type NeutralMessage, type SessionInfo } from "@my-harness-desktop/shared";
 import type { GoalState } from "../core/goal-state";
@@ -438,6 +438,14 @@ export function useGoalController() {
     if (!cmd) return false;
     const g = goalAccess.get();
     const notifyNoGoal = (): void => {
+      // ⚠ r192：加**应用内**播报作主通道（与 r191 的 openRawFile 同族缺陷）。
+      //   此前唯一反馈是系统通知，而 notification.ts 的头注写明
+      //   "remote 连接 host 为缺省降级(no-op/不支持)"、node-host 的 notify 就是 no-op
+      //   （**resolve 而不是 reject** ⇒ 加 .catch 无用）。于是远程/纯 Node 宿主下，
+      //   用户输入 /goal pause 而当前无目标时**什么都收不到**（§7.6 禁止的静默）。
+      //   斜杠命令的返回值契约是 `boolean | { send: string }`（composer-commands.ts:15），
+      //   **没有承载提示文案的字段** ⇒ 不改契约，直接用命令式播报原语（r83）。
+      announceTransient(t("goal.noGoal"), "info");
       void notify.show({ title: "Goal", body: t("goal.noGoal"), silent: true });
     };
     switch (cmd.kind) {
