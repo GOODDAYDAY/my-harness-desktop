@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 250;   // r188 收敛 ui-store 的 20 处偏好落盘 ⇒ 269 → 250（实测值）
+const CEILING = 250;   // r188 收敛 ui-store 的 20 处偏好落盘 ⇒ 269 → 250；r189 豁免判据收紧为 import 感知（计数不变：被豁免的站点确实都 import 了原语）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -91,6 +91,20 @@ const SELF_PROTECTING: { name: string; impl: string; reason: string }[] = [
     reason: "r185 收敛的原语：它**就是**失败处置本身（catch + warn + 播报）" },
 ];
 
+/**
+ * 该文件是否**从别处 import** 了这个名字（而不是自己在本文件里定义的同名函数）。
+ * 判据：存在 `import { … name … } from "…"` 且 name 出现在花括号里（含 `as` 别名的原名位置）。
+ * ⚠ 只认 import：本地定义的同名函数**不算**——它是否自保护要看它自己的实现，
+ *   而那不是豁免表在担保的东西（r189）。
+ */
+function importsFrom(raw: string, name: string): boolean {
+  for (const m of raw.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["'][^"']+["']/g)) {
+    const names = m[1].split(",").map((x) => x.trim().split(/\s+as\s+/)[0].trim());
+    if (names.includes(name)) return true;
+  }
+  return false;
+}
+
 interface Hit { file: string; line: number; expr: string }
 
 function scan(): { hits: Hit[]; unparsed: number; total: number; withCatch: number; selfProtected: number } {
@@ -99,7 +113,8 @@ function scan(): { hits: Hit[]; unparsed: number; total: number; withCatch: numb
   const hits: Hit[] = [];
   let unparsed = 0, total = 0, withCatch = 0, selfProtected = 0;
   for (const f of files) {
-    const s = strip(readFileSync(f, "utf-8"));
+    const rawFile = readFileSync(f, "utf-8");
+    const s = strip(rawFile);
     const rel = relative(ROOT, f);
     for (const m of s.matchAll(STMT)) {
       total++;
@@ -130,9 +145,15 @@ function scan(): { hits: Hit[]; unparsed: number; total: number; withCatch: numb
       if (!expr.trim()) { unparsed++; continue; }
       if (expr.includes(".catch(")) { withCatch++; continue; }
       // r187：调用**自保护原语**的 void 不算债务（原语内部已兜住、从不 reject）
+      // ⚠ r189 收紧为 **import 感知**：首版只比对被调方的**叶子名**，这是不成立的判据——
+      //   实测同名函数在不同文件里保护状态**不同**（`refresh` 有 6 个定义：2 个带 catch、4 个不带；
+      //   `reload` 2 个定义一带一不带）。按名字豁免 ⇒ 某个插件自己定义一个**不带保护**的
+      //   `copyToClipboard`，就会被错误豁免（r159 的教训：按语义分类、不按名字/形态）。
+      //   正确判据：**该文件确实从原语所在的模块 import 了这个名字** ⇒ 它调的才是那个自保护实现。
       const callee = /^void\s+([A-Za-z_$][\w$.]*)/.exec(expr.trim())?.[1] ?? "";
       const leaf = callee.split(".").pop() ?? "";
-      if (SELF_PROTECTING.some((x) => x.name === leaf)) { selfProtected++; continue; }
+      const exempt = SELF_PROTECTING.find((x) => x.name === leaf);
+      if (exempt && importsFrom(rawFile, exempt.name)) { selfProtected++; continue; }
       hits.push({ file: rel, line: s.slice(0, m.index).split("\n").length, expr: expr.replace(/\s+/g, " ").slice(0, 90) });
     }
   }
