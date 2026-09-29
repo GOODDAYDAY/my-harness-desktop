@@ -236,8 +236,8 @@ try {
   // 思考块落地等 DOM(事件驱动):settle 的停止钮轮询对极速回合会漏看(出现+消失落在 500ms
   //  轮询间隙),内容写穿/镜像合入尚需一拍——等「思考按钮 或 无思考内容提示」任一出现再断言。
   await page.waitForFunction(
-    () => [...document.querySelectorAll("button")].some((b) => /思考已完成|思考过程/.test(b.textContent || ""))
-      || document.body.innerText.includes("无思考内容"),
+    () => !!document.querySelector("[data-thinking-block]")
+      || !!document.querySelector('[data-thinking-block="empty"]'),
     { timeout: 10000, polling: 300 },
   ).catch(() => {});
   // DOM×文件对账(纪律:落盘文件是真相源,DOM 必须与之一致):文件有思考块 → DOM 必须有
@@ -254,8 +254,8 @@ try {
   }
   note("幕A 会话文件含思考块", fileHasThinking);
   const a1 = await page.evaluate(() => {
-    const labels = [...document.querySelectorAll("button")].filter((b) => /思考已完成|思考过程/.test(b.textContent || ""));
-    const emptyHints = document.body.innerText.includes("无思考内容");
+    const labels = [...document.querySelectorAll('[data-thinking-block="expanded"],[data-thinking-block="collapsed"]')];
+    const emptyHints = !!document.querySelector('[data-thinking-block="empty"]');
     return { thinkingButtons: labels.length, emptyHints };
   });
   note("幕A 思考块按钮数", a1.thinkingButtons);
@@ -267,12 +267,12 @@ try {
   }
   // 展开最新思考块,断言正文非空(仅文件确有思考块时——模型裁量不思考的轮次没有可展开对象)
   if (fileHasThinking) await page.evaluate(() => {
-    const btns = [...document.querySelectorAll("button")].filter((b) => /思考已完成|思考过程/.test(b.textContent || ""));
+    const btns = [...document.querySelectorAll('[data-thinking-block="expanded"],[data-thinking-block="collapsed"]')];
     btns[btns.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
   await new Promise((r) => setTimeout(r, 400));
   const a2 = await page.evaluate(() => {
-    const btns = [...document.querySelectorAll("button")].filter((b) => /思考已完成|思考过程/.test(b.textContent || ""));
+    const btns = [...document.querySelectorAll('[data-thinking-block="expanded"],[data-thinking-block="collapsed"]')];
     const btn = btns[btns.length - 1];
     const box = btn?.parentElement;
     const body = box?.querySelector("div.whitespace-pre-wrap");
@@ -293,14 +293,14 @@ try {
   await settle();
   // 同幕A:等思考区落定(空帧模型应落「无思考内容」提示)再断言,不赌固定静默窗口
   await page.waitForFunction(
-    () => document.body.innerText.includes("无思考内容")
-      || [...document.querySelectorAll("button")].some((b) => /思考已完成|思考过程/.test(b.textContent || "")),
+    () => !!document.querySelector('[data-thinking-block="empty"]')
+      || !!document.querySelector("[data-thinking-block]"),
     { timeout: 10000, polling: 300 },
   );
   const b1 = await page.evaluate(() => {
     const bodyText = document.body.innerText;
-    const hintInButton = [...document.querySelectorAll("button")].some((b) => (b.textContent || "").includes("无思考内容"));
-    return { hasEmptyHint: bodyText.includes("无思考内容"), hintInButton, thinkingBtns: [...document.querySelectorAll("button")].filter((b) => /思考已完成|思考过程/.test(b.textContent || "")).length };
+    const hintInButton = !!document.querySelector('[data-thinking-block="empty"]');
+    return { hasEmptyHint: !!document.querySelector('[data-thinking-block="empty"]'), hintInButton, thinkingBtns: [...document.querySelectorAll('[data-thinking-block="expanded"],[data-thinking-block="collapsed"]')].length };
   });
   note("幕B 「无思考内容」出现", b1.hasEmptyHint);
   note("幕B 提示在 button 里(死控件)", b1.hintInButton);

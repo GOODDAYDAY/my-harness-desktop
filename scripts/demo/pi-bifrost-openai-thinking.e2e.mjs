@@ -86,23 +86,23 @@ try {
 
   // 等思考块落定(按钮或降级提示)
   await page.waitForFunction(
-    () => [...document.querySelectorAll("button")].some((b) => /思考已完成|思考过程/.test(b.textContent || "")) || document.body.innerText.includes("无思考内容"),
+    () => !!document.querySelector("[data-thinking-block]") || !!document.querySelector('[data-thinking-block="empty"]'),
     { timeout: 10000, polling: 300 },
   ).catch(() => {});
   const st = await page.evaluate(() => {
-    const btns = [...document.querySelectorAll("button")].filter((b) => /思考已完成|思考过程/.test(b.textContent || ""));
-    return { thinkingButtons: btns.length, emptyHint: document.body.innerText.includes("无思考内容") };
+    const btns = [...document.querySelectorAll('[data-thinking-block="expanded"],[data-thinking-block="collapsed"]')];
+    return { thinkingButtons: btns.length, emptyHint: !!document.querySelector('[data-thinking-block="empty"]') };
   });
   console.log(`  · 思考块按钮数 → ${st.thinkingButtons},空提示 → ${st.emptyHint}`);
   ok(st.thinkingButtons > 0, "pi + openai 路径条目:思考块渲染(非空提示)");
   // 展开看正文
   await page.evaluate(() => {
-    const btns = [...document.querySelectorAll("button")].filter((b) => /思考已完成|思考过程/.test(b.textContent || ""));
+    const btns = [...document.querySelectorAll('[data-thinking-block="expanded"],[data-thinking-block="collapsed"]')];
     btns[btns.length - 1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
   await new Promise((r) => setTimeout(r, 400));
   const expanded = await page.evaluate(() => {
-    const btns = [...document.querySelectorAll("button")].filter((b) => /思考已完成|思考过程/.test(b.textContent || ""));
+    const btns = [...document.querySelectorAll('[data-thinking-block="expanded"],[data-thinking-block="collapsed"]')];
     const box = btns[btns.length - 1]?.parentElement?.querySelector("div.whitespace-pre-wrap");
     return (box?.textContent ?? "").trim().length;
   });

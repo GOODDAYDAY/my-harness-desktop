@@ -99,7 +99,9 @@ export function ThinkingChainBlock({
 
   if (content.redacted) {
     return (
-      <div className="mb-1">
+      <div className="mb-1" data-thinking-block="filtered">
+        {/* r238：稳定锚点（状态位而不是文案）。此前 e2e 只能按译文子串探针
+            （"无思考内容"/"思考已完成|思考过程"），换语言即失效（§1.2/r113）。 */}
         <button
           className="flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)] bg-transparent border-none cursor-pointer p-0"
         >
@@ -126,7 +128,11 @@ export function ThinkingChainBlock({
   // 流式期不受影响(正文可能还在路上),有正文的块照旧点击展开全文(无任何截断)。
   if (!streaming && content.thinking.trim().length === 0) {
     return (
-      <div className="mb-1 flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)]">
+      <div
+        className="mb-1 flex items-center gap-1 text-[length:var(--font-size-sm)] text-[var(--color-muted)]"
+        data-thinking-block="empty"
+        data-thinking-elapsed={elapsed ? "true" : "false"}
+      >
         <Brain className="size-3.5" />
         {label} · {t("shell.thinkingEmpty")}
       </div>
@@ -134,7 +140,14 @@ export function ThinkingChainBlock({
   }
 
   return (
-    <div className="mb-1">
+    <div
+      className="mb-1"
+      // r238：稳定锚点 = 状态位（展开/收起、是否流式、有没有时长），
+      //   让 e2e 不必从译文反推状态（r96 的通则：断言状态位要让产品暴露状态位本身）。
+      data-thinking-block={open ? "expanded" : "collapsed"}
+      data-thinking-streaming={streaming ? "true" : "false"}
+      data-thinking-elapsed={elapsed ? "true" : "false"}
+    >
       <button
         onClick={toggleOpen}
         // 展开/收起态此前只由 ChevronRight/ChevronDown 图标表达（视觉态有、可访问态无）

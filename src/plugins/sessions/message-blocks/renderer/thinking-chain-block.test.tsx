@@ -167,3 +167,52 @@ describe("ThinkingChainBlock 的 aria-expanded", () => {
     expect(btn.getAttribute("aria-expanded"), "点击后必须翻转").not.toBe(before);
   });
 });
+
+describe("ThinkingChainBlock 的稳定状态锚点（r238；给 e2e 用，不再从译文反推状态）", () => {
+  beforeEach(() => { vi.useFakeTimers(); resetThinkingOpenOverride(); });
+  afterEach(() => { vi.useRealTimers(); resetThinkingOpenOverride(); });
+
+  it("流式期：data-thinking-block=collapsed、data-thinking-streaming=true、无时长时 elapsed=false", () => {
+    const now = 1700000000000;
+    vi.setSystemTime(now);
+    const { container } = render(
+      <ThinkingChainBlock content={{ type: "thinking", thinking: "在想" }} streaming={true} startedAt={now - 100} />,
+    );
+    const el = container.querySelector("[data-thinking-block]");
+    expect(el, "流式期要有思考块锚点").not.toBeNull();
+    expect(el!.getAttribute("data-thinking-streaming"), "流式态要是状态位本身（r96：不从文案反推）").toBe("true");
+    expect(el!.getAttribute("data-thinking-elapsed")).toBe("false");
+    expect(el!.getAttribute("data-thinking-block")).toBe("collapsed");
+  });
+
+  it("非流式完成态：streaming=false 且 elapsed=true（有时长）", () => {
+    vi.setSystemTime(1700000000000);
+    const { container } = render(
+      <ThinkingChainBlock content={{ type: "thinking", thinking: "在想" }} streaming={false} startedAt={1000} completedAt={4200} />,
+    );
+    const el = container.querySelector("[data-thinking-block]");
+    expect(el!.getAttribute("data-thinking-streaming")).toBe("false");
+    expect(el!.getAttribute("data-thinking-elapsed"), "完成态带时长 ⇒ elapsed=true").toBe("true");
+  });
+
+  it("展开后 data-thinking-block 从 collapsed 变 expanded（状态位跟着交互走）", () => {
+    vi.setSystemTime(1700000000000);
+    const { container } = render(
+      <ThinkingChainBlock content={{ type: "thinking", thinking: "正文" }} streaming={false} startedAt={1000} completedAt={2000} />,
+    );
+    const el = container.querySelector("[data-thinking-block]") as HTMLElement;
+    expect(el.getAttribute("data-thinking-block")).toBe("collapsed");
+    fireEvent.click(el.querySelector("button")!);
+    expect(container.querySelector("[data-thinking-block]")!.getAttribute("data-thinking-block"),
+      "点击展开后状态位要变（e2e 靠它判展开态，不靠 aria-expanded 的译文或图标）").toBe("expanded");
+  });
+
+  it("完成态空思考块：data-thinking-block=empty（e2e 用它替代『无思考内容』文案探针）", () => {
+    vi.setSystemTime(1700000000000);
+    const { container } = render(
+      <ThinkingChainBlock content={{ type: "thinking", thinking: "   " }} streaming={false} startedAt={1000} completedAt={2000} />,
+    );
+    expect(container.querySelector('[data-thinking-block="empty"]'), "空思考块要有 empty 状态位").not.toBeNull();
+    expect(container.querySelector('[data-thinking-block="empty"]')!.getAttribute("data-thinking-elapsed")).toBe("true");
+  });
+});
