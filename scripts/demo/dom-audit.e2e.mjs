@@ -310,6 +310,35 @@ try {
     }
     if (visited === 0) note("M", "设置页", "TAB 遍历失败", "找到了设置页但一个可点行都没能进入，设置页内部未被体检");
     else ok(visited > 0, `设置页遍历了 ${visited} 个子页并逐个体检`);
+
+    // ── 阶段 B2（r234）：定向补走**内核与其余设置子页** ──
+    // 为什么要有这一段：ROW_SEL 是"可点行"的泛化选择器，实测收到 **73 个**候选
+    // （含侧栏条目、输入框按钮、右面板 tab），而上面那个循环 `visited >= 14` 就 break
+    // ⇒ 只走了前 14 个（项目/会话/搜索会话/…/Tree），**内核页全在后面没走到**。
+    // 而内核页正是文案缺陷的高发区：KernelVersionPage / ModelConfigPage 是 packages/react 里的
+    // **共享页面**，文案键经 prop 前缀拼出（dsh / kernel / dshModels / models），
+    // 缺键时 i18next 把键名当译文返回 ⇒ 页面上出现 `dsh.applied` 这样的裸键（r228/r229 修过 68 条）。
+    // 又因为检查④**跳过不可见子树**（settings-page 是 keep-mounted 的），
+    // 没走到的 tab 就等于没检查 ⇒ 必须显式走过去。
+    const TARGETS = ["Pi", "DSH", "Minimal", "Probe4", "通用", "主題", "主题", "技能", "Desktop 插件", "快捷键", "快捷鍵"];
+    let visited2 = 0;
+    for (const label of TARGETS) {
+      const clicked = await page.evaluate(({ sel, want }) => {
+        const el = [...document.querySelectorAll(sel)].find((x) => {
+          const t = (x.getAttribute("aria-label") || x.textContent || "").trim().replace(/\s+/g, " ");
+          return t === want || t.startsWith(want + " ");
+        });
+        if (!el) return false;
+        el.click();
+        return true;
+      }, { sel: ROW_SEL, want: label });
+      if (!clicked) continue;
+      await waitForDomIdle(page, { quietMs: 450, timeoutMs: 10000 }).catch(() => {});
+      await auditSurface(`设置页/${label}`);
+      visited2 += 1;
+    }
+    console.log(`  · 阶段 B2：定向补走了 ${visited2} 个内核/其余设置子页（目标 ${TARGETS.length} 个）`);
+    ok(visited2 >= 3, `阶段 B2 至少走到 3 个内核页（实际 ${visited2} 个）——否则内核共享页面的裸键无人检查（r234）`);
   }
 
   // ===== 阶段 C：文件与格式对应 =====
