@@ -101,5 +101,6 @@
   "settings.dsh-ext": "DSH-Erweiterungen",
   "settings.dsh-models": "DSH-Modelle",
   "dsh.routeEmptyModels": "dsh-Route „{{provider}}“ hat keine Modelle: mindestens ein Modell hinzufügen oder die Route entfernen — eine leere Route lässt die dsh-Laufzeit den gesamten llm-pi-ai-Abschnitt ablehnen, wodurch auch alle anderen Provider ausfallen",
-  "dsh.routeEmptyModelId": "dsh-Route „{{provider}}“ hat eine leere Modell-ID: ausfüllen oder dieses Modell entfernen"
+  "dsh.routeEmptyModelId": "dsh-Route „{{provider}}“ hat eine leere Modell-ID: ausfüllen oder dieses Modell entfernen",
+  "dshModels.exportFailed": "Modellkonfiguration konnte nicht exportiert werden: {{detail}} (dieser Host unterstützt möglicherweise keine Speicherdialoge)"
 }

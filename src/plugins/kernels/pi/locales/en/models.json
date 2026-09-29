@@ -63,5 +63,6 @@
   "models.discoverCollapse": "Collapse",
   "models.discoverUseConfigured": "Listing not supported · use {{count}} configured models instead",
   "models.devRoleIncompatible": "devRole incompatible",
-  "models.devRoleHint": "Some OpenAI-compatible gateways only accept the system role; the kernel sends developer by default for reasoning models and gets rejected with 400 — tick this to fall back to system."
+  "models.devRoleHint": "Some OpenAI-compatible gateways only accept the system role; the kernel sends developer by default for reasoning models and gets rejected with 400 — tick this to fall back to system.",
+  "models.exportFailed": "Could not export the model config: {{detail}} (this host may not support save dialogs)"
 }

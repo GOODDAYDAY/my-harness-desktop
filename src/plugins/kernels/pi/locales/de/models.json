@@ -63,5 +63,6 @@
   "models.discoverCollapse": "Einklappen",
   "models.discoverUseConfigured": "Auflistung nicht unterstützt · stattdessen {{count}} konfigurierte Modelle nutzen",
   "models.devRoleIncompatible": "devRole inkompatibel",
-  "models.devRoleHint": "Manche OpenAI-kompatiblen Gateways akzeptieren nur die system-Rolle; der Kernel sendet für Reasoning-Modelle standardmäßig developer und erhält eine 400-Ablehnung — aktivieren, um auf system zurückzufallen."
+  "models.devRoleHint": "Manche OpenAI-kompatiblen Gateways akzeptieren nur die system-Rolle; der Kernel sendet für Reasoning-Modelle standardmäßig developer und erhält eine 400-Ablehnung — aktivieren, um auf system zurückzufallen.",
+  "models.exportFailed": "Modellkonfiguration konnte nicht exportiert werden: {{detail}} (dieser Host unterstützt möglicherweise keine Speicherdialoge)"
 }

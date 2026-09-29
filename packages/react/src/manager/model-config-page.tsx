@@ -10,6 +10,7 @@
 // 改动经 onChange 上报，框架顶部保存浮层负责落盘(pi/dsh 各自实现 kernelModels.saveConfig)。
 // 本组件不自己 set api、不自己管 dirty、不带保存按钮。
 import { useEffect, useRef, useState } from "react";
+import { announceTransient } from "../widgets/live-region";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import * as ContextMenu from "@radix-ui/react-context-menu";
@@ -109,12 +110,20 @@ export function ModelConfigPage({ api, i18nPrefix, capabilities, onDefaultChange
   // 内联的一部分、dsh prefs 密钥的字面备份，导出即「完整配置备份」语义。
   const exportConfig = async (): Promise<void> => {
     const json = JSON.stringify(providers, null, 2);
-    await ctx.dialog.saveTextFile({
-      name: "model-config.json",
-      content: json,
-      defaultFileName: "model-config.json",
-      filters: [{ name: "JSON", extensions: ["json"] }],
-    });
+    // ⚠ r212：此前是裸 await（调用点又是 `void exportConfig()`）⇒ 导出失败时零反馈。
+    //   而且 ctx.dialog.* 是**宿主能力**：远程/Node 宿主下是 UNSUPPORTED、会抛（r136/r137/r191），
+    //   所以这条路径在远程访问下是**必然**失败而不是偶发失败。
+    //   框架层取文案走本组件已有的 k()（i18n 键前缀助手），播报用命令式原语（r82/r83）。
+    try {
+      await ctx.dialog.saveTextFile({
+        name: "model-config.json",
+        content: json,
+        defaultFileName: "model-config.json",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+    } catch (err) {
+      announceTransient(k("exportFailed", { detail: (err as Error)?.message ?? String(err) }), "error");
+    }
   };
 
   return (

@@ -63,5 +63,6 @@
   "models.discoverCollapse": "收起",
   "models.discoverUseConfigured": "端点不支持列表发现 · 改用已配置的 {{count}} 个模型",
   "models.devRoleIncompatible": "devRole 不兼容",
-  "models.devRoleHint": "部分 OpenAI 兼容网关只认 system 角色;内核对 reasoning 模型默认发 developer 会被 400 拒——勾选则退回 system。"
+  "models.devRoleHint": "部分 OpenAI 兼容网关只认 system 角色;内核对 reasoning 模型默认发 developer 会被 400 拒——勾选则退回 system。",
+  "models.exportFailed": "导出模型配置失败：{{detail}}（当前宿主可能不支持保存对话框）"
 }
