@@ -250,6 +250,24 @@ export function parseSessionModelPrefs(custom: Record<string, unknown> | undefin
 
 /** 值是否为内核 id(不透明字符串;KernelId = string,任何 string 都是内核 id)。
  *  内核 id 由内核插件声明、经 KernelRegistry 运行时注册,不再有字面量联合可窄化。 */
+/**
+ * ⚠ **只是形状守卫，不是成员校验**（r150 补注释；此前无任何说明，名字与类型谓词都在过度承诺）。
+ *
+ * 它只判"是不是字符串"，**不判"是不是已装载的内核"**——因为圆心**无法**判：
+ * 内核清单由 `KernelRegistry` 在运行时驱动（见 `domain/kernel.ts:5`：字面量数组 `KERNEL_IDS`
+ * 已删除），"加内核 = 写插件、圆心一行不改"（§1.5）。若在圆心造一份 id 清单来校验，
+ * 就等于把内核身份写回圆心，正是 §1.5 判别气味与 §6.3 检验⑤要消灭的形态。
+ *
+ * 所以类型谓词 `v is KernelId` 的含义要读作**"形状上可以当内核 id 用"**，
+ * 而不是"这个 id 一定对应一个已装载的内核"。
+ *
+ * **真正的成员校验在能拿到注册表的那一层**：`bootstrap` 的路由工厂
+ * （`50-wiring.ts` 的 `kernelRegistry.get(opts.kernel)`）在未装载时会抛可行动的错误
+ * （"内核 X 当前未装载…临时启用可用 MHD_ENABLE_KERNELS=X"）。
+ * 调用方（如 `session-store.ts:583` 用本谓词识别旧头行里的 `custom.kernel`）
+ * 因此得到的是"形状合法的候选 id"，能不能真用由注册表那一层决定——
+ * 这与 §1.5 的三条出路一致：识别不了就**显式报错/降级**，不静默当成某个内核。
+ */
 export function isKernelId(v: unknown): v is KernelId {
   return typeof v === "string";
 }
