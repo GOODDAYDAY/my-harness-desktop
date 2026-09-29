@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 275;   // r183 修掉 7 处 UI 态落盘 ⇒ 282 → 275（实测值，与算术一致；提取缺口本轮为 0）
+const CEILING = 275;   // r183 修掉 7 处 UI 态落盘 ⇒ 282 → 275；r185 收敛四处到 fireAndReport（不改计数：它们原本就带 .catch）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
