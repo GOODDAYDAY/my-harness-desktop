@@ -390,3 +390,48 @@ describe("deduplicateAdjacent：content 无法序列化时的回落（相邻去�
     expect(deduplicateAdjacent([a, mid, b]), "非标准角色全量去重：非相邻的相同内容也算冗余").toHaveLength(2);
   });
 });
+
+describe("持久层的终结态行 → 中性消息（r248；e2e 种子剧本的前提）", () => {
+  // 背景：r246/r247 想用「种一个带终结态的会话文件」在真机零 token 渲染出
+  // data-message-error / data-message-stopped，剧本卡在「消息正文没渲染」。
+  // 本轮在圆心层把两个候选一次排除：② 种入的 assistant 行没被投影成中性消息；
+  // ③ errorMessage 那条的 content 被丢弃。结论：**都不成立**——投影是 { ...m } 全量透传
+  // 后再 withTerminalState，所以 stopReason/errorMessage 只影响 error/stopped 标记，不动 content。
+  // ⇒ 剧本的阻塞点只剩「点击没真正切会话/时序」这一类（剧本侧问题，不是产品问题）。
+
+  it("① stopReason=error + errorMessage 的行 ⇒ error=true，且 content 与 errorMessage 都保留", () => {
+    const m = sessionEntryToNeutral({
+      type: "message",
+      message: {
+        role: "assistant",
+        stopReason: "error",
+        errorMessage: "上游返回 500",
+        content: [{ type: "text", text: "半截回复" }],
+      },
+    });
+    expect(m, "带终结态的行必须能投影成中性消息（否则会话打开后时间线是空的）").not.toBeNull();
+    expect(m!.error, "stopReason=error ⇒ error 标记").toBe(true);
+    expect(m!.stopped, "error 不该顺带置 stopped").not.toBe(true);
+    expect(JSON.stringify(m!.content), "content 不能被丢弃（否则失败条只剩标题、看不到半截正文）").toContain("半截回复");
+    expect(m!.errorMessage).toBe("上游返回 500");
+  });
+
+  it("② stopReason=aborted 的行 ⇒ stopped=true 且**不叠** error（用户点停止不是错误）", () => {
+    const m = sessionEntryToNeutral({
+      type: "message",
+      message: { role: "assistant", stopReason: "aborted", content: [{ type: "text", text: "被打断的回复" }] },
+    });
+    expect(m!.stopped).toBe(true);
+    expect(m!.error, "aborted 语义上没有合法 error（函数头注：此前误标会让「已停止」渲染成「生成失败」红条）").not.toBe(true);
+    expect(JSON.stringify(m!.content)).toContain("被打断的回复");
+  });
+
+  it("③ 正常 end_turn 行 ⇒ 两个标记都不置（对照组：确认判据不是「一律置真」）", () => {
+    const m = sessionEntryToNeutral({
+      type: "message",
+      message: { role: "assistant", stopReason: "end_turn", content: [{ type: "text", text: "正常回复" }] },
+    });
+    expect(m!.error).not.toBe(true);
+    expect(m!.stopped).not.toBe(true);
+  });
+});
