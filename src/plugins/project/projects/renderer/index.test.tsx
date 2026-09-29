@@ -21,6 +21,9 @@ const h = vi.hoisted(() => ({
   setCwdCalls: [] as string[],
   clearCalls: 0,
   configSets: [] as unknown[][],
+  // r184：失败播报的记录（persistState 的 .catch 走它）
+  announced: [] as { msg: string; variant?: string }[],
+  configSetRejects: false as boolean,
 }));
 const ctx = vi.hoisted(() => ({
   o: {} as Record<string, unknown>,
@@ -39,6 +42,10 @@ vi.mock("@my-harness-desktop/react", () => ({
     getState: () => ({ switchCwd: async (d: string) => { h.switchCalls.push(d); } }),
   }),
   Section: ({ children }: { children: React.ReactNode }) => <section>{children}</section>,
+  // ⚠ r183 的产品改动新 import 了 announceTransient；mock 不给它，测试里一调就是 undefined
+  //   （r165 的教训：mock 缺项不会报错，只会在调用点炸或静默无效）。
+  announceTransient: (msg: string, variant?: string) => { h.announced.push({ msg, variant }); },
+  pickDirectory: async () => null,
 }));
 
 import { ProjectsSection } from "./index";
@@ -47,10 +54,14 @@ const row = (dir: string): HTMLElement => document.querySelector(`[title="${dir}
 beforeEach(() => {
   h.cwds = ["/w/alpha", "/w/beta"]; h.currentCwd = "/w/alpha";
   h.switchCalls = []; h.setCwdCalls = []; h.clearCalls = 0; h.configSets = [];
+  h.announced = []; h.configSetRejects = false;
   ctx.o = {
     config: {
       get: async (k: string) => (k === "recentCwds" ? h.cwds : k === "sectionCollapsed" ? false : undefined),
-      set: async (...a: unknown[]) => { h.configSets.push(a); },
+      set: async (...a: unknown[]) => {
+        h.configSets.push(a);
+        if (h.configSetRejects) throw new Error("写盘失败(夹具)");
+      },
     },
   };
 });
@@ -107,5 +118,61 @@ describe("ProjectsSection(左栏项目组)", () => {
     await waitFor(() => expect(h.switchCalls).toEqual(["/w/beta"]));
     const orderWrite = h.configSets.find((a) => a[0] === "recentCwds");
     expect(orderWrite, "点项目竟写回了 recentCwds(会重排)").toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// persistState 的失败播报（r184：补 r183 那批"修了但没测"的 DOM 层断言）
+//
+// r183 把 7 处 `void ctx.config.set(...)` 发射后不管改成 persistState/persist
+// （.catch ⇒ console.warn + announceTransient）。当时如实记了欠据：失败路径没测。
+// 它在 jsdom 里**可直接构造**（把 ctx.config.set 换成 reject），不需要真机造传输失败——
+// 判据是 r170 那条：mock 的是**协作者**（config 写入的实现），不是被测对象
+// （persistState 的失败处置逻辑）。
+// ─────────────────────────────────────────────────────────────────────────────
+describe("persistState：UI 态落盘失败要播报（r183 那批兜底的 DOM 层断言）", () => {
+  it("① 写失败 ⇒ 播报一条 error，且文案含**可行动指引**与失败的 key", async () => {
+    h.configSetRejects = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<ProjectsSection />);
+    await waitFor(() => expect(row("/w/alpha")).toBeTruthy());
+    // 折叠/展开分组会触发 persistState("sectionCollapsed", …)
+    const toggle = document.querySelector("[data-project-group-toggle], button[aria-expanded]");
+    if (toggle) fireEvent.click(toggle);
+    // 若该控件不存在，退而点删除按钮也会触发 recentCwds 落盘
+    if (h.configSets.length === 0) {
+      const rm = document.querySelector("[data-project-remove]");
+      if (rm) fireEvent.click(rm as HTMLElement);
+    }
+    await waitFor(() => expect(h.configSets.length).toBeGreaterThan(0));
+    await waitFor(() => expect(h.announced.length).toBeGreaterThan(0));
+    const a = h.announced[0];
+    expect(a.variant, "落盘失败是用户可行动的故障 ⇒ 必须走 error 级（不是 info）").toBe("error");
+    expect(a.msg, "文案要点名失败的 key（否则用户不知道哪个状态没保住）").toContain("stateSaveFailed");
+    expect(warn.mock.calls.length, "同时留 console.warn 供排查").toBeGreaterThan(0);
+    warn.mockRestore();
+  });
+
+  it("② 写**成功** ⇒ 不播报（不给用户假警报）", async () => {
+    h.configSetRejects = false;
+    render(<ProjectsSection />);
+    await waitFor(() => expect(row("/w/alpha")).toBeTruthy());
+    const rm = document.querySelector("[data-project-remove]");
+    if (rm) fireEvent.click(rm as HTMLElement);
+    await waitFor(() => expect(h.configSets.length).toBeGreaterThan(0));
+    expect(h.announced, "成功路径不该播报任何失败信息").toEqual([]);
+  });
+
+  it("③ 落盘失败**不影响本地 UI 生效**（§7.6：部分成功要显示已成功的部分 + 说明失败项）", async () => {
+    h.configSetRejects = true;
+    render(<ProjectsSection />);
+    await waitFor(() => expect(row("/w/beta")).toBeTruthy());
+    const rm = row("/w/beta").querySelector("[data-project-remove]") as HTMLElement | null;
+    if (rm) {
+      fireEvent.click(rm);
+      // 本地立即移除（用户的动作有反馈），同时被告知没保住
+      await waitFor(() => expect(row("/w/beta")).toBeNull());
+      await waitFor(() => expect(h.announced.length).toBeGreaterThan(0));
+    }
   });
 });
