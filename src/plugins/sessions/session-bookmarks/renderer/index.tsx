@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState, Toast, SortableList, announceTransient } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, EmptyState, Toast, SortableList, fireAndReport } from "@my-harness-desktop/react";
 import { cwdToBucketName, messageContentText, applyCustomOrder } from "@my-harness-desktop/shared";
 
 // 收藏请求事件(本插件自有 channel):timeline/树行一击收藏经 invoke 分派,本 tab 订阅 + revealOn 揭示。
@@ -103,10 +103,10 @@ export function BookmarksTab(): React.ReactNode {
    *  把所有在飞 invoke 一律 reject（r177/r178 查明的第四环）。
    *  收敛成一个函数（§3.3：两处调用逻辑相同、差别只在入参），失败时播报可行动信息。 */
   const persistOrder = useCallback((ids: string[]): void => {
-    void ctx.config.set("bookmarkOrder", ids).catch((err: unknown) => {
-      const detail = err instanceof Error ? err.message : String(err);
-      console.warn("[session-bookmarks] 顺序落盘失败:", err);
-      announceTransient(t("bookmarks.orderSaveFailed", { detail }), "error");
+    // r185：收敛到框架原语 fireAndReport（此前四个插件各抄一份同构的 .catch+warn+播报）。
+    fireAndReport(ctx.config.set("bookmarkOrder", ids), {
+      tag: "session-bookmarks",
+      message: (detail) => t("bookmarks.orderSaveFailed", { detail }),
     });
   }, [ctx, t]);
 

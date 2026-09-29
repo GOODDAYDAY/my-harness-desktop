@@ -11,7 +11,7 @@ import {
   resolveCodeBlockRendererByExtension,
   resolveCodeBlockRendererComponent,
   type FileActionInvokePayload,
-  announceTransient,
+  fireAndReport,
 } from "@my-harness-desktop/react";
 import { pathBasename } from "@my-harness-desktop/shared";
 
@@ -176,10 +176,9 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
     //   或传输层失败——ws-transport 的 failAll 在鉴权被拒/连接断开时把所有在飞 invoke 一律
     //   reject，r177/r178 查明的第四环）。此前 `void ctx.openFile(path)` 把结果与错误一起丢掉，
     //   用户点了"打开"却什么都没发生、零反馈（§7.6 禁止的静默失败）。
-    void ctx.openFile(path).catch((err: unknown) => {
-      const detail = err instanceof Error ? err.message : String(err);
-      console.warn("[file-preview] 打开文件失败:", err);
-      announceTransient(t("preview.openFailed", { detail }), "error");
+    fireAndReport(ctx.openFile(path), {   // r185 收敛到框架原语
+      tag: "file-preview",
+      message: (detail) => t("preview.openFailed", { detail }),
     });
   };
 

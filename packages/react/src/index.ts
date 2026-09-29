@@ -364,6 +364,7 @@ export { EmptyState, type EmptyStateProps } from "./widgets/empty-state";
 export { Toast, ensureToastHost, type ToastProps } from "./widgets/toast";
 // 常驻 live region 宿主：应用根挂载一次，让**第一条** toast 也能被读屏播报（见 live-region.tsx 的说明）。
 export { LiveRegionHost, Announce, announceTransient } from "./widgets/live-region";
+export { fireAndReport, type FireAndReportOptions } from "./widgets/fire-and-report";
 // 复制到剪贴板的统一原语（r134）：9 处各自调 navigator.clipboard 的形态收敛成一个，
 // 失败时自己播报（§7.6 不许静默）、返回 boolean 供调用方驱动"已复制"状态。
 export { copyToClipboard } from "./widgets/clipboard";

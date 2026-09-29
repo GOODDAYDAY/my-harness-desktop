@@ -10,7 +10,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Announce, announceTransient, Button, RECOMMENDED_PLUGIN_TAGS, type PluginListItem, type PluginTier, usePluginContext, useSessionStore, Pagination, usePagination , pickDirectory } from "@my-harness-desktop/react";
+import { Announce, fireAndReport, Button, RECOMMENDED_PLUGIN_TAGS, type PluginListItem, type PluginTier, usePluginContext, useSessionStore, Pagination, usePagination , pickDirectory } from "@my-harness-desktop/react";
 
 
 const PAGE_SIZE = 10;
@@ -66,10 +66,9 @@ export function PluginManagerPage(): React.ReactNode {
   const { t } = useTranslation();
   /** UI 态落盘（r183，同 projects 的 persist）：三处此前都是 `void ctx.config.set(...)` 发射后不管。 */
   const persist = (key: string, value: unknown): void => {
-    void ctx.config.set(key, value, { scope: "global" }).catch((err: unknown) => {
-      const detail = err instanceof Error ? err.message : String(err);
-      console.warn("[plugin-manager] UI 态落盘失败:", key, err);
-      announceTransient(t("pluginManager.stateSaveFailed", { key, detail }), "error");
+    fireAndReport(ctx.config.set(key, value, { scope: "global" }), {   // r185 收敛到框架原语
+      tag: "plugin-manager",
+      message: (detail) => t("pluginManager.stateSaveFailed", { key, detail }),
     });
   };
 

@@ -15,7 +15,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {  usePluginContext, useUiStore, useSessionStore, Section , pickDirectory, announceTransient } from "@my-harness-desktop/react";
+import {  usePluginContext, useUiStore, useSessionStore, Section , pickDirectory, fireAndReport } from "@my-harness-desktop/react";
 import { pathBasename } from "@my-harness-desktop/shared";
 
 
@@ -30,10 +30,10 @@ export function ProjectsSection(): React.ReactNode {
   // ⚠ 命名：本文件原有一个 persist(next: string[])（recentCwds 专用），故本助手叫 persistState
   //   （r183 首版撞名 ⇒ TS2451 Cannot redeclare；改名而不是删掉原有的，因为原有那个语义更窄）。
   const persistState = (key: string, value: unknown): void => {
-    void ctx.config.set(key, value, { scope: "global" }).catch((err: unknown) => {
-      const detail = err instanceof Error ? err.message : String(err);
-      console.warn("[projects] UI 态落盘失败:", key, err);
-      announceTransient(t("projects.stateSaveFailed", { key, detail }), "error");
+    // r185：收敛到框架原语 fireAndReport（此前四个插件各抄一份同构的 .catch+warn+播报）。
+    fireAndReport(ctx.config.set(key, value, { scope: "global" }), {
+      tag: "projects",
+      message: (detail) => t("projects.stateSaveFailed", { key, detail }),
     });
   };
 
