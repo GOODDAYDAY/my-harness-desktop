@@ -205,7 +205,8 @@ try {
     document.querySelectorAll("div").forEach((d) => { if (d.scrollHeight > d.clientHeight + 200) d.scrollTop = 0; });
   });
   await waitForDomIdle(page, { quietMs: 400, timeoutMs: 5000 }).catch(() => {});
-  ok(await page.evaluate(() => document.body.innerText.includes("模型 →")), "② 模型分隔线可见(问题1)");
+  // r240：模型分隔线改按稳定锚点 data-entry-divider="model" 探针（此前按译文 "模型 →"，语言绑定）
+  ok(await page.evaluate(() => !!document.querySelector('[data-entry-divider="model"]')), "② 模型分隔线可见(问题1)");
   // 中立层落盘核对(数据层硬断言,不依赖渲染窗口):分隔线持久化在册,刷新不丢
   const nsFiles = readdirSync(join(home, ".my-harness-desktop-dev", "sessions")).filter((f) => f.endsWith(".json"));
   const dividerPersisted = nsFiles.some((f) => {
@@ -263,7 +264,7 @@ try {
   await page.waitForSelector("[data-timeline-composer]", { timeout: 30000 });
   await waitForDomIdle(page, { quietMs: 900, timeoutMs: 25000 });
   // 刷新后停留在最后会话(sessions list 恢复);若停在空态则点第一个会话
-  const hasDivider = await page.evaluate(() => document.body.innerText.includes("模型 →"));
+  const hasDivider = await page.evaluate(() => !!document.querySelector('[data-entry-divider="model"]'));
   if (!hasDivider) {
     // 刷新后停在新会话壳(两内核一致的设计行为:启动只恢复 lastCwd,不恢复会话)——
     // 点会话列表行重开。锚点是 sessions-list 的 data-session-path 行;
@@ -279,7 +280,7 @@ try {
     document.querySelectorAll("div").forEach((d) => { if (d.scrollHeight > d.clientHeight + 200) d.scrollTop = 0; });
   });
   await waitForDomIdle(page, { quietMs: 400, timeoutMs: 5000 }).catch(() => {});
-  await page.waitForFunction(() => document.body.innerText.includes("模型 →"), { timeout: 15000, polling: 400 });
+  await page.waitForFunction(() => !!document.querySelector('[data-entry-divider="model"]'), { timeout: 15000, polling: 400 });
   ok(true, "⑤ 刷新重开后模型分隔线仍在(问题1持久化)");
   await shot("after-reload");
 

@@ -29,7 +29,12 @@ export function EntryDivider({ kind, i18nKey, i18nArgs, detail, tone }: {
   const text = t(i18nKey, i18nArgs);
   const colorClass = tone === "error" ? "text-[var(--color-accent-error)]" : "text-[var(--color-muted)]";
   return (
-    <div className="select-none">
+    // r240：稳定状态锚点 = 分隔条的**种类**（model / compaction / thinkingLevel / info…）。
+    //   此前 e2e 只能按译文探针（dsh-session 的 innerText.includes("模型 →")），语言绑定即失效
+    //   （§1.2/r113）；而这里的文案键是**当数据传**的（i18nKey 由圆心 session-state.ts:568 与
+    //   minimal/probe4-catalog.ts:31 写进 divider 条目，渲染侧才 t(i18nKey, i18nArgs)），
+    //   所以按文案搜根本找不到消费处——只能按 kind 这个**中立契约字段**做锚点。
+    <div className="select-none" data-entry-divider={kind}>
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-[var(--color-border)]" />
         <button
