@@ -15,7 +15,8 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, TriangleAlert } from "lucide-react";
-import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, PluginIcon, type SessionInfo } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, PluginIcon, type SessionInfo,
+  announceTransient,} from "@my-harness-desktop/react";
 import { deriveSessionTitle, applyCustomOrder, advancePhase, scopeKeyFromSessionKey, type WorkingPhase, type SessionRawFilePaths } from "@my-harness-desktop/shared";
 import { filterSessions } from "../core/search";
 import { PhaseIcon } from "./phase-icon";
@@ -266,9 +267,20 @@ export function SessionsSection(): React.ReactNode {
   }, [ctx]);
 
   /** 打开原始文件;无路径/打开失败都显式通知,不静默(此前 shell.openPath 失败被宿主
-   *  console.warn 吞掉、插件侧 `void` 丢弃结果——点了没反应也没报错的根因)。 */
+   *  console.warn 吞掉、插件侧 `void` 丢弃结果——点了没反应也没报错的根因)。
+   *
+   *  ⚠ r191 更正反馈通道：此前两个分支**只**用 `ctx.notify.show`（系统通知），
+   *  而系统通知是**宿主相关**的——`src/server/controllers/notification.ts` 的头注写明
+   *  "remote 连接 host 为缺省降级(no-op/不支持)"，node-host 的 notify 就是 no-op。
+   *  也就是说：**远程访问 / 纯 Node 宿主下，用户点了"打开原始文件"失败后什么都收不到**
+   *  （不是缺 .catch——no-op 是 resolve 而不是 reject，所以 .catch 根本不会触发）。
+   *  按 §1.5 的三条出路，这属于"宿主缺面"⇒ 走**显式降级**：改用**应用内**播报
+   *  （announceTransient 走常驻 live region，恒可用、且读屏可达），
+   *  系统通知保留为**补充**（应用在后台时它才有额外价值）。
+   *  这与 r83 的结论一致：反馈通道要选"恒可用的那个"，不能选"宿主可能没有的那个"。 */
   const openRawFile = useCallback(async (path: string | null): Promise<void> => {
     if (!path) {
+      announceTransient(t("sessions.noRawFile"), "error");
       void ctx.notify.show({ title: t("sessions.openRaw"), body: t("sessions.noRawFile") });
       return;
     }
@@ -276,6 +288,7 @@ export function SessionsSection(): React.ReactNode {
       await ctx.dialog.openFile(path);
     } catch (err) {
       console.error("[sessions-list] 打开原始文件失败:", err);
+      announceTransient(t("sessions.openFailed"), "error");
       void ctx.notify.show({ title: t("sessions.openRaw"), body: t("sessions.openFailed") });
     }
   }, [ctx, t]);
