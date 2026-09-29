@@ -24,5 +24,6 @@
   "bookmarks.errorNotForkable": "The bookmark anchor is not an assistant message; cannot fork",
   "bookmarks.forkCreated": "New session created from bookmark \"{{label}}\"",
   "bookmarks.deleteFailed": "Failed to delete bookmark. Please retry",
-  "bookmarks.orderSaveFailed": "Could not save the bookmark order: {{detail}} (the current order lasts only for this session; it reverts on restart)"
+  "bookmarks.orderSaveFailed": "Could not save the bookmark order: {{detail}} (the current order lasts only for this session; it reverts on restart)",
+  "bookmarks.createFailed": "Could not create the bookmark: {{detail}} (it was not saved; you can try again)"
 }

@@ -24,5 +24,6 @@
   "bookmarks.errorNotForkable": "收藏的錨點不是助手訊息,無法 fork",
   "bookmarks.forkCreated": "已從收藏「{{label}}」建立新會話",
   "bookmarks.deleteFailed": "刪除收藏失敗,請重試",
-  "bookmarks.orderSaveFailed": "收藏順序儲存失敗：{{detail}}（目前順序只在這次工作階段內有效，重新啟動後會回到上次的順序）"
+  "bookmarks.orderSaveFailed": "收藏順序儲存失敗：{{detail}}（目前順序只在這次工作階段內有效，重新啟動後會回到上次的順序）",
+  "bookmarks.createFailed": "建立收藏失敗：{{detail}}（該收藏未儲存，可重試）"
 }

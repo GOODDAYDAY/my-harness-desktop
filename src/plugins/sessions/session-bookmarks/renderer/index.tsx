@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState, Toast, SortableList, fireAndReport } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, EmptyState, Toast, SortableList, fireAndReport, announceTransient,} from "@my-harness-desktop/react";
 import { cwdToBucketName, messageContentText, applyCustomOrder } from "@my-harness-desktop/shared";
 
 // 收藏请求事件(本插件自有 channel):timeline/树行一击收藏经 invoke 分派,本 tab 订阅 + revealOn 揭示。
@@ -178,6 +178,22 @@ export function BookmarksTab(): React.ReactNode {
       await ctx.config.set("bookmarks", index);
       await loadBookmarks();
       return id;
+    } catch (err) {
+      // ⚠ r213：此前这个 try **只有 finally、没有 catch** ⇒ ctx.sessions.bookmark /
+      //   ctx.config.set 一旦 reject，错误冒到调用方；而调用方是
+      //   `void createBookmark(req, label).then((id) => …)`（**.then 无 .catch**）
+      //   ⇒ 未处理 rejection + 用户点"收藏"后零反馈（§7.6；r181 表里的形态①）。
+      //   修在**定义处**（不是各个调用点）⇒ 所有调用方同时得到正确行为（r190）。
+      //   返回 null 是既有契约（调用方用 `if (editAfter && id)` 判成功），所以不改签名。
+      //   ⚠ t 用本组件既有的那个（BookmarksTab 顶部 const { t, i18n } = useTranslation()）——
+      //   r213 首版按 'const { t } = useTranslation' 搜索没匹配到带 i18n 的解构形态、
+      //   于是多插了一个 t ⇒ TS2451 Cannot redeclare。教训：查'同名标识符是否已存在'要用
+      //   宽松模式（grep -n "\bt\b.*useTranslation"），不能照抄某一种解构写法。
+      announceTransient(
+        t("bookmarks.createFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
+      return null;
     } finally {
       pendingCreateRef.current.delete(id);
     }

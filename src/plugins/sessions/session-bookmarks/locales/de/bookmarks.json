@@ -24,5 +24,6 @@
   "bookmarks.errorNotForkable": "Die Lesezeichen-Markierung ist keine Assistentennachricht; Fork nicht möglich",
   "bookmarks.forkCreated": "Neue Sitzung aus Lesezeichen „{{label}}“ erstellt",
   "bookmarks.deleteFailed": "Lesezeichen konnte nicht gelöscht werden. Bitte erneut versuchen",
-  "bookmarks.orderSaveFailed": "Lesezeichen-Reihenfolge konnte nicht gespeichert werden: {{detail}} (die aktuelle Reihenfolge gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)"
+  "bookmarks.orderSaveFailed": "Lesezeichen-Reihenfolge konnte nicht gespeichert werden: {{detail}} (die aktuelle Reihenfolge gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)",
+  "bookmarks.createFailed": "Lesezeichen konnte nicht erstellt werden: {{detail}} (es wurde nicht gespeichert; erneut versuchen)"
 }
