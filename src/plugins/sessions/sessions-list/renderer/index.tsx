@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, TriangleAlert } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, PluginIcon, type SessionInfo,
-  announceTransient,} from "@my-harness-desktop/react";
+  announceTransient, fireAndReport,} from "@my-harness-desktop/react";
 import { deriveSessionTitle, applyCustomOrder, advancePhase, scopeKeyFromSessionKey, type WorkingPhase, type SessionRawFilePaths } from "@my-harness-desktop/shared";
 import { filterSessions } from "../core/search";
 import { PhaseIcon } from "./phase-icon";
@@ -62,6 +62,17 @@ interface ChildSession {
 export function SessionsSection(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
+  /** UI 态落盘（r197，同 r183 的 projects/plugin-manager）：此前是 `void ctx.config.set(...)`
+   *  **发射后不管**——已读状态与拖拽排序写失败时静默不落盘、重启后回退且零反馈（§7.6）。
+   *  customOrder 尤其是用户动作（拖拽排序，r180 的收藏顺序同族）。收敛成一个助手（§3.3），
+   *  失败处置复用框架原语 fireAndReport（r185）。 */
+  const persist = (key: string, value: unknown): void => {
+    fireAndReport(ctx.config.set(key, value), {
+      tag: "sessions-list",
+      message: (detail) => t("sessions.stateSaveFailed", { key, detail }),
+    });
+  };
+
   const {
     currentCwd, currentNeutralSessionId,
     setCurrentSessionPath, setCurrentNeutralSessionId, setSessionTitle,
@@ -154,7 +165,7 @@ export function SessionsSection(): React.ReactNode {
     const next = { ...cur, [path]: entryId };
     readStateRef.current = next;
     setReadState(next);
-    void ctx.config.set("readState", next);
+    persist("readState", next);
   };
 
   /** 阶段推进(advancePhase 增量;functional update 保最新 prev,事件闭包不 stale)。 */
@@ -432,7 +443,7 @@ export function SessionsSection(): React.ReactNode {
     setCustomOrder(next);
   }, []);
   const persistOrder = useCallback((): void => {
-    void ctx.config.set("customOrder", customOrderRef.current);
+    persist("customOrder", customOrderRef.current);
   }, [ctx]);
 
   return (

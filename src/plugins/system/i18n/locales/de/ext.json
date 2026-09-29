@@ -21,5 +21,6 @@
   "ext.installUnsupported": "Dieser Kernel unterstützt keine Erweiterung-Installation",
   "ext.installUnsupportedHint": "Der Kernel stellt keine Installationsfähigkeit bereit, daher wird das Formular hier nicht angeboten — statt Sie eine Quelle eingeben und danach scheitern zu lassen.",
   "ext.toggleFailed": "Erweiterung konnte nicht umgeschaltet werden: {{detail}}",
-  "ext.restartFailed": "Neustart fehlgeschlagen: {{detail}}"
+  "ext.restartFailed": "Neustart fehlgeschlagen: {{detail}}",
+  "ext.stateSaveFailed": "UI-Status konnte nicht gespeichert werden: {{detail}} (der Filter gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)"
 }

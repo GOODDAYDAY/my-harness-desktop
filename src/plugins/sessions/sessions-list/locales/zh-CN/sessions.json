@@ -35,5 +35,6 @@
   "sessions.deleteConfirmNo": "取消",
   "sessions.unread": "未读消息",
   "sessions.kernelNotLoaded": "本会话所属内核「{{kernel}}」未装载：可查看，不能发送",
-  "sessions.kernelNotLoadedShort": "内核未装载"
+  "sessions.kernelNotLoadedShort": "内核未装载",
+  "sessions.stateSaveFailed": "界面状态保存失败：{{detail}}（{{key}} 只在这次会话内有效，重启后会回到上次的状态）"
 }

@@ -6,6 +6,7 @@
 // ctx.restart(中性)。本组件只消费 ctx.kernelExtensions(kernel) + ctx.restart,
 // 不含任何内核身份分支。
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { fireAndReport } from "./widgets/fire-and-report";
 import { announceTransient } from "./widgets/live-region";
 import { useTranslation } from "react-i18next";
 import type { KernelExtensionInfo, KernelExtensionCapabilities, KernelId } from "@my-harness-desktop/shared";
@@ -88,6 +89,15 @@ export function KernelExtensionsPage({ kernel, title, sourcePlaceholder, refresh
 
 function ListSection({ kernel, title, refreshSignal }: { kernel: KernelId; title: string; refreshSignal: number }): React.ReactNode {
   const { t } = useTranslation();
+  /** 标签筛选落盘（r197）：此前是 `void ctx.config.set(...)` 发射后不管——用户切了筛选、
+   *  写失败时静默不落盘、重启后回到旧筛选且零反馈（§7.6）。走框架原语 fireAndReport（r185）。 */
+  const persistTagFilter = (value: unknown): void => {
+    fireAndReport(ctx.config.set("tagFilter", value, { scope: "global" }), {
+      tag: "kernel-extensions-page",
+      message: (detail) => t("ext.stateSaveFailed", { detail }),
+    });
+  };
+
   const ctx = usePluginContext();
   const [extensions, setExtensions] = useState<KernelExtensionInfo[]>([]);
   const [search, setSearch] = useState("");
@@ -134,12 +144,12 @@ function ListSection({ kernel, title, refreshSignal }: { kernel: KernelId; title
     else if (next[tag] === "exc") delete next[tag];
     else next[tag] = "inc";
     setTagFilter(next);
-    void ctx.config.set("tagFilter", next, { scope: "global" });
+    persistTagFilter(next);
   };
 
   const resetTagFilter = () => {
     setTagFilter({});
-    void ctx.config.set("tagFilter", {}, { scope: "global" });
+    persistTagFilter({});
   };
 
   const allTags = useMemo(() => {

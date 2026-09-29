@@ -35,5 +35,6 @@
   "sessions.deleteConfirmNo": "取消",
   "sessions.unread": "未讀訊息",
   "sessions.kernelNotLoaded": "本會話所屬核心「{{kernel}}」未裝載：可檢視，不能傳送",
-  "sessions.kernelNotLoadedShort": "核心未裝載"
+  "sessions.kernelNotLoadedShort": "核心未裝載",
+  "sessions.stateSaveFailed": "介面狀態儲存失敗：{{detail}}（{{key}} 只在這次工作階段內有效，重新啟動後會回到上次的狀態）"
 }
