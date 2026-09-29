@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 269;   // r187 排除自保护原语调用点 ⇒ 275 → 269（实测值）
+const CEILING = 250;   // r188 收敛 ui-store 的 20 处偏好落盘 ⇒ 269 → 250（实测值）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;

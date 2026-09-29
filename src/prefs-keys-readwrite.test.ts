@@ -74,12 +74,20 @@ function countUsages(keys: string[]): Map<string, { get: string[]; set: string[]
     for (const f of walk(join(ROOT, root))) {
       const rel = relative(ROOT, f);
       const src = readFileSync(f, "utf-8").replace(/\/\*[\s\S]*?\*\//g, "");
-      for (const m of src.matchAll(/prefs\s*\.\s*(get|set)\b/g)) {
+      // ⚠ 判据认**两种写入形态**（r188）：直接的 `prefs.set(...)`，以及 ui-store 里
+      //   收敛后的单一写入口 `persistPref(PREF_KEYS.x, v)`（r188 把 20 处发射后不管收敛成它，
+      //   内部走 fireAndReport + window.kernel.prefs.set）。
+      //   为什么要认后者：这条守卫的语义是"每个键都被写、都被回读"，
+      //   **写入经过一个收敛助手不改变这个语义**；若判据只认直接形态，
+      //   收敛之后所有键都会被判成"只读不写"⇒ 守卫红、然后被人放宽判据或加豁免（守卫就废了）。
+      //   反过来，收敛也**不该**让这条守卫失效——所以两侧都要认。
+      for (const m of src.matchAll(/(?:prefs\s*\.\s*(get|set)|persistPref)\s*\(?/g)) {
+        const isGet = m[1] === "get";
         const win = src.slice(m.index! + m[0].length, m.index! + m[0].length + WINDOW);
         for (const k of keys) {
           if (win.includes(`PREF_KEYS.${k}`)) {
             const rec = out.get(k)!;
-            (m[1] === "get" ? rec.get : rec.set).push(rel);
+            (isGet ? rec.get : rec.set).push(rel);
           }
         }
       }
