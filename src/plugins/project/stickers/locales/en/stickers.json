@@ -55,5 +55,6 @@
   "stickers.importFailed": "Import failed: {{detail}}",
   "stickers.saveFailed": "Save failed: {{detail}}",
   "stickers.pickImageFailed": "Could not open the image picker: {{detail}} (system dialogs are not available over remote/browser access — use the local window)",
-  "stickers.bannerLost": "Image could not be loaded"
+  "stickers.bannerLost": "Image could not be loaded",
+  "stickers.deleteFailed": "Could not delete the sticker: {{detail}} (the list has been refreshed to the actual state on disk)"
 }

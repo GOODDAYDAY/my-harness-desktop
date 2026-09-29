@@ -55,5 +55,6 @@
   "stickers.importFailed": "Import fehlgeschlagen: {{detail}}",
   "stickers.saveFailed": "Speichern fehlgeschlagen: {{detail}}",
   "stickers.pickImageFailed": "Bildauswahl konnte nicht geöffnet werden: {{detail}} (Systemdialoge sind über Remote-/Browserzugriff nicht verfügbar — lokales Fenster verwenden)",
-  "stickers.bannerLost": "Bild konnte nicht geladen werden"
+  "stickers.bannerLost": "Bild konnte nicht geladen werden",
+  "stickers.deleteFailed": "Sticker konnte nicht gelöscht werden: {{detail}} (die Liste wurde auf den tatsächlichen Zustand auf der Festplatte aktualisiert)"
 }

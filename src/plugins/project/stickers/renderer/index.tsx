@@ -270,8 +270,23 @@ export function StickersPanel({ isActive }: { isActive: boolean }): ReactNode {
                     onFillComposer={() => void fillComposer(n)}
                     onEdit={n.layer === "builtin" ? undefined : () => setEditing({ id: n.id, title: n.title ?? "", content: n.content, existingBanner: n.banner })}
                     onDelete={async () => {
-                      await removeSticker(ctx, n.id);
-                      await reload();
+                      // ⚠ r200：此前是裸的 `await removeSticker(); await reload();`，
+                      //   而调用点是 `void onDelete(n.id)` ⇒ 删除失败时**静默**：贴纸还在、
+                      //   用户以为删掉了、零反馈（§7.6）。同文件的 mutate（r83）已经写对了
+                      //   （try/catch + announceTransient + 失败后 reload 让列表回到真实状态），
+                      //   但它在**另一个组件的作用域**里、这里调不到 ⇒ 按同一形态就地兜。
+                      //   ⚠ 不改成"复用 mutate"：那要把 mutate 提到模块级或经 prop 传下来，
+                      //   属签名/结构变更（§3.3 的收敛要多个调用方共享才划算，此处只 1 个），
+                      //   本轮只做根因修复（失败要有反馈），收敛留待第三个同构调用点出现时。
+                      try {
+                        await removeSticker(ctx, n.id);
+                      } catch (err) {
+                        announceTransient(
+                          t("stickers.deleteFailed", { detail: (err as Error)?.message ?? String(err) }),
+                          "error",
+                        );
+                      }
+                      await reload().catch(() => {});   // 失败也要让列表回到真实状态，别显示半截
                     }}
                   />
                 ),

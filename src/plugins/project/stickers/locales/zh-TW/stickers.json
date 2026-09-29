@@ -55,5 +55,6 @@
   "stickers.importFailed": "匯入失敗：{{detail}}",
   "stickers.saveFailed": "儲存失敗：{{detail}}",
   "stickers.pickImageFailed": "無法開啟圖片選擇器：{{detail}}（遠端/瀏覽器存取下不支援系統對話框，請在本機視窗裡操作）",
-  "stickers.bannerLost": "圖片讀取失敗"
+  "stickers.bannerLost": "圖片讀取失敗",
+  "stickers.deleteFailed": "刪除貼紙失敗：{{detail}}（清單已重新整理為磁碟上的真實狀態）"
 }
