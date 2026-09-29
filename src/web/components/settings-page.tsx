@@ -17,6 +17,7 @@
 //   (统一通道约定,docs/design/unified-project-config.md)
 // saveMode=manual 的插件(theme-manager):不传 config(null)、不显示浮层/打开按钮/拦截。
 import { useCallback, useEffect, useRef, useState, memo } from "react";
+import { fireAndReport } from "@my-harness-desktop/react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -620,11 +621,15 @@ export function SettingsPage(): React.ReactNode {
               )}
               {activeOpenTarget && (activeIsFramework ? activeHasConfig : true) && (
                 <button
-                  onClick={() => void window.kernel.openFile(
+                  onClick={() => fireAndReport(window.kernel.openFile(
                     activeIsFramework && activeIsLayered && currentCwd && activeHasProject
                       ? `${currentCwd}/.my-harness-desktop/${relPathOf(activeOpenTarget)}`
                       : activeOpenTarget,
-                  )}
+                  ), {
+                    // r194：用户动作不能发射后不管（与 r182/r193 同族）
+                    tag: "settings-page",
+                    message: (detail) => i18next.t("shell.openFileFailed", { detail }),
+                  })}
                   title={t("shell.openConfig")}
                   style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "transparent", color: "var(--color-muted)", cursor: "pointer" }}
                 >

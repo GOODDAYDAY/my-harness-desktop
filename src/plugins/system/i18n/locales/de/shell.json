@@ -64,5 +64,6 @@
   "shell.clipboardFailed": "Kopieren fehlgeschlagen: {{detail}}",
   "shell.clipboardUnavailable": "Die Zwischenablage ist in diesem Kontext nicht verfügbar (Browser stellen sie nur in sicheren Kontexten bereit — localhost oder https verwenden)",
   "shell.directoryPickerFailed": "Verzeichnisauswahl konnte nicht geöffnet werden: {{detail}} (Systemdialoge sind über Remote-/Browserzugriff nicht verfügbar — lokales Fenster verwenden)",
-  "shell.prefSaveFailed": "Einstellung konnte nicht gespeichert werden: {{detail}} ({{key}} gilt nur für diesen Lauf und wird beim Neustart zurückgesetzt)"
+  "shell.prefSaveFailed": "Einstellung konnte nicht gespeichert werden: {{detail}} ({{key}} gilt nur für diesen Lauf und wird beim Neustart zurückgesetzt)",
+  "shell.openFileFailed": "Datei konnte nicht geöffnet werden: {{detail}} (Sie können den Pfad manuell in Ihrer Dateiverwaltung öffnen)"
 }

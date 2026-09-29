@@ -64,5 +64,6 @@
   "shell.clipboardFailed": "Copy failed: {{detail}}",
   "shell.clipboardUnavailable": "The clipboard is not available in this context (browsers expose it only in secure contexts — use localhost or https)",
   "shell.directoryPickerFailed": "Could not open the directory picker: {{detail}} (system dialogs are not available over remote/browser access — use the local window)",
-  "shell.prefSaveFailed": "Could not save the preference: {{detail}} ({{key}} lasts only for this run; it reverts on restart)"
+  "shell.prefSaveFailed": "Could not save the preference: {{detail}} ({{key}} lasts only for this run; it reverts on restart)",
+  "shell.openFileFailed": "Could not open the file: {{detail}} (you can open that path manually in your file manager)"
 }
