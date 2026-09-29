@@ -113,7 +113,8 @@ try {
   ok(clicked, "点击「分叉」(arm)");
   await new Promise((r) => setTimeout(r, 400));
   const confirmed = await page.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find((x) => (x.title || "").includes("确认分叉"));
+    // r179：改用稳定锚点（此前按 title 含「确认分叉」定位——语言绑定探针，换 locale 就静默失效）
+    const b = document.querySelector('[data-message-fork][data-message-fork-armed="true"]');
     if (!b) return false;
     b.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     return true;

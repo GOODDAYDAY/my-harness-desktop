@@ -243,7 +243,7 @@ try {
   const evtLog = await page.evaluate(() => window.__evtLog ?? []);
   console.log("   [diag] 会话事件流:", JSON.stringify(evtLog));
   ok((await page.evaluate(() => document.querySelectorAll('[data-message-id] [title="收藏"]').length)) >= 1, "③ 「收藏」入口在消息行渲染(问题8)");
-  ok((await page.evaluate(() => document.querySelectorAll('[data-message-id] [title="分叉"], [data-message-id] [title="确认分叉？"]').length)) >= 1, "③ 「分叉」入口在消息行渲染(问题8)");
+  ok((await page.evaluate(() => document.querySelectorAll('[data-message-id] [data-message-fork]').length)) >= 1, "③ 「分叉」入口在消息行渲染(问题8)");
 
   // ④ 第一条后改名分隔线恰好一条(问题10:自动命名只应跑一次)
   const renames1 = await renameCount();

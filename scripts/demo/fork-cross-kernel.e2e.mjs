@@ -95,7 +95,8 @@ try {
   });
   await new Promise((r) => setTimeout(r, 400));
   await page.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find((x) => (x.title || "").includes("确认分叉"));
+    // r179：改用稳定锚点（同 minimal-fork）
+    const b = document.querySelector('[data-message-fork][data-message-fork-armed="true"]');
     b?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
   await new Promise((r) => setTimeout(r, 2000));

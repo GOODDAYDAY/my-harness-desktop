@@ -89,6 +89,12 @@ export function ForkAction({ message }: MessageActionProps): React.ReactNode {
           arm(true);
         }}
         title={armed ? t("shell.forkArmed") : t("shell.fork")}
+        // ⚠ 稳定探针锚点（r179，skills §10.3）：此前剧本只能按 title 是否含「分叉」/「确认分叉」
+        //   定位这个按钮 —— 语言绑定探针，换 locale 就静默失效（r121 那族，这是最后一处）。
+        //   armed 态单独给一个锚点值：两步确认（r161 的 useArmConfirm）的两个阶段在剧本里
+        //   要分别断言，靠文案区分同样会随语言漂移。
+        data-message-fork=""
+        data-message-fork-armed={armed ? "true" : "false"}
         className={armed ? ARMED_STYLE : STYLE}
       >
         <GitFork className="size-3.5" />
