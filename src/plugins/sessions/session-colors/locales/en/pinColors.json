@@ -21,5 +21,6 @@
   "pinColors.color.a6e3a1": "Green",
   "pinColors.color.89b4fa": "Blue",
   "pinColors.color.cba6f7": "Purple",
-  "pinColors.color.f5c2e7": "Pink"
+  "pinColors.color.f5c2e7": "Pink",
+  "pinColors.stateSaveFailed": "Could not save the pin state: {{detail}} ({{key}} lasts only for this session; it reverts on restart)"
 }

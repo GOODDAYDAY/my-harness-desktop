@@ -21,5 +21,6 @@
   "pinColors.color.a6e3a1": "綠",
   "pinColors.color.89b4fa": "藍",
   "pinColors.color.cba6f7": "紫",
-  "pinColors.color.f5c2e7": "粉"
+  "pinColors.color.f5c2e7": "粉",
+  "pinColors.stateSaveFailed": "色標狀態儲存失敗：{{detail}}（{{key}} 只在這次工作階段內有效，重新啟動後會回到上次的狀態）"
 }

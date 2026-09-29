@@ -21,5 +21,6 @@
   "pinColors.color.a6e3a1": "绿",
   "pinColors.color.89b4fa": "蓝",
   "pinColors.color.cba6f7": "紫",
-  "pinColors.color.f5c2e7": "粉"
+  "pinColors.color.f5c2e7": "粉",
+  "pinColors.stateSaveFailed": "色标状态保存失败：{{detail}}（{{key}} 只在这次会话内有效，重启后会回到上次的状态）"
 }

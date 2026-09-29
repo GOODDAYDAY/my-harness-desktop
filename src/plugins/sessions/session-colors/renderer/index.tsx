@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
-import { useUiStore, usePluginContext, useSessionStore, useCurrentScopeKey, currentScopeKey, type PluginContext, type SessionInfo, type MessageActionProps } from "@my-harness-desktop/react";
+import { useUiStore, usePluginContext, useSessionStore, useCurrentScopeKey, currentScopeKey, type PluginContext, type SessionInfo, type MessageActionProps, fireAndReport,} from "@my-harness-desktop/react";
 import { deriveSessionTitle } from "@my-harness-desktop/shared";
 import { PinSVG } from "./pin-svg";
 import { usePinStore } from "./pin-store";
@@ -40,12 +40,26 @@ function isRowVisible(path: string): boolean {
   return true;
 }
 
-function persistPins(ctx: PluginContext, pins: Record<string, Pin[]>): void {
-  void ctx.config.set("pins", pins);
+/** ⚠ r198：`t` 由调用方**参数注入**（§6.3：插件不许 import src/web、所以拿不到 i18next 单例；
+ *  模块级函数又不在 React 作用域里、用不了 useTranslation ⇒ 唯一合法通道是参数注入，r197 记下）。
+ *  此前是 `void ctx.config.set(...)` 发射后不管：写失败时用户刚钉的色标静默不落盘、
+ *  重启后消失且零反馈（§7.6）。失败处置走框架原语 fireAndReport（r185）。 */
+/** r198：文案函数的**本地类型**（不用 i18next 的 TFunc——这个版本没导出它，TS2614；
+ *  而且插件只需要"给键与插值、拿回字符串"这一点点能力，本地别名更贴合 §6.3 的最小依赖面）。 */
+type Translate = (key: string, opts?: Record<string, unknown>) => string;
+
+function persistPins(ctx: PluginContext, pins: Record<string, Pin[]>, t: Translate): void {
+  fireAndReport(ctx.config.set("pins", pins), {
+    tag: "session-colors",
+    message: (detail) => t("pinColors.stateSaveFailed", { key: "pins", detail }),
+  });
 }
 
-function persistContentPins(ctx: PluginContext, contentPins: Record<string, ContentPin[]>): void {
-  void ctx.config.set("contentPins", contentPins);
+function persistContentPins(ctx: PluginContext, contentPins: Record<string, ContentPin[]>, t: Translate): void {
+  fireAndReport(ctx.config.set("contentPins", contentPins), {   // r198：同 persistPins
+    tag: "session-colors",
+    message: (detail) => t("pinColors.stateSaveFailed", { key: "contentPins", detail }),
+  });
 }
 
 async function loadPins(ctx: PluginContext): Promise<Record<string, Pin[]>> {
@@ -498,6 +512,7 @@ function ContentPinRow({ pin, preview, previewMuted, onLocate }: {
  *  面板只是 store 的视图,不再承担持久化。 */
 export function Overlay(): React.ReactNode {
   const ctx = usePluginContext();
+  const { t } = useTranslation();   // r198：为参数注入给模块级的 persist* 函数
   const selectedColor = usePinStore((s) => s.selectedColor);
   const pinMode = usePinStore((s) => s.pinMode);
   const pinsVisible = usePinStore((s) => s.pinsVisible);
@@ -536,7 +551,7 @@ export function Overlay(): React.ReactNode {
     const migrated = migrateContentPinKeys(contentPins, lookup);
     if (!migrated) return;   // 无需迁移(全是新口径的键)
     setContentPins(migrated);
-    persistContentPins(ctx, migrated);
+    persistContentPins(ctx, migrated, t);
   }, [contentPinsLoaded, sessionInfosForMigrate, contentPins, ctx, setContentPins]);
 
   useEffect(() => {
@@ -552,9 +567,15 @@ export function Overlay(): React.ReactNode {
     let first = true;
     return usePinStore.subscribe((state, prev) => {
       if (first) { first = false; return; }
-      if (state.pins !== prev.pins) persistPins(ctx, state.pins);
-      if (state.contentPins !== prev.contentPins) persistContentPins(ctx, state.contentPins);
-      if (state.pinsVisible !== prev.pinsVisible) void ctx.config.set("pinsVisible", state.pinsVisible, { scope: "global" });
+      if (state.pins !== prev.pins) persistPins(ctx, state.pins, t);
+      if (state.contentPins !== prev.contentPins) persistContentPins(ctx, state.contentPins, t);
+      if (state.pinsVisible !== prev.pinsVisible) {
+        // r198：可见性开关也是用户动作（点眼睛图标），失败要播报（同族）
+        fireAndReport(ctx.config.set("pinsVisible", state.pinsVisible, { scope: "global" }), {
+          tag: "session-colors",
+          message: (detail) => t("pinColors.stateSaveFailed", { key: "pinsVisible", detail }),
+        });
+      }
     });
   }, [ctx]);
 
