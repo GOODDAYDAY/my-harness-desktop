@@ -25,6 +25,12 @@ import { useComposerActions } from "./composer-actions";
 import { useComposerAttachments } from "./composer-attachments";
 import { useComposerPolicies } from "./composer-policies";
 import { useComposerStats } from "./composer-stats";
+// r163 扩批：这四个与前四个**机械同构**（模块级 cache + pluginsNonce + useState/useEffect），
+//   所以直接复用同一套性质（r162 的"一套性质 × N 个实例"手法）。
+import { useComposerTop } from "./composer-top";
+import { useComposerVoice } from "./composer-voice";
+import { useFileActions, fileActionInvokeChannel } from "./file-actions";
+import { useCodeBlockRenderers } from "./code-block-renderers";
 
 // ── ui-store：只暴露 pluginsNonce（可被测试改写以模拟插件启停）
 const uiState = { pluginsNonce: 1 };
@@ -58,6 +64,14 @@ const CASES = [
     sample: [{ pluginId: "p3", component: "Pol" }] },
   { name: "useComposerStats", hook: useComposerStats, slot: "composerStats",
     sample: [{ pluginId: "p4", component: "Sta" }] },
+  { name: "useComposerTop", hook: useComposerTop, slot: "composerTop",
+    sample: [{ pluginId: "p5", component: "Top" }] },
+  { name: "useComposerVoice", hook: useComposerVoice, slot: "composerVoice",
+    sample: [{ pluginId: "p6", component: "Voi" }] },
+  { name: "useFileActions", hook: useFileActions, slot: "fileActions",
+    sample: [{ pluginId: "p7", component: "Fil" }] },
+  { name: "useCodeBlockRenderers", hook: useCodeBlockRenderers, slot: "codeBlockRenderers",
+    sample: [{ pluginId: "p8", component: "Cod" }] },
 ];
 
 function Probe({ hook, onRender }: { hook: () => unknown[]; onRender: (v: unknown[]) => void }): React.ReactNode {
@@ -137,3 +151,15 @@ for (const c of CASES) {
     });
   });
 }
+
+describe("fileActionInvokeChannel：文件动作回调的 channel 名（纯函数）", () => {
+  it("① 形状是 `<pluginId>:fileActionInvoke`（事件总线按 channel 路由，名字错了贡献方收不到）", () => {
+    expect(fileActionInvokeChannel("stickers")).toBe("stickers:fileActionInvoke");
+  });
+  it("② 不同 pluginId 得到**不同** channel（否则两个插件的文件动作会互相串）", () => {
+    expect(fileActionInvokeChannel("a")).not.toBe(fileActionInvokeChannel("b"));
+  });
+  it("③ 确定性：同输入同输出（它被用作事件路由键，不能每次不同）", () => {
+    expect(fileActionInvokeChannel("x")).toBe(fileActionInvokeChannel("x"));
+  });
+});
