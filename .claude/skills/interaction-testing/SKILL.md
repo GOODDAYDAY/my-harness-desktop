@@ -9,6 +9,9 @@ description: 在 my-harness-desktop 做真实交互验证(DOM 级/E2E)与全仓�
 
 ## 0 索引(按主题速查;条目按轮号 rXXX 编号)
 
+> 🧭 **第一次用先读 §18「操作面总入口」**（r253）：三级测试怎么选层、剧本怎么挑怎么跑、
+> 探针纪律、失败诊断手法、一轮的标准动作与禁令——每条都给确切命令。§0–§17 是按轮次累积的判据库。
+
 **基础设施与拉起**:§1 基础设施(lastCwd/端口/dsh 三件/seed/**静默开拉·不抢用户焦点**)| 官方 e2e 矩阵(r326)
 **探针通用纪律**:数据/渲染分层断言 | 写穿感知等待 | settle 清缓冲 | 官方 e2e 矩阵
 **会话回合生命周期**:多行输入(r339)排队(r331)流式中切换(r321/r322)中断×续跑(r354)重试(r307/r363)回退(r313)
@@ -12018,3 +12021,105 @@ timeline 的 `blocks.ts` 经 `getAuxParsers()` 喂 `parseUserBlocks`），属发
 + 每个 locale 各跑一遍 + 每条判据配"不空转"断言 + 每个修复配反向注入验证
 + 大批量债务走棘轮清单 + 锚点只用自有且源码可查的 + 文件↔DOM 用不变量而非等式
 + 结论落到守卫（下次自动跑）而不是一次性输出。
+
+
+---
+
+## 18 操作面总入口：从 0 到跑通（r253 收尾整理；用户要的第 3 项「怎么实际交互」）
+
+前面 §0–§17 是**按轮次累积**的（12000+ 行、253 个小节），适合查"某类问题的判据"。
+本节是**按操作顺序**写的入口：拿到一个改动，从头到尾该怎么验。每条都给了确切命令。
+
+### 18.1 三级测试：先选层，再动手（§5.6）
+
+| 层 | 命令 | 什么时候用 | 判据（§4.5） |
+|---|---|---|---|
+| **unittest** | `npx vitest run <file>` | 圆心纯函数、归约器、翻译器、状态机、解析器 | **不需要 mock 外部环境** ⇒ 内层材料 |
+| **DOM 交互** | `npx vitest run <file>`（文件首行 `// @vitest-environment jsdom`） | 插件 UI 组件的真实交互（渲染/点击/键入/状态翻转/`data-*` 锚点） | 需要 mock `usePluginContext` / `react-i18next`，但**只 mock 这两类** |
+| **e2e** | `npm run build && node scripts/demo/<name>.e2e.mjs [--port N] [--locale de] [--keep]` | 跨进程全链路：真实键入、真实内核起停、真实事件流、真实 DOM | jsdom 测不了的（虚拟列表、CDP 时序、真实内核事件） |
+
+三层都要跑完整套时：`npx vitest run --reporter=dot`（当前 **309 文件 / 2610 测试**）
++ `npm run audit`（十三检验，当前五项 0 违规）+ `npx tsc --noEmit -p tsconfig.json` + `npm run build`。
+
+⚠ **四类验证各管一段，不能互相代替**（r217）：vitest 不 typecheck、tsc 不查 i18n 键、
+构建不查剧本语法、剧本语法只有 `node --check <file>.mjs` 查得到。改完哪类就跑哪类。
+
+### 18.2 e2e 剧本：怎么挑、怎么跑、怎么不打扰用户
+
+- **零 token 剧本**（不需内核额度，随时可跑）：`minimal-smoke`（28 断言）、`minimal-fork`（11）、
+  `minimal-tool`（3）、`minimal-model`、`composer-session-audit`（26）、`dom-audit`（47/48，可 `--locale`）、
+  `content-pin-key`、`cwd-session-restore`、`quiet-launch`。
+- **需要内核与 token 的剧本**：`dsh-*`、`pi-*`、`multi-kernel-round`、`fork.e2e`、`fork-cross-kernel`、
+  `goal-command`、`goal-scope*`、`kernel-thinking-matrix`。**没额度时不要假装跑过**——如实记为未验证。
+- **静默纪律（硬要求，不是礼貌）**：所有剧本经 `scripts/demo/lib/quiet-env.mjs`
+  （默认 `MHD_WINDOW=hidden`）⇒ 不 show、不抢焦点、不进任务栏、不弹系统通知。
+  人工要看画面时显式 `MHD_WINDOW=shown node scripts/demo/<name>.e2e.mjs`。
+  守卫：`npm run audit:quiet` + `window-visibility.test.ts` + `quiet-launch.e2e.mjs`。
+- **端口与残留**：每场景用独立 `--port`；跑前清残留 `lsof -ti:<port> | xargs -r kill -9`。
+  **不要碰用户实例的 8420**。
+- **隔离 HOME**：`makeRunRoot()` + `setupBaseline({home, realHome, locale})` ⇒ 临时目录，
+  结束 `rmSync`（`--keep` 保留现场做事后诊断）。
+- **零 token 造失败路径**：`writeFileSync(join(home,".pi","agent","models.json"), JSON.stringify({providers:{}}))`
+  ⇒ 发送走"会话未启动"的快速拒绝（真实路径，不是 mock）。
+- **种子会话**：`writeSessionFile(ctx.agentDir, proj, rows, ageHours, ctx.defaultModel)`，
+  rows 形状见 `content-pin-key.e2e.mjs`；writer 会补 `id/parentId/timestamp/usage`
+  （**usage 必须补**：底座按轮聚合时直读 `totalTokens`，缺失即抛错）。
+
+### 18.3 探针纪律：怎么定位元素（最常踩的一类）
+
+1. **只用稳定锚点，不用文案**（§1.2/r113）。现成锚点见 §2 与源码里的 `data-*`：
+   `[data-composer-send]` / `[data-composer-queued]` / `[data-settings-id]` / `[data-settings-pane-active]`
+   / `[data-session-path]` / `[data-message-id]` / `[data-message-error]` / `[data-entry-divider="<kind>"]`
+   / `[data-thinking-block="expanded|collapsed|empty|filtered"]` / `[data-goal-bar]` / `[data-goal-phase]`
+   / `[data-goal-action="save|pause|resume|clear"]` / `[data-sidebar-entry="settings"]` / `[data-sidebar-style]`。
+2. **补锚点前先查有没有现成的**（r237：发送按钮的锚点 r119 就补好了，剧本一直没用它）。
+3. **补锚点必须同轮找到消费者**（r238/r239）：真机走不到 ⇒ 消费者可以是组件 DOM 测试；
+   找不到消费者 ⇒ **干脆不补**（死锚点会被 `data-anchor-consumers` 报，且将来被当"没用的属性"删掉）。
+4. **例外**：断言"剧本自己种入的数据"（输入的选项文本、种入的消息正文）可以用文案——
+   那是数据不是 UI 文案，语言无关（r236）。
+5. **改完 `.mjs` 必须 `node --check`**（r240：注释插进表达式内部，vitest 全绿而剧本语法已坏）。
+
+### 18.4 失败了怎么查（诊断手法，别急着改代码）
+
+1. **先加诊断打印，分清哪一层没到位**（r246/r249）：例如
+   `种入正文可见=? err=? stopped=? body 里有没有裸键=?`——它把"会话没打开"与"终结态没投到渲染层"分开，
+   避免去改错的地方。
+2. **对照实验挑能把变量隔离到最小的那一层做**（r248）：app 层一次受五个变量影响
+   （种子格式/投影/会话切换/渲染/时序），圆心层只受一个 ⇒ 先在内层定论。
+3. **对照组要能在失败前打印出来**（r249）：若超时点在对照组之前，对照就白设计了。
+4. **`--keep` 保留隔离 HOME 做事后取证**（r171）：日志、会话文件、配置都在里面。
+5. **命中数为 0 要先怀疑判据**（r198/r213）：用**反向注入**证明判据真会亮
+   （注入形态要照判据的正则构造，注入要自证落盘，验完 `git status` + 定向 grep 确认还原）。
+6. **连续两轮卡在同一格且没有新信息 ⇒ 停**（r247/r249）：删掉半成品剧本（不留在仓库里当假资产），
+   把"已确证 / 仍缺"分栏记下，并写清"再试需要什么新信息"。
+
+### 18.5 交付一轮的标准动作（本仓 250+ 轮的实际节奏）
+
+```
+① npx vitest run --reporter=dot        # 起点基线（当前 309/2610）
+② 读代码定位根因（§3.7：不打补丁；判据要能引用文档条款）
+③ 改产品 / 改守卫 / 补测试（守卫基线取**实测值**：临时压 0 读数字，不用推算，r123）
+④ npx tsc --noEmit -p tsconfig.json && npm run audit && npm run build
+⑤ node --check <改过的 .mjs>；涉及 UI 就真机跑相关剧本（零 token 优先）
+⑥ 反向注入验证新守卫会亮 → 还原 → git status 确认干净
+⑦ git status --porcelain 先看，再 git add <明确路径>；产品 / 守卫基线 / skill **分开提交**
+   长中文提交信息一律 git commit -F <file>（-m 会被引号/反引号截断）
+⑧ skill：新增 §17.x 小节 + **用脚本重建 §17.0 全量索引**（不手写维护，r227）
+⑨ 报告：审了什么、证据表、缺陷与根因+文档条款、**自己造成的工具问题如实披露**、
+   仍**未**覆盖/未验证的清单（不美化）
+```
+
+**严禁**：push、`npm install`、任何非 LLM 的远程交互；把"build 通过"当运行时验证（§5.4）；
+为了过测试软化断言；用内存式/mock 式实现替代同等功能的真实实现。
+
+### 18.6 交付物地图（这份 skill 怎么查）
+
+- **§0 索引**：按主题速查（基础设施/探针纪律/会话生命周期/分叉×收藏/…）。
+- **§1–§7**：现成基础设施、DOM 锚点清单、七条实踩陷阱、数据层 vs 渲染层分工、
+  按内核的最小验证路径、诊断现场留存、修复纪律速查。
+- **§8–§16**：内核插件化/注册模型、物理插件可卸载、补面三纪律、构建产物的"假结果"、
+  全量 e2e 广扫、mock 模型零 token 真回合、三内核同场、双内核写半读半对齐。
+- **§17（253 小节 + §17.0 全量索引）**：全仓审计范式——每轮一小节，
+  内容是"审了什么 / 判据是什么 / 查出什么 / 根因与文档条款 / 守卫怎么钉 / 仍未覆盖什么"。
+  查某类问题的判据时，先用 §17.0 的索引定位小节。
+- **§18（本节）**：操作面总入口。
