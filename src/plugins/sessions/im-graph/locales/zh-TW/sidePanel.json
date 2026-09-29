@@ -1,3 +1,5 @@
 {
-  "sidePanel.im-graph": "IM"
+  "sidePanel.im-graph": "IM",
+  "im-graph.focusFailed": "聚焦該節點失敗：{{detail}}（圖中顯示的事件可能不是該節點的）",
+  "im-graph.refreshFailed": "重新整理訊息圖失敗：{{detail}}（圖中顯示的仍是上一次成功重新整理的結果）"
 }

@@ -1,3 +1,5 @@
 {
-  "sidePanel.im-graph": "IM"
+  "sidePanel.im-graph": "IM",
+  "im-graph.focusFailed": "聚焦该节点失败：{{detail}}（图中显示的事件可能不是该节点的）",
+  "im-graph.refreshFailed": "刷新消息图失败：{{detail}}（图中显示的仍是上一次成功刷新的结果）"
 }

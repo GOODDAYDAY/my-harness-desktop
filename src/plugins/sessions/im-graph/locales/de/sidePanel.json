@@ -1,3 +1,5 @@
 {
-  "sidePanel.im-graph": "IM"
+  "sidePanel.im-graph": "IM",
+  "im-graph.focusFailed": "Knoten konnte nicht fokussiert werden: {{detail}} (die angezeigten Ereignisse gehören möglicherweise nicht zu diesem Knoten)",
+  "im-graph.refreshFailed": "Nachrichtengraph konnte nicht aktualisiert werden: {{detail}} (er zeigt weiterhin den Stand der letzten erfolgreichen Aktualisierung)"
 }

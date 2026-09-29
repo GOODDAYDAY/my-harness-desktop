@@ -1,3 +1,5 @@
 {
-  "sidePanel.im-graph": "IM"
+  "sidePanel.im-graph": "IM",
+  "im-graph.focusFailed": "Could not focus that node: {{detail}} (the events shown may not be this node's)",
+  "im-graph.refreshFailed": "Could not refresh the message graph: {{detail}} (it still shows the last successful refresh)"
 }

@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Network, RefreshCw } from "lucide-react";
-import { EmptyState, usePluginContext, usePluginId } from "@my-harness-desktop/react";
+import { EmptyState, usePluginContext, usePluginId, announceTransient,} from "@my-harness-desktop/react";
 import { BusObserver } from "../client/bus-observer";
 import { emptyModel, type FlowPulse, type GraphModel } from "../core/graph-model";
 import { appendFlowEvent, type FlowEvent } from "../core/flow-events";
@@ -61,8 +61,18 @@ export function ImGraphPanel({ isActive }: { isActive: boolean }): ReactNode {
     setFlowEvents([]);
     const observer = observerRef.current;
     if (!observer) return;
-    if (key) void observer.focus(key).catch(() => {});
-    else void observer.unfocus().catch(() => {});
+    // ⚠ r219：此前两处都是 `.catch(() => {})`——挂在**用户动作**上（点图里的节点聚焦）却静默吞
+    //   （r218 的判据：有"正在等它的用户动作"⇒ 失败必须可感知）。失败时高亮跳过去了、
+    //   而该节点的流事件是空的，用户会以为"这个节点没有事件"。
+    if (key) {
+      void observer.focus(key).catch((err: unknown) => {
+        announceTransient(t("im-graph.focusFailed", { detail: (err as Error)?.message ?? String(err) }), "error");
+      });
+    } else {
+      void observer.unfocus().catch((err: unknown) => {
+        announceTransient(t("im-graph.focusFailed", { detail: (err as Error)?.message ?? String(err) }), "error");
+      });
+    }
   };
 
   const focusedLabel = focusedKey ? (model.sessions.get(focusedKey)?.label ?? focusedKey) : "";
@@ -75,7 +85,10 @@ export function ImGraphPanel({ isActive }: { isActive: boolean }): ReactNode {
           type="button"
           className="im-refresh-btn"
           title={t("im-graph.refresh")}
-          onClick={() => void observerRef.current?.refresh().catch(() => {})}
+          onClick={() => void observerRef.current?.refresh().catch((err: unknown) => {
+            // r219：同 onFocus（用户点刷新按钮 ⇒ 失败必须可感知，否则用户以为刷新成功了）
+            announceTransient(t("im-graph.refreshFailed", { detail: (err as Error)?.message ?? String(err) }), "error");
+          })}
         >
           <RefreshCw size={13} />
         </button>
