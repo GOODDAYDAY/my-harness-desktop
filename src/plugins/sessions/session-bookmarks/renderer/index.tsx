@@ -117,7 +117,13 @@ export function BookmarksTab(): React.ReactNode {
         metas = (await migrateLegacyBucket(ctx, currentCwd)) ?? [];
       }
       // exists 标记:对应快照文件 <id>.json 是否在项目级 bookmarks 目录
-      const entries = await fs.listDir(snapshotDir(currentCwd)).catch(() => [] as { name: string; isDir: boolean }[]);
+      // r224：此前是 .catch(() => [])——读目录失败会被当成"目录里没有快照文件"，
+      //   于是孤儿对账这一轮什么都不做（不会误删，但也不会自愈）。属后台对账（非用户动作）
+      //   ⇒ 不弹提示（r220），但要留痕（r220 的第三条通道：console.warn 给开发者）。
+      const entries = await fs.listDir(snapshotDir(currentCwd)).catch((err: unknown) => {
+        console.warn("[session-bookmarks] 读取快照目录失败(本轮跳过孤儿对账):", err);
+        return [] as { name: string; isDir: boolean }[];
+      });
       const files = new Set(entries.filter((e) => !e.isDir).map((e) => e.name));
       // 孤儿对账:盘上有、元数据里没有、且非在途创建(创建窗口豁免)的快照 → 静默删。
       // 历史残留(元数据已删但快照未清等)跨加载周期自愈;在途创建由 pendingCreateRef 豁免——

@@ -222,9 +222,16 @@ export function RecordsTab({ isActive }: { isActive: boolean }): React.ReactNode
       if (loadEpochRef.current !== epoch) return;
       cursorRef.current = cursors;
       setPairs(pairRecords(lines));
-    } catch {
+    } catch (err) {
       if (loadEpochRef.current !== epoch) return;
       // 目录不存在(从未记录)或读失败 → 空列表
+      // ⚠ r224 记为**设计问题**（不当场硬修）：这两种成因被压成同一个空态，
+      //   而用户正看着这块面板 ⇒ 按 r222 的判据本该区分（"没有记录" vs "没读到"）。
+      //   但要区分就需要 fs 层给出**可判别的错误类型**（ENOENT/不存在 vs 权限/传输失败），
+      //   当前 catch 到的 error 无法可靠分类——靠 message 里找 "ENOENT" 是脆判据（r192：
+      //   开放形态不交守卫；同理也不该拿它当产品分支）。硬加失败态会把"从未记录"误报成失败，
+      //   那比空态更糟（谎报）。⇒ 先补 console.warn 留痕，三态留待 fs 契约给出可判别错误后做。
+      console.warn("[llm-recorder] 全量加载失败(按空列表呈现,成因未区分):", err);
       setPairs([]);
     }
     if (loadEpochRef.current === epoch) setLoaded(true);
