@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 275;   // r183 修掉 7 处 UI 态落盘 ⇒ 282 → 275；r185 收敛四处到 fireAndReport（不改计数：它们原本就带 .catch）
+const CEILING = 269;   // r187 排除自保护原语调用点 ⇒ 275 → 269（实测值）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -74,13 +74,30 @@ function matchParen(s: string, i: number): number {
   return -1;
 }
 
+/**
+ * **自保护原语**豁免表（r187）：这些函数**内部已经兜住了错误**（catch + 播报），
+ * 从不向调用方 reject ⇒ 调用点的 `void f(...)` **不是**发射后不管的债务。
+ *
+ * ⚠ 豁免表最容易烂掉：某天有人把原语里的 catch 删了，调用点全都变成裸奔，
+ *   而豁免表还在替它们打掩护。所以 ② 那条测试会**回读原语实现**，
+ *   断言它确实含 catch（豁免的前提必须持续成立，不能只在建表时核一次）。
+ */
+const SELF_PROTECTING: { name: string; impl: string; reason: string }[] = [
+  { name: "copyToClipboard", impl: "packages/react/src/widgets/clipboard.ts",
+    reason: "r134 收敛的原语：内部 catch + 播报 clipboardFailed/clipboardUnavailable，返回 boolean 不 reject" },
+  { name: "pickDirectory", impl: "packages/react/src/widgets/pick-directory.ts",
+    reason: "r137 收敛的原语：内部 catch + 播报 directoryPickerFailed，返回 string|null 不 reject" },
+  { name: "fireAndReport", impl: "packages/react/src/widgets/fire-and-report.ts",
+    reason: "r185 收敛的原语：它**就是**失败处置本身（catch + warn + 播报）" },
+];
+
 interface Hit { file: string; line: number; expr: string }
 
-function scan(): { hits: Hit[]; unparsed: number; total: number; withCatch: number } {
+function scan(): { hits: Hit[]; unparsed: number; total: number; withCatch: number; selfProtected: number } {
   const files = ROOTS.flatMap((r) => walk(join(ROOT, r)));
   const STMT = /(?:(?<=^)|(?<=[;{}])|(?<==>\s)|(?<=\(\s)|(?<=,\s))\s*void\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\s*(?:\(|\b))/g;
   const hits: Hit[] = [];
-  let unparsed = 0, total = 0, withCatch = 0;
+  let unparsed = 0, total = 0, withCatch = 0, selfProtected = 0;
   for (const f of files) {
     const s = strip(readFileSync(f, "utf-8"));
     const rel = relative(ROOT, f);
@@ -112,10 +129,14 @@ function scan(): { hits: Hit[]; unparsed: number; total: number; withCatch: numb
       }
       if (!expr.trim()) { unparsed++; continue; }
       if (expr.includes(".catch(")) { withCatch++; continue; }
+      // r187：调用**自保护原语**的 void 不算债务（原语内部已兜住、从不 reject）
+      const callee = /^void\s+([A-Za-z_$][\w$.]*)/.exec(expr.trim())?.[1] ?? "";
+      const leaf = callee.split(".").pop() ?? "";
+      if (SELF_PROTECTING.some((x) => x.name === leaf)) { selfProtected++; continue; }
       hits.push({ file: rel, line: s.slice(0, m.index).split("\n").length, expr: expr.replace(/\s+/g, " ").slice(0, 90) });
     }
   }
-  return { hits, unparsed, total, withCatch };
+  return { hits, unparsed, total, withCatch, selfProtected };
 }
 
 describe("`void <promise>` 发射后不管：未保护数只许减少", () => {
@@ -149,5 +170,23 @@ describe("`void <promise>` 发射后不管：未保护数只许减少", () => {
     expect(r.hits.some((h) => h.expr.includes("notify.show")),
       "notify.show 类应当被扫到（它是这一族里最多的正当形态；扫不到说明判据在漏）").toBe(true);
     expect(r.hits.length, "命中数不该为 0").toBeGreaterThan(100);
+  });
+});
+
+describe("自保护原语豁免表：豁免的前提必须持续成立（r187）", () => {
+  it("① 豁免表里的每个原语，实现里**确实**兜住了错误（否则豁免就是在替裸奔打掩护）", () => {
+    for (const e of SELF_PROTECTING) {
+      const src = readFileSync(join(ROOT, e.impl), "utf-8");
+      expect(/\.catch\s*\(|catch\s*[({]/.test(src),
+        `${e.name}（${e.impl}）的实现里找不到 catch —— 它已不再自保护，` +
+        `豁免必须撤销（否则所有 void ${e.name}(…) 的调用点都变成裸奔而守卫不报）。` +
+        `建表理由：${e.reason}`).toBe(true);
+      expect(e.reason.length, "每条豁免都要写明理由（账本纪律）").toBeGreaterThan(10);
+    }
+  });
+
+  it("② 豁免确实生效：扫到的自保护调用数 > 0（否则豁免表是死的、判据可能在漏）", () => {
+    const r = scan();
+    expect(r.selfProtected, "自保护原语的调用点数（r187 实测应 > 0；否则豁免表是死的）").toBeGreaterThan(0);
   });
 });
