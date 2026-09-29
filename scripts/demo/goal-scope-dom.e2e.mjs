@@ -201,8 +201,9 @@ try {
   await shot("4-back-structure-intact");
 
   // ── ⑤ 暂停态的结构:相位锚点翻转、绿晕撤除、节点仍在(不是消失) ──
-  await clickEl('[title="停止"]');
-  await page.waitForFunction(() => !!document.querySelector('[title="恢复"]'), { timeout: 6000, polling: 150 });
+  await clickEl('[data-goal-action="pause"]');   // r236：按稳定锚点
+  // r236：按稳定锚点定位（此前 '[title="恢复"]' 是语言绑定的；data-goal-phase 见 goal-bar.tsx）
+  await page.waitForFunction(() => !!document.querySelector('[data-goal-phase="paused"]'), { timeout: 6000, polling: 150 });
   d = await domStructure();
   ok(d.barCount === 1, "⑤ 暂停后目标条节点仍在(paused 是相位,不是卸载)", d.barCount);
   ok(d.barPhase === "paused", "⑤ data-goal-phase=paused", d.barPhase);

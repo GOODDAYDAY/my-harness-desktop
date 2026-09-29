@@ -87,7 +87,7 @@ export function GoalBar(): React.ReactNode {
         </span>
       )}
       {editing ? (
-        <button type="button" title={t("goal.bar.save")} aria-label={t("goal.bar.save")} onClick={commitEdit} className="text-[var(--color-accent-success)] hover:opacity-70">
+        <button type="button" data-goal-action="save" title={t("goal.bar.save")} aria-label={t("goal.bar.save")} onClick={commitEdit} className="text-[var(--color-accent-success)] hover:opacity-70">
           <Check className="size-3.5" />
         </button>
       ) : (
@@ -110,16 +110,16 @@ export function GoalBar(): React.ReactNode {
       )}
       {/* 停/恢复按阶段精确显示:仅 active 可停、仅 paused 可恢复;achieved 两者皆无。 */}
       {goal.phase === "active" && (
-        <button type="button" title={t("goal.bar.pause")} aria-label={t("goal.bar.pause")} onClick={pause} className="text-[var(--color-accent-warning)] hover:opacity-70 shrink-0">
+        <button type="button" data-goal-action="pause" title={t("goal.bar.pause")} aria-label={t("goal.bar.pause")} onClick={pause} className="text-[var(--color-accent-warning)] hover:opacity-70 shrink-0">
           <Pause className="size-3.5" />
         </button>
       )}
       {goal.phase === "paused" && (
-        <button type="button" title={t("goal.bar.resume")} aria-label={t("goal.bar.resume")} onClick={resume} className="text-[var(--color-accent-success)] hover:opacity-70 shrink-0">
+        <button type="button" data-goal-action="resume" title={t("goal.bar.resume")} aria-label={t("goal.bar.resume")} onClick={resume} className="text-[var(--color-accent-success)] hover:opacity-70 shrink-0">
           <Play className="size-3.5" />
         </button>
       )}
-      <button type="button" title={t("goal.bar.clear")} aria-label={t("goal.bar.clear")} onClick={clear} className="text-[var(--color-muted)] hover:opacity-70 shrink-0">
+      <button type="button" data-goal-action="clear" title={t("goal.bar.clear")} aria-label={t("goal.bar.clear")} onClick={clear} className="text-[var(--color-muted)] hover:opacity-70 shrink-0">
         <Trash2 className="size-3.5" />
       </button>
     </div>

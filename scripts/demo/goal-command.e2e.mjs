@@ -223,15 +223,18 @@ try {
   // 不能再拿文本匹配当弹窗代理。输入框还留着命令全文 → chip 仍在(命令仍生效,所见即所得)。
   ok((await selCount(page, "[data-slash-popup]")) === 0, "② 弹窗已关闭(命令前缀不进会话流)");
   ok((await selCount(page, "[data-command-chip]")) === 1, "② 命令生效高亮 chip 在位(输入仍命中 /goal)");
-  ok((await selCount(page, '[title="停止"]')) >= 1, "② active 态:停止按钮在位");
+  ok((await selCount(page, '[data-goal-action="pause"]')) >= 1, "② active 态:停止(pause)按钮在位（r236：按锚点不按 title）");
   ok((await selCount(page, "[data-goal-bar]")) === 1, "② 目标横幅在位(composerTop 槽)");
   ok(await goalBarAboveComposer(page), "② 目标横幅位于输入框上方");
   ok(await waitGoalAccent(page, true), "② goal 生效:输入框药丸挂绿晕着色");
   await shot("goal-set");
 
   // ③ 点停止 → paused 态
-  await clickSel(page, '[title="停止"]');
-  await waitFor(page, () => !!document.querySelector('[title="恢复"]'), "③ 点停止 → 恢复按钮出现");
+  await clickSel(page, '[data-goal-action="pause"]');   // r236：按稳定锚点
+  // r236：改按**稳定锚点**定位（此前是 '[title="恢复"]'——按译文定位，换语言即失效；
+  //   §1.2/r113：别把界面文案当结构）。goal-bar 已有 data-goal-phase="active"|"paused"
+  //   （goal-bar.test.tsx 就用它断言相位），"恢复按钮出现"⇔ 相位为 paused。
+  await waitFor(page, () => !!document.querySelector('[data-goal-phase="paused"]'), "③ 点停止 → 相位变 paused（恢复按钮出现）");
   ok(await goalBarStyleContains(page, OBJECTIVE, "--color-accent-warning"), "③ 目标条转警告色边框(paused)");
   ok(await waitGoalAccent(page, false), "③ 暂停后输入框绿晕熄灭");
   await shot("goal-paused");
@@ -255,7 +258,7 @@ try {
   // ⑤ /goal resume → active + 即时装弹(轮次推进)
   await typeIntoComposer(page, "/goal resume");
   await page.keyboard.press("Enter");
-  await waitFor(page, () => !!document.querySelector('[title="停止"]'), "⑤ /goal resume → 停止按钮回归(active)");
+  await waitFor(page, () => !!document.querySelector('[data-goal-phase="active"]'), "⑤ /goal resume → 相位回归 active（r236：按锚点不按 title）");
   await waitFor(
     page,
     () => document.body.innerText.includes("1/1000"),
@@ -267,7 +270,7 @@ try {
   // ⑥ /goal stop → 再暂停
   await typeIntoComposer(page, "/goal stop");
   await page.keyboard.press("Enter");
-  await waitFor(page, () => !!document.querySelector('[title="恢复"]'), "⑥ /goal stop → 恢复按钮回归(paused)");
+  await waitFor(page, () => !!document.querySelector('[data-goal-phase="paused"]'), "⑥ /goal stop → 相位回归 paused（r236：按锚点不按 title）");
   ok(await waitGoalAccent(page, false), "⑥ 再暂停:输入框绿晕再熄灭");
 
   // ⑦ 点垃圾桶 → 目标条从 DOM 消失
@@ -279,7 +282,7 @@ try {
     8000,
     EDITED,
   );
-  ok((await selCount(page, '[title="停止"]')) === 0 && (await selCount(page, '[title="恢复"]')) === 0, "⑦ 停止/恢复按钮全撤");
+  ok((await selCount(page, '[data-goal-action="pause"]')) === 0 && (await selCount(page, '[data-goal-action="resume"]')) === 0, "⑦ 停止/恢复按钮全撤（r236：按锚点）");
   ok((await selCount(page, "[data-goal-bar]")) === 0, "⑦ 横幅节点撤除");
   await shot("goal-cleared");
 
@@ -288,7 +291,7 @@ try {
   await page.keyboard.press("Enter");
   await waitForDomIdle(page, { quietMs: 500, timeoutMs: 5000 }).catch(() => {});
   ok((await inputValue(page, "[data-timeline-composer]")) === "", "⑧ 裸 /goal 被吞:输入框清空");
-  ok((await selCount(page, '[title="停止"]')) === 0 && (await selCount(page, '[title="恢复"]')) === 0, "⑧ 无目标条残留");
+  ok((await selCount(page, '[data-goal-bar]')) === 0, "⑧ 无目标条残留（r236：直接断言目标条锚点不在）");
   await shot("bare-goal");
 
   await killApp(app);
