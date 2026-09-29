@@ -367,7 +367,15 @@ export function SessionsSection(): React.ReactNode {
       useSessionStore.getState().removeSessionRows([s.path]);
     } catch (err) {
       console.error("[sessions-list] 删除会话失败:", err);
-      await reloadAfterWrite();
+      // ⚠ r203：此前 catch 里**只有 console**——用户点删除、行经 reloadAfterWrite 又回来了，
+      //   却没有任何解释（§7.6：降级必须可感知）。删除是"真删 JSONL、不可恢复"的破坏性动作，
+      //   静默失败的后果是用户以为删掉了、或反复点。播报必须显式 "error"
+      //   （announceTransient 默认 info ⇒ 不设 role=alert ⇒ 读屏不打断，r202 已钉成守卫）。
+      announceTransient(
+        t("sessions.deleteFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
+      await reloadAfterWrite();   // 仍要重拉：让列表回到磁盘上的真实状态，别显示半截
     } finally {
       clearRemoving();
     }
@@ -383,6 +391,10 @@ export function SessionsSection(): React.ReactNode {
       useSessionStore.getState().removeSessionRows(targets);
     } catch (err) {
       console.error("[sessions-list] 批量删除失败:", err);
+      announceTransient(   // r203：同 deleteOne（批量删除更要播报——用户以为一次删掉了整组）
+        t("sessions.deleteAllFailed", { count: targets.length, detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
       await reloadAfterWrite();
     } finally {
       clearRemoving();

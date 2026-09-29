@@ -36,5 +36,7 @@
   "sessions.unread": "Ungelesene Nachrichten",
   "sessions.kernelNotLoaded": "Der Kernel \"{{kernel}}\" dieser Sitzung ist nicht geladen — lesbar, Senden nicht möglich",
   "sessions.kernelNotLoadedShort": "Kernel nicht geladen",
-  "sessions.stateSaveFailed": "UI-Status konnte nicht gespeichert werden: {{detail}} ({{key}} gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)"
+  "sessions.stateSaveFailed": "UI-Status konnte nicht gespeichert werden: {{detail}} ({{key}} gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)",
+  "sessions.deleteFailed": "Sitzung konnte nicht gelöscht werden: {{detail}} (die Liste wurde aktualisiert; die Sitzung existiert weiterhin)",
+  "sessions.deleteAllFailed": "{{count}} Sitzungen konnten nicht gelöscht werden: {{detail}} (die Liste wurde auf den tatsächlichen Zustand aktualisiert)"
 }
