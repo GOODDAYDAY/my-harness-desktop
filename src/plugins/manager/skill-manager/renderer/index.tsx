@@ -13,7 +13,7 @@ import {
   Pagination,
   usePagination,
 } from "@my-harness-desktop/react";
-import { useUiStore } from "@my-harness-desktop/react";
+import { useUiStore, announceTransient } from "@my-harness-desktop/react";
 
 // 结构化块:skill parser(auxParsers 代码级声明,plugins-host 加载时自动注册)+ 渲染器
 // (manifest blockRenderers auxBlock/skill 按名自动匹配,必须在入口 re-export)。
@@ -232,7 +232,15 @@ export function SkillManagerPage({ refreshSignal }: SettingsComponentProps): Rea
             skills={visibleSkills}
             onSetEnabled={handleSetEnabled}
             onSetModelInvocable={handleSetModelInvocable}
-            onOpenFolder={(s) => void ctx.openFile(s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "")}
+            onOpenFolder={(s) => {
+              // ⚠ 不能发射后不管（r182，同 file-preview）：失败时用户点了"打开目录"却零反馈。
+              const dir = s.filePath ? s.filePath.slice(0, s.filePath.lastIndexOf("/")) : "";
+              void ctx.openFile(dir).catch((err: unknown) => {
+                const detail = err instanceof Error ? err.message : String(err);
+                console.warn("[skill-manager] 打开目录失败:", err);
+                announceTransient(t("settings.skillOpenFolderFailed", { detail }), "error");
+              });
+            }}
             t={t}
           />
         )}

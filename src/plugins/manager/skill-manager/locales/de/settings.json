@@ -21,5 +21,6 @@
   "settings.skillToggleForce": "Im Kontext pinnen: Gepinnt landet der Skill im System-Prompt und das Modell kann ihn aufrufen; nicht gepinnt nur manuell per /skill auslösbar",
   "settings.skillOpenFolder": "Enthaltenden Ordner öffnen",
   "skill-blocks.skillRef": "Skill referenziert: {{name}}",
-  "settings.skillUnsupported": "Keines der geladenen Kernel bietet eine Skill-Liste"
+  "settings.skillUnsupported": "Keines der geladenen Kernel bietet eine Skill-Liste",
+  "settings.skillOpenFolderFailed": "Ordner konnte nicht geöffnet werden: {{detail}} (Sie können den Pfad manuell in Ihrer Dateiverwaltung öffnen)"
 }

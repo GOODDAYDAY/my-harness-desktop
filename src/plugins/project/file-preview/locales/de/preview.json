@@ -9,5 +9,6 @@
   "preview.viewRendered": "Gerendert",
   "preview.loadFailed": "Laden fehlgeschlagen",
   "preview.fsUnavailable": "Dateisystemzugriff nicht verfügbar",
-  "preview.noContent": "Kein Inhalt zurückgegeben"
+  "preview.noContent": "Kein Inhalt zurückgegeben",
+  "preview.openFailed": "Datei konnte nicht geöffnet werden: {{detail}} (Sie können den Pfad manuell in Ihrer Dateiverwaltung öffnen)"
 }

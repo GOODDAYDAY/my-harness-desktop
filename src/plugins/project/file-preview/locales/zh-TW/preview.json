@@ -9,5 +9,6 @@
   "preview.viewRendered": "渲染",
   "preview.loadFailed": "載入失敗",
   "preview.fsUnavailable": "檔案系統存取不可用",
-  "preview.noContent": "沒有回傳內容"
+  "preview.noContent": "沒有回傳內容",
+  "preview.openFailed": "開啟檔案失敗：{{detail}}（可以在系統檔案管理員中手動開啟該路徑）"
 }

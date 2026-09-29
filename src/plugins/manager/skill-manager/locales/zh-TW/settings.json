@@ -21,5 +21,6 @@
   "settings.skillToggleForce": "固定到上下文：固定後 skill 進入 system prompt，模型可自動調用；不固定則只能手動 /skill 觸發",
   "settings.skillOpenFolder": "開啟所在資料夾",
   "skill-blocks.skillRef": "已引用技能 {{name}}",
-  "settings.skillUnsupported": "目前載入的核心都不提供技能清單"
+  "settings.skillUnsupported": "目前載入的核心都不提供技能清單",
+  "settings.skillOpenFolderFailed": "開啟目錄失敗：{{detail}}（可以在系統檔案管理員中手動開啟該路徑）"
 }

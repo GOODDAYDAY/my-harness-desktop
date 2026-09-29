@@ -21,5 +21,6 @@
   "settings.skillToggleForce": "Pin to context: when pinned, the skill enters the system prompt and the model can invoke it; when unpinned, it can only be triggered manually via /skill",
   "settings.skillOpenFolder": "Open containing folder",
   "skill-blocks.skillRef": "Skill referenced: {{name}}",
-  "settings.skillUnsupported": "None of the loaded kernels provides a skill list"
+  "settings.skillUnsupported": "None of the loaded kernels provides a skill list",
+  "settings.skillOpenFolderFailed": "Could not open the folder: {{detail}} (you can open that path manually in your file manager)"
 }

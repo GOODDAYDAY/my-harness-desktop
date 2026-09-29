@@ -9,5 +9,6 @@
   "preview.viewRendered": "Rendered",
   "preview.loadFailed": "Load Failed",
   "preview.fsUnavailable": "File system access is not available",
-  "preview.noContent": "No content returned"
+  "preview.noContent": "No content returned",
+  "preview.openFailed": "Could not open the file: {{detail}} (you can open that path manually in your file manager)"
 }
