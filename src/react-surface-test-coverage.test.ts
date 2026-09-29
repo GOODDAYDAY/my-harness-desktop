@@ -35,7 +35,7 @@ const ROOT = join(HERE, "..");
  *  首版守卫漏了直接导出声明（少算）——两个错恰好抵消成同一个数字。
  *  ⚠ 这正是"数字对上了不等于判据对了"的实例：必须分别核对两侧的分类器。
  *  现判据两种导出形态都认、类型已分离 ⇒ 以守卫实测 57 为准（r129/r151 的通则：分类器不对，指标就没意义；两个分类器不一致时信可复跑的那个）。 */
-const CEILING = 25;   // r250 实测值（r166 的 29 已松：先量得 28；本轮 aux-block-parsers 注册表 3 个导出被测 ⇒ 25）
+const CEILING = 24;   // r251 实测（r250 的 25 再消化 Select ⇒ 24）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
