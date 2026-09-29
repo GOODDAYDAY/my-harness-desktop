@@ -23,5 +23,6 @@
   "review.truncatedNote": "\n\n...(Diff zu groß, gekürzt)...",
   "review.loading": "Laden…",
   "review.newFileUntracked": "Neue Datei (unverfolgt)",
-  "review.noDiff": "Kein Diff (möglicherweise gestaged und identisch mit HEAD)"
+  "review.noDiff": "Kein Diff (möglicherweise gestaged und identisch mit HEAD)",
+  "review.refreshFailed": "Arbeitsbereich-Status konnte nicht aktualisiert werden: {{detail}} (angezeigt wird der Stand der letzten erfolgreichen Aktualisierung)"
 }

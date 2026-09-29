@@ -23,5 +23,6 @@
   "review.truncatedNote": "\n\n...(diff 过大,已截断)...",
   "review.loading": "加载中…",
   "review.newFileUntracked": "新文件(未跟踪)",
-  "review.noDiff": "无 diff(可能已暂存与 HEAD 一致)"
+  "review.noDiff": "无 diff(可能已暂存与 HEAD 一致)",
+  "review.refreshFailed": "工作区状态刷新失败：{{detail}}（面板显示的是上一次成功刷新的结果）"
 }

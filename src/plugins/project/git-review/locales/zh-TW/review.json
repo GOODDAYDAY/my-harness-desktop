@@ -23,5 +23,6 @@
   "review.truncatedNote": "\n\n...(diff 過大,已截斷)...",
   "review.loading": "載入中…",
   "review.newFileUntracked": "新檔案(未追蹤)",
-  "review.noDiff": "無 diff(可能已暫存與 HEAD 一致)"
+  "review.noDiff": "無 diff(可能已暫存與 HEAD 一致)",
+  "review.refreshFailed": "工作區狀態重新整理失敗：{{detail}}（面板顯示的是上一次成功重新整理的結果）"
 }

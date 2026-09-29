@@ -23,5 +23,6 @@
   "review.truncatedNote": "\n\n...(diff too large, truncated)...",
   "review.loading": "Loading…",
   "review.newFileUntracked": "New file (untracked)",
-  "review.noDiff": "No diff (possibly staged and identical to HEAD)"
+  "review.noDiff": "No diff (possibly staged and identical to HEAD)",
+  "review.refreshFailed": "Could not refresh the workspace status: {{detail}} (the panel shows the last successful refresh)"
 }

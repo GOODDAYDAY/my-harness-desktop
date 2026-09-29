@@ -13,8 +13,7 @@ import { GitBranch, RefreshCw, FileDiff, ChevronRight, Sparkles, History } from 
 import { parseDiff, Diff, Hunk } from "react-diff-view";
 import {
   usePluginContext, useUiStore, useSessionStore, EmptyState, toolCallsOf,
-  type NeutralMessage, type GitChangedFile, type GitLogEntry,
-} from "@my-harness-desktop/react";
+  type NeutralMessage, type GitChangedFile, type GitLogEntry, announceTransient,} from "@my-harness-desktop/react";
 import { messageContentText } from "@my-harness-desktop/shared";
 import "react-diff-view/style/index.css";
 
@@ -57,6 +56,8 @@ function useWorkspace(cwd: string | null, visible: boolean): {
   refresh: () => Promise<void>;
 } {
   const ctx = usePluginContext();
+  // r190：hook 内取 t（失败播报要用插件语言包；框架零文案，§1.2）
+  const { t } = useTranslation();
   const { streaming } = useSessionStore();
   const [isRepo, setIsRepo] = useState(true);
   const [branch, setBranch] = useState<string | null>(null);
@@ -67,12 +68,25 @@ function useWorkspace(cwd: string | null, visible: boolean): {
 
   const refresh = async (): Promise<void> => {
     if (!cwd) return;
-    const r = await ctx.git!.status(cwd);
-    setIsRepo(r.isRepo);
-    setBranch(r.branch);
-    setAhead(r.ahead);
-    setBehind(r.behind);
-    setFiles(r.files);
+    // ⚠ 根因修在**定义处**而不是三个调用点（r190，§3.7）：本函数被三处 `void refresh()` 调用
+    //   （挂载时、流式结束时、点刷新按钮时），此前体内**没有 try/catch** ⇒
+    //   `ctx.git.status` reject 时是未处理 rejection、且用户侧零反馈（§7.6 禁止的静默失败）。
+    //   在三个调用点各加 .catch 是补丁式修法（漏一处就复发，且三份重复）；
+    //   在定义处兜一次，三个调用点同时得到正确行为。
+    //   可达性按 r177/r178 逐环确认：git 不可用/不是仓库/仓库损坏会让 status 抛，
+    //   且即使服务端不抛，**传输层**也会 reject（ws-transport 的 failAll）。
+    try {
+      const r = await ctx.git!.status(cwd);
+      setIsRepo(r.isRepo);
+      setBranch(r.branch);
+      setAhead(r.ahead);
+      setBehind(r.behind);
+      setFiles(r.files);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn("[git-review] 工作区状态刷新失败:", err);
+      announceTransient(t("review.refreshFailed", { detail }), "error");
+    }
   };
 
   useEffect(() => {
