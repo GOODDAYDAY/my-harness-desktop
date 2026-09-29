@@ -76,7 +76,7 @@ page.on("pageerror", (e) => pageErrors.push(e.message));
 // ---------- 页内审计器（在 renderer 上下文跑，返回发现清单） ----------
 const AUDIT_FN = `
 (() => {
-  const out = { nesting: [], dupAnchors: [], emptyAnchored: [], i18nLeak: [], unnamedIcons: [], imgNoAlt: [], headings: [], dupText: [], skippedHidden: 0 };
+  const out = { nesting: [], dupAnchors: [], emptyAnchored: [], i18nLeak: [], skippedDataControl: 0, skippedTemplateDoc: 0, unnamedIcons: [], imgNoAlt: [], headings: [], dupText: [], skippedHidden: 0 };
   const INTERACTIVE = "button, a[href], input, select, textarea, [role=button], [role=link], [role=tab], [role=menuitem], [role=checkbox], [role=switch]";
 
   // ⚠ 必须排除不可见子树（实测教训，勿删）：设置页是 keep-mounted 的——
@@ -170,7 +170,25 @@ const AUDIT_FN = `
     const t = (n.nodeValue || "").trim();
     if (!t) continue;
     if (n.parentElement && hidden(n.parentElement)) { out.skippedHidden += 1; continue; }
-    if (t.includes("{{") || t.includes("}}")) out.i18nLeak.push({ text: t.slice(0, 60), why: "插值残留" });
+    // r235：排除**承载数据的控件**（textarea / input / select）里的文本。
+    //   它们装的是用户可编辑的**数据**，不是 UI 文案——例如 blind-review 设置页的 prompt 模板
+    //   里本来就写着 {{content}} / {{reports}}（由插件在发送时替换，不经 i18next），
+    //   首版把它报成"插值残留"（4 条 H 级假阳性）。
+    //   判据：这些元素的文本不参与"界面文案是否漏键/漏译"这个问题域。
+    if (n.parentElement && n.parentElement.closest("textarea, input, select")) { out.skippedDataControl = (out.skippedDataControl || 0) + 1; continue; }
+    if (t.includes("{{") || t.includes("}}")) {
+      // r235 窄豁免：**文档化模板语法**的文案里本来就要写出占位符名
+      //   （blind-review 的 review.blindReviewDesc / *PromptPlaceholder：
+      //   "{{content}} 是内容占位符"、"{{reports}} 是各队报告"），
+      //   那不是 i18next 插值残留，而是**内容本身**。
+      //   判据封闭：占位符名必须全在已知模板变量集合里（content/reports/tree/prompt），
+      //   否则仍算残留（例如 {{detail}} 没被替换就是真缺陷）。
+      const names = [...t.matchAll(/\{\{\s*([A-Za-z0-9_.]+)\s*\}\}/g)].map((m) => m[1]);
+      const TEMPLATE_VARS = new Set(["content", "reports", "tree", "prompt"]);
+      const allTemplate = names.length > 0 && names.every((n) => TEMPLATE_VARS.has(n));
+      if (allTemplate) out.skippedTemplateDoc = (out.skippedTemplateDoc || 0) + 1;
+      else out.i18nLeak.push({ text: t.slice(0, 60), why: "插值残留" });
+    }
     else if (keyLike.test(t) && t.length < 48 && !/\\.(js|ts|json|md|png|svg|css)$/.test(t)) out.i18nLeak.push({ text: t.slice(0, 60), why: "疑似未翻译的 key" });
   }
 
@@ -203,7 +221,7 @@ async function auditSurface(label) {
     nesting: r.nesting.length, dup: r.dupAnchors.length, empty: r.emptyAnchored.length,
     i18n: r.i18nLeak.length, unnamed: r.unnamedIcons.length, imgNoAlt: r.imgNoAlt.length,
   };
-  console.log(`  · [${label}] 嵌套违规=${counts.nesting} 锚点重复=${counts.dup} 空壳=${counts.empty} i18n漏=${counts.i18n} 无名图标=${counts.unnamed} 图无alt=${counts.imgNoAlt} 标题h1=${r.headings.h1}/共${r.headings.total} （跳过不可见元素 ${r.skippedHidden} 个）`);
+  console.log(`  · [${label}] 嵌套违规=${counts.nesting} 锚点重复=${counts.dup} 空壳=${counts.empty} i18n漏=${counts.i18n} 无名图标=${counts.unnamed} 图无alt=${counts.imgNoAlt} 标题h1=${r.headings.h1}/共${r.headings.total} （跳过不可见元素 ${r.skippedHidden} 个、数据控件文本 ${r.skippedDataControl || 0} 个、模板语法文档 ${r.skippedTemplateDoc || 0} 个）`);
   for (const x of r.nesting.slice(0, 6)) note("H", label, "交互嵌套违规", `${x.outer} 套 ${x.inner}（外层可访问名「${x.outerLabel}」，锚点 ${x.anchor || "无"}）`);
   for (const x of r.dupAnchors.slice(0, 6)) note("H", label, "锚点重复", `${x.kind}="${x.value}" 出现 ${x.count} 次`);
   for (const x of r.emptyAnchored.slice(0, 6)) note("M", label, "空壳容器", x.anchor);
@@ -311,34 +329,39 @@ try {
     if (visited === 0) note("M", "设置页", "TAB 遍历失败", "找到了设置页但一个可点行都没能进入，设置页内部未被体检");
     else ok(visited > 0, `设置页遍历了 ${visited} 个子页并逐个体检`);
 
-    // ── 阶段 B2（r234）：定向补走**内核与其余设置子页** ──
-    // 为什么要有这一段：ROW_SEL 是"可点行"的泛化选择器，实测收到 **73 个**候选
-    // （含侧栏条目、输入框按钮、右面板 tab），而上面那个循环 `visited >= 14` 就 break
-    // ⇒ 只走了前 14 个（项目/会话/搜索会话/…/Tree），**内核页全在后面没走到**。
-    // 而内核页正是文案缺陷的高发区：KernelVersionPage / ModelConfigPage 是 packages/react 里的
-    // **共享页面**，文案键经 prop 前缀拼出（dsh / kernel / dshModels / models），
-    // 缺键时 i18next 把键名当译文返回 ⇒ 页面上出现 `dsh.applied` 这样的裸键（r228/r229 修过 68 条）。
-    // 又因为检查④**跳过不可见子树**（settings-page 是 keep-mounted 的），
-    // 没走到的 tab 就等于没检查 ⇒ 必须显式走过去。
-    const TARGETS = ["Pi", "DSH", "Minimal", "Probe4", "通用", "主題", "主题", "技能", "Desktop 插件", "快捷键", "快捷鍵"];
+    // ── 阶段 B2（r234 建、r235 改成按**稳定锚点**遍历）：走完全部设置条目 ──
+    // 为什么不用文案匹配（r235 更正）：r234 的首版按标签数组定向点击
+    // （["Pi","DSH","Minimal","Probe4","通用","主题",…]），结果在 **de 语言下只走到 4 页**——
+    // 德文的 Allgemein/Themen/Fertigkeiten/Tastenkürzel 匹配不上中文标签。
+    // 这正是 §1.2/r113 那条：**别把界面文案当结构**（文案经 i18n 查表、随语言变）。
+    // 改用设置页自带的稳定锚点：`[data-settings-id]`（入口探针，settings-page.tsx:563 的注释
+    // 明确说它是"稳定探针锚点"）；激活态可由 `[data-settings-pane-active="true"]` 复核。
+    const ids = await page.evaluate(() =>
+      [...document.querySelectorAll("[data-settings-id]")].map((el) => String(el.getAttribute("data-settings-id"))));
+    console.log(`  · 设置条目（data-settings-id）${ids.length} 个：${ids.join(" / ").slice(0, 220)}`);
     let visited2 = 0;
-    for (const label of TARGETS) {
-      const clicked = await page.evaluate(({ sel, want }) => {
-        const el = [...document.querySelectorAll(sel)].find((x) => {
-          const t = (x.getAttribute("aria-label") || x.textContent || "").trim().replace(/\s+/g, " ");
-          return t === want || t.startsWith(want + " ");
-        });
+    const visitedIds = [];
+    for (const id of ids) {
+      const clicked = await page.evaluate((want) => {
+        const el = document.querySelector(`[data-settings-id="${want}"]`);
         if (!el) return false;
         el.click();
         return true;
-      }, { sel: ROW_SEL, want: label });
+      }, id);
       if (!clicked) continue;
-      await waitForDomIdle(page, { quietMs: 450, timeoutMs: 10000 }).catch(() => {});
-      await auditSurface(`设置页/${label}`);
+      await waitForDomIdle(page, { quietMs: 400, timeoutMs: 10000 }).catch(() => {});
+      // 复核激活态：确认这次点击真的切到了该条目（否则审计的还是上一页）
+      const activeId = await page.evaluate(() => {
+        const el = document.querySelector('[data-settings-pane-active="true"]');
+        return el ? String(el.getAttribute("data-settings-pane")) : null;
+      });
+      await auditSurface(`设置页#${id}`);
       visited2 += 1;
+      visitedIds.push(activeId === id ? id : `${id}(激活态=${activeId})`);
     }
-    console.log(`  · 阶段 B2：定向补走了 ${visited2} 个内核/其余设置子页（目标 ${TARGETS.length} 个）`);
-    ok(visited2 >= 3, `阶段 B2 至少走到 3 个内核页（实际 ${visited2} 个）——否则内核共享页面的裸键无人检查（r234）`);
+    console.log(`  · 阶段 B2：按锚点走完 ${visited2}/${ids.length} 个设置条目：${visitedIds.join(" / ").slice(0, 240)}`);
+    ok(ids.length >= 8, `设置条目锚点数应 ≥ 8（实际 ${ids.length}）——过少说明锚点没挂上或设置页没打开（r235）`);
+    ok(visited2 === ids.length, `阶段 B2 应走完**全部**设置条目（实际 ${visited2}/${ids.length}）——按锚点遍历不受语言影响（r235）`);
   }
 
   // ===== 阶段 C：文件与格式对应 =====
@@ -428,7 +451,11 @@ try {
   const visible = await page.evaluate(() => document.body.innerText);
   if (LOCALE === "en" || LOCALE === "de") {
     // 非中文语言下，界面里出现任何 CJK 都是未本地化的串漏出来了
-    const cjk = [...new Set(visible.match(/[\u4e00-\u9fff]{2,}/g) ?? [])];
+    // r235 窄豁免：**语言自称**（endonym）按惯例用其自身文字显示（语言选择器里
+    //   "简体中文 / 繁體中文 / English / Deutsch" 并列），所以非中文语言下它们是正当的中文串。
+    //   判据封闭：只豁免这两个确切字符串，其它中文串一律算未本地化。
+    const ENDONYMS = new Set(["简体中文", "繁體中文"]);
+    const cjk = [...new Set(visible.match(/[\u4e00-\u9fff]{2,}/g) ?? [])].filter((x) => !ENDONYMS.has(x));
     console.log(`  · [${LOCALE}] 界面里的中文串 ${cjk.length} 处${cjk.length ? ": " + JSON.stringify(cjk.slice(0, 8)) : ""}`);
     ok(cjk.length === 0, `${LOCALE} 界面里不该出现任何中文串（未本地化的文案会这样漏出来）`);
   }
