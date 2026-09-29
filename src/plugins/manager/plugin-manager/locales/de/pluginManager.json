@@ -31,5 +31,6 @@
   "pluginManager.tag.dev": "Entwicklung",
   "pluginManager.tag.productivity": "Produktivität",
   "pluginManager.tag.insight": "Einblick",
-  "pluginManager.systemPromptInert": "Der aktuelle Kernel akzeptiert keinen angehängten System-Prompt, daher bleibt der systemPrompts-Beitrag dieses Plugins ohne Wirkung"
+  "pluginManager.systemPromptInert": "Der aktuelle Kernel akzeptiert keinen angehängten System-Prompt, daher bleibt der systemPrompts-Beitrag dieses Plugins ohne Wirkung",
+  "pluginManager.stateSaveFailed": "UI-Status konnte nicht gespeichert werden: {{detail}} ({{key}} gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)"
 }

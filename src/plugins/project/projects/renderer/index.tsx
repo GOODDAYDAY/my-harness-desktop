@@ -15,13 +15,28 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {  usePluginContext, useUiStore, useSessionStore, Section , pickDirectory } from "@my-harness-desktop/react";
+import {  usePluginContext, useUiStore, useSessionStore, Section , pickDirectory, announceTransient } from "@my-harness-desktop/react";
 import { pathBasename } from "@my-harness-desktop/shared";
 
 
 export function ProjectsSection(): React.ReactNode {
   const ctx = usePluginContext();
   const { t } = useTranslation();
+  /** UI 态落盘（r183）：此前四处都是 `void ctx.config.set(...)` **发射后不管**——
+   *  写失败时用户刚做的动作（加项目/删项目/折叠分组）静默不落盘，重启后回到旧状态且零反馈
+   *  （§7.6 禁止的静默失败；r180/r182 同族）。收敛成一个函数（§3.3：四处逻辑相同、只差入参）。
+   *  ⚠ 这条路真实可达：服务端写盘会抛，且即使不抛，**传输层**也会 reject
+   *  （ws-transport 的 failAll 在鉴权被拒/连接断开时把所有在飞 invoke 一律 reject，r177/r178）。 */
+  // ⚠ 命名：本文件原有一个 persist(next: string[])（recentCwds 专用），故本助手叫 persistState
+  //   （r183 首版撞名 ⇒ TS2451 Cannot redeclare；改名而不是删掉原有的，因为原有那个语义更窄）。
+  const persistState = (key: string, value: unknown): void => {
+    void ctx.config.set(key, value, { scope: "global" }).catch((err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn("[projects] UI 态落盘失败:", key, err);
+      announceTransient(t("projects.stateSaveFailed", { key, detail }), "error");
+    });
+  };
+
   const { currentCwd, setCurrentCwd, clearSessionContext } = useUiStore();
   const [cwds, setCwds] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -34,7 +49,7 @@ export function ProjectsSection(): React.ReactNode {
 
   const persist = (next: string[]): void => {
     setCwds(next);
-    void ctx.config.set("recentCwds", next, { scope: "global" });
+    persistState("recentCwds", next);
   };
 
   const switchCwd = async (dir: string): Promise<void> => {
@@ -60,7 +75,7 @@ export function ProjectsSection(): React.ReactNode {
     // 函数式更新:快速连删不读渲染闭包的旧 cwds
     setCwds((prev) => {
       const next = prev.filter((c) => c !== dir);
-      void ctx.config.set("recentCwds", next, { scope: "global" });
+      persistState("recentCwds", next);
       return next;
     });
     // 摘掉的是当前挂接:清 cwd/会话上下文,回无项目空态——否则列表删光了
@@ -80,7 +95,7 @@ export function ProjectsSection(): React.ReactNode {
       const newIndex = prev.indexOf(over.id as string);
       if (oldIndex < 0 || newIndex < 0) return prev;
       const next = arrayMove(prev, oldIndex, newIndex);
-      void ctx.config.set("recentCwds", next, { scope: "global" });
+      persistState("recentCwds", next);
       return next;
     });
   };
@@ -91,7 +106,7 @@ export function ProjectsSection(): React.ReactNode {
 
   const setSectionOpen = (open: boolean): void => {
     setCollapsed(!open);
-    void ctx.config.set("sectionCollapsed", !open, { scope: "global" });
+    persistState("sectionCollapsed", !open);
   };
 
   return (

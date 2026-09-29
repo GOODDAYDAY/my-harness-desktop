@@ -1,5 +1,6 @@
 {
   "projects.title": "Projekte",
   "projects.add": "Projekt hinzufügen",
-  "projects.remove": "Aus Liste entfernen"
+  "projects.remove": "Aus Liste entfernen",
+  "projects.stateSaveFailed": "UI-Status konnte nicht gespeichert werden: {{detail}} ({{key}} gilt nur für diese Sitzung und wird beim Neustart zurückgesetzt)"
 }

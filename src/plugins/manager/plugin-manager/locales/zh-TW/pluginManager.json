@@ -31,5 +31,6 @@
   "pluginManager.tag.dev": "開發",
   "pluginManager.tag.productivity": "效率",
   "pluginManager.tag.insight": "洞察",
-  "pluginManager.systemPromptInert": "目前核心不承接附加系統 prompt，此外掛貢獻的 systemPrompts 暫不生效"
+  "pluginManager.systemPromptInert": "目前核心不承接附加系統 prompt，此外掛貢獻的 systemPrompts 暫不生效",
+  "pluginManager.stateSaveFailed": "介面狀態儲存失敗：{{detail}}（{{key}} 只在這次工作階段內有效，重新啟動後會回到上次的狀態）"
 }

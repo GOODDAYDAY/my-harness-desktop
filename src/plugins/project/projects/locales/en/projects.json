@@ -1,5 +1,6 @@
 {
   "projects.title": "Projects",
   "projects.add": "Add project",
-  "projects.remove": "Remove from list"
+  "projects.remove": "Remove from list",
+  "projects.stateSaveFailed": "Could not save the UI state: {{detail}} ({{key}} lasts only for this session; it reverts on restart)"
 }

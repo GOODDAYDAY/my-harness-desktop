@@ -31,5 +31,6 @@
   "pluginManager.tag.dev": "Dev",
   "pluginManager.tag.productivity": "Productivity",
   "pluginManager.tag.insight": "Insight",
-  "pluginManager.systemPromptInert": "The current kernel does not accept an appended system prompt, so this plugin's systemPrompts contribution has no effect"
+  "pluginManager.systemPromptInert": "The current kernel does not accept an appended system prompt, so this plugin's systemPrompts contribution has no effect",
+  "pluginManager.stateSaveFailed": "Could not save the UI state: {{detail}} ({{key}} lasts only for this session; it reverts on restart)"
 }

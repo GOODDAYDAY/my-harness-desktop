@@ -10,7 +10,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Announce, Button, RECOMMENDED_PLUGIN_TAGS, type PluginListItem, type PluginTier, usePluginContext, useSessionStore, Pagination, usePagination , pickDirectory } from "@my-harness-desktop/react";
+import { Announce, announceTransient, Button, RECOMMENDED_PLUGIN_TAGS, type PluginListItem, type PluginTier, usePluginContext, useSessionStore, Pagination, usePagination , pickDirectory } from "@my-harness-desktop/react";
 
 
 const PAGE_SIZE = 10;
@@ -64,6 +64,15 @@ function tierColor(tier: PluginTier): string {
 
 export function PluginManagerPage(): React.ReactNode {
   const { t } = useTranslation();
+  /** UI 态落盘（r183，同 projects 的 persist）：三处此前都是 `void ctx.config.set(...)` 发射后不管。 */
+  const persist = (key: string, value: unknown): void => {
+    void ctx.config.set(key, value, { scope: "global" }).catch((err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn("[plugin-manager] UI 态落盘失败:", key, err);
+      announceTransient(t("pluginManager.stateSaveFailed", { key, detail }), "error");
+    });
+  };
+
   const ctx = usePluginContext();
   const [plugins, setPlugins] = useState<PluginListItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[]>([]);
@@ -189,12 +198,12 @@ export function PluginManagerPage(): React.ReactNode {
     else if (next[tag] === "exc") delete next[tag];
     else next[tag] = "inc";
     setTagFilter(next);
-    void ctx.config.set("tagFilter", next, { scope: "global" });
+    persist("tagFilter", next);
   };
 
   const resetTagFilter = () => {
     setTagFilter({});
-    void ctx.config.set("tagFilter", {}, { scope: "global" });
+    persist("tagFilter", {});
   };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -208,7 +217,7 @@ export function PluginManagerPage(): React.ReactNode {
     const reordered = arrayMove(sortedPlugins, oldIndex, newIndex);
     const newOrder = reordered.map((p) => p.id);
     setCustomOrder(newOrder);
-    void ctx.config.set("customOrder", newOrder, { scope: "global" });
+    persist("customOrder", newOrder);
   }, [sortedPlugins, ctx]);
 
   // Tooltip.Provider 由内核根组件统一提供(index.tsx),此处只保留 Root 局部配置;
