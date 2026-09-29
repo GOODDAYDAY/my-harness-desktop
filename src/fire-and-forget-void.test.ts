@@ -47,7 +47,7 @@ const ROOT = join(HERE, "..");
 const ROOTS = ["src", "packages/react/src", "packages/shared/src"];
 
 /** r181 实测 270（另有 23 处提取失败未计入 ⇒ 这是**下界**）。 */
-const CEILING = 229;   // r207 正当账本豁免 8 处（runMutation 4 + onUpdate 4）⇒ 237 → 229（实测值；数字现在更接近"真待修数"）
+const CEILING = 224;   // r208 账本收录 onRawPaths 5 处 ⇒ 229 → 224（实测值）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -122,6 +122,9 @@ const LEDGER: { file: string; callee: string; evidence: string; reason: string }
   { file: "src/plugins/sessions/sessions-list/renderer/index.tsx", callee: "onUpdate",
     evidence: "src/plugins/sessions/sessions-list/renderer/index.tsx",
     reason: "onUpdate 的实现是同文件内的 async 回调（:618 附近），体内 try { await ctx.sessions.updateHeader } catch 已兜住 + 播报（r203/r204 补）+ reloadAfterWrite 回滚；4 个 void onUpdate(...) 因此正当（r199 核实）" },
+  { file: "src/plugins/sessions/sessions-list/renderer/index.tsx", callee: "onRawPaths",
+    evidence: "src/plugins/sessions/sessions-list/renderer/index.tsx",
+    reason: "onRawPaths 是实现 fetchRawPaths 的 prop（:616 处 onRawPaths={fetchRawPaths}），而 fetchRawPaths（:271-276）体内 try { await ctx.sessions.rawFilePaths(...) } catch { console.error(...); return { desktop: null, kernel: null } } ⇒ **永不 reject**，所以 5 个 void onRawPaths(...).then(...) 不会漏错误；且失败路径**最终有用户反馈**——返回的 desktop 为 null 时下游 onOpenRawFile(null) 会播报 sessions.noRawFile（r191 修的）。r208 逐个回读核实。" },
   { file: "src/web/kernel/build-kernel.ts", callee: "onDone",
     evidence: "src/web/kernel/build-kernel.ts",
     reason: "**回调隔离**：try { onDone(r) } catch { console.error } 之后紧跟 resolveFn?.(r) 与 cleanup()——一个消费方回调抛错不该让内核安装流程断掉；安装结果本身经 resolveFn 上报，所以这里不需要用户播报（r206 核实，与 r170 的 probe4 监听器隔离同族）" },
