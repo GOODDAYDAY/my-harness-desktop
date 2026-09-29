@@ -2,5 +2,6 @@
   "projects.title": "项目",
   "projects.add": "添加项目",
   "projects.remove": "从列表移除",
-  "projects.stateSaveFailed": "界面状态保存失败：{{detail}}（{{key}} 只在这次会话内有效，重启后会回到上次的状态）"
+  "projects.stateSaveFailed": "界面状态保存失败：{{detail}}（{{key}} 只在这次会话内有效，重启后会回到上次的状态）",
+  "projects.switchFailed": "切换项目失败：{{detail}}（仍停留在原来的项目）"
 }

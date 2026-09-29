@@ -57,5 +57,6 @@
   "settings.previewRefresh": "Aktualisieren",
   "settings.previewStats": "Statistik",
   "settings.previewInputTokens": "Eingabe-Tokens",
-  "settings.previewOutputTokens": "Ausgabe-Tokens"
+  "settings.previewOutputTokens": "Ausgabe-Tokens",
+  "settings.fontPreviewSaveFailed": "Schriftvorschau-Einstellung konnte nicht gespeichert werden: {{detail}} (der Schalter behielt seinen vorherigen Zustand)"
 }

@@ -57,5 +57,6 @@
   "settings.previewRefresh": "刷新",
   "settings.previewStats": "统计",
   "settings.previewInputTokens": "输入 tokens",
-  "settings.previewOutputTokens": "输出 tokens"
+  "settings.previewOutputTokens": "输出 tokens",
+  "settings.fontPreviewSaveFailed": "保存字体预览设置失败：{{detail}}（开关保持原状，未生效）"
 }

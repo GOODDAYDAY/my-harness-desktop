@@ -14,8 +14,7 @@ import {
   useUiStore,
   SettingsSection,
   usePluginContext,
-  type SettingsComponentProps,
-} from "@my-harness-desktop/react";
+  type SettingsComponentProps, announceTransient,} from "@my-harness-desktop/react";
 import type { FontPresetContribution } from "@my-harness-desktop/shared";
 
 interface ThemeManagerConfig {
@@ -76,7 +75,16 @@ export function FontTab({ refreshSignal }: Pick<SettingsComponentProps, "refresh
       await ctx.config.set("showFontPreview", on, { scope: "global" });
       setShowFontPreview(on);
     } catch (err) {
-      console.error("[theme-manager] 写配置失败,已回滚", err);
+      // ⚠ r205 更正一处 **stale 注释**（§5.3）：原文写"写配置失败,已回滚"，
+      //   但 catch 里**并没有回滚代码**——setShowFontPreview(on) 只在成功分支执行，
+      //   所以真实行为是"开关保持原状"（不是"回滚"）。注释描述的与代码做的不一致，
+      //   比没注释更糟（读的人会以为已有回滚逻辑而不去查）。
+      //   同时补上用户可见反馈：此前只有 console ⇒ 用户拨了开关、没反应、无解释（§7.6）。
+      console.error("[theme-manager] 写配置失败，开关保持原状:", err);
+      announceTransient(
+        t("settings.fontPreviewSaveFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
     }
   };
 

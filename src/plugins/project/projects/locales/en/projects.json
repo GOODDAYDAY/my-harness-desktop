@@ -2,5 +2,6 @@
   "projects.title": "Projects",
   "projects.add": "Add project",
   "projects.remove": "Remove from list",
-  "projects.stateSaveFailed": "Could not save the UI state: {{detail}} ({{key}} lasts only for this session; it reverts on restart)"
+  "projects.stateSaveFailed": "Could not save the UI state: {{detail}} ({{key}} lasts only for this session; it reverts on restart)",
+  "projects.switchFailed": "Could not switch the project: {{detail}} (still showing the previous project)"
 }

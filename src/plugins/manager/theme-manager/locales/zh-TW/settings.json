@@ -57,5 +57,6 @@
   "settings.previewRefresh": "重新整理",
   "settings.previewStats": "統計",
   "settings.previewInputTokens": "輸入 tokens",
-  "settings.previewOutputTokens": "輸出 tokens"
+  "settings.previewOutputTokens": "輸出 tokens",
+  "settings.fontPreviewSaveFailed": "儲存字型預覽設定失敗：{{detail}}（開關保持原狀，未生效）"
 }

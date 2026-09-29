@@ -57,5 +57,6 @@
   "settings.previewRefresh": "Refresh",
   "settings.previewStats": "Stats",
   "settings.previewInputTokens": "Input tokens",
-  "settings.previewOutputTokens": "Output tokens"
+  "settings.previewOutputTokens": "Output tokens",
+  "settings.fontPreviewSaveFailed": "Could not save the font-preview setting: {{detail}} (the toggle kept its previous state)"
 }

@@ -329,6 +329,14 @@ export function SessionsSection(): React.ReactNode {
       }
     } catch (err) {
       console.error("[sessions-list] 打开会话失败:", err);
+      // ⚠ r205：这是 r204 说的**最糟那种**——乐观更新 + 静默回滚。
+      //   点击瞬间已把会话上下文三连（path/ns/title）改成新会话，失败后下面三行把它们改回去；
+      //   若此时不播报，用户看到的是"高亮跳到别的会话 → 又自己跳回来"，没有任何解释
+      //   （§7.6：回滚本身就是需要解释的状态变化）。
+      announceTransient(
+        t("sessions.openFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",
+      );
       setCurrentSessionPath(prevPath);
       setCurrentNeutralSessionId(prevNeutral);
       setSessionTitle(prevTitle);

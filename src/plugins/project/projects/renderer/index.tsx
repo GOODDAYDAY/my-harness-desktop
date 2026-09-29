@@ -15,7 +15,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {  usePluginContext, useUiStore, useSessionStore, Section , pickDirectory, fireAndReport } from "@my-harness-desktop/react";
+import {  usePluginContext, useUiStore, useSessionStore, Section , pickDirectory, fireAndReport, announceTransient,} from "@my-harness-desktop/react";
 import { pathBasename } from "@my-harness-desktop/shared";
 
 
@@ -61,6 +61,12 @@ export function ProjectsSection(): React.ReactNode {
       await useSessionStore.getState().switchCwd(dir);
     } catch (err) {
       console.error("[projects] 切换目录失败:", err);
+      // ⚠ r205：此前只有 console ⇒ 用户点项目、什么都没发生、也没有解释（§7.6；
+      //   r203 识别的第三种形态：有 catch 有日志、就是没有用户可见反馈）。
+      announceTransient(
+        t("projects.switchFailed", { detail: (err as Error)?.message ?? String(err) }),
+        "error",   // 显式 error：默认 info ⇒ 无 role=alert ⇒ 读屏不打断（r202 已钉成守卫）
+      );
     }
   };
 
