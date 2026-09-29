@@ -11,7 +11,13 @@ const IMAGE_MIME: Record<string, string> = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
 };
 
-function mimeOf(src: string): string {
+/** 由文件名的扩展名推 mime。
+ *
+ * r245 导出以便单测（此前是模块私有）：扩展名是**契约字段**（来自任意附件文件），
+ * 而 IMAGE_MIME 是本文件内部的**兜底呈现表**——表外取值必然出现（任何非常见图片格式）。
+ * 两者的容错方向相反（r241）：表可以缺项，契约字段不能因为表缺项就崩或产出空 mime。
+ * 按 §4.5 的可测性判据（纯函数不该埋在组件文件里不可测），导出它。 */
+export function mimeOf(src: string): string {
   const i = src.lastIndexOf(".");
   if (i === -1) return "image/png";
   return IMAGE_MIME[src.slice(i + 1).toLowerCase()] ?? "image/png";
