@@ -11,6 +11,18 @@
 // 这三类的共同特征是**静默**：功能路径照样通、页面照样不报错，但结构已经坏了。
 // 正向剧本抓不到，所以单独立一个审计剧本，输出结构化发现清单。
 //
+// ⚠ 覆盖边界（r233 量化并写明，避免把"0 发现"当成全量证据）：
+//   检查④（i18n key 漏成可见文本）用 TreeWalker 遍历 body 的文本节点，但**跳过不可见子树**
+//   （`hidden(parentElement)` ⇒ `skippedHidden++`）。这是**设计如此**——它查的是"漏成
+//   *可见* 文本"，而 `display:none` 的内容用户看不到。
+//   代价：`settings-page` 用 `display: active ? flex : none` 渲染所有 tab（非激活 tab 仍在 DOM 里），
+//   所以**非激活设置页的文案不在本剧本的覆盖范围内**——包括内核版本页
+//   （`KernelVersionPage`，其文案键经 prop 前缀拼出；r228/r229 修过它的缺键）。
+//   实测每个界面跳过 **88–95 个**不可见文本节点（数字已在摘要里打印：`跳过不可见元素 N 个`）。
+//   ⇒ 要覆盖那些页面，得先**激活对应 tab** 再扫（本轮未做，记为待办）；
+//     在此之前，"dom-audit 0 发现"**不能**当作"内核版本页没有裸键"的证据。
+//     那一类目前由静态守卫 `src/dynamic-prefix-i18n-keys.test.ts` 负责（r228/r229，硬断言 0）。
+//
 // 用法: npm run build && node scripts/demo/dom-audit.e2e.mjs [--port 9350] [--keep]
 // 零 token：用 minimal 内核（echo），不花真实模型额度。
 import { parseArgs } from "node:util";
