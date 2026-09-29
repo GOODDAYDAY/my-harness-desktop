@@ -96,36 +96,54 @@ describe("PanelIconButton：图标按钮的可访问名与禁用", () => {
 });
 
 describe("PanelRow：行点击与三个插槽", () => {
-  it("① children 与 icon 常驻渲染；**actions 是 hover 才渲染**（钉住这个真实行为）", () => {
+  it("① children / icon / **actions 都常驻 DOM**（r155：不再条件渲染，键盘才够得着）", () => {
     render(<PanelRow icon={<i data-probe="icon" />} actions={<b data-probe="act" />}>行标题</PanelRow>);
     expect(screen.getByText("行标题")).toBeInTheDocument();
     expect(document.querySelector("[data-probe='icon']"), "icon 常驻").not.toBeNull();
-    // r154 实测：actions 插槽被 hovered 门控（panel-row.tsx:37 `{hovered && actions != null && …}`）
-    expect(document.querySelector("[data-probe='act']"), "未 hover 时操作区不渲染").toBeNull();
+    expect(document.querySelector("[data-probe='act']"),
+      "r155 修：操作区必须常驻 DOM（此前 hovered 才渲染 ⇒ 键盘用户 Tab 不到、普查也查不出）").not.toBeNull();
   });
 
-  it("①b hover ⇒ 操作区出现；移出 ⇒ 收起（两侧都测）", () => {
+  it("①b 可见性由 hover 驱动：未 hover ⇒ opacity 0；hover ⇒ 1；移出 ⇒ 0（两侧都测）", () => {
     render(<PanelRow actions={<b data-probe="act" />}>行标题</PanelRow>);
     const row = screen.getByText("行标题").closest("div")!;
+    const area = () => document.querySelector("[data-panel-row-actions]") as HTMLElement;
+    expect(area().style.opacity, "未 hover 时视觉隐藏（但仍可聚焦）").toBe("0");
     fireEvent.mouseEnter(row);
-    expect(document.querySelector("[data-probe='act']"), "hover 后应出现").not.toBeNull();
+    expect(area().style.opacity, "hover 后揭示").toBe("1");
     fireEvent.mouseLeave(row);
-    expect(document.querySelector("[data-probe='act']"), "移出后应收起").toBeNull();
+    expect(area().style.opacity, "移出后收起").toBe("0");
   });
 
-  it("①c ⚠ **已知 a11y 缺口钉桩**：键盘聚焦**不会**显示操作区（hovered 只由鼠标事件驱动）", () => {
-    // r154 发现：panel-row.tsx 的 hovered 只由 onMouseEnter/onMouseLeave 设置，
-    // 没有 onFocus/onBlur 路径 ⇒ 纯键盘用户在 Tab 到这一行时看不到任何操作按钮，
-    // 也就无法用键盘触发它们（可访问名普查查不出来：按钮**存在**于 React 树里，
-    // 只是没被渲染进 DOM）。这与 r115 那次"差点修一个不存在的 a11y 缺口"相反——
-    // 这次是**真的**缺口，但本轮只做钉桩与记录，不在测试轮里改产品行为
-    // （改法要与 §7.6/可访问名纪律一起考虑：加 onFocus/onBlur，或让操作区常驻但视觉弱化）。
+  it("①c **键盘焦点也揭示**（r154 查出的 a11y 缺口在 r155 修掉；本条从钉桩翻成断言修复）", () => {
     render(<PanelRow actions={<button data-probe="kbd">操作</button>}>行标题</PanelRow>);
     const row = screen.getByText("行标题").closest("div")!;
+    const area = () => document.querySelector("[data-panel-row-actions]") as HTMLElement;
+    expect(area().style.opacity).toBe("0");
+    // 焦点落在行内（模拟 Tab 到操作按钮）⇒ 揭示
     fireEvent.focus(row);
-    expect(document.querySelector("[data-probe='kbd']"),
-      "当前行为：聚焦不显示操作区（若哪天修好了，这条会红 ⇒ 那时请把本测试改成断言'聚焦应显示'）").toBeNull();
+    expect(area().style.opacity, "键盘聚焦必须揭示操作区，否则纯键盘用户看不到也点不中").toBe("1");
+    // 焦点离开本行 ⇒ 收起（blur 时 relatedTarget 不在行内）
+    fireEvent.blur(row, { relatedTarget: document.body });
+    expect(area().style.opacity, "焦点离开本行后收起").toBe("0");
   });
+
+  it("①d 焦点从行**移到行内按钮**时不收起（relatedTarget 在行内 ⇒ 保持揭示，否则按钮会在点击前消失）", () => {
+    render(<PanelRow actions={<button data-probe="kbd2">操作</button>}>行标题</PanelRow>);
+    const row = screen.getByText("行标题").closest("div")!;
+    const btn = document.querySelector("[data-probe='kbd2']") as HTMLElement;
+    fireEvent.focus(row);
+    // blur 的 relatedTarget 是行内的按钮 ⇒ 不该收起
+    fireEvent.blur(row, { relatedTarget: btn });
+    expect((document.querySelector("[data-panel-row-actions]") as HTMLElement).style.opacity,
+      "焦点在行内移动时必须保持揭示（否则按钮会在被点到的前一刻隐藏、点不中）").toBe("1");
+  });
+
+  it("①e 未给 actions 时不渲染操作区容器（不留空 span 占位）", () => {
+    render(<PanelRow>只有标题</PanelRow>);
+    expect(document.querySelector("[data-panel-row-actions]")).toBeNull();
+  });
+
   it("② 点击行触发 onClick；active 不影响点击", () => {
     const onClick = vi.fn();
     render(<PanelRow onClick={onClick} active>可点行</PanelRow>);
