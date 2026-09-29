@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   configSets: [] as unknown[][],
   // r184：失败播报的记录（persistState 的 .catch 走它）
   announced: [] as { msg: string; variant?: string }[],
+  fired: [] as { tag: string; msg: string }[],
   configSetRejects: false as boolean,
 }));
 const ctx = vi.hoisted(() => ({
@@ -44,7 +45,19 @@ vi.mock("@my-harness-desktop/react", () => ({
   Section: ({ children }: { children: React.ReactNode }) => <section>{children}</section>,
   // ⚠ r183 的产品改动新 import 了 announceTransient；mock 不给它，测试里一调就是 undefined
   //   （r165 的教训：mock 缺项不会报错，只会在调用点炸或静默无效）。
-  announceTransient: (msg: string, variant?: string) => { h.announced.push({ msg, variant }); },
+  // ⚠ r185：产品改用框架原语 fireAndReport（四处同构兜底收敛到 packages/react），
+  //   所以 mock 要给的是它、不再是 announceTransient（r184 那条"产品新增 import 后要查 mock 缺项"
+  //   在这里立刻应验——上一轮刚补的 announceTransient 这一轮就被换掉了）。
+  //   这里只**记录插件传进来的选项**（tag 与 message 产出），原语自身的行为由
+  //   packages/react/src/widgets/fire-and-report.test.ts 单独测（分层：插件测接线、原语测机制）。
+  fireAndReport: (pr: Promise<unknown>, opts: { tag: string; message: (d: string) => string }) => {
+    void pr.catch((err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      h.fired.push({ tag: opts.tag, msg: opts.message(detail) });
+      h.announced.push({ msg: opts.message(detail), variant: "error" });
+    });
+    return pr;
+  },
   pickDirectory: async () => null,
 }));
 
@@ -54,7 +67,7 @@ const row = (dir: string): HTMLElement => document.querySelector(`[title="${dir}
 beforeEach(() => {
   h.cwds = ["/w/alpha", "/w/beta"]; h.currentCwd = "/w/alpha";
   h.switchCalls = []; h.setCwdCalls = []; h.clearCalls = 0; h.configSets = [];
-  h.announced = []; h.configSetRejects = false;
+  h.announced = []; h.fired = []; h.configSetRejects = false;
   ctx.o = {
     config: {
       get: async (k: string) => (k === "recentCwds" ? h.cwds : k === "sectionCollapsed" ? false : undefined),
@@ -149,7 +162,12 @@ describe("persistState：UI 态落盘失败要播报（r183 那批兜底的 DOM 
     const a = h.announced[0];
     expect(a.variant, "落盘失败是用户可行动的故障 ⇒ 必须走 error 级（不是 info）").toBe("error");
     expect(a.msg, "文案要点名失败的 key（否则用户不知道哪个状态没保住）").toContain("stateSaveFailed");
-    expect(warn.mock.calls.length, "同时留 console.warn 供排查").toBeGreaterThan(0);
+    // ⚠ **不在这一层断言 console.warn**（r185 首版在这断言了、于是红）：
+    //   收敛到框架原语之后，warn 是**原语的职责**，而原语在本测试里被 mock 掉了。
+    //   它由 packages/react/src/widgets/fire-and-report.test.ts ② 单独钉住。
+    //   这正是本文件顶部写的分层原则（插件测接线、原语测机制）——断言不能越过自己那一层，
+    //   否则会因"下层被替身换掉"而假失败，且诱导人把下层的实现细节复制进上层测试。
+    expect(warn, "本层不该断言原语的内部行为").toBeDefined();
     warn.mockRestore();
   });
 
@@ -174,5 +192,20 @@ describe("persistState：UI 态落盘失败要播报（r183 那批兜底的 DOM 
       await waitFor(() => expect(row("/w/beta")).toBeNull());
       await waitFor(() => expect(h.announced.length).toBeGreaterThan(0));
     }
+  });
+});
+
+describe("persistState 的接线（r185 收敛到 fireAndReport 之后）", () => {
+  it("④ 失败时传给原语的是**本插件的 tag 与含 key 的文案**（框架零文案，内容由插件供）", async () => {
+    h.configSetRejects = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<ProjectsSection />);
+    await waitFor(() => expect(row("/w/alpha")).toBeTruthy());
+    const rm = row("/w/beta")?.querySelector("[data-project-remove]") as HTMLElement | null;
+    if (rm) fireEvent.click(rm);
+    await waitFor(() => expect(h.fired.length).toBeGreaterThan(0));
+    expect(h.fired[0].tag, "tag 用于 console.warn 前缀，点名是哪个插件").toBe("projects");
+    expect(h.fired[0].msg, "文案来自插件的 i18n 键（框架不含文案，§1.2）").toContain("projects.stateSaveFailed");
+    warn.mockRestore();
   });
 });
