@@ -166,7 +166,9 @@ try {
   await page.keyboard.type("审计草稿");
   await waitForDomIdle(page, { quietMs: 400, timeoutMs: 6000 }).catch(() => {});
   const after = await page.evaluate(() => {
-    const b = document.querySelector("button[aria-label*='发送']");
+    // r237：改用**早就存在**的稳定锚点 data-composer-send（composer.tsx:573，r119 补的）——
+  //   此前按 aria-label 的译文子串定位，换语言即失效（§1.2/r113：别把界面文案当结构）。
+  const b = document.querySelector("[data-composer-send]");
     const ta = document.querySelector("[data-timeline-composer]");
     return { disabled: b?.disabled ?? null, value: ta?.value ?? null };
   });
@@ -288,7 +290,9 @@ try {
   const rowsBefore = await page.evaluate(() => [...document.querySelectorAll("[data-session-path]")].map((e) => e.getAttribute("data-session-path")));
   console.log(`  · 发送前会话行 ${rowsBefore.length} 个`);
   const sendRect = await page.evaluate(() => {
-    const b = document.querySelector("button[aria-label*='发送']");
+    // r237：改用**早就存在**的稳定锚点 data-composer-send（composer.tsx:573，r119 补的）——
+  //   此前按 aria-label 的译文子串定位，换语言即失效（§1.2/r113：别把界面文案当结构）。
+  const b = document.querySelector("[data-composer-send]");
     if (!b) return null;
     const r = b.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };

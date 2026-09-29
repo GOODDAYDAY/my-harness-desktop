@@ -129,7 +129,7 @@ try {
   await page.click("[data-timeline-composer]");
   await page.keyboard.type("调模型");
   const sendRect = await page.evaluate(() => {
-    const b = document.querySelector("button[aria-label^='发送']") || document.querySelector("button[aria-label*='发送']");
+    const b = document.querySelector("[data-composer-send]");   // r237：改用早就存在的稳定锚点（composer.tsx:573，r119 补的），不再按译文子串定位
     if (!b) return null;
     const r = b.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };

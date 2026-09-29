@@ -129,7 +129,7 @@ const sendAndWaitEcho = async (text) => {
   await page.click("[data-timeline-composer]");
   await page.keyboard.type(text);
   const r = await page.evaluate(() => {
-    const b = document.querySelector("button[aria-label*='发送']");
+    const b = document.querySelector("[data-composer-send]");   // r237：改用早就存在的稳定锚点（composer.tsx:573，r119 补的），不再按译文子串定位
     const rect = b.getBoundingClientRect();
     return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
   });

@@ -185,7 +185,7 @@ try {
     await page.click("[data-timeline-composer]");
     await page.keyboard.type(text);
     const sendRect = await page.evaluate(() => {
-      const b = document.querySelector("button[aria-label*='发送']"); if (!b) return null;
+      const b = document.querySelector("[data-composer-send]"); if (!b) return null;   // r237：稳定锚点
       const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
     });
     if (!sendRect) throw new Error("未找到发送按钮");
