@@ -109,6 +109,40 @@ const PHASE_META: Record<string, { key: string; color: string; pulse: boolean }>
  *  ComposerAttachmentPayload(设计 docs/design/plugin-decoupling.md §5.2),timeline 不再本地定义。
  *  渲染归位后(channels 字段已删):timeline 只挂载数据,谁画由 composerAttachments 槽贡献方决定。 */
 
+/** 消息的终结状态条（已停止 / 生成失败）。
+ *
+ * 从 TimelineView 的内联 JSX 抽出（r243），目的是**可测**：TimelineView 依赖大量 store/context，
+ * 消息行的状态条此前无法单独渲染断言；抽出后这两个锚点有了 DOM 级消费者。
+ *
+ * 锚点是 e2e 的稳定探针（§1.2/r113：探针不绑文案；r96：断言状态位要让产品暴露状态位本身）：
+ * `data-message-stopped` / `data-message-error`。此前 e2e 只能按译文探针（"生成失败"），换语言即失效。
+ */
+export function MessageStatusFlags({ stopped, error, errorMessage }: {
+  stopped?: boolean;
+  error?: boolean;
+  errorMessage?: unknown;
+}): React.ReactNode {
+  const { t } = useTranslation();
+  if (!stopped && !error) return null;
+  return (
+    <>
+      {stopped && (
+        <div className="text-[length:var(--font-size-sm)] text-[var(--color-accent-error)] italic mt-1" data-message-stopped="">
+          {t("shell.stopped")}
+        </div>
+      )}
+      {error && (
+        <div className="text-[length:var(--font-size-sm)] text-[var(--color-accent-error)] mt-1" data-message-error="">
+          {t("shell.error")}
+          {typeof errorMessage === "string" && errorMessage && (
+            <div className="opacity-70 whitespace-pre-wrap break-all mt-0.5">{errorMessage}</div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function TimelineView(): React.ReactNode {
   const ctx = usePluginContext();
   // 已注册内核的注册表顺序(模型下拉 TAB 条排序用):从 PluginContext.kernels 的键序派生
@@ -1543,24 +1577,14 @@ const MessageRow = memo(function MessageRow({ message, collapseDefault, bubbleMa
         {blocks.length === 0 && message.pending !== true && !message.error && !message.stopped && (
           <div className="text-[var(--color-muted)]">{t("shell.emptyMessage")}</div>
         )}
-        {message.stopped && (
-          <div className="text-[length:var(--font-size-sm)] text-[var(--color-accent-error)] italic mt-1">
-            {t("shell.stopped")}
-          </div>
-        )}
-        {message.error && (
-          // r239：稳定状态锚点（此前 e2e 只能按译文 "生成失败" 探针，语言绑定；§1.2/r113、r96 的状态位通则）。
-          //   ⚠ 同批本想给"已停止"条也加 data-message-stopped，但**当轮找不到消费者**
-          //   （没有剧本用它、也没有渲染消息行的 DOM 测试）⇒ 按 r238 的通则撤掉：
-          //   补锚点必须同轮找到消费者，否则就是死锚点（data-anchor-consumers 会报，
-          //   而没人用的锚点会在未来重构里被当"没用的属性"删掉）。等真有剧本要断言停止态时再加。
-          <div className="text-[length:var(--font-size-sm)] text-[var(--color-accent-error)] mt-1" data-message-error="">
-            {t("shell.error")}
-            {typeof message.errorMessage === "string" && message.errorMessage && (
-              <div className="opacity-70 whitespace-pre-wrap break-all mt-0.5">{message.errorMessage}</div>
-            )}
-          </div>
-        )}
+        {/* r243：状态条抽成导出的小组件 MessageStatusFlags（此前是 TimelineView 里的内联 JSX，
+            而 TimelineView 依赖大量 store/context ⇒ 消息行的状态条**无法单独测**）。
+            抽出后既可测（见 message-status-flags.test.tsx），锚点也才有了消费者（r238/r239 的通则）。 */}
+        <MessageStatusFlags
+          stopped={message.stopped}
+          error={message.error}
+          errorMessage={message.errorMessage}
+        />
         <div className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           {/* 空正文也挂动作区(根因修复 r361):rowText 空门禁曾把整组 MessageActions 摘掉——
               dsh 中断无流式缓冲时落空内容行(stopped=true),「继续」是它唯一的恢复入口,
