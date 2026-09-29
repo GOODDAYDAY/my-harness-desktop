@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState, Toast, SortableList } from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, EmptyState, Toast, SortableList, announceTransient } from "@my-harness-desktop/react";
 import { cwdToBucketName, messageContentText, applyCustomOrder } from "@my-harness-desktop/shared";
 
 // 收藏请求事件(本插件自有 channel):timeline/树行一击收藏经 invoke 分派,本 tab 订阅 + revealOn 揭示。
@@ -95,6 +95,20 @@ export function BookmarksTab(): React.ReactNode {
   const [deleteTarget, setDeleteTarget] = useState<BookmarkMeta | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  /** 顺序落盘（r180）：此前两处都是 `void ctx.config.set(...)` **发射后不管**——
+   *  写失败时用户的新顺序静默不落盘，下次启动回到旧顺序且**零反馈**（§7.6 禁止的静默失败）。
+   *  ⚠ 这条路是**真实可达**的：服务端 config 写入确实会抛（写盘失败），
+   *  而且即使服务端不抛，**传输层**也会 reject——ws-transport 的 failAll() 在鉴权被拒/连接断开时
+   *  把所有在飞 invoke 一律 reject（r177/r178 查明的第四环）。
+   *  收敛成一个函数（§3.3：两处调用逻辑相同、差别只在入参），失败时播报可行动信息。 */
+  const persistOrder = useCallback((ids: string[]): void => {
+    void ctx.config.set("bookmarkOrder", ids).catch((err: unknown) => {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn("[session-bookmarks] 顺序落盘失败:", err);
+      announceTransient(t("bookmarks.orderSaveFailed", { detail }), "error");
+    });
+  }, [ctx, t]);
 
   const loadBookmarks = useCallback(async () => {
     if (!currentCwd || !ctx.fs) return;
@@ -235,7 +249,7 @@ export function BookmarksTab(): React.ReactNode {
     if (nextOrder.length !== orderRef.current.length) {
       orderRef.current = nextOrder;
       setOrder(nextOrder);
-      void ctx.config.set("bookmarkOrder", nextOrder);
+      persistOrder(nextOrder);
     }
     try {
       await loadBookmarks();
@@ -324,7 +338,7 @@ export function BookmarksTab(): React.ReactNode {
           <SortableList
             values={filtered.map((b) => b.id)}
             onReorder={(ids) => { orderRef.current = ids; setOrder(ids); }}
-            onEnd={() => void ctx.config.set("bookmarkOrder", orderRef.current)}
+            onEnd={() => persistOrder(orderRef.current)}
             disabled={!!search}
           >
           {filtered.map((bm) => {
