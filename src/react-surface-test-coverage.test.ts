@@ -35,7 +35,7 @@ const ROOT = join(HERE, "..");
  *  首版守卫漏了直接导出声明（少算）——两个错恰好抵消成同一个数字。
  *  ⚠ 这正是"数字对上了不等于判据对了"的实例：必须分别核对两侧的分类器。
  *  现判据两种导出形态都认、类型已分离 ⇒ 以守卫实测 57 为准（r129/r151 的通则：分类器不对，指标就没意义；两个分类器不一致时信可复跑的那个）。 */
-const CEILING = 35;   // r163 清掉四个同构 hook + fileActionInvokeChannel ⇒ 40 → 35（实测值）
+const CEILING = 31;   // r164 清掉三个同构 hook + useFileIconIndex ⇒ 35 → 31（实测值）
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
