@@ -399,29 +399,44 @@ function WorkspaceView({ isActive }: { isActive: boolean }): React.ReactNode {
     if (!currentCwd || checked.size === 0 || !message.trim()) return;
     setBusy("commit");
     setActionError(null);
-    const r = await ctx.gitWrite!.commit(currentCwd, message.trim(), [...checked].sort());
-    setBusy(null);
-    if (!r.ok) {
-      setActionError(t("review.commitFailed", { error: r.error ?? "" }));
-      return;
+    // ⚠ r210：结果对象协议（r.ok）只覆盖"操作失败"，**不覆盖"调用没完成"**——
+    //   传输层 reject 时（ws-transport 的 failAll 在鉴权被拒/连接断开时一律 reject，r177/r178）
+    //   await 会抛出，于是 setBusy(null) 走不到 ⇒ **提交按钮永久卡在 busy 态**、且没有任何错误提示
+    //   （r134/r137 同族：await 抛错时后续状态更新全部走不到）。
+    //   所以用 try/catch/finally：finally 保证 busy 一定解除，catch 把 reject 也变成可见错误。
+    try {
+      const r = await ctx.gitWrite!.commit(currentCwd, message.trim(), [...checked].sort());
+      if (!r.ok) {
+        setActionError(t("review.commitFailed", { error: r.error ?? "" }));
+        return;
+      }
+      setMessage("");
+      setChecked(new Set());
+      await refresh();
+      await refreshLog();
+    } catch (err) {
+      setActionError(t("review.commitFailed", { error: (err as Error)?.message ?? String(err) }));
+    } finally {
+      setBusy(null);
     }
-    setMessage("");
-    setChecked(new Set());
-    await refresh();
-    await refreshLog();
   };
 
   const doPush = async (): Promise<void> => {
     if (!currentCwd) return;
     setBusy("push");
     setActionError(null);
-    const r = await ctx.gitWrite!.push(currentCwd);
-    setBusy(null);
-    if (!r.ok) {
-      setActionError(t("review.pushFailed", { error: r.error ?? "" }));
-      return;
+    try {
+      const r = await ctx.gitWrite!.push(currentCwd);   // r210：同 doCommit（reject 时也要解除 busy 并报错）
+      if (!r.ok) {
+        setActionError(t("review.pushFailed", { error: r.error ?? "" }));
+        return;
+      }
+      await refresh();
+    } catch (err) {
+      setActionError(t("review.pushFailed", { error: (err as Error)?.message ?? String(err) }));
+    } finally {
+      setBusy(null);
     }
-    await refresh();
   };
 
   if (!currentCwd) return <EmptyState icon={<GitBranch className="size-8" />} title={t("review.openFolderFirst")} />;
