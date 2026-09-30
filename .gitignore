@@ -80,3 +80,9 @@ desktop.ini
 .ollama/
 .lmstudio/
 .qa-shots/
+
+# 本地设计草稿(带分步动画的 HTML 讲解稿):由用户手工维护、不入库(r256 用户决定)。
+# ⚠ 只忽略这**一个精确路径**,不写 docs/**/*.html 这类宽泛规则——
+#   docs/reports/*.html 是**要入库**的正式报告(如 interaction-testing-256-rounds.html),
+#   宽规则会把它们一起藏掉(git status 干净 ≠ 该入库的入了库)。
+docs/design/kernel-compaction.html
