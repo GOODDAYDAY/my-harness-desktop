@@ -151,8 +151,17 @@ describe("写穿:messageEnd 是内容落中立层的主触发", () => {
   });
 
   it("压缩结束:compactionEnd → 落一条 compaction 分隔线(摘要随事件载荷)", () => {
-    adapter.emit({ type: "compaction_start" });
-    adapter.emit({ type: "compaction_end", summary: "摘要:聊过天气", tokensBefore: 12345 });
+    adapter.emit({ type: "compaction_start", reason: "manual" });
+    // ⚠ 用 pi 的**真实线格式**:摘要嵌在 result 下(agent-session.ts 的 CompactionResult),
+    //   不是顶层。此前本测试 emit 扁平 `{ summary, tokensBefore }` —— 因为 translateEvent 的
+    //   `...piEvent` 会把顶层字段透传,它在「翻译层没归一 result」的 bug 下**照样绿**,是个
+    //   假绿老师:教的形状 pi 根本不发。改成嵌套后,这条才真正守住
+    //   「pi result.summary → 中性 compactionEnd.summary → 分隔线 detail」整条链
+    //   (回归锚点:e2e compaction-rewind ⑰⑱;翻译层单测 event-translator.test.ts)。
+    adapter.emit({
+      type: "compaction_end", reason: "manual", aborted: false, willRetry: false,
+      result: { summary: "摘要:聊过天气", firstKeptEntryId: "k1", tokensBefore: 12345, estimatedTokensAfter: 800 },
+    });
     const comp = entries().find((e) => e.role === "divider" && e.kind === "compaction");
     expect(comp).toBeDefined();
     expect(comp!.detail).toBe("摘要:聊过天气"); // 摘要落库,作 seed 投影的截断代身

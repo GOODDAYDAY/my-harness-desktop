@@ -181,6 +181,9 @@ describe("translateDshEvent", () => {
   it("compaction/start、compaction/end → compactionStart/compactionEnd(压缩生命周期)", () => {
     expect(translateDshEvent({ type: "compaction/start", data: { compactionId: "cp1", turn: 1 } }))
       .toEqual({ type: "compactionStart" });
+    // ⚠ 无状态层**故意**不带 summary/tokensBefore:dsh 的摘要在独立事件 compaction/summary 上,
+    //   按 compactionId 合并需要跨事件状态 → 归 createDshEventTranslator
+    //   (见下方「压缩摘要合并」那组用例)。别在这里补摘要,那是把状态塞进纯函数。
     expect(translateDshEvent({ type: "compaction/end", data: { compactionId: "cp1", turn: 1 } }))
       .toEqual({ type: "compactionEnd" });
   });
@@ -542,3 +545,74 @@ describe("createDshEventTranslator: request/header 派生模型/思考分隔线(
     expect(t(header({ maxTokens: 1000 }))).toHaveLength(0);
   });
 });
+
+// ==============================================================================================
+// 压缩摘要合并:dsh 把摘要与收尾拆成两个事件(compaction/summary + compaction/end),
+// 中性域只有一条 compactionEnd 承载 summary/tokensBefore(圆心契约 CompactionEndEvent)。
+// 合并需要跨事件状态 → 只能住在 createDshEventTranslator,无状态的 translateDshEvent 做不了。
+// 不接的后果与 pi 侧同形:壳的分隔线没有 detail → seed 投影「摘要代身」走不到(全量回灌)、
+// UI 没有 token 数。证据锚点:scripts/demo/compaction-rewind.e2e.mjs ⑰⑱。
+// ==============================================================================================
+describe("createDshEventTranslator: 压缩摘要(compaction/summary)合并进 compactionEnd", () => {
+  const start = (id: string) => ({ type: "compaction/start", seq: 1, time: 1, data: { compactionId: id, turn: null } });
+  const summary = (id: string, text: string, shadowed: number) => ({
+    type: "compaction/summary", seq: 2, time: 2,
+    data: { compactionId: id, turn: null, summary: [{ type: "text", text }], shadowedTokenCount: shadowed, provider: "p", model: "m" },
+  });
+  const end = (id: string) => ({ type: "compaction/end", seq: 3, time: 3, data: { compactionId: id, turn: null } });
+
+  it("start → summary → end:摘要与 token 数合并进 compactionEnd(与 pi 中性形状对齐)", () => {
+    const t = createDshEventTranslator();
+    expect(t(start("cp1"))).toEqual([{ type: "compactionStart" }]);
+    expect(t(summary("cp1", "聊过天气与架构", 4800))).toEqual([]); // summary 事件只缓冲,不单独产出
+    const out = t(end("cp1"));
+    expect(out).toEqual([{ type: "compactionEnd", summary: "聊过天气与架构", tokensBefore: 4800 }]);
+  });
+
+  it("多个 text 块拼成一段摘要(换行连接)", () => {
+    const t = createDshEventTranslator();
+    t(start("cp1"));
+    t({
+      type: "compaction/summary", seq: 2, time: 2,
+      data: { compactionId: "cp1", summary: [{ type: "text", text: "第一段" }, { type: "text", text: "第二段" }], shadowedTokenCount: 100 },
+    });
+    expect(t(end("cp1"))[0]).toMatchObject({ type: "compactionEnd", summary: "第一段\n第二段", tokensBefore: 100 });
+  });
+
+  it("summary 缺席(压缩被中断/内核未产出)→ compactionEnd 不带摘要(缺省,不伪造空串)", () => {
+    const t = createDshEventTranslator();
+    t(start("cp1"));
+    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd" }]);
+  });
+
+  it("空文本摘要不缓冲(空串会污染 detail 判定)", () => {
+    const t = createDshEventTranslator();
+    t(start("cp1"));
+    t(summary("cp1", "   ", 50)); // 纯空白 → textOfBlocks 得 ""→ 不缓冲
+    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd" }]);
+  });
+
+  it("compactionId 不匹配 → 不串台(用别的 id 的摘要不填进来)", () => {
+    const t = createDshEventTranslator();
+    t(start("cp1"));
+    t(summary("cpOTHER", "别的压缩的摘要", 10));
+    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd" }]);
+  });
+
+  it("摘要用完即清:同一 id 的第二次 end 不再带旧摘要(不重复消费)", () => {
+    const t = createDshEventTranslator();
+    t(start("cp1"));
+    t(summary("cp1", "第一次摘要", 100));
+    expect(t(end("cp1"))[0]).toMatchObject({ summary: "第一次摘要" });
+    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd" }]); // 缓冲已清
+  });
+
+  it("新一轮 start 清掉上一轮没等到 end 的残留(缓冲有界,不泄漏)", () => {
+    const t = createDshEventTranslator();
+    t(start("cp1"));
+    t(summary("cp1", "被中断的摘要", 100)); // 有 summary 无 end(压缩中断)
+    t(start("cp2")); // 新一轮 → 清残留
+    expect(t(end("cp2"))).toEqual([{ type: "compactionEnd" }]); // cp1 的摘要没串到 cp2
+  });
+});
+

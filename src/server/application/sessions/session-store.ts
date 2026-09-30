@@ -3074,14 +3074,18 @@ export class SessionStore implements
       // 压缩边界条目落中立层(session-single-source §4.1 压缩感知):中立层不靠读内核文件
       // 感知压缩点,靠事件。条目形状与文件读路径同一映射(sessionEntryToNeutral,契约单源);
       // 事件带摘要则记(作 seed 投影的截断代身),不带则只记边界。
+      // summary/tokensBefore 是圆心契约 CompactionEndEvent 声明的字段(narrowing 后即类型可见),
+      // 由两内核的协议翻译层负责填(pi 从 result.* 平铺、dsh 从 compaction/summary 缓冲合并)——
+      // 此处不再 cast 猜内核形状(此前 `event as { summary?: unknown }` 读的是顶层,而 pi 真实
+      // 事件把摘要嵌在 result 下 → 永远读不到 → 分隔线无 detail → seed 投影的「摘要代身」
+      // 在生产里从未生效,一律保守全量回灌。实测锚点:e2e compaction-rewind ⑰⑱)。
       if (proc) {
-        const payload = event as { summary?: unknown; tokensBefore?: unknown };
         const synthetic = sessionEntryToNeutral({
           type: "compaction",
           id: `comp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           timestamp: new Date().toISOString(),
-          ...(typeof payload.summary === "string" ? { summary: payload.summary } : {}),
-          ...(typeof payload.tokensBefore === "number" ? { tokensBefore: payload.tokensBefore } : {}),
+          ...(event.summary !== undefined ? { summary: event.summary } : {}),
+          ...(event.tokensBefore !== undefined ? { tokensBefore: event.tokensBefore } : {}),
         });
         if (synthetic) this.appendNeutral(proc, { neutralEntryId: "", message: synthetic });
       }
