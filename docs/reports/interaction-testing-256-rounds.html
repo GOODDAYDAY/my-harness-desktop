@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>256 轮自主交互测试：都干了啥（详细说明）</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212a; --fg:#e6e8ee; --muted:#9aa3b2;
+    --line:#2a2f3a; --accent:#7aa2f7; --ok:#9ece6a; --warn:#e0af68; --bad:#f7768e;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#fbfbfd; --panel:#fff; --panel2:#f4f5f8; --fg:#1b1e26; --muted:#5c6472; --line:#e2e5ec; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 96px}
+  h1{font-size:30px;line-height:1.35;margin:0 0 6px}
+  h2{font-size:21px;margin:44px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:16.5px;margin:26px 0 8px;color:var(--accent)}
+  p{margin:10px 0}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:26px}
+  code,kbd{font-family:var(--mono);font-size:.9em;background:var(--panel2);
+    padding:1px 5px;border-radius:4px;border:1px solid var(--line)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;margin:22px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .card .n{font-size:26px;font-weight:650;letter-spacing:-.5px}
+  .card .l{color:var(--muted);font-size:12.5px;margin-top:3px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--panel2);font-weight:600;font-size:13px;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  td.c{text-align:center;white-space:nowrap}
+  .tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600}
+  .t-ok{background:rgba(158,206,106,.16);color:var(--ok)}
+  .t-warn{background:rgba(224,175,104,.16);color:var(--warn)}
+  .t-bad{background:rgba(247,118,142,.16);color:var(--bad)}
+  .box{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:8px;padding:14px 18px;margin:16px 0}
+  .box.warn{border-left-color:var(--warn)}
+  .box.bad{border-left-color:var(--bad)}
+  .box.ok{border-left-color:var(--ok)}
+  .box p:first-child{margin-top:0}.box p:last-child{margin-bottom:0}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:5px 0}
+  .muted{color:var(--muted)}
+  .small{font-size:13px}
+  hr{border:none;border-top:1px solid var(--line);margin:34px 0}
+  .kpi{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  a{color:var(--accent)}
+  .toc{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 20px;margin:20px 0}
+  .toc ol{margin:6px 0 0}
+  .foot{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>256 轮自主交互测试：都干了啥</h1>
+<div class="sub">
+  仓库 <code>my-harness-desktop</code>（pi-desktop 工作副本）· 目标周期 2026-09-03 → 2026-09-29 ·
+  本文所有数字都是<b>当场从仓库量出来的</b>（命令附在文末），不是回忆。
+</div>
+
+<div class="box">
+  <p><b>一句话结论：</b>这 256 轮不是"写了 256 个功能"，而是<b>把这个壳的"静默失败"逐类挖出来、修掉、并用守卫钉死</b>——
+  外加把"怎么验"这件事本身写成了一份可执行的手册（skill）。
+  产物三堆：<b>产品修复</b>（真实缺陷）、<b>守卫</b>（防回潮的自动化判据）、<b>文档</b>（判据与操作面）。</p>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="n">256</div><div class="l">自主轮次</div></div>
+  <div class="card"><div class="n">625</div><div class="l">期间本地提交</div></div>
+  <div class="card"><div class="n">2618</div><div class="l">测试通过（311 文件）</div></div>
+  <div class="card"><div class="n">57</div><div class="l">静态守卫（src/ 根）</div></div>
+  <div class="card"><div class="n">65</div><div class="l">真机 e2e 剧本</div></div>
+  <div class="card"><div class="n">12250</div><div class="l">skill 行数（256 小节）</div></div>
+  <div class="card"><div class="n">44978</div><div class="l">测试代码行数</div></div>
+  <div class="card"><div class="n">0</div><div class="l">audit 违规 / tsc 错误 / push</div></div>
+</div>
+
+<div class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#s1">为什么"一直都有接下来要搞的事"</a>（正面回答你的吐槽）</li>
+    <li><a href="#s2">七条主线：具体都干了啥</a></li>
+    <li><a href="#s3">怎么验证的（五级证据链）</a></li>
+    <li><a href="#s4">交付物清单与在哪看</a></li>
+    <li><a href="#s5">已知缺口（不美化）</a></li>
+    <li><a href="#s6">我自己犯的错（披露）</a></li>
+    <li><a href="#s7">如果你只想再做三件事</a></li>
+    <li><a href="#s8">附：数字怎么来的</a></li>
+  </ol>
+</div>
+
+<h2 id="s1">1. 为什么"一直都有接下来要搞的事"</h2>
+
+<p>你的感受是对的——每轮报告末尾都挂着待办。这不是我在拖延，而是<b>这类工作的结构决定的</b>。三个机制：</p>
+
+<h3>① 棘轮式治理：每收紧一层，就暴露下一层</h3>
+<p>大量债务不是一次能清完的（比如"发射后不管的 <code>void promise</code>"全仓 212 处）。
+做法是：先<b>量化</b>（写守卫数出真实值）→ 立<b>棘轮基线</b>（只许减不许增）→ 每轮消化几处 → 基线跟着实测值下调。
+所以"待办"其实是<b>一个正在下降的数字</b>，不是无限的清单：</p>
+<table>
+  <tr><th>棘轮</th><th>起点</th><th>现在</th><th>性质</th></tr>
+  <tr><td>i18n 死键</td><td class="c">231</td><td class="c"><b>0</b></td><td><span class="tag t-ok">已清零（硬断言）</span></td></tr>
+  <tr><td>动态前缀缺键</td><td class="c">68</td><td class="c"><b>0</b></td><td><span class="tag t-ok">已清零（硬断言）</span></td></tr>
+  <tr><td>发布面零测试引用导出</td><td class="c">57</td><td class="c"><b>17</b></td><td><span class="tag t-warn">下降中</span></td></tr>
+  <tr><td><code>void</code> 发射后不管</td><td class="c">213</td><td class="c"><b>212</b></td><td><span class="tag t-warn">15 条已入正当账本</span></td></tr>
+  <tr><td>德语单词级未译</td><td class="c">69</td><td class="c"><b>60</b></td><td><span class="tag t-warn">7 条正当豁免</span></td></tr>
+  <tr><td>busy-flag 无 finally / config.set 双重播报</td><td class="c">—</td><td class="c"><b>0</b></td><td><span class="tag t-ok">硬断言 + 反向注入已验</span></td></tr>
+</table>
+<p class="small muted">读法：<b>0 的那些已经不是待办了</b>，是守卫在看着的既成事实；剩下的都是"有上限、在下降"的债务。</p>
+
+<h3>② 覆盖是有层次的，绿灯不等于覆盖</h3>
+<p>这是后期最主要的"新待办"来源，也是最有价值的发现。举一个真实例子（r233–r249 一条线走到底）：</p>
+<ol>
+  <li><code>dom-audit</code> 跑出来 <b>0 条发现</b> → 看着很干净；</li>
+  <li>读它的实现才发现：检查④<b>跳过不可见子树</b>，而设置页是 keep-mounted 的（<code>display:none</code>）→ 非激活页根本没被扫；</li>
+  <li>再读才发现真正原因是<b>一个上限常量</b>（<code>if (visited &gt;= 14) break</code>，而候选有 73 个）→ 内核页全在后面；</li>
+  <li>改成按稳定锚点走完 <b>17/17</b> 个设置条目 → 立刻查出 5 条新东西（逐条读后全是正当例外，于是补了两条<b>窄豁免</b>）；</li>
+  <li>于是断言从 28 项长到 <b>47/48 项</b>（两个语言），r229 修的"内核版本页裸键"才第一次有真机证据。</li>
+</ol>
+<div class="box">
+  <p><b>通则（写进 skill 的）：</b>"剧本里有这项检查"≠"这项检查覆盖到了那个页面"；
+  "覆盖到了那个页面"≠"走到了那个分支"。<b>覆盖要落到分支级。</b>
+  每往下一层，就会冒出上一层看不见的待办——这不是效率低，这是<b>验证深度在增加</b>。</p>
+</div>
+
+<h3>③ 有些缺口需要外部条件，不是我能在本地关闭的</h3>
+<p>需要真实内核与 token 的剧本（<code>dsh-*</code>、<code>pi-*</code>、<code>multi-kernel-round</code>、<code>fork.e2e</code>、
+<code>fork-cross-kernel</code>、<code>goal-command</code>、<code>kernel-thinking-matrix</code>）在"纯本地、不与远程交互"的约束下跑不了。
+它们会一直躺在待办里，直到你给一次真实额度。</p>
+
+<div class="box ok">
+  <p><b>所以怎么判断该停？</b>我在 r247 给自己立过一条判据并真的执行了（r249）：
+  <b>"这一轮有没有让下一轮的工作量变小？"</b> 有 → 继续；连续两轮卡在同一格且没有新信息 → <b>停</b>，
+  删掉半成品，把"已确证 / 仍缺"分栏记下。目标本身在第 256 轮已按九项逐条自评后标记完成，
+  <b>剩下的都是可选增量，不是未完成的目标。</b></p>
+</div>
+
+<h2 id="s2">2. 七条主线：具体都干了啥</h2>
+
+<h3>A. 架构与抽象：把"内核"从特权变成插件</h3>
+<ul>
+  <li><b>能力面从单 bit 改成十一轴</b>（steering / retry / compaction / snapshot / stats / modelCycle / toolExec / busFrames / questions / thinking + fileBacked）。
+      此前"某内核缺多路并发"会连带禁掉它本可有的压缩与统计——违背"内核同等地位、同等功能"。</li>
+  <li><b>删掉按内核身份取面的助手</b>：<code>asPi()</code> / <code>piSend()</code> 退役，改成按轴取面，错误消息点名<b>轴</b>不点名内核；
+      opaque 桶 <code>capabilities.extensions</code> 删除（它逼 application 去 type-only import 内核实现）。</li>
+  <li><b>真实的第四内核 probe4</b>：不是 mock，是与 pi/dsh 同级的注册内核，用来<b>实测开闭原则</b>——加它时壳一行未改。</li>
+  <li><b>机制层零内核名</b>：路径常量、<code>manifest.piExtension</code> 这类按内核名分的字段、<code>catalogFor("pi")</code> 全部消失；
+      内核目录自包含（对外只暴露动态 require 的 <code>plugin.js</code>）；字面量键访问（<code>kernels.pi</code> / <code>kernelConfig["dsh"]</code>）归零。</li>
+  <li><b>契约单源清理</b>：<code>ChannelMeta.label</code> → <code>labelKey</code>；删死字段 <code>maxTokens</code>；IPC 表 34 处字面量改常量；
+      圆心 20 个零引用纯函数清零并加防回潮守卫。</li>
+</ul>
+<p class="kpi">现状：内核目录 <code>core / pi / dsh / minimal / probe4</code>；内核插件 <code>src/plugins/kernels/{pi,dsh}</code>；
+测试内核 <code>test-plugins/kernels/{minimal,probe4}</code>（结构性杜绝测试内核在真实项目留幽灵会话）。</p>
+
+<h3>B. 静默失败与反馈通道（这是最大的一条线）</h3>
+<p>把"用户点了按钮、什么都没发生、也没人告诉他"这类缺陷<b>分类学化</b>，定出四种形态：</p>
+<table>
+  <tr><th>#</th><th>形态</th><th>典型代码</th><th>为什么静默</th></tr>
+  <tr><td class="c">①</td><td>裸奔</td><td><code>void p</code> / 无保护 <code>await p</code></td><td>结果与错误一起被丢弃</td></tr>
+  <tr><td class="c">②</td><td>通道失效</td><td>播报存在，但宿主能力是 no-op</td><td>以为说了，其实没人听</td></tr>
+  <tr><td class="c">③</td><td>有 catch 无反馈</td><td><code>try/catch</code> + console + 回滚</td><td>用户看不到任何输出</td></tr>
+  <tr><td class="c">④</td><td>通道只覆盖一半失效来源</td><td>结果对象 <code>{ok,error}</code> 覆盖"操作失败"，不覆盖"调用被拒"</td><td>busy 标志永不清 ⇒ 按钮卡死</td></tr>
+</table>
+<p>并定出<b>三条通道</b>（判据是"有没有用户动作在等它"）：有用户动作 ⇒ 播报给用户；用户正看着这块 UI ⇒ 如实渲染三态（失败/空/数据）；
+两者都不是 ⇒ 带模块标签的 <code>console.warn</code>。<b>空 catch 一条都不满足。</b></p>
+<ul>
+  <li>收敛出原语 <code>fireAndReport</code>，并加"接线对账守卫"（用了原语就必须接对）。</li>
+  <li>修掉的具体站点（举要）：stickers 5 处、sessions-list 多处、git-review 的 <code>doCommit</code>/<code>doPush</code>、
+      kernel-version-page 的 install/apply、timeline 的 <code>handleSendNow</code>、session-bookmarks、session-tree、im-graph、
+      projects 的 <code>switchCwd</code>、font-tab、model-config 导出、session-colors 的 openSession。</li>
+  <li><b>三态渲染</b>：<code>remote-access</code>（status/qr/devices）与 <code>llm-recorder</code> 从"空列表"改成"装载失败"，
+      因为<b>空列表 ≠ 装载失败</b>，谎报比留空更糟。</li>
+  <li>43 处非 UI 的 <code>.catch(() =&gt; {})</code> 改成带模块标签的 <code>console.warn</code>（13 个文件）。</li>
+  <li><b>回退过一次自己的修复</b>（r216）：发现 <code>ctx.config.set</code> 在框架层已经播报，插件层再包一层就是<b>双重播报</b>
+      ⇒ 撤掉 9 处、删 28 个死键、加守卫 <code>config-set-double-announce</code>（0 命中硬断言、注入已验）。</li>
+</ul>
+
+<h3>C. i18n 全链路（四语言：zh-CN / zh-TW / en / de）</h3>
+<ul>
+  <li><b>死键 231 → 0</b>：给"键的消费方"建模八类（含最难的一类：<b>键当数据传</b>——
+      圆心把 <code>timeline.modelChange</code> 写进 divider 条目的 <code>i18nKey</code>，渲染侧才 <code>t(i18nKey, args)</code>，
+      所以按文案 grep 永远找不到消费处）。</li>
+  <li><b>动态前缀缺键 68 → 0</b>：<code>KernelVersionPage</code> / <code>ModelConfigPage</code> 是共享页面，
+      键名由调用方的 <code>i18nPrefix="dsh|kernel|dshModels|models"</code> 拼出；缺键时 i18next 把<b>键名当译文返回</b>
+      ⇒ 页面上出现 <code>dsh.applied</code> 这样的裸键。守卫按"组件 ↔ 实际传入的前缀"配对算（不是笛卡尔积，那会造出 708 个假阳性）。</li>
+  <li><b>德语单词级盲区</b>：既有守卫明确跳过"≤1 个词"的译文，于是单立一条把这类量化到 60（7 条正当豁免：字段名如 <code>apiKeyEnv</code>）。</li>
+  <li>真机面：<code>dom-audit</code> 在 de 下断言"界面里不该出现任何中文串"，只豁免<b>语言自称</b>（简体中文/繁體中文）。</li>
+</ul>
+<div class="box warn">
+  <p><b>这一条线上我犯过整个周期最严重的错（r229）：</b>批量补键的脚本没有对每个文件设前置条件，
+  结果写进了 <b>488 个语言文件（1036 条）</b>，而预期只有 8 个。
+  发现方式是脚本自己打印了"触及 488 个文件"与预期不符 ⇒ <code>git checkout --</code> 全量还原 ⇒
+  三重验证还原（<code>git status</code> 干净 + 全量测试 + 污染串全仓 grep 归零）⇒ 重做时限定到"含该前缀的 8 个文件"。
+  由此立下纪律：<b>批量写入脚本的每条写路径都要能回答"为什么是这个文件"，并对触及文件数设预期值。</b></p>
+</div>
+
+<h3>D. DOM 组装与可访问性</h3>
+<ul>
+  <li><b><code>dom-audit</code> 从 12 项断言长到 47/48 项</b>（两语言），四类检查：DOM 是否混乱（交互元素嵌套违规、锚点重复、空壳容器、
+      i18n 键漏成可见文本、图标按钮无可访问名、图片无 alt、标题跳级）、文件↔格式是否对应、功能是否漂移（能力面 ⇄ 呈现的控件）、
+      常驻 live region 的宿主属性。</li>
+  <li><b>阶段 B2</b>：按 <code>[data-settings-id]</code> 走完 <b>17/17</b> 个设置条目（含四个内核页），并断言"至少走到 3 个内核页"。</li>
+  <li><b>可访问名普查归零</b>；TAB 条 ARIA 与常驻 live region 宿主（<code>aria-live=polite</code> / <code>aria-atomic</code> / <code>role=status</code> / 不占可见空间）。</li>
+  <li><b>瞬时提示的严重级</b>：<code>announceTransient(msg, "error")</code> 才会给 <code>role="alert"</code>
+      ⇒ 失败播报必须显式传 <code>"error"</code>，守卫 <code>announce-severity</code> 钉住。</li>
+  <li><b>组件抽取以提升可测性</b>：<code>MessageStatusFlags</code>（从 1600 行的 <code>TimelineView</code> 里抽出纯呈现的一小块，
+      从"要种 4 个 store + 槽位"变成"只 mock react-i18next"）。</li>
+</ul>
+
+<h3>E. e2e 探针纪律（65 个剧本）</h3>
+<ul>
+  <li><b>把语言绑定探针改成稳定锚点</b>：18 个剧本 43 处（早期）+ 18 处发送按钮 + 23 处思考块 + 7 处 goal + 3 处分隔条 + 1 处失败条。
+      判据是"<b>这段文字是谁写进去的</b>"：剧本自己种入的数据（如 <code>"苹果"</code> 选项）正当；系统渲染的 UI 文案（<code>[title="停止"]</code>）必须换锚点。</li>
+  <li><b>补锚点必须同轮找到消费者</b>：找不到就不补（撤掉过 <code>data-message-stopped</code>，后来有测试了再补回）。
+      锚点由 <code>data-anchor-consumers</code> 做"发出 ⇔ 消费"对账，死锚点当场暴露。</li>
+  <li><b>先查有没有现成锚点</b>：发送按钮的 <code>data-composer-send</code> 早就存在（r119 补的），18 处探针却一直在用译文子串——
+      差点又造出第二个锚点（违反契约单源）。</li>
+  <li><b>静默纪律</b>：所有剧本经 <code>quiet-env.mjs</code>（<code>MHD_WINDOW=hidden</code>），不抢用户窗口与焦点；三个守卫看着这条。</li>
+</ul>
+
+<h3>F. 文件与格式对账</h3>
+<ul>
+  <li>manifest 的<b>声明 ⇄ 兑现</b>四面封上；<code>KernelSpec</code>/prefs 对账；事件总线 channel 对账；CSS 变量正反两方向。</li>
+  <li><b>契约常量的跨产物对账</b>（最近一轮）：<code>GENERAL_CONFIG_PATH</code> ⇄ <code>plugin.json</code> 的 <code>configFile</code> 逐字相同
+      （因为注释里写着"改路径时两处同步"——<b>注释里写"记得同步"就是在邀请漂移</b>）；
+      <code>RECOMMENDED_PLUGIN_TAGS</code> ⇄ 四语言的 <code>pluginManager.tag.&lt;tag&gt;</code> 键齐全（缺键 ⇒ chip 渲染成裸键名）。</li>
+  <li>会话文件的写读对应（壳写出去的 JSONL 字段 ⇔ 读它的那份代码期望的形状）。</li>
+</ul>
+
+<h3>G. 交付物：skill（你要的第 3 项）</h3>
+<p><code>.claude/skills/interaction-testing/SKILL.md</code>，<b>12250 行</b>：</p>
+<ul>
+  <li><b>§18 操作面总入口</b>（六小节，为"怎么实际交互"专门写）：三级测试怎么选层、65 个剧本怎么挑怎么跑、
+      探针纪律、失败诊断手法、一轮的 9 步标准动作与严禁清单——每条给确切命令。</li>
+  <li><b>§17 全仓审计范式</b>：256 个小节，每轮一节，内容是"审了什么 / 判据是什么 / 查出什么 / 根因与文档条款 / 守卫怎么钉 / 仍未覆盖什么"。</li>
+  <li><b>§17.0 全量索引</b>：<b>脚本从标题生成</b>（256 条，与小节数逐条一致），不手写维护——
+      因为手写索引自己会漂移（这是 r227 的教训）。</li>
+  <li>§0–§16：基础设施、DOM 锚点清单、七条实踩陷阱、数据层 vs 渲染层分工、按内核的最小验证路径、诊断现场留存、修复纪律速查等。</li>
+</ul>
+
+<h2 id="s3">3. 怎么验证的（五级证据链）</h2>
+<table>
+  <tr><th>级</th><th>手段</th><th>命令 / 位置</th><th>当前结果</th></tr>
+  <tr><td class="c">1</td><td>unittest（圆心纯函数、归约器、翻译器、解析器）</td><td><code>npx vitest run &lt;file&gt;</code></td><td rowspan="2" class="c"><b>311 文件 / 2618 测试通过</b><br><span class="small muted">测试代码 44978 行</span></td></tr>
+  <tr><td class="c">2</td><td>DOM 交互（jsdom + Testing Library，按角色/属性查，不按 class）</td><td>文件首行 <code>// @vitest-environment jsdom</code></td></tr>
+  <tr><td class="c">3</td><td>e2e 真机（CDP 驱真实构建产物 + 隔离 HOME，零 token 优先）</td><td><code>npm run build &amp;&amp; node scripts/demo/&lt;name&gt;.e2e.mjs</code></td><td class="c">65 个剧本；本轮跑通 <code>dom-audit</code> 47/48、<code>composer-session-audit</code> 26、<code>minimal-smoke</code> 28</td></tr>
+  <tr><td class="c">4</td><td>静态审计（依赖方向十三检验、文档漂移、交叉引用、测试静默、会话作用域）</td><td><code>npm run audit</code></td><td class="c">五份报告全 <b>0</b></td></tr>
+  <tr><td class="c">5</td><td>类型 + 构建 + <b>反向注入</b>（证明守卫真会亮，而不是空转）</td><td><code>tsc --noEmit</code> / <code>npm run build</code> / 注入后还原并 <code>git status</code> 核</td><td class="c">0 错误 / 通过 / 每条新守卫都注入验过</td></tr>
+</table>
+<div class="box">
+  <p><b>四类验证各管一段，不能互相代替</b>（这是踩出来的）：vitest 不 typecheck、tsc 不查 i18n 键、构建不查剧本语法、
+  剧本语法只有 <code>node --check</code> 查得到。有一次我把注释插进了 <code>.mjs</code> 的表达式内部，
+  <b>测试全绿、审计全绿、构建通过，而剧本语法已经坏了</b>——只有 <code>node --check</code> 抓到。</p>
+</div>
+
+<h2 id="s4">4. 交付物清单与在哪看</h2>
+<table>
+  <tr><th>交付物</th><th>位置</th><th>规模</th></tr>
+  <tr><td>交互测试手册（你要的 skills 说明）</td><td><code>.claude/skills/interaction-testing/SKILL.md</code></td><td>12250 行 / §17 256 小节 + §18 六小节 + §0–§16</td></tr>
+  <tr><td>静态守卫（棘轮 / 硬断言 / 对账）</td><td><code>src/*.test.ts</code></td><td>57 个，其中 9 个带 <code>CEILING</code> 棘轮</td></tr>
+  <tr><td>真机 e2e 剧本</td><td><code>scripts/demo/*.e2e.mjs</code></td><td>65 个（零 token 可随时跑的约 10 个）</td></tr>
+  <tr><td>DOM/文件/漂移主审计入口</td><td><code>scripts/demo/dom-audit.e2e.mjs</code></td><td>阶段 A–D + B2，47/48 项断言，可 <code>--locale</code></td></tr>
+  <tr><td>依赖方向审计（十三检验）</td><td><code>scripts/dependency-audit.mjs</code> · <code>npm run audit</code></td><td>五份报告全 0</td></tr>
+  <tr><td>本次总结</td><td><code>docs/reports/interaction-testing-256-rounds.html</code></td><td>本文</td></tr>
+</table>
+<p class="small muted">产品侧改动分散在 <code>src/plugins/**</code>、<code>packages/react/src/**</code>、<code>packages/shared/src/**</code>、
+<code>src/server/**</code>；每次改动都在提交信息里写了"改了什么 / 为什么改 / 架构依据（CLAUDE.md 条款）/ 运行时验证"四要素，
+可按 <code>git log</code> 逐条回溯（期间 625 次提交，skill 文件本身 276 次）。</p>
+
+<h2 id="s5">5. 已知缺口（不美化）</h2>
+<table>
+  <tr><th>已确证（有永久证据）</th><th>仍缺（记为缺口）</th></tr>
+  <tr>
+    <td>状态条三态与锚点（<code>MessageStatusFlags</code> 5 测，注入已验）；终结态投影（圆心 3 测）；catalog 不因终结态行拒收会话（读实现确认只按 <code>.jsonl</code> 后缀过滤）</td>
+    <td>状态条在<b>真机</b>渲染过一次（r249 按自立判据停止：三轮卡在同一格且无新信息）</td>
+  </tr>
+  <tr>
+    <td>发布面除 17 个之外的导出全部有测试；棘轮只增不减</td>
+    <td>那 <b>17 个</b>零测试引用的导出</td>
+  </tr>
+  <tr>
+    <td>四个内核的设置页在真机被逐个体检（17/17 条目、两语言 0 发现）</td>
+    <td>需<b>内核与 token</b> 的剧本未真机跑：<code>dsh-*</code>、<code>pi-*</code>、<code>multi-kernel-round</code>、<code>fork.e2e</code>、<code>fork-cross-kernel</code>、<code>goal-command</code>、<code>goal-scope*</code>、<code>kernel-thinking-matrix</code></td>
+  </tr>
+  <tr>
+    <td>i18n：死键 0、动态前缀缺键 0、四语言键齐全（含补齐的 68 条）</td>
+    <td>德语<b>单词级</b>未译 60 条（棘轮）；早期的 27 处颜色改动未做像素对比</td>
+  </tr>
+  <tr>
+    <td>失败反馈：四形态分类 + 三条通道 + 8 条守卫</td>
+    <td><code>json-prefs</code> 的 4 处<b>服务端-only 失败</b>仍无到渲染层的通道（这是设计问题，不是漏改）；<code>console.warn</code> 噪音未长期观察</td>
+  </tr>
+  <tr>
+    <td>另有 4 个"内部兜底表"组件已立通则（表外取值仍守住契约）</td>
+    <td>其中 4 个（<code>PHASE_LABEL_KEY</code> / <code>LABEL_TO_GROUP_ID</code> / <code>LEVEL_KEY</code> / <code>SOURCE_BADGE</code>）尚未补断言；<code>plugin-icon</code> 的 KernelLogo 委托分支未测</td>
+  </tr>
+</table>
+<p class="small muted">另：工作区有一个<b>非本工作产生</b>的未跟踪文件 <code>docs/design/kernel-compaction.html</code>——从未提交、也从未删除，留给你处置。</p>
+
+<h2 id="s6">6. 我自己犯的错（披露）</h2>
+<table>
+  <tr><th>轮次</th><th>错</th><th>怎么发现</th><th>留下的纪律</th></tr>
+  <tr><td class="c">r229</td><td><span class="tag t-bad">最严重</span> 批量补键脚本无逐文件前置条件，写进 <b>488 个语言文件（1036 条）</b>，预期只有 8 个</td><td>脚本自己打印"触及 488 个文件"与预期不符</td><td>每条写路径要能回答"为什么是这个文件"；对触及文件数设预期值；还原也要验证（污染串全仓归零）</td></tr>
+  <tr><td class="c">r216–217</td><td>给 <code>ctx.config.set</code> 加的插件层播报与框架层<b>重复</b>（双重播报），持续 4 轮</td><td>另一条守卫的账本理由提到了框架层那次修复</td><td>回退 9 处 + 删 28 死键 + 加守卫；"记下教训 ≠ 修好了问题"</td></tr>
+  <tr><td class="c">r255</td><td>棘轮基线按"20 − 1 = 19"<b>推算</b>填写，实测是 17</td><td>读守卫打印的实测值</td><td>基线一律取实测值；<b>棘轮只拦增长、不拦基线偏松</b>，所以这个错守卫拦不住</td></tr>
+  <tr><td class="c">r255</td><td>把需要 <code>label</code> prop 的探针组件当无参组件用 ⇒ 属性值是 <code>undefined</code> ⇒ <b>整个属性消失</b> ⇒ 查到 0 个</td><td>失败信息是"0 个"而不是"值不对"</td><td>"查到 0 个"先怀疑夹具没渲染出来，不是先怀疑产品</td></tr>
+  <tr><td class="c">r240</td><td>把说明注释插进 <code>.mjs</code> 的表达式内部 ⇒ 语法坏掉，而<b>测试/审计/构建全绿</b></td><td><code>node --check</code></td><td>改完 <code>.mjs</code> 必须跑 <code>node --check</code>；注释永远独占一行</td></tr>
+  <tr><td class="c">r256</td><td><code>--port 1027$RANDOM</code> 拼出<b>非法端口</b> ⇒ 三个剧本假失败；又用 <code>tail -2 | head -1</code> 取值造成空输出假象</td><td>换固定端口后 28 项断言通过</td><td>端口用固定值；<b>读工具输出先确认没截断，再下"没有这个信息"的结论</b></td></tr>
+  <tr><td class="c">r226</td><td>夹具按印象猜（<code>DeviceRow</code> 字段猜错、mock 的 ctx 缺 <code>sessions.onEvent</code>）⇒ 误导性失败</td><td>失败信息与被测行为不符</td><td>夹具类型要照真实契约给；mock 的面要 <code>grep ctx.</code> 全部成员</td></tr>
+</table>
+
+<h2 id="s7">7. 如果你只想再做三件事</h2>
+<ol>
+  <li><b>给一次真实内核额度</b>，把需 token 的那批剧本跑一遍（<code>dsh-*</code> / <code>pi-*</code> / <code>multi-kernel-round</code> / <code>fork*</code> / <code>goal-*</code>）。
+      这是当前<b>唯一</b>无法在本地关闭的覆盖缺口，也是"功能是否漂移"最有说服力的一层证据。</li>
+  <li><b>把发布面 17 个零测试引用导出消化到 0</b>（按已验证的排序法：挑"同文件相邻导出最多"的，一个测试文件常能一次清掉 3 个）。</li>
+  <li><b>给 <code>json-prefs</code> 的 4 处服务端-only 失败设计一条到渲染层的通道</b>——这是唯一一条"加播报修不了"的失败类（服务端写盘失败，渲染层根本不知道），需要设计而不是补 catch。</li>
+</ol>
+<p class="small muted">以上都是<b>可选增量</b>。九项目标已逐条自评并标记完成，全量验证当前全绿。</p>
+
+<h2 id="s8">8. 附：数字怎么来的</h2>
+<pre class="kpi" style="background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;overflow:auto">
+git log --oneline | wc -l                                  # 2008（仓库总提交，2026-07-24 起）
+git log --oneline --since=2026-09-03 | wc -l               # 625（skill 诞生以来 = 本周期）
+git log --oneline -- .claude/skills/interaction-testing/SKILL.md | wc -l   # 276
+npx vitest run --reporter=dot                              # 311 文件 / 2618 测试通过
+npm run audit                                              # 五份报告全 0
+npx tsc --noEmit -p tsconfig.json                          # 0 错误
+npm run build                                              # 通过
+find src packages -name '*.test.ts*' | wc -l               # 314（含 3 个 skipped 文件）
+find src packages -name '*.test.ts*' | xargs wc -l         # 44978 行测试代码
+ls scripts/demo/*.e2e.mjs | wc -l                          # 65 个剧本
+ls src/*.test.ts | wc -l                                   # 57 个静态守卫
+grep -rl 'const CEILING' src packages | wc -l              # 9 个棘轮
+find src/plugins -maxdepth 3 -name plugin.json | wc -l     # 50 个内置壳插件
+wc -l .claude/skills/interaction-testing/SKILL.md          # 12250 行
+node scripts/demo/dom-audit.e2e.mjs [--locale de]          # 47 / 48 项断言，0 条发现
+</pre>
+
+<div class="foot">
+  <p>生成于第 256 轮（最后一轮）· 全程<b>无 push、无 <code>npm install</code>、无 LLM 之外的远程交互</b>·
+  所有改动均本地提交（产品 / 守卫基线 / 文档分开提交，长中文提交信息走 <code>git commit -F</code>）。</p>
+  <p>相关文档：<code>CLAUDE.md</code>（纪律总纲）· <code>docs/design/design-principles.md</code>（38 条原则 + 18 条反模式）·
+  <code>.claude/skills/interaction-testing/SKILL.md</code> §18（操作面总入口）。</p>
+</div>
+
+</div>
+</body>
+</html>
