@@ -111,9 +111,6 @@ const LEDGER: { anchor: string; why: string; next: string }[] = [
   { anchor: "data-plugin-drag-handle",
     why: "插件列表的拖拽手柄。拖拽/粘贴一族自 r26 起就没有自动化覆盖（CDP 合成拖拽不稳定）",
     next: "与附件链拖拽（r26 待办）一起解决，或改为键盘可达性断言" },
-  { anchor: "data-rewind-inline",
-    why: "时间线内联回退条。需要真实会话历史才能渲染",
-    next: "在会话类剧本里消费它（ask-resume / timeline 系列已有真会话夹具可借）" },
   { anchor: "data-settings-load-error",
     why: "r97 加的：设置页加载失败提示。但 r102 查明**服务端三条读取路径都吞错回落空值**，这条路径当前不可达（见 settings-page.tsx 里的可达性分析注释）",
     next: "若哪天服务端改成抛错（那是更好的设计），立刻用它写剧本；在此之前保留锚点即可" },
@@ -241,11 +238,14 @@ describe("data-* 探针锚点：发出 ⇔ 消费对账", () => {
     expect(thin.map((l) => l.anchor), "账本条目的共享语义写得太短（等于没写）").toEqual([]);
   });
 
-  it("④ 棘轮：死锚点总数只许减少（r141 基线 7）", () => {
+  it("④ 棘轮：死锚点总数只许减少（r141 基线 7 → 6）", () => {
     expect(dead.length, [
-      `无消费方的 data-* 锚点从 7 涨到了 ${dead.length}。`,
+      `无消费方的 data-* 锚点从 6 涨到了 ${dead.length}。`,
       "      每消化一条（补消费方或删锚点）就下调这个数字；账本条目的 why/next 必须具体到能照着做。",
-    ].join("\n")).toBeLessThanOrEqual(7);
+      "      最近一次消化：data-rewind-inline —— 由 scripts/demo/compaction-rewind.e2e.mjs 消费",
+      "      （waitForSelector / setComposer / waitForFunction 三处真实使用，不是注释里提一句），",
+      "      所以它的账本条目按本守卫的要求删掉了（账本只放待办，不放已完成的）。",
+    ].join("\n")).toBeLessThanOrEqual(6);
     expect(LEDGER.length, "账本条目数应与死锚点数一致（每条都是一个待办）").toBe(dead.length);
   });
 });
