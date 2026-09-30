@@ -57,6 +57,25 @@ export function translateEvent(piEvent: AgentSessionEvent): SessionEvent {
     const name = typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
     return { ...piEvent, type: neutralType, sessionName: name } as SessionEvent;
   }
+  // compaction_end:pi 把摘要嵌在 `result` 下(agent-session.ts 的 CompactionResult:
+  //   { summary, firstKeptEntryId, tokensBefore, estimatedTokensAfter, details }),
+  // 而圆心契约 CompactionEndEvent 声明的是**顶层** summary/tokensBefore。
+  // 不归一的后果是双层的、且都是静默的:① 壳的写穿读不到 summary → 压缩分隔线没有 detail
+  //   → seed 投影的「摘要代身」永远走不到,一律保守全量回灌(压缩白做);
+  //   ② 读不到 tokensBefore → UI 只显示「上下文已压缩」,没有 token 数。
+  // 实测锚点:scripts/demo/compaction-rewind.e2e.mjs 的 ⑰⑱(底层内核有 summary、中间层没有)。
+  // 归一放在这一层而不是消费方:内核线格式的知识只许住在协议翻译层(§1.1 依赖只向内)。
+  if (neutralType === "compactionEnd") {
+    const result = (piEvent as { result?: unknown }).result;
+    const r = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+    const summary = typeof r.summary === "string" && r.summary.trim() ? r.summary : undefined;
+    const tokensBefore = typeof r.tokensBefore === "number" && Number.isFinite(r.tokensBefore) ? r.tokensBefore : undefined;
+    return {
+      ...piEvent, type: neutralType,
+      ...(summary !== undefined ? { summary } : {}),
+      ...(tokensBefore !== undefined ? { tokensBefore } : {}),
+    } as SessionEvent;
+  }
   // 翻译后的事件:type 用中性名,其余字段原样保留
   return { ...piEvent, type: neutralType } as SessionEvent;
 }

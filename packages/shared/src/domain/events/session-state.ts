@@ -472,7 +472,21 @@ export interface ModelSelectEvent {
 }
 
 export interface CompactionStartEvent { type: "compactionStart"; reason?: string }
-export interface CompactionEndEvent { type: "compactionEnd"; reason?: string }
+/** 压缩收尾。summary / tokensBefore 是**压缩边界条目的素材**,不是可选装饰:
+ *  - tokensBefore → 分隔线文案「上下文已压缩(N tokens)」;
+ *  - summary → 分隔线 detail,且是 seed 投影「摘要代身」的唯一输入
+ *    (`assembleSeedProjection`:有摘要才截断投影,没有就保守全量回灌)。
+ *  两内核的线格式都不把它们摆在中性域这两个名字上(pi 嵌在 `result` 下、dsh 走独立的
+ *  `compaction/summary` 事件),所以**必须由各自的协议翻译层填进来**。契约在此声明,
+ *  翻译层才有义务,消费方(壳的写穿)才不必靠 unchecked cast 猜内核形状。 */
+export interface CompactionEndEvent {
+  type: "compactionEnd";
+  reason?: string;
+  /** 本次压缩生成的摘要文本;内核未提供则缺省(壳退回全量投影,不伪造摘要)。 */
+  summary?: string;
+  /** 压缩前的上下文 token 数;内核未提供则缺省(UI 不显示 token 数,不冒充 0)。 */
+  tokensBefore?: number;
+}
 
 export interface QueueUpdateEvent { type: "queueUpdate"; pendingMessageCount?: number }
 

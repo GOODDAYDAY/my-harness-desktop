@@ -113,6 +113,10 @@ export function translateDshEvent(event: unknown): SessionEvent | null {
 
     // 压缩生命周期(compaction-basic 插件):compaction/start + compaction/end。
     // 中性域 compactionStart/End 驱动壳的 isCompacting(composer 覆盖态),pi 侧 compaction_start/end 同款。
+    // ⚠ compactionEnd 的 summary/tokensBefore **不在这里填**:dsh 把摘要放在独立事件
+    //   `compaction/summary`(带 summary: ContentBlock[] / shadowedTokenCount),end 事件只有
+    //   compactionId+turn。按 compactionId 缓冲再合并需要跨事件状态 → 归 createDshEventTranslator
+    //   (见下方「压缩摘要缓冲」)。这里保持无状态映射,单测的纯函数形状不变。
     case "compaction/start":
       return { type: "compactionStart" };
     case "compaction/end":
@@ -174,6 +178,21 @@ function mapDshUsage(raw: unknown): Record<string, number> | undefined {
   const cacheRead = n(u.cacheReadTokens);
   const cacheWrite = n(u.cacheWriteTokens);
   return { input, output, cacheRead, cacheWrite, cost: 0, totalTokens: input + output + cacheRead + cacheWrite };
+}
+
+/** 把 dsh 的 ContentBlock[] 拼成纯文本(摘要这类「只要文字」的场合)。
+ *  只取 text/reasoning 块的文字,其余块忽略;非数组原样当字符串处理。空结果返回 ""(调用方据此不填字段)。 */
+function textOfBlocks(raw: unknown): string {
+  if (typeof raw === "string") return raw;
+  if (!Array.isArray(raw)) return "";
+  const parts: string[] = [];
+  for (const block of raw) {
+    if (typeof block === "string") { parts.push(block); continue; }
+    if (!block || typeof block !== "object") continue;
+    const b = block as Record<string, unknown>;
+    if (typeof b.text === "string" && b.text) parts.push(b.text);
+  }
+  return parts.join("\n").trim();
 }
 
 /** dsh ContentBlock 块类型 → pi 中性块类型:tool-call→toolCall(补 args 别名)、tool-result→toolResult。
@@ -245,6 +264,14 @@ function buildStreamContent(buf: DshStreamBuffer): unknown[] {
  */
 export function createDshEventTranslator(initialHeader?: { provider?: string; model?: string; effort?: string }): (event: unknown) => SessionEvent[] {
   const streams = new Map<string, DshStreamBuffer>();
+  /** 压缩摘要缓冲(按 compactionId)。dsh 的摘要与收尾是**两个事件**
+   *  (`compaction/summary` 带 summary: ContentBlock[] / shadowedTokenCount,`compaction/end`
+   *  只有 compactionId+turn),而中性域只有一条 compactionEnd 承载 summary/tokensBefore
+   *  (圆心契约 CompactionEndEvent)。合并需要跨事件状态,故住在本工厂,不进无状态的
+   *  translateDshEvent。不接的后果与 pi 侧同一形态:壳的压缩分隔线没有 detail →
+   *  seed 投影的「摘要代身」走不到(一律全量回灌)、UI 也没有 token 数。
+   *  证据锚点:scripts/demo/compaction-rewind.e2e.mjs 的 ⑰⑱。 */
+  const compactionSummaries = new Map<string, { summary: string; tokensBefore?: number }>();
   // 最近一次 request/header 报告的生效配置(provider/model/effort);初值 = spawn 握手值。
   let lastHeader: { provider?: string; model?: string; effort?: string } = {
     provider: initialHeader?.provider,
@@ -459,6 +486,32 @@ export function createDshEventTranslator(initialHeader?: { provider?: string; mo
         out.push({ type: "entryAppended", entry: { type: "thinking_level_change", id: `dsh-hdr-eff-${seq}`, timestamp: ts, thinkingLevel: effort } });
       }
       return out;
+    }
+
+    // 压缩摘要缓冲(见上方 compactionSummaries 注释):summary 事件只缓冲、不产出中性事件
+    // (中性域没有「压缩摘要」这个独立事件,它是 compactionEnd 的字段)。
+    if (e.type === "compaction/start") {
+      // 新一轮压缩开始 → 清掉上一轮可能没等到 end 的残留(压缩被中断时 end 不会来),
+      // 缓冲自然有界,不靠定时器也不靠上限猜测。
+      compactionSummaries.clear();
+      return [{ type: "compactionStart" }];
+    }
+    if (e.type === "compaction/summary") {
+      const id = typeof d.compactionId === "string" ? d.compactionId : "";
+      const summary = textOfBlocks(d.summary);
+      // shadowedTokenCount = 被摘要替代掉的那段的 token 数。口径与 pi 的 tokensBefore
+      // (压缩前整个上下文的 token 数)**不完全相同**,但都是「这次压缩掉了多少」,
+      // 对 UI 文案「上下文已压缩(N tokens)」是诚实的;拿不到就不带,不冒充 0。
+      const tokensBefore = typeof d.shadowedTokenCount === "number" && Number.isFinite(d.shadowedTokenCount)
+        ? d.shadowedTokenCount : undefined;
+      if (summary) compactionSummaries.set(id, { summary, ...(tokensBefore !== undefined ? { tokensBefore } : {}) });
+      return [];
+    }
+    if (e.type === "compaction/end") {
+      const id = typeof d.compactionId === "string" ? d.compactionId : "";
+      const hit = compactionSummaries.get(id);
+      compactionSummaries.delete(id); // 用完即清(同一次压缩的 summary 只服务一条 end)
+      return [{ type: "compactionEnd", ...(hit?.summary ? { summary: hit.summary } : {}), ...(hit?.tokensBefore !== undefined ? { tokensBefore: hit.tokensBefore } : {}) }];
     }
 
     const stateless = translateDshEvent(event);
