@@ -17,7 +17,7 @@ src/plugins/{domain}/{feature}/
   dsh-extension/     # dsh 内核插件：给 dsh 补能力的 Cordis 插件（index.mjs + extension.json）
 ```
 
-四件套是「按需」的，不是「必须」的：`llm-recorder` 没有 `dsh-extension/`，`goal` 没有 `locales/`（它的文案直接写死在 renderer，属于反例，别学）。一个功能如果两个内核都要，就 pi-extension 和 dsh-extension 都写；只给一个内核补能力就只写那个。
+四件套是「按需」的，不是「必须」的。正例都是现成的：`llm-recorder` 有完整的 pi-extension + dsh-extension（两个内核都记 LLM 流量），`goal` 有完整的四语 `locales/` + 双内核扩展（文案全部走 i18n key 不写死）。反倒是"只补单侧"的例子要小心取：只给一个内核补能力就只写那一侧——比如 `goody-hao` 只有 pi 侧能力就只写 pi-extension、只贡献 `systemPrompts`。参Manifest 的字段是**一个映射** `extensions: { "pi": "./pi-extension", "dsh": "./dsh-extension" }`，不是两个命名字段。
 
 **依赖只向内，这是硬纪律。** 壳插件（`renderer/`）只允许 import 两个包：
 
@@ -111,7 +111,7 @@ goal/
     extension.json       # dsh 扩展展示元数据
 ```
 
-`src/plugins/insight/llm-recorder/`（renderer + pi-extension + locales，无 dsh-extension）：
+`src/plugins/insight/llm-recorder/`（renderer + pi-extension + dsh-extension + locales——两侧内核扩展与四语文案都齐全）：
 
 ```
 llm-recorder/
@@ -123,6 +123,9 @@ llm-recorder/
     record-modal.tsx
   pi-extension/
     index.ts             # pi 内核扩展：before_provider_request 等事件钩子落盘 JSONL
+  dsh-extension/
+    index.mjs            # dsh 内核扩展：llm/stream 请求与响应钩子（Cordis 插件）
+    extension.json
   locales/
     zh-CN/{panel,settings,plugin}.json
     zh-TW/...
@@ -162,7 +165,9 @@ import { runGoalCommand } from "./goal-controller";
 export const composerCommands: ComposerCommand[] = [
   {
     name: GOAL_COMMAND_NAME,
-    description: "设置/管理本会话目标(自动续跑)。/goal <目标> 设置;stop·resume·edit·clear 控制",
+    descriptionKey: "goal.command.desc",  // ⚠ 是 i18n key 不是文案文本(r56 起 description 字段已改此名)。
+    //   文案本体在 locales/{zh-CN,zh-TW,en,de}/goal.json 里各写一份——照抄"直填中文"过不了类型,
+    //   且 en/de 用户会看到中文。
     handle: (input) => runGoalCommand(input),
   },
 ];
@@ -522,7 +527,7 @@ llm-recorder 的 contributes 覆盖三类槽：
 - **`sidePanel`**（`SidePanelContribution`，第 81 行）：`id`/`label`（Tab 显示名，字段名是 label 不是 title）/`icon`（lucide 图标名）/`component`（renderer 组件名）/`order`（排序，小的在上，缺省 100）/`revealOn`（可选，声明后该 channel 被 emit/invoke 时框架展开右面板并激活本 Tab）。
 - **`settings`**（`SettingsContribution`，第 9 行）：`id`/`title`/`icon`/`component`/`configFile`/`configMerge`/`saveMode`/`kernelModels`/`kernelConfig`/`order`/`tabs`。详见 §9。`component` 可省略（展示分组入口只有 tabs 无自身 component）。
 - **`blockRenderers`**（`BlockRendererContribution`，第 465 行）：`id`/`block`（`"thinking"|"toolCall"|"text"|"userText"|"divider"` 或开放字符串）/`names`（可选，仅 toolCall/divider 有意义，toolCall 比工具名小写）/`component`/`order`。解析规则（`block-renderers.ts:39` 的 `resolveBlockRenderer`）：names 精确命中的特化层优先于未声明 names 的通用层；层内 order 小者胜。
-- **`sidebar`**（第 110 行）：`id`/`title`/`component`/`order`/`group`（同 group 共享 Panel）。
+- **`sidebar`**（第 110 行）：`id`/`component`/`order`/`group`（同 group 共享 Panel）。⇐ 曾有 `title` 字段：它是死字段（sidebar.tsx 从未读取，分组标题由各插件自己 `<Section title={t(...)}>` 渲染），已从 `SidebarContribution` 删除——写了也不生效，别学。
 - **`mainView`**（第 100 行）：`id`/`component`/`order`。多贡献按 order 选第一个。
 - **`titlebar`**（第 141 行）：`id`/`component`/`order`。
 - **`messageRenderers`**（第 452 行）：`role`/`component`，按消息 role 贡献卡片。
@@ -530,8 +535,8 @@ llm-recorder 的 contributes 覆盖三类槽：
 - **`fileIcons`**（第 328 行）：`id`/`icon`/`extensions`/`filenames`/`color`/`order`。
 - **`messageActions`**（第 170 行）：`id`/`component`/`placement`/`when.role`/`order`。组件收 `{ message, text }`。
 - **`codeBlockRenderers`**（第 307 行）：`id`/`languages`/`fileExtensions`/`component`/`order`。
-- **`sessionGroupings`**（第 188 行）：`id`/`parentPathKey`/`childLabelKey`/`childIcon`/`order`。
-- **`composerPolicies`**（第 205 行）：`id`/`customKey`/`readonlyMessageKey`/`order`。
+- **`sessionGroupings`**（第 188 行）：`id`/`parentPathField`/`childLabelKey`/`childIcon`/`order`（注意是 `parentPathField`——数据字段名以 `Field` 结尾；`*Key` 后缀专属 i18n 键，r65 消歧改的名，照抄旧名消费方读不到分组）。
+- **`composerPolicies`**（第 205 行）：`id`/`customField`/`readonlyMessageKey`/`order`（`customField` 同理——读哪颗 custom 数据字段的"路径"，不是文案键）。
 - **`composerAttachments`**（第 221 行）：`id`/`component`/`order`。
 - **`composerActions`**（第 249 行）、**`composerStats`**（第 263 行）、**`composerTop`**（第 277 行）、**`composerVoice`**（第 292 行）：`id`/`component`/`order`（composerVoice 组件收 `{ onTranscribed, disabled }`）。
 - **`settingsGroups`**（第 45 行）：`id`/`titleKey`/`order`/`fields`（`SettingsFieldDecl`：key/type/default/titleKey/descKey/options），纯 JSON 声明，通用渲染器渲 UI，插件零渲染代码。
