@@ -244,10 +244,12 @@ export class RpcAdapter {
     }
 
     // 2. response(带 id → 配对)。success:false 必须 reject 而非 resolve——
-    // 根因:此前错误响应当正常值放行,fork 等命令的调用方看不到失败
-    // (内核拒 fork 后 UI 静默停在旧会话、中间副本泄漏),也违背 session-store
+    // 根因:此前错误响应当正常值放行,调用方看不到失败(首个实锤案例是 pi 的 fork
+    // RPC 被拒后 UI 静默停在旧会话、中间副本泄漏;fork 命令虽已随 forkless 化从
+    // 联合退役,该案例的教训对 bash/set_model 等活命令同样成立),也违背 session-store
     // 既有注释假设的"RPC 拒绝抛错"契约(setModel 双写注释)。 reject 后错误
     // 经 session-store.send 的 rpcError 上报通道照常广播。
+    // (⇐ 历史例证里的 fork 曾被指为"现行命令",文档审计 §3#5 照出后改述为历史案例。)
     if (data.type === "response" && typeof data.id === "string") {
       const res = data as unknown as RpcResponse;
       if (res.success === false) {

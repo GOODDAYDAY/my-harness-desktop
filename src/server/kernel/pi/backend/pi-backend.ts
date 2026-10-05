@@ -1,6 +1,6 @@
 // pi 后端 —— BaseBackend 的 pi 实现:收编 client/pi 传输 + resync 基线 + pi 命令构造 + 会话文件编排。
 //
-// 依据 docs/design/base-interface-lineage.md §3.1。pi 的协议(JSONL 31 命令)、会话文件、
+// 依据 docs/design/base-interface-lineage.md §3.1。pi 的协议(JSONL;RpcCommand 联合 29 命令)、会话文件、
 // parentId 树,全部收编在本后端内部;对外只暴露 BaseBackend 中性操作。
 //
 // 分工:本类做「文件级」编排(bookmark 拷贝 / resume 物化 / getTree 树读——委托 pi-catalog)

@@ -34,10 +34,15 @@ export interface BackendContext {
 /**
  * 抽象后端:BaseBackend 契约的骨架实现。
  *
- * - 15 条必实现意图全部声明为 abstract,由 PiBackend / DshBackend 各自 override——
+ * - 14 条必实现意图全部声明为 abstract,由 PiBackend / DshBackend 各自 override——
  *   加第 N 个内核时编译器逼着它实现全量意图,漏一条就编译错,杜绝静默缺面。
+ *   (契约 BaseBackend 的必实现成员更多(18:含 7 个 readonly/getter 与 inbox 必方法),
+ *   这里只把"方法类意图"做成 abstract;另有 4 个默认成员——capabilities/configDepPaths/
+ *   sessionId getter/supportsRuntimeSetModel 乐观 true——子类按需 override。)
  * - 3 条可缺面意图(listTools / answerQuestion / setThinkingLevel)给缺面默认:
  *   listTools 返回 null(壳走降级),其余抛错(不静默吞、不伪造成功)。
+ * - ⚠ 成员账以本文件实际代码为准,勿从注释抄数字——这里曾写"15 条"漂移过一轮
+ *   (docs/reports/doc-code-gap-audit-2026-10.md §4A 的教训:注释里的数字不可信)。
  *
  * 本类不 import 任何具体内核,只依赖圆心契约 + 中性类型。
  */

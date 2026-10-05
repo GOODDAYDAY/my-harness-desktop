@@ -1,7 +1,7 @@
 // pi RPC 协议类型镜像 —— gateway/protocol,唯一可 import pi 类型处。
 //
 // 依据 pi SDK rpc-types.d.ts(0.82.x),re-declare 核心类型(不 import pi 包,保持自洽)。
-// 31 个命令联合为 RpcCommand;响应/事件/状态/模型/条目/树/命令/Extension UI。
+// RpcCommand 命令联合(29 个 type 字面量;rforkless 后 fork/clone/get_fork_messages/export_html 已退役)。响应/事件/状态/模型/条目/树/命令/Extension UI。计数以本联合实际成员为准——"31"曾是历史简称,留在旧文档里漂移过多轮(docs/reports/doc-code-gap-audit-2026-10.md §4A)。
 // 零外部依赖:只用 TS 内置类型。
 
 /** ThinkingLevel(pi-agent-core)。 */
@@ -85,7 +85,7 @@ export interface RpcSessionState {
   pendingMessageCount: number;
 }
 
-/** 31 个 RPC 命令联合(按 type 区分)。 */
+/** RPC 命令联合(按 type 区分;29 个成员,计数勿从注释抄)。 */
 export type RpcCommand =
   | { id?: string; type: "prompt"; message: string; images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" }
   | { id?: string; type: "steer"; message: string; images?: ImageContent[] }

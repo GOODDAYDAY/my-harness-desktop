@@ -5,9 +5,11 @@
 // 加一个方法要改多处、拼错只在运行时现形。这里收成单源常量：方法名只在此定义一次，
 // client/dsh 各文件 import 引用（契约单源，§1.3）。
 //
-// 与 pi 的对称性（CLAUDE.md §6.2）：pi 的协议面在 core/protocol（commands.ts 26 个
-// build*Command），dsh 的方法枚举收在这里，两边协议面都在 core/protocol 纯契约层——
-// 消除「pi 协议在 core、dsh 协议散在 client」的物理不对称。
+// 与 pi 的对称性（CLAUDE.md §6.2）：pi 的协议面在 kernel/pi/protocol（commands.ts 21 个
+// build*Command 构造器；RpcCommand 联合 29 个 type 字面量），dsh 的方法枚举收在这里。
+// 两边协议面各归各的内核目录、同为纯契约层——消除「pi 协议在 core、dsh 协议散在 client」
+// 的物理不对称。两边的权威计数以各自文件的实际导出为准，勿从注释抄数字——"26 个"
+// 曾在此漂移过一轮（docs/reports/doc-code-gap-audit-2026-10.md §4A 的教训）。
 //
 // 本文件零依赖：纯字符串常量，不 import 任何包（与 core/protocol 其余文件同一纪律）。
 

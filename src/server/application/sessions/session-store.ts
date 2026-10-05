@@ -1537,11 +1537,14 @@ export class SessionStore implements
     return hydrated;
   }
 
-  /** 跨内核切换(session-neutral-layer.md §19 + kernel-switch-projection.md):abort → 落定 →
-   *  快照(拓扑序 + 边界归一)→ stop 旧 → 查绑定(失效回退)→ 分内核 seed/start → 重绑 → 收尾。
-   *  回切经映射表找回目标内核已有私有形态,不重复 seed(pi 有效;dsh 内存态不可续,恒 seed)。 */
+  /** 跨内核切换(session-single-source §12.3 + kernel-forkless §15/§22):abort → 落定 →
+   *  快照(拓扑序 + 边界归一)→ stop 旧 → 分内核 seed/start(**恒 seed**,无绑定表)→ 重绑 → 收尾。
+   *  回切不查映射表:内核侧会话 id 由 lineageId 幂等派生,重算即同 id(§12.3"去映射表")——
+   *  ⇐ 本方法头注释曾写"查绑定(失效回退)/映射表回切",是被 forkless 化推翻的旧机制,
+   *  内部 :1568 的现行注释("不查表不存表")才是真相;此处按实况重写(勿回退)。 */
   async switchKernel(target: KernelId): Promise<void> {
-    // 暂缓切换(§3.2):入口 gate,七步编排原样保留,未来放开时删掉这个判断。
+    // 入口 gate(gate=true 已放开;三过渡已验:文件态→文件态 / →RPC / RPC→文件态):
+    // 保留这个判断作为回退开关,不是"暂缓"(旧注释曾写"暂缓切换、未来放开时删"——已放开)。
     if (!this.switchKernelEnabled) throw new Error("跨内核切换暂未启用");
     const proc = this.activeProc();
     if (!proc || !proc.backend.alive) throw new Error("内核未启动");
