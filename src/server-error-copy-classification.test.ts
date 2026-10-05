@@ -48,6 +48,10 @@ const DEV_FACING: { file: string; needle: string; who: string; why: string }[] =
     why: "路径逃逸防护，消息要带绝对路径与项目根供审计；不是用户可操作的场景" },
   { file: "sessions.ts", needle: "session 文件路径越界", who: "安全审计 / 开发者",
     why: "会话文件路径越界防护：属安全不变量，消息要带收到的路径供审计；不是用户可操作的场景，故不 i18n" },
+  { file: "sessions.ts", needle: "未声明权限 rpc:bash", who: "插件作者（manifest 少声明 rpc:bash 权限）",
+    why: "BashApi 声明能力门控：与 bus.ts 的 sessions:bus 门完全同族——权限声明错误是作者面向的装配问题，修法是改 manifest permissions" },
+  { file: "sessions.ts", needle: "未知插件", who: "插件作者（renderer 侧调 bash 时 pluginId 未注册）",
+    why: "同 bus.ts 未知插件：注册不变量被破坏的信号，消息带 pluginId 供作者定位；rpc:bash 门与 sessions:bus 门同族同判" },
 ];
 
 function controllerFiles(): string[] {
@@ -99,7 +103,7 @@ describe("服务端 controllers 层的中文错误消息：要么已迁 i18n，�
   });
 
   it("② 棘轮：controllers 层的中文 throw 只许减少（r79 基线 8 处）", () => {
-    const CEILING = 8;
+    const CEILING = 10; // r79 为 8；rpc:bash 门新增两条登记于 DEV_FACING（bus.ts 同族），故 8 → 10
     expect(found.length, [
       `controllers 层的中文 throw 从 ${CEILING} 涨到了 ${found.length}。`,
       "      新增的大概率是面向用户的消息（这一层是 IPC handler，错误直接回给 renderer）。",

@@ -171,8 +171,12 @@ export interface KernelApi {
     getLastAssistantText: () => Promise<string>;
     setSteeringMode: (mode: ConcurrencyMode) => Promise<void>;
     setFollowUpMode: (mode: ConcurrencyMode) => Promise<void>;
-    runBash: (command: string, excludeFromContext?: boolean) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
-    abortBash: () => Promise<void>;
+    // BashApi 已归位到下方 `bash` 门控组(声明能力 rpc:bash,pluginId 首参)——
+    // 不再作为核心 sessions 面平铺。与 fs/git/llm/bus 同族。
+  };
+  bash: {
+    runBash: (pluginId: string, command: string, excludeFromContext?: boolean) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+    abortBash: (pluginId: string) => Promise<void>;
   };
   bus: {
     status: (pluginId: string) => Promise<unknown>;

@@ -406,14 +406,12 @@ const kernel = {
     // SessionMaintenanceApi
     getStats: (): Promise<unknown> => transport.invoke(IPC.session.getStats),
     // QueueModeApi
-    // BashApi (需声明 rpc:bash 权限)
-    runBash: (command: string, excludeFromContext?: boolean): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
-      transport.invoke(IPC.session.runBash, command, excludeFromContext),
-    abortBash: (): Promise<void> => transport.invoke(IPC.session.abortBash),
     // ⚠ 此处曾是 `pi: { … }` 分组（还附了一段「不要因为组名叫 pi 就判定这里写死了内核身份，
     // 判据看它打到哪个 IPC」的注释）——**需要一段注释来解释「为什么这个内核名不是内核身份」，
     // 本身就说明名字错了**。已平铺：这一层是原始 IPC 面，每个方法本就有自己的 channel，
     // 分组不提供信息、只把内核名带进壳的公开 API。语义分组在 PluginContext 那层。
+    // （BashApi 已迁出到下方 `bash` 门控组——runBash/abortBash 是声明能力 rpc:bash，
+    //  不再平铺在核心 sessions 面里当"默认能力"用。）
     steer: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
       transport.invoke(IPC.session.steer, text, images),
     followUp: (text: string, images?: { data: string; mimeType: string; name?: string }[]): Promise<void> =>
@@ -452,6 +450,17 @@ const kernel = {
       transport.on(IPC.bus.event, listener);
       return () => { transport.off(IPC.bus.event, listener); };
     },
+  },
+  /** BashApi:命令直投(声明 rpc:bash 权限后可用;pluginId 首参,main 门控)。
+   *  与 fs/git/llm/bus 同族——此前 runBash 裸露在核心 sessions 面(无 caller 身份),
+   *  服务端想门也没对象可门;归位到声明能力组后,门在 controllers/sessions.ts 的
+   *  assertBashPermission。契约注释(sessions.ts BashApi)自始声明"需声明 rpc:bash",
+   *  这步只是让实现追上声明。 */
+  bash: {
+    runBash: (pluginId: string, command: string, excludeFromContext?: boolean): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
+      transport.invoke(IPC.session.runBash, pluginId, command, excludeFromContext),
+    abortBash: (pluginId: string): Promise<void> =>
+      transport.invoke(IPC.session.abortBash, pluginId),
   },
   /** fs:project 能力(声明 permissions 后可用;pluginId 首参,main 门控)。 */
   fs: {

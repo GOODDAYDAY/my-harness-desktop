@@ -27,6 +27,19 @@ function assertSessionPathAllowed(p: string, paths: MainPaths, kernelConfigRoots
 
 export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   const { sessionStore } = ctx;
+
+  /** BashApi 声明能力门控(rpc:bash)——与 fs:project / git:* / llm:oneshot / sessions:bus
+   *  同一门控族:pluginId 由框架经 PluginIdContext 注入(不自报),服务端核对 manifest
+   *  permissions 后放行。此前该通道**无门**:注释与契约(BashApi/context.ts)都写着
+   *  "需声明 rpc:bash、高危 RCE 门控",handler 却连 caller 身份都不收——任意 renderer
+   *  代码可经 window.kernel.sessions.runBash 直投内核 bash(等价 RCE)。门现在补齐声明。 */
+  function assertBashPermission(pluginId: string): void {
+    if (!ctx.registry.manifestOf(pluginId)) throw new Error(`未知插件: ${pluginId}`);
+    if (!ctx.registry.hasPermission(pluginId, "rpc:bash")) {
+      throw new Error(`插件 ${pluginId} 未声明权限 rpc:bash`);
+    }
+  }
+
   // 列表行字段变更(归档/置顶/改名/删除/复制)后广播,各端据此本地打补丁——
   // 此前只写不播,操作端本地重拉,其他端纹丝不动(第 21 项「归档没有同步多端」根因);
   // 再后来各端收到广播全量重拉(每端全目录 parse,被归档次数×客户端数乘法放大)——
@@ -168,9 +181,13 @@ export function registerSessions(gateway: Gateway, ctx: MainContext): void {
   gateway.register(IPC.session.setSteeringMode, (_e, mode: "all" | "one-at-a-time") => sessionStore.setSteeringMode(mode));
   gateway.register(IPC.session.setFollowUpMode, (_e, mode: "all" | "one-at-a-time") => sessionStore.setFollowUpMode(mode));
 
-  // ---- BashApi(需声明 rpc:bash 权限,高危 RCE 门控)----
-  gateway.register(IPC.session.runBash, (_e, command: string, excludeFromContext?: boolean) =>
-    sessionStore.run(command, { excludeFromContext }),
-  );
-  gateway.register(IPC.session.abortBash, () => sessionStore.abortBash());
+  // ---- BashApi(声明能力:rpc:bash 权限门控;pluginId 首参,与 fs/git/bus 同族)----
+  gateway.register(IPC.session.runBash, (_e, pluginId: string, command: string, excludeFromContext?: boolean) => {
+    assertBashPermission(pluginId);
+    return sessionStore.run(command, { excludeFromContext });
+  });
+  gateway.register(IPC.session.abortBash, (_e, pluginId: string) => {
+    assertBashPermission(pluginId);
+    return sessionStore.abortBash();
+  });
 }

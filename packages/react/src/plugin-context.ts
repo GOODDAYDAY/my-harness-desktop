@@ -5,7 +5,7 @@ import type {
 } from "@my-harness-desktop/shared";
 import type {
   SessionsApi, MessagingApi, ModelApi, SessionTreeApi,
-  FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, BusApi,
+  FsApi, GitReadApi, GitWriteApi, LlmOneshotApi, DialogApi, BusApi, BashApi,
   I18nApi,
   SessionInfo, SessionDetail, ImageInput, BashResult,
   ModelInfo, SessionStats, NeutralMessage, KnownToolInfo,
@@ -180,6 +180,16 @@ export function usePluginContext(): PluginContext {
     onMessage: (cb) => window.kernel.bus.onMessage(cb),
   }), [pluginId]);
 
+  // bash 是声明能力(rpc:bash):与 fs/git/llm/bus 同族——react 层无条件构造,
+  // "可不可用"由服务端门(controllers/sessions.ts assertBashPermission)决定;
+  // 未声明权限的插件调用会被拒,门的拒绝即显式降级(§1.5:不伪造成功)。
+  const bash: BashApi = useMemo(() => ({
+    run: (command, opts) => window.kernel.bash.runBash(pluginId, command, opts?.excludeFromContext),
+    abortBash: () => window.kernel.bash.abortBash(pluginId),
+    // RpcOps 通用面:统计走 core 的 session 通道(get_session_stats),不属 bash 门控。
+    getStats: () => window.kernel.sessions.getStats() as Promise<SessionStats>,
+  }), [pluginId]);
+
   const dialog: DialogApi = useMemo(() => ({
     openDirectory: () => window.kernel.dialog.openDirectory(),
     openImages: () => window.kernel.dialog.openImages(),
@@ -209,7 +219,7 @@ export function usePluginContext(): PluginContext {
 
   return useMemo(() => ({
     config, sessions, messaging, models, tree,
-    i18n: i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout,
+    i18n: i18nApi, fs, git, gitWrite, llm, dialog, events, bus, bash, layout,
     prefs: window.kernel.prefs,
     themes: window.kernel.themes,
     fonts: window.kernel.fonts,
@@ -227,5 +237,5 @@ export function usePluginContext(): PluginContext {
     appInfo: { get: () => window.kernel.app.info(), restart: () => window.kernel.app.restart() },
     notify: { show: (opts) => window.kernel.notify.show(opts) },
     window: { isFocused: () => window.kernel.window.isFocused() },
-  }), [config, sessions, messaging, models, tree, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, layout]);
+  }), [config, sessions, messaging, models, tree, i18nApi, fs, git, gitWrite, llm, dialog, events, bus, bash, layout]);
 }
