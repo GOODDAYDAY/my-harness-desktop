@@ -135,7 +135,7 @@ const goalBarHasText = (t) => page.evaluate((x) => {
 const composerGoalAccent = () => page.evaluate(() => {
   const ta = document.querySelector("[data-timeline-composer]");
   const pill = ta?.parentElement;
-  return !!pill && pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
+  return !!pill && pill.classList.contains("shell-composer-goal") && pill.getAttribute("data-goal-active") === "true";
 });
 /** 轮询等绿晕达到期望态。绿晕经 goal:state scoped channel 传播,而 goal 广播是「值变化」
  *  effect 驱动(比 setGoal 晚一个渲染周期)+ timeline 重渲染又一个周期——即时断言会偶发抢跑
@@ -144,7 +144,7 @@ async function waitGoalAccent(want) {
   return page.waitForFunction((w) => {
     const ta = document.querySelector("[data-timeline-composer]");
     const pill = ta?.parentElement;
-    const on = !!pill && pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
+    const on = !!pill && pill.classList.contains("shell-composer-goal") && pill.getAttribute("data-goal-active") === "true";
     return on === w;
   }, { timeout: 6000, polling: 100 }, want).then(() => true).catch(() => false);
 }

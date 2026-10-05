@@ -107,7 +107,7 @@ async function waitAccentSettled() {
     const active = !!bar && bar.getAttribute("data-goal-phase") === "active";
     const ta = document.querySelector("[data-timeline-composer]");
     const pill = ta?.parentElement;
-    const accent = !!pill && pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
+    const accent = !!pill && pill.classList.contains("shell-composer-goal") && pill.getAttribute("data-goal-active") === "true";
     return accent === active;
   }, { timeout: 6000, polling: 80 }).catch(() => {});
 }
@@ -137,9 +137,9 @@ const domStructure = async () => {
     barAboveComposer: !!(barRect && taRect && barRect.bottom <= taRect.top + 1),
     barAncestorChain: chain,
     barSharesParentWithComposer: sameParent,
-    pillHasGoalClass: !!pill?.classList.contains("pi-composer-goal"),
+    pillHasGoalClass: !!pill?.classList.contains("shell-composer-goal"),
     pillGoalActive: pill?.getAttribute("data-goal-active") ?? null,
-    taHasGoalClass: !!ta?.classList.contains("pi-composer-goal"),   // 绿晕该在药丸不在输入框本体
+    taHasGoalClass: !!ta?.classList.contains("shell-composer-goal"),   // 绿晕该在药丸不在输入框本体
     sendErrorCount: document.querySelectorAll("[data-goal-send-error]").length,
     // 幽灵节点:页面里还有没有别的会话的目标文本
     bodyHasA: document.body.innerText.includes("结构审查目标甲"),
@@ -157,7 +157,7 @@ try {
   await openSession(NAME_A, MARK_A);
   let d = await domStructure();
   ok(d.barCount === 0, "① 无目标时 [data-goal-bar] 节点数为 0(卸载而非隐藏)", d.barCount);
-  ok(d.pillHasGoalClass === false, "① 无目标时药丸不挂 pi-composer-goal", d.pillHasGoalClass);
+  ok(d.pillHasGoalClass === false, "① 无目标时药丸不挂 shell-composer-goal", d.pillHasGoalClass);
   ok(d.taHasGoalClass === false, "① 绿晕不挂在输入框本体(应在药丸层)", d.taHasGoalClass);
   await shot("1-no-goal");
 
@@ -170,7 +170,7 @@ try {
   ok(d.barAboveComposer === true, "② 目标条位于输入框**上方**(bar.bottom ≤ ta.top)", { above: d.barAboveComposer });
   ok(d.barSharesParentWithComposer === true, "② 目标条与输入框同挂一个容器(ComposerDock:composerTop 槽 + composer)", d.barSharesParentWithComposer);
   ok(d.barPhase === "active", "② data-goal-phase=active", d.barPhase);
-  ok(d.pillHasGoalClass === true, "② active 时药丸挂 pi-composer-goal(绿晕在药丸层)", d.pillHasGoalClass);
+  ok(d.pillHasGoalClass === true, "② active 时药丸挂 shell-composer-goal(绿晕在药丸层)", d.pillHasGoalClass);
   ok(d.pillGoalActive === "true", "② data-goal-active=true(锚点与 class 双通道一致)", d.pillGoalActive);
   ok(d.taHasGoalClass === false, "② 绿晕类不在输入框本体(职责在药丸,不重复挂)", d.taHasGoalClass);
   await shot("2-goal-active");

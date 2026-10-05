@@ -88,7 +88,7 @@ async function composerGoalAccent(page) {
     const ta = document.querySelector("[data-timeline-composer]");
     const pill = ta?.parentElement;
     if (!pill) return false;
-    return pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
+    return pill.classList.contains("shell-composer-goal") && pill.getAttribute("data-goal-active") === "true";
   });
 }
 
@@ -100,7 +100,7 @@ async function waitGoalAccent(page, want) {
   return page.waitForFunction((w) => {
     const ta = document.querySelector("[data-timeline-composer]");
     const pill = ta?.parentElement;
-    const on = !!pill && pill.classList.contains("pi-composer-goal") && pill.getAttribute("data-goal-active") === "true";
+    const on = !!pill && pill.classList.contains("shell-composer-goal") && pill.getAttribute("data-goal-active") === "true";
     return on === w;
   }, { timeout: 6000, polling: 100 }, want).then(() => true).catch(() => false);
 }
