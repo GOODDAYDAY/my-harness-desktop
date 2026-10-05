@@ -167,6 +167,49 @@ describe("写穿:messageEnd 是内容落中立层的主触发", () => {
     expect(comp!.detail).toBe("摘要:聊过天气"); // 摘要落库,作 seed 投影的截断代身
   });
 
+  // 假边界守卫(§1.5 不伪造成功):压缩**失败/取消**时 pi 同样发 compaction_end,
+  // 只是 result: undefined。此前壳无条件落分隔线 → 中间层有边界、底层内核没有压缩条目
+  // (实测真实 502 撞上生成摘要的那次模型调用)。假边界会遮蔽更早的真摘要(assembleSeedProjection
+  // 找到最新边界就 break)并让 UI 谎报「上下文已压缩」。锚点:e2e compaction-overflow Phase C。
+  //
+  // ⚠ 夹具一律用 pi 的**真实线格式**(compaction_end + result),不用中性形状:
+  //   本文件的 FakeAdapter 喂的是 PiBackend,事件要过 translateEvent。若手搓中性
+  //   `{type:"compactionEnd", compacted:false}`,translateEvent 仍会命中归一分支并按
+  //   `result` 重算 compacted —— 断言于是「碰巧」通过,守的却不是真实链路(与本文件
+  //   那条扁平 summary 夹具同一类错误)。用真实线格式,这条测试同时覆盖翻译层 + 写穿。
+  const compactionDividers = () => entries().filter((e) => e.role === "divider" && e.kind === "compaction").length;
+
+  it("压缩失败(pi: result undefined + errorMessage)→ **不落**分隔线(不产假边界)", () => {
+    const before = compactionDividers();
+    adapter.emit({ type: "compaction_start", reason: "threshold" });
+    adapter.emit({
+      type: "compaction_end", reason: "threshold", result: undefined, aborted: false, willRetry: false,
+      errorMessage: "Auto-compaction failed: 502 provider_connection_failed",
+    });
+    expect(compactionDividers()).toBe(before); // 一条都没多
+  });
+
+  it("压缩取消(pi: result undefined + aborted)→ 同样不落分隔线", () => {
+    const before = compactionDividers();
+    adapter.emit({ type: "compaction_end", reason: "manual", result: undefined, aborted: true, willRetry: false });
+    expect(compactionDividers()).toBe(before);
+  });
+
+  it("溢出恢复第二次仍失败(result undefined + errorMessage)→ 不落分隔线,且 busy 被清算", async () => {
+    // isBusy 的键是**会话路径**(procs 的 key;正常态 key === boundSessionPath),
+    // 不是中立主键 ns —— 与 session-store.test.ts 的 isBusy(sessionPath) 同款用法。
+    const sessionPath = join(dir, "sessions", cwdToBucketName(CWD), "s1.jsonl");
+    adapter.emit({ type: "compaction_start", reason: "overflow" });
+    expect(store.isBusy(sessionPath)).toBe(true); // 压缩中 = busy(restart 协调器据此不动它)
+    adapter.emit({
+      type: "compaction_end", reason: "overflow", result: undefined, aborted: false, willRetry: false,
+      errorMessage: "Context overflow recovery failed after one compact-and-retry attempt.",
+    });
+    expect(compactionDividers()).toBe(0);
+    // busy 必须清算:压缩失败也算结束,否则 restart-coordinator 永远认为它在忙(静默挂死)
+    expect(store.isBusy(sessionPath)).toBe(false);
+  });
+
   it("clone 归壳:中立层整树复制 + 新 ns,内核零参与(§4.2)", async () => {
     await store.prompt("问", undefined, undefined, { provider: "p", modelId: "a", thinkingLevel: "", kernel: "pi" });
     adapter.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "答" }] } });

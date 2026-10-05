@@ -48,5 +48,6 @@
   "shell.fork": "分叉",
   "shell.forkArmed": "确认分叉？",
   "shell.forkFailed": "分叉失败：{{error}}",
+  "shell.compactionFailed": "上下文压缩失败（会话未改动，上下文仍是满的）：{{error}}",
   "shell.kernelLocked": "当前会话已使用 {{kernel}} 内核，跨内核切换后续支持"
 }

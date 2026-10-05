@@ -48,5 +48,6 @@
   "shell.fork": "Abzweigen",
   "shell.forkArmed": "Abzweigen bestätigen?",
   "shell.forkFailed": "Abzweigen fehlgeschlagen: {{error}}",
+  "shell.compactionFailed": "Kontextkomprimierung fehlgeschlagen (Sitzung unverändert, Kontext ist weiterhin voll): {{error}}",
   "shell.kernelLocked": "Diese Sitzung ist an den {{kernel}}-Kernel gebunden; Kernelwechsel noch nicht unterstützt"
 }

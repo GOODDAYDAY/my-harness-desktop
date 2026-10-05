@@ -505,14 +505,26 @@ export function TimelineView(): React.ReactNode {
   // 上下文压缩进行中状态(compactionStart 置、compactionEnd 清):设计 docs/design/session-working-phase.md
   // §2.4——compacting 与 retrying 对称的覆盖态,走视图流(onEvent 只含激活会话,天然过滤归属);
   // useSessionStore 虽也消费 compaction 事件,但只拿 compactionEnd 触发 sync,不暴露布尔,故本地维护。
+  //
+  // **失败/取消的压缩要显形**(§1.5 不静默、不伪造成功)。compactionEnd 不必然代表成功:
+  // pi 在「扩展取消 / 用户中断 / 生成摘要那次模型调用抛错(如 502)」时同样发它,
+  // 只是 compacted=false(判据在各内核的协议翻译层,契约三态见 CompactionEndEvent)。
+  // 服务端此时不落压缩边界(落了就是假边界:遮蔽真摘要 + UI 谎报已压缩),
+  // 但用户仍需知道"这次压缩没成" —— 否则上下文还是满的、用户以为压过了,继续发就真溢出。
+  // 取消(aborted)不报错:那是用户/扩展自己的动作,不是故障,打扰是噪音。
   const [compacting, setCompacting] = useState(false);
   useEffect(() => {
     const off = ctx.sessions.onEvent((event) => {
       if (event.type === "compactionStart") setCompacting(true);
-      if (event.type === "compactionEnd") setCompacting(false);
+      if (event.type === "compactionEnd") {
+        setCompacting(false);
+        if (event.compacted === false && !event.aborted) {
+          showToast(t("shell.compactionFailed", { error: event.errorMessage ?? "" }), "error");
+        }
+      }
     });
     return off;
-  }, [ctx]);
+  }, [ctx, showToast, t]);
   // 切会话/resync 清残留(与 retrying 同纪律)。
   useEffect(() => { setCompacting(false); }, [currentNeutralSessionId, syncNonce]);
   // 当前工作阶段(快照式推导):底部指示的单一状态源。覆盖态优先(retrying/compacting 有独立

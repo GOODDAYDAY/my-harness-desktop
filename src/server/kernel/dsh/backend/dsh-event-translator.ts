@@ -270,7 +270,7 @@ export function createDshEventTranslator(initialHeader?: { provider?: string; mo
    *  (圆心契约 CompactionEndEvent)。合并需要跨事件状态,故住在本工厂,不进无状态的
    *  translateDshEvent。不接的后果与 pi 侧同一形态:壳的压缩分隔线没有 detail →
    *  seed 投影的「摘要代身」走不到(一律全量回灌)、UI 也没有 token 数。
-   *  证据锚点:scripts/demo/compaction-rewind.e2e.mjs 的 ⑰⑱。 */
+   *  证据锚点:scripts/demo/compaction-rewind.e2e.mjs「分隔线带摘要 detail / 带 tokens」两条断言。 */
   const compactionSummaries = new Map<string, { summary: string; tokensBefore?: number }>();
   // 最近一次 request/header 报告的生效配置(provider/model/effort);初值 = spawn 握手值。
   let lastHeader: { provider?: string; model?: string; effort?: string } = {
@@ -511,7 +511,21 @@ export function createDshEventTranslator(initialHeader?: { provider?: string; mo
       const id = typeof d.compactionId === "string" ? d.compactionId : "";
       const hit = compactionSummaries.get(id);
       compactionSummaries.delete(id); // 用完即清(同一次压缩的 summary 只服务一条 end)
-      return [{ type: "compactionEnd", ...(hit?.summary ? { summary: hit.summary } : {}), ...(hit?.tokensBefore !== undefined ? { tokensBefore: hit.tokensBefore } : {}) }];
+      // 成败判定:dsh 的失败信号在 end 的 `error` 字段上(SessionEventMap:
+      //   'compaction/end': { compactionId, sourceCommandId?, turn, error? })——与 pi 不同
+      //   (pi 靠 `result != null`),所以各内核自己判、各自的翻译层负责(§3.3 行为级差异不收敛)。
+      // 语义与 pi 侧对齐:压缩失败**不落边界**,否则壳会记下假边界(危害见圆心契约
+      //   CompactionEndEvent 的注释:遮蔽更早的真摘要 + UI 谎报已压缩)。
+      // error 缺省 = 内核没说失败 → 按成功处理;此时若摘要也没收到(插件版本差异),
+      //   壳的 seed 投影会走保守全量回落,不丢历史(宁多灌不丢语义)。
+      const error = typeof d.error === "string" && d.error.trim() ? d.error.trim() : undefined;
+      return [{
+        type: "compactionEnd",
+        compacted: error === undefined,
+        ...(error !== undefined ? { errorMessage: error } : {}),
+        ...(hit?.summary ? { summary: hit.summary } : {}),
+        ...(hit?.tokensBefore !== undefined ? { tokensBefore: hit.tokensBefore } : {}),
+      }];
     }
 
     const stateless = translateDshEvent(event);

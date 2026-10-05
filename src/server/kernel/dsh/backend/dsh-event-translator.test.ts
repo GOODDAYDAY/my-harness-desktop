@@ -566,7 +566,7 @@ describe("createDshEventTranslator: 压缩摘要(compaction/summary)合并进 co
     expect(t(start("cp1"))).toEqual([{ type: "compactionStart" }]);
     expect(t(summary("cp1", "聊过天气与架构", 4800))).toEqual([]); // summary 事件只缓冲,不单独产出
     const out = t(end("cp1"));
-    expect(out).toEqual([{ type: "compactionEnd", summary: "聊过天气与架构", tokensBefore: 4800 }]);
+    expect(out).toEqual([{ type: "compactionEnd", compacted: true, summary: "聊过天气与架构", tokensBefore: 4800 }]);
   });
 
   it("多个 text 块拼成一段摘要(换行连接)", () => {
@@ -582,21 +582,21 @@ describe("createDshEventTranslator: 压缩摘要(compaction/summary)合并进 co
   it("summary 缺席(压缩被中断/内核未产出)→ compactionEnd 不带摘要(缺省,不伪造空串)", () => {
     const t = createDshEventTranslator();
     t(start("cp1"));
-    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd" }]);
+    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd", compacted: true }]);
   });
 
   it("空文本摘要不缓冲(空串会污染 detail 判定)", () => {
     const t = createDshEventTranslator();
     t(start("cp1"));
     t(summary("cp1", "   ", 50)); // 纯空白 → textOfBlocks 得 ""→ 不缓冲
-    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd" }]);
+    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd", compacted: true }]);
   });
 
   it("compactionId 不匹配 → 不串台(用别的 id 的摘要不填进来)", () => {
     const t = createDshEventTranslator();
     t(start("cp1"));
     t(summary("cpOTHER", "别的压缩的摘要", 10));
-    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd" }]);
+    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd", compacted: true }]);
   });
 
   it("摘要用完即清:同一 id 的第二次 end 不再带旧摘要(不重复消费)", () => {
@@ -604,7 +604,7 @@ describe("createDshEventTranslator: 压缩摘要(compaction/summary)合并进 co
     t(start("cp1"));
     t(summary("cp1", "第一次摘要", 100));
     expect(t(end("cp1"))[0]).toMatchObject({ summary: "第一次摘要" });
-    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd" }]); // 缓冲已清
+    expect(t(end("cp1"))).toEqual([{ type: "compactionEnd", compacted: true }]); // 缓冲已清
   });
 
   it("新一轮 start 清掉上一轮没等到 end 的残留(缓冲有界,不泄漏)", () => {
@@ -612,7 +612,54 @@ describe("createDshEventTranslator: 压缩摘要(compaction/summary)合并进 co
     t(start("cp1"));
     t(summary("cp1", "被中断的摘要", 100)); // 有 summary 无 end(压缩中断)
     t(start("cp2")); // 新一轮 → 清残留
-    expect(t(end("cp2"))).toEqual([{ type: "compactionEnd" }]); // cp1 的摘要没串到 cp2
+    expect(t(end("cp2"))).toEqual([{ type: "compactionEnd", compacted: true }]); // cp1 的摘要没串到 cp2
+  });
+});
+
+// ==============================================================================================
+// dsh 的成败判定:dsh 把失败信号放在 end 的 `error` 字段上
+// (SessionEventMap: 'compaction/end': { compactionId, turn, error?: string }),与 pi 靠
+// `result != null` 不同 —— 行为级差异,所以各内核的翻译层各自判(§3.3 不收敛到共享路径)。
+// 语义必须与 pi 侧一致:压缩失败 → compacted:false → 壳不落边界(否则就是假边界)。
+// ==============================================================================================
+describe("createDshEventTranslator: 压缩失败判定(compacted,防假边界)", () => {
+  const start = (id: string) => ({ type: "compaction/start", seq: 1, time: 1, data: { compactionId: id, turn: 2 } });
+  const summary = (id: string, text: string, shadowed: number) => ({
+    type: "compaction/summary", seq: 2, time: 2,
+    data: { compactionId: id, turn: 2, summary: [{ type: "text", text }], shadowedTokenCount: shadowed },
+  });
+
+  it("end 无 error → compacted: true(成功)", () => {
+    const t = createDshEventTranslator();
+    t(start("cp1"));
+    t(summary("cp1", "摘要", 100));
+    expect(t({ type: "compaction/end", data: { compactionId: "cp1", turn: 2 } }))
+      .toEqual([{ type: "compactionEnd", compacted: true, summary: "摘要", tokensBefore: 100 }]);
+  });
+
+  it("end 带 error → compacted: false + errorMessage 带出(壳据此不落边界、UI 显形)", () => {
+    const t = createDshEventTranslator();
+    t(start("cp1"));
+    t(summary("cp1", "半截摘要", 100)); // 摘要已收到但压缩仍失败 → 不能当成功
+    const out = t({ type: "compaction/end", data: { compactionId: "cp1", turn: 2, error: "llm timeout" } });
+    expect(out).toEqual([{ type: "compactionEnd", compacted: false, errorMessage: "llm timeout", summary: "半截摘要", tokensBefore: 100 }]);
+  });
+
+  it("error 是空串/空白/非字符串 → 视作没报错(compacted: true,不弹空提示)", () => {
+    for (const error of ["", "   ", 42, null]) {
+      const t = createDshEventTranslator();
+      t(start("cp1"));
+      const out = t({ type: "compaction/end", data: { compactionId: "cp1", turn: 2, error } }) as Record<string, unknown>[];
+      expect(out[0].compacted, `error=${JSON.stringify(error)} 不该被判成失败`).toBe(true);
+      expect(out[0].errorMessage).toBeUndefined();
+    }
+  });
+
+  it("无状态 translateDshEvent 不做成败判定(那是有状态层的职责,避免两处判据漂移)", () => {
+    // 无状态层只认死映射;compacted 一律由 createDshEventTranslator 填。
+    // 这条钉住「不要在两个层各判一次」——两判据必然漂移(§1.3 契约单源的推论)。
+    expect(translateDshEvent({ type: "compaction/end", data: { compactionId: "c", error: "boom" } }))
+      .toEqual({ type: "compactionEnd" });
   });
 });
 

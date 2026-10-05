@@ -48,5 +48,6 @@
   "shell.fork": "Fork",
   "shell.forkArmed": "Confirm fork?",
   "shell.forkFailed": "Fork failed: {{error}}",
+  "shell.compactionFailed": "Context compaction failed (session unchanged, context is still full): {{error}}",
   "shell.kernelLocked": "This session is locked to the {{kernel}} kernel; cross-kernel switch is not yet supported"
 }

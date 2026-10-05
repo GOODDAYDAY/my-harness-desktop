@@ -51,7 +51,9 @@
     "e2e:content-pin-key": "node scripts/demo/content-pin-key.e2e.mjs",
     "e2e:review-basket-key": "node scripts/demo/review-basket-key.e2e.mjs",
     "e2e:dsh:recorder": "node scripts/demo/dsh-round.e2e.mjs",
-    "e2e:quiet": "node scripts/demo/quiet-launch.e2e.mjs"
+    "e2e:quiet": "node scripts/demo/quiet-launch.e2e.mjs",
+    "e2e:compaction-rewind": "node scripts/demo/compaction-rewind.e2e.mjs",
+    "e2e:compaction-overflow": "node scripts/demo/compaction-overflow-rewind.e2e.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

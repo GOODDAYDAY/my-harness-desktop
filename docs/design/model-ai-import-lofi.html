@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型 AI 导入 · 模板快照派生 · HTML 低保真 (v3)</title>
+<style>
+  :root {
+    --bg: #14161a; --surface: #1c1f24; --surface-2: #22262c; --border: #2a2f36;
+    --fg: #d6dbe2; --muted: #7a828c; --primary: #6c8cff;
+    --ok: #3fb950; --warn: #d29922; --err: #f85149;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 6px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 13px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; padding-bottom: 80px; }
+  button { font: inherit; cursor: pointer; }
+  .mono { font-family: var(--mono); }
+
+  .screen { max-width: 1080px; margin: 34px auto 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg); }
+  .screenhead { display: flex; align-items: baseline; gap: 12px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .screenhead .no { font-weight: 700; color: var(--primary); }
+  .screenhead h2 { margin: 0; font-size: 15px; }
+  .screenhead .desc { color: var(--muted); font-size: 12px; }
+
+  .titlebar { height: 34px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 12px; color: var(--muted); }
+  .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .titlebar .dot:nth-of-type(1) { background: var(--err); opacity: .7; }
+  .titlebar .dot:nth-of-type(2) { background: var(--warn); opacity: .7; }
+  .titlebar .dot:nth-of-type(3) { background: var(--ok); opacity: .7; }
+  .titlebar .title { color: var(--fg); }
+
+  .page { padding: 18px 22px; }
+  .sectionhead { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .sectionhead h3 { margin: 0; font-size: 15px; }
+  .sectionhead .desc { color: var(--muted); font-size: 12px; }
+
+  .btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--fg); font-size: 12px; }
+  .btn:hover { background: var(--surface-2); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #0d1117; font-weight: 600; }
+  .btn.ai { border-color: var(--primary); color: var(--primary); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.sm { font-size: 11px; padding: 1px 8px; }
+
+  .columns { display: grid; grid-template-columns: 170px 1fr; gap: 20px; align-items: start; margin-top: 14px; }
+  .provider { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: var(--radius); font-family: var(--mono); font-size: 12px; }
+  .provider.active { background: var(--surface-2); }
+  .provider .count { color: var(--muted); font-size: 11px; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 10px; }
+  .fieldrow { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .fieldrow label { min-width: 80px; font-size: 12px; color: var(--muted); }
+  .fieldrow .input { flex: 1; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); font-family: var(--mono); font-size: 12px; color: var(--fg); }
+
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--primary); color: var(--primary); font-size: 11px; background: rgba(108,140,255,.08); }
+  .newbadge { display: inline-block; padding: 0 6px; border-radius: 8px; background: var(--primary); color: #0d1117; font-size: 10px; font-weight: 700; vertical-align: 2px; margin-left: 6px; }
+
+  /* ===== 屏 2:模板资产示意 ===== */
+  .assetbox { display: grid; grid-template-columns: 300px 40px 1fr; gap: 0; align-items: center; margin-top: 14px; }
+  .asset { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow: hidden; }
+  .asset .ahead { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; background: var(--surface-2); }
+  .asset .abody { padding: 10px 12px; font-size: 12px; }
+  .entry { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; background: var(--bg); }
+  .entry .role { font-size: 10.5px; color: var(--muted); font-family: var(--mono); margin-bottom: 3px; }
+  .entry .body { font-size: 11.5px; color: var(--fg); }
+  .entry .body.dim { color: var(--muted); }
+  .arrowcol { text-align: center; color: var(--muted); font-size: 20px; }
+
+  .chatscreen { display: grid; grid-template-columns: 200px 1fr; min-height: 600px; }
+  .sidebar { border-right: 1px solid var(--border); background: var(--surface); padding: 10px; }
+  .sidebar .group { color: var(--muted); font-size: 11px; margin: 10px 4px 4px; }
+  .sidebar .item { padding: 6px 8px; border-radius: var(--radius); font-size: 12px; color: var(--fg); }
+  .sidebar .item.active { background: var(--surface-2); border: 1px dashed var(--primary); }
+  .sidebar .item .sub { color: var(--muted); font-size: 11px; }
+
+  .chatmain { display: flex; flex-direction: column; min-width: 0; }
+  .chatheader { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .chatheader .name { font-weight: 600; font-size: 13px; }
+  .pill { padding: 1px 9px; border-radius: 10px; font-size: 11px; border: 1px solid var(--border); color: var(--muted); }
+  .pill.tmp { border-color: var(--warn); color: var(--warn); background: rgba(210,153,34,.08); }
+  .pill.model { font-family: var(--mono); }
+
+  .banner { display: flex; align-items: center; gap: 8px; padding: 6px 14px; font-size: 12px; color: var(--warn); background: rgba(210,153,34,.06); border-bottom: 1px solid var(--border); }
+
+  .timeline { flex: 1; overflow: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 80%; }
+  .msg .who { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .msg .bubble { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); font-size: 12.5px; }
+  .msg.user { align-self: flex-end; }
+  .msg.user .bubble { background: var(--surface-2); }
+  .msg.assistant { align-self: flex-start; }
+  .msg .bubble p { margin: 0 0 8px; }
+  .msg .bubble p:last-child { margin-bottom: 0; }
+  .msg .bubble ul { margin: 6px 0; padding-left: 18px; }
+  .msg .bubble li { margin-bottom: 3px; }
+  .paste { border: 1px dashed var(--border); border-radius: 6px; padding: 8px 10px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: pre-wrap; background: var(--bg); }
+
+  .codeblock { border: 1px solid var(--border); border-radius: var(--radius); margin-top: 8px; overflow: hidden; }
+  .codehead { display: flex; align-items: center; gap: 8px; padding: 5px 10px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+  .codehead .lang { font-family: var(--mono); }
+  .codehead .spacer { flex: 1; }
+  .codebody { padding: 10px 12px; font-family: var(--mono); font-size: 11.5px; white-space: pre; overflow: auto; background: var(--bg); color: var(--fg); }
+  .codebody .k { color: var(--primary); }
+  .codebody .s { color: var(--ok); }
+  .codebody .n { color: var(--warn); }
+
+  .composer { border-top: 1px solid var(--border); padding: 10px 14px; background: var(--surface); }
+  .composer .box { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); padding: 8px 10px; color: var(--muted); font-size: 12px; min-height: 38px; }
+  .composer .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .composer .hint { color: var(--muted); font-size: 11px; }
+
+  /* ===== 屏 4:导入弹窗(既有,零改动) ===== */
+  .modalwrap { padding: 26px; display: flex; justify-content: center; background: rgba(0,0,0,.35); }
+  .modal { width: 640px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+  .modalhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .modalhead h3 { margin: 0; font-size: 14px; }
+  .modalbody { padding: 14px 16px; }
+  .textarea { width: 100%; box-sizing: border-box; min-height: 130px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-family: var(--mono); font-size: 11.5px; color: var(--fg); }
+  .modalfoot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  .modalfoot .hint { color: var(--muted); font-size: 11.5px; }
+
+  .savebar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border: 1px solid var(--warn); border-radius: var(--radius); background: rgba(210,153,34,.07); margin-top: 14px; font-size: 12px; }
+
+  .notes { max-width: 1080px; margin: 40px auto 0; padding: 0 4px; }
+  .notes h2 { font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .notes h3 { font-size: 13.5px; margin: 18px 0 6px; color: var(--primary); }
+  .notes p, .notes li { color: var(--fg); font-size: 12.5px; line-height: 1.75; }
+  .notes code { font-family: var(--mono); background: var(--surface-2); padding: 0 4px; border-radius: 3px; font-size: 11.5px; }
+  .notes .q { color: var(--warn); }
+  .notes table td, .notes table th { border: 1px solid var(--border); padding: 5px 10px; font-size: 12px; text-align: left; }
+  .notes table th { background: var(--surface); }
+  .flow { font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; white-space: pre; overflow: auto; line-height: 1.8; }
+  .strike { color: var(--muted); text-decoration: line-through; }
+
+  /* ===== 图集 SVG 通用样式 ===== */
+  .svgwrap { padding: 14px 18px; overflow-x: auto; }
+  .svgwrap svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  svg text { font-size: 12px; fill: #d6dbe2; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  svg text.sm { font-size: 10.5px; fill: #7a828c; }
+  svg text.mn { font-family: var(--mono); font-size: 10.5px; }
+  svg text.hd { font-size: 12px; font-weight: 600; }
+  svg text.new { font-size: 10px; fill: #6c8cff; font-weight: 700; }
+  svg text.cap { font-size: 11px; fill: #7a828c; font-weight: 600; letter-spacing: .5px; }
+  svg rect.nb { fill: #1c1f24; stroke: #2a2f36; stroke-width: 1; }
+  svg rect.nw { fill: #1b2030; stroke: #6c8cff; stroke-width: 1.3; }
+  svg rect.gy { fill: #17191d; stroke: #3a4048; stroke-dasharray: 4 3; }
+  svg rect.st { fill: #15181c; stroke: #3a4048; }
+  svg rect.band { fill: #171a1e; stroke: #22262c; }
+  svg rect.frame { fill: none; stroke: #3a4048; stroke-dasharray: 5 4; }
+  svg polygon.dc { fill: #221d13; stroke: #d29922; stroke-width: 1.2; }
+  svg .aw { stroke: #7a828c; stroke-width: 1.4; fill: none; }
+  svg .awb { stroke: #6c8cff; stroke-width: 1.6; fill: none; }
+  svg .awd { stroke: #4a515a; stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
+  svg .ll { stroke: #2a2f36; stroke-width: 1; stroke-dasharray: 3 4; }
+</style>
+</head>
+<body>
+
+<!-- ================= 屏 1:设置页 · 模型 TAB ================= -->
+<div class="screen">
+  <div class="screenhead"><span class="no">屏 1</span><h2>设置 · 模型 TAB —— 入口按钮「✦ AI 导入」</h2><span class="desc">点击 = 从本内核的模板快照派生一个新会话并跳转主页打开（收藏「发起」同款操作）</span></div>
+  <div class="titlebar">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="title">设置 · PI 入口 · 模型</span>
+    <span style="flex:1"></span>
+    <span>pi / dsh 共用同一 base 组件，模板各内核一份</span>
+  </div>
+  <div class="page">
+    <div class="sectionhead">
+      <h3>模型</h3>
+      <span class="desc">管理模型供应商与模型（~/.pi/agent/models.json）</span>
+      <span style="flex:1"></span>
+      <button class="btn">导出</button>
+      <button class="btn">导入</button>
+      <button class="btn ai">✦ AI 导入<span class="newbadge">NEW</span></button>
+    </div>
+
+    <div class="columns">
+      <div>
+        <div class="provider active"><span>deepseek</span><span class="count">(2)</span></div>
+        <div class="provider"><span>openai</span><span class="count">(1)</span></div>
+        <button class="btn primary" style="width:100%; margin-top:10px;">+ 添加供应商</button>
+      </div>
+      <div>
+        <div class="card">
+          <div class="fieldrow"><label>供应商 ID</label><div class="input">deepseek</div></div>
+          <div class="fieldrow" style="margin-bottom:0"><label>Base URL</label><div class="input">https://api.deepseek.com/v1</div></div>
+        </div>
+        <div style="color:var(--muted); font-size:12px;">……（既有页面其余部分不变）</div>
+      </div>
+    </div>
+
+    <div class="savebar" style="border-color:var(--border); background:var(--surface); color:var(--muted);">
+      <span class="tag">v3</span>
+      无默认模型 → 按钮禁用 + tooltip「请先设置默认模型」。点击后<b style="color:var(--fg)">不弹任何对话框</b>，直接派生会话并跳转主页。
+    </div>
+  </div>
+</div>
+
+<!-- ================= 屏 2:模板快照资产 + 派生示意 ================= -->
+<div class="screen">
+  <div class="screenhead"><span class="no">屏 2</span><h2>核心机制 —— 预制模板快照，每次点按钮复制一份</h2><span class="desc">形状 = BookmarkSnapshot（自包含 NeutralEntry[] 前缀）；存放 = 内核插件分发资产，不进项目 bookmarks、不进收藏面板</span></div>
+
+  <div class="page">
+    <div class="assetbox">
+      <!-- 模板资产 -->
+      <div class="asset">
+        <div class="ahead">📦 模板快照（只读资产，随内核插件分发）<span class="newbadge">NEW</span></div>
+        <div class="abody">
+          <div class="mono" style="font-size:11px; color:var(--muted); margin-bottom:8px;">src/plugins/kernels/pi/assistant/<br>　model-import.snapshot.json</div>
+          <div class="entry">
+            <div class="role">entry[0] · role: user（预制教程）</div>
+            <div class="body dim">「你是模型配置导入助手。目标格式：中性 providers JSON（字段表…）。pi 落盘差异：apiKey 内联、compat.supportsDeveloperRole…。缺 baseUrl/api 类型/窗口时必须追问。输出纪律：最终结果只给一个 ```json 块，不编造 apiKey…」</div>
+          </div>
+          <div class="entry">
+            <div class="role">entry[1] · role: assistant（预制开场白）</div>
+            <div class="body dim">「把你手头的任何东西粘给我——API 文档片段、别家工具的 JSON/YAML、一句话描述都行。我来补齐并生成 pi 模型配置。」</div>
+          </div>
+          <div style="color:var(--muted); font-size:11px; border-top:1px dashed var(--border); padding-top:8px;">
+            dsh 同款另一份：<span class="mono">kernels/dsh/assistant/model-import.snapshot.json</span>（教程写 dsh 差异：baseURL 拼写、reasoning→reasoningEfforts、apiKey 进凭证库…）
+          </div>
+        </div>
+      </div>
+
+      <div class="arrowcol">→</div>
+
+      <!-- 派生流程 -->
+      <div class="asset">
+        <div class="ahead">♻ 每次点击 = 复制一份新会话（bookmark「发起」同一通道）</div>
+        <div class="abody">
+          <div class="flow" style="margin:0; font-size:11.5px; line-height:1.9;">「✦ AI 导入」(模型 TAB, kernel=k)
+  │
+  ├─ getDefault(k) → 默认模型（禁用判据）
+  │
+  ├─ 读模板快照 entries（预制上下文）
+  │      · 内容来源③：分发模板
+  │        （①fork 现场截前缀 ②收藏读预存快照）
+  │
+  ├─ deriveSession(entries, kernel=k, ephemeral)
+  │      · 纯中立写，零内核交互，瞬时
+  │      · ephemeral：不进会话列表（"只读模式"）
+  │
+  ├─ materializeSession → seed 投影进内核
+  │      · 唯一物化通道（约束 §2.3），pi 写
+  │        JSONL / dsh 走 session/seed RPC
+  │
+  └─ 跳转主页 · 激活该会话 · 默认模型待命
+       用户从开场白之后接着聊</div>
+          <div style="color:var(--muted); font-size:11px; margin-top:8px;">
+            同一模板可反复发起、多份并存互不影响——「同一份收藏可以反复发起」的语义原样成立。关闭即弃：销毁 proc + 删中立 ns 文件，模板本体永不被改。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="savebar" style="border-color:var(--border); background:var(--surface); color:var(--muted);">
+      <span class="tag">对照收藏插件</span>
+      收藏发起 = <span class="mono">resume(snapshotId)</span>：读项目 bookmarks 里的快照 → deriveSession → materialize → 跳转激活。
+      AI 导入 = 同一串动作，只换两处：快照来源是<b style="color:var(--fg)">内核插件的分发资产</b>（不是用户收藏），派生出的会话带 <b style="color:var(--fg)">ephemeral 标</b>（不进列表、关走即弃）。不复用收藏插件的存储/面板/元数据。
+    </div>
+  </div>
+</div>
+
+<!-- ================= 屏 3:派生出的导入会话 ================= -->
+<div class="screen">
+  <div class="screenhead"><span class="no">屏 3</span><h2>主页 · 派生出的「模型导入助手」会话</h2><span class="desc">前两条消息 = 模板预制内容（seed 进内核，AI 天然带着教程上下文）；产出块只留「复制」，无联动</span></div>
+  <div class="titlebar">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="title">主页</span>
+  </div>
+
+  <div class="chatscreen">
+    <div class="sidebar">
+      <div class="group">当前项目 · 会话</div>
+      <div class="item">重构登录模块<div class="sub">2 小时前</div></div>
+      <div class="item">修 e2e 超时<div class="sub">昨天</div></div>
+      <div class="item active" style="border:1px dashed var(--warn);">✦ 模型导入助手<div class="sub">临时 · 不在列表持久显示</div></div>
+      <div style="color:var(--muted); font-size:11px; margin-top:10px; padding:0 8px;">ephemeral 会话仅在激活期间可见；关闭/切走即销毁</div>
+    </div>
+
+    <div class="chatmain">
+      <div class="chatheader">
+        <span class="name">✦ 模型导入助手</span>
+        <span class="pill tmp">临时会话 · 关走即弃</span>
+        <span class="pill model">pi · deepseek/deepseek-chat（本内核默认模型）</span>
+        <span style="flex:1"></span>
+        <button class="btn sm">✕ 结束导入</button>
+      </div>
+
+      <div class="banner">⚠ 本会话不写入历史。结果 JSON 点「复制」，到 设置 → 模型 → 导入 粘贴即可（合并语义与手动导入一致）。</div>
+
+      <div class="timeline">
+        <!-- 预制内容:模板快照里带来的两条 -->
+        <div class="msg user">
+          <div class="who" style="text-align:right;">预制教程 <span class="tag" style="margin-left:6px;">来自模板 entry[0] · seed 进内核</span></div>
+          <div class="bubble"><div style="color:var(--muted); font-size:11.5px;">（你是模型配置导入助手…目标格式/追问清单/输出纪律…）</div></div>
+        </div>
+
+        <div class="msg assistant">
+          <div class="who">助手 <span class="tag" style="margin-left:6px;">来自模板 entry[1]（开场白）</span></div>
+          <div class="bubble">
+            <p>把你手头的<b>任何东西</b>粘给我，我来生成 pi 的模型配置：</p>
+            <ul>
+              <li>供应商的 API 文档片段 / 控制台截图文字</li>
+              <li>别的工具导出的 JSON / YAML 配置</li>
+              <li>一句话：「moonshot，key 是 sk-xxx」</li>
+            </ul>
+            <p style="color:var(--muted);">我会补齐 baseUrl / api 类型 / 上下文窗口，缺什么会问你。满意后点「复制」，到 设置 → 模型 → 导入 粘贴。</p>
+          </div>
+        </div>
+
+        <!-- 以下才是本次会话真实产生的 -->
+        <div class="msg user">
+          <div class="who" style="text-align:right;">我</div>
+          <div class="bubble">
+            <div class="paste">智谱 GLM，文档说 base_url 是
+https://open.bigmodel.cn/api/paas/v4
+兼容 OpenAI 格式，key: 7f3a...c92d
+模型 glm-4.6 上下文 200k，glm-4.5-air 便宜量大</div>
+          </div>
+        </div>
+
+        <div class="msg assistant">
+          <div class="who">助手</div>
+          <div class="bubble">
+            <p>glm-4.6 要勾 <span class="mono">reasoning</span> 吗？maxTokens 没写，默认给 8192 可改。</p>
+          </div>
+        </div>
+
+        <div class="msg user">
+          <div class="who" style="text-align:right;">我</div>
+          <div class="bubble">4.6 勾上，maxTokens 都写 32768</div>
+        </div>
+
+        <div class="msg assistant">
+          <div class="who">助手</div>
+          <div class="bubble">
+            <p>新增 1 个供应商 <span class="mono">zhipu</span>（2 个模型）：</p>
+            <div class="codeblock">
+              <div class="codehead">
+                <span class="lang">json</span><span>· 中性 providers 片段</span>
+                <span class="spacer"></span>
+                <button class="btn sm primary">复制<span class="newbadge">唯一动作</span></button>
+              </div>
+              <div class="codebody">[{
+  <span class="k">"id"</span>: <span class="s">"zhipu"</span>,
+  <span class="k">"baseUrl"</span>: <span class="s">"https://open.bigmodel.cn/api/paas/v4"</span>,
+  <span class="k">"api"</span>: <span class="s">"openai-completions"</span>,
+  <span class="k">"apiKey"</span>: <span class="s">"7f3a...c92d"</span>,
+  <span class="k">"models"</span>: [
+    { <span class="k">"id"</span>: <span class="s">"glm-4.6"</span>, <span class="k">"reasoning"</span>: <span class="n">true</span>, <span class="k">"contextWindow"</span>: <span class="n">200000</span>, <span class="k">"maxTokens"</span>: <span class="n">32768</span> },
+    { <span class="k">"id"</span>: <span class="s">"glm-4.5-air"</span>, <span class="k">"contextWindow"</span>: <span class="n">200000</span>, <span class="k">"maxTokens"</span>: <span class="n">32768</span> }
+  ]
+}]</div>
+            </div>
+            <p style="color:var(--muted); margin-top:8px;">要调整就说一声，我出新版本。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer">
+        <div class="box">继续说点什么…（多轮修改照常）</div>
+        <div class="row">
+          <span class="hint">「只读模式」= 会话不持久（ephemeral、不进历史）；对话照常</span>
+          <span style="flex:1"></span>
+          <button class="btn primary">发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 屏 4:既有导入弹窗,零改动 ================= -->
+<div class="screen">
+  <div class="screenhead"><span class="no">屏 4</span><h2>回到设置页 ·「导入」弹窗 —— 既有功能，零改动</h2><span class="desc">粘贴 → 确认 → dirty → 复核/测试 → 框架保存浮层 → 各内核 saveConfig</span></div>
+  <div class="titlebar">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="title">设置 · PI 入口 · 模型 · 导入</span>
+  </div>
+
+  <div class="modalwrap">
+    <div class="modal">
+      <div class="modalhead">
+        <h3>导入模型配置</h3>
+        <span style="flex:1"></span>
+        <button class="btn sm">✕</button>
+      </div>
+      <div class="modalbody">
+        <div style="color:var(--muted); font-size:11.5px; margin-bottom:8px;">粘贴 JSON（单个 provider 或数组；同 id 覆盖、新 id 追加）：</div>
+        <div class="textarea">[{ "id": "zhipu", "baseUrl": "https://open.bigmodel.cn/api/paas/v4", "api": "openai-completions", "apiKey": "7f3a...c92d", "models": [ { "id": "glm-4.6", "reasoning": true, ... } ] }]</div>
+      </div>
+      <div class="modalfoot">
+        <span class="hint">从 AI 导入会话「复制」来的 JSON 直接贴这里 —— 与手动粘贴完全同一条路径</span>
+        <span style="flex:1"></span>
+        <button class="btn">取消</button>
+        <button class="btn primary">确认导入</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page" style="padding-top:12px;">
+    <div class="savebar">
+      <span class="tag" style="border-color:var(--warn); color:var(--warn);">未保存</span>
+      确认后进入既有 dirty 流程：可手改、点「测试」验连通，保存浮层落盘（pi 写 models.json / dsh 写 settings.yaml + 凭证库）。
+      <span style="flex:1"></span>
+      <button class="btn">放弃</button>
+      <button class="btn primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 图集 ================= -->
+<div class="screen">
+  <div class="screenhead"><span class="no">图 1</span><h2>端到端主流程（三段泳道）</h2><span class="desc">蓝框 = 本功能唯一新增的机制段；灰框 = 既有能力零改动；菱形 = 分支</span></div>
+  <div class="svgwrap">
+    <svg viewBox="0 0 980 1300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#7a828c"/></marker>
+        <marker id="ahb1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#6c8cff"/></marker>
+      </defs>
+      <g marker-end="url(#ah1)">
+        <!-- 图例 -->
+        <rect x="60" y="14" width="16" height="10" class="nw"/><text x="82" y="23" class="sm">新增</text>
+        <rect x="140" y="14" width="16" height="10" class="nb"/><text x="162" y="23" class="sm">既有 · 零改动</text>
+        <polygon points="270,14 282,19 270,24 258,19" class="dc"/><text x="290" y="23" class="sm">分支</text>
+
+        <!-- Band 1 -->
+        <rect x="40" y="50" width="900" height="580" class="band"/>
+        <text x="56" y="74" class="cap">阶段① 派生临时会话 —— 唯一新增的机制段（与收藏发起 resume() 同一条通道）</text>
+
+        <rect x="250" y="90" width="300" height="42" class="nb"/>
+        <text x="400" y="116" text-anchor="middle">用户点「✦ AI 导入」（模型 TAB · renderer）</text>
+        <path class="aw" d="M400,132 V156"/>
+
+        <polygon points="400,158 550,196 400,234 250,196" class="dc"/>
+        <text x="400" y="192" text-anchor="middle">有默认模型？</text>
+        <text x="400" y="208" text-anchor="middle" class="mn">kernelModels[k].getDefault()</text>
+        <path class="aw" d="M550,196 H636"/>
+        <text x="580" y="188" class="sm">无</text>
+        <rect x="640" y="172" width="270" height="48" class="gy"/>
+        <text x="775" y="192" text-anchor="middle">按钮置灰 + tooltip</text>
+        <text x="775" y="208" text-anchor="middle" class="sm">「请先设置默认模型」（点前即灰）</text>
+        <path class="aw" d="M400,234 V266"/>
+        <text x="412" y="254" class="sm">有</text>
+
+        <rect x="225" y="268" width="350" height="48" class="nw"/>
+        <text x="400" y="288" text-anchor="middle">读本内核模板快照 entries（预制上下文）</text>
+        <text x="400" y="306" text-anchor="middle" class="mn">kernels/&lt;id&gt;/assistant/model-import.snapshot.json · 只读</text>
+        <path class="awb" d="M400,316 V342" marker-end="url(#ahb1)"/>
+
+        <rect x="225" y="344" width="350" height="52" class="nw"/>
+        <text x="400" y="364" text-anchor="middle" class="mn">deriveSession(entries, kernel, ephemeral)</text>
+        <text x="400" y="382" text-anchor="middle" class="sm">纯中立写 · 零内核交互 · 瞬时</text>
+        <path class="awd" d="M575,370 H636"/>
+        <rect x="640" y="344" width="290" height="56" class="gy"/>
+        <text x="785" y="364" text-anchor="middle" class="mn">~/.my-harness-desktop/sessions/&lt;ns&gt;.json</text>
+        <text x="785" y="382" text-anchor="middle" class="sm">header 带 ephemeral 标 → 不进会话列表</text>
+        <path class="awb" d="M400,396 V422" marker-end="url(#ahb1)"/>
+
+        <rect x="225" y="424" width="350" height="44" class="nb"/>
+        <text x="400" y="442" text-anchor="middle">materializeSession —— 唯一物化通道</text>
+        <text x="400" y="458" text-anchor="middle" class="sm">bookmark-snapshot-fork-unify §2.3</text>
+        <path class="aw" d="M330,468 V480 H265 V494"/>
+        <path class="aw" d="M470,468 V480 H555 V494"/>
+        <rect x="140" y="496" width="250" height="46" class="nb"/>
+        <text x="265" y="514" text-anchor="middle">pi：seed = 写 JSONL 文件</text>
+        <text x="265" y="530" text-anchor="middle" class="sm">不依赖活进程 · 先 seed 再 spawn</text>
+        <rect x="430" y="496" width="250" height="46" class="nb"/>
+        <text x="555" y="514" text-anchor="middle">dsh：seed = session/seed RPC</text>
+        <text x="555" y="530" text-anchor="middle" class="sm">依赖进程 · create→start→seed</text>
+        <path class="aw" d="M265,542 V554 H370 V564"/>
+        <path class="aw" d="M555,542 V554 H430 V564"/>
+
+        <rect x="250" y="566" width="300" height="44" class="nb"/>
+        <text x="400" y="584" text-anchor="middle">start proc（以默认模型 spawn）</text>
+        <text x="400" y="600" text-anchor="middle" class="sm">→ 跳转主页 · 激活会话 · 基线从中立层出</text>
+        <path class="aw" d="M400,610 V640 H400 V688"/>
+
+        <!-- Band 2 -->
+        <rect x="40" y="650" width="900" height="230" class="band"/>
+        <text x="56" y="674" class="cap">阶段② 多轮对话 —— 全部既有通道（零新增）</text>
+
+        <rect x="225" y="690" width="350" height="44" class="nb"/>
+        <text x="400" y="708" text-anchor="middle">用户粘贴任意内容</text>
+        <text x="400" y="724" text-anchor="middle" class="sm">API 文档片段 / 别家工具 JSON / 一句话描述</text>
+        <path class="aw" d="M400,734 V754"/>
+
+        <rect x="225" y="756" width="350" height="48" class="nb"/>
+        <text x="400" y="776" text-anchor="middle">助手追问 → 产出配置 ⇄ 多轮修改</text>
+        <text x="400" y="792" text-anchor="middle" class="sm">sendMessage 既有通道；教程已随 seed 在内核上下文里</text>
+        <path class="aw" d="M400,804 V818"/>
+
+        <rect x="225" y="820" width="350" height="40" class="nb"/>
+        <text x="400" y="837" text-anchor="middle">产出 ```json 块 → 点「复制」</text>
+        <text x="400" y="852" text-anchor="middle" class="sm">既有代码块能力 · 唯一动作 · 无联动</text>
+        <path class="awd" d="M575,840 H860 V962 H579"/>
+        <text x="640" y="834" class="sm">人工搬运（剪贴板）</text>
+
+        <!-- Band 3 -->
+        <rect x="40" y="900" width="900" height="290" class="band"/>
+        <text x="56" y="924" class="cap">阶段③ 手动导入落盘 —— 既有功能（零改动）</text>
+
+        <rect x="225" y="940" width="350" height="48" class="nb"/>
+        <text x="400" y="960" text-anchor="middle">设置 → 模型 → 导入 → 粘贴 → 确认导入</text>
+        <text x="400" y="976" text-anchor="middle" class="sm">既有弹窗 · 合并语义：同 id 覆盖 / 新 id 追加</text>
+        <path class="aw" d="M400,988 V1008"/>
+
+        <rect x="225" y="1010" width="350" height="44" class="nb"/>
+        <text x="400" y="1028" text-anchor="middle">onChange → dirty（纯 renderer · 不出进程）</text>
+        <text x="400" y="1044" text-anchor="middle" class="sm">可继续手改 / 点「测试」验连通（起临时 proc ping）</text>
+        <path class="aw" d="M400,1054 V1074"/>
+
+        <rect x="225" y="1076" width="350" height="44" class="nb"/>
+        <text x="400" y="1094" text-anchor="middle">保存浮层 → kernelModels[k].saveConfig(cfg)</text>
+        <text x="400" y="1110" text-anchor="middle" class="sm">既有 IPC · 各内核适配器翻译</text>
+        <path class="aw" d="M330,1120 V1130 H265 V1138"/>
+        <path class="aw" d="M470,1120 V1130 H555 V1138"/>
+        <rect x="140" y="1140" width="250" height="44" class="nb"/>
+        <text x="265" y="1158" text-anchor="middle">pi：models.json + settings.json</text>
+        <text x="265" y="1174" text-anchor="middle" class="sm">apiKey 内联 · default 两文件都写</text>
+        <rect x="430" y="1140" width="250" height="44" class="nb"/>
+        <text x="555" y="1158" text-anchor="middle">dsh：settings.yaml + 凭证库</text>
+        <text x="555" y="1174" text-anchor="middle" class="sm">apiKey 进 .credentials.yaml · reasoningEfforts</text>
+
+        <!-- 销毁 bar -->
+        <rect x="40" y="1210" width="900" height="64" class="gy"/>
+        <text x="490" y="1236" text-anchor="middle">任意时刻可发生：✕ 结束导入 / 切走 / 关应用 → 销毁 ephemeral 会话</text>
+        <text x="490" y="1256" text-anchor="middle" class="sm">stop proc + 删 &lt;ns&gt;.json + 内核侧临时投影清理 · 模板资产永不变 · 可再派生任意多份</text>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<div class="screen">
+  <div class="screenhead"><span class="no">图 2</span><h2>三个内容来源，一条派生通道</h2><span class="desc">对位 bookmark-snapshot-fork-unify.md §3.1：AI 导入只是第三个内容来源，通道零新增</span></div>
+  <div class="svgwrap">
+    <svg viewBox="0 0 980 540" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#7a828c"/></marker>
+      </defs>
+      <g marker-end="url(#ah2)">
+        <rect x="45" y="40" width="270" height="100" class="nb"/>
+        <text x="180" y="64" text-anchor="middle" class="hd">① fork</text>
+        <text x="180" y="86" text-anchor="middle" class="sm">现场沿中立树截前缀</text>
+        <text x="180" y="104" text-anchor="middle" class="mn">materializeLineagePrefix</text>
+        <text x="180" y="126" text-anchor="middle" class="sm">素材：源会话的当下</text>
+
+        <rect x="355" y="40" width="270" height="100" class="nb"/>
+        <text x="490" y="64" text-anchor="middle" class="hd">② 收藏发起 resume(snapshotId)</text>
+        <text x="490" y="86" text-anchor="middle" class="sm">读预存快照（用户冻的）</text>
+        <text x="490" y="104" text-anchor="middle" class="mn">&lt;cwd&gt;/.my-harness-desktop/bookmarks/&lt;id&gt;.json</text>
+        <text x="490" y="126" text-anchor="middle" class="sm">素材：任意历史节点前缀</text>
+
+        <rect x="665" y="40" width="270" height="100" class="nw"/>
+        <text x="800" y="64" text-anchor="middle" class="hd">③ AI 导入（本设计 · NEW）</text>
+        <text x="800" y="86" text-anchor="middle" class="sm">读分发模板快照（预制的）</text>
+        <text x="800" y="104" text-anchor="middle" class="mn">kernels/&lt;id&gt;/assistant/model-import.snapshot.json</text>
+        <text x="800" y="126" text-anchor="middle" class="sm">素材：教程 entry + 开场白 entry</text>
+
+        <path class="aw" d="M180,140 V175 H390 V206"/>
+        <path class="aw" d="M490,140 V206"/>
+        <path class="aw" d="M800,140 V175 H590 V206"/>
+
+        <rect x="290" y="210" width="400" height="56" class="nb"/>
+        <text x="490" y="232" text-anchor="middle" class="hd">deriveSession —— 纯中立派生（复制 entries → 新 ns）</text>
+        <text x="490" y="250" text-anchor="middle" class="sm">①②③ 唯一差别：③ 传 ephemeral:true</text>
+        <path class="aw" d="M490,266 V294"/>
+
+        <rect x="290" y="296" width="400" height="48" class="nb"/>
+        <text x="490" y="316" text-anchor="middle" class="hd">materializeSession —— 唯一物化通道（§2.3）</text>
+        <text x="490" y="332" text-anchor="middle" class="sm">任意中立会话 → 内核会话，必经此处，不许第二实现</text>
+
+        <path class="aw" d="M390,344 V362 H275 V380"/>
+        <path class="aw" d="M590,344 V362 H705 V380"/>
+        <rect x="140" y="382" width="270" height="52" class="nb"/>
+        <text x="275" y="402" text-anchor="middle">pi：seed = 写 JSONL 文件</text>
+        <text x="275" y="420" text-anchor="middle" class="sm">预 seed 得路径 → 以该路径 spawn</text>
+        <rect x="570" y="382" width="270" height="52" class="nb"/>
+        <text x="705" y="402" text-anchor="middle">dsh：seed = session/seed RPC</text>
+        <text x="705" y="420" text-anchor="middle" class="sm">create → start → backend.seed</text>
+
+        <rect x="45" y="460" width="890" height="52" class="gy"/>
+        <text x="490" y="482" text-anchor="middle">产物差异只在 ephemeral 标：①② 新会话进列表（fork / 收藏语义）· ③ 不进列表、关走即弃</text>
+        <text x="490" y="500" text-anchor="middle" class="sm">「两个入口、一条通道」约束（§2.4）扩成三个内容来源，仍是一条通道 —— 代码里出现第二套派生逻辑即违规</text>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<div class="screen">
+  <div class="screenhead"><span class="no">图 3</span><h2>时序图：从点击到落盘到销毁</h2><span class="desc">蓝色 = 新增 IPC / 动作；其余全部既有。opt 框 = 销毁协议（✕ 结束 / 切走 / 关应用）</span></div>
+  <div class="svgwrap">
+    <svg viewBox="0 0 1080 1000" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#7a828c"/></marker>
+        <marker id="ahb3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#6c8cff"/></marker>
+      </defs>
+      <!-- 头 -->
+      <rect x="15" y="36" width="130" height="40" class="nb"/><text x="80" y="60" text-anchor="middle" class="hd">用户</text>
+      <rect x="165" y="36" width="170" height="40" class="nb"/><text x="250" y="54" text-anchor="middle" class="hd">模型 TAB / 主页</text><text x="250" y="70" text-anchor="middle" class="sm">renderer + 插件</text>
+      <rect x="365" y="36" width="170" height="40" class="nb"/><text x="450" y="60" text-anchor="middle" class="hd">gateway · controllers</text>
+      <rect x="555" y="36" width="170" height="40" class="nb"/><text x="640" y="60" text-anchor="middle" class="hd">session-store</text>
+      <rect x="735" y="36" width="150" height="40" class="nb"/><text x="810" y="60" text-anchor="middle" class="hd">中立层 · 文件</text>
+      <rect x="905" y="36" width="160" height="40" class="nb"/><text x="990" y="54" text-anchor="middle" class="hd">内核侧</text><text x="990" y="70" text-anchor="middle" class="sm">proc / 配置文件</text>
+      <!-- 生命线 -->
+      <path class="ll" d="M80,76 V950"/><path class="ll" d="M250,76 V950"/><path class="ll" d="M450,76 V950"/><path class="ll" d="M640,76 V950"/><path class="ll" d="M810,76 V950"/><path class="ll" d="M990,76 V950"/>
+
+      <g marker-end="url(#ah3)">
+        <path class="aw" d="M80,110 H246"/><text x="90" y="104" class="sm">点「✦ AI 导入」</text>
+        <path class="aw" d="M250,145 H446"/><text x="258" y="139" class="sm">kernelModels.getDefault(k)【既有 IPC】</text>
+        <path class="aw" d="M450,175 H636"/><text x="458" y="169" class="sm">modelsApi(k).getDefault()</text>
+        <path class="awd" d="M640,205 H254"/><text x="330" y="199" class="sm">默认模型 / null（null → 按钮置灰，流程终止）</text>
+
+        <path class="awb" d="M250,250 H446" marker-end="url(#ahb3)"/><text x="258" y="244" class="sm">session.importAssist.start(k)【新 IPC】</text>
+        <path class="awb" d="M450,282 H636" marker-end="url(#ahb3)"/><text x="458" y="276" class="sm">createImportSession(kernel)</text>
+        <rect x="646" y="300" width="150" height="26" class="nw"/><text x="721" y="317" text-anchor="middle" class="sm">读模板快照（只读资产）</text>
+        <path class="awb" d="M640,356 H806" marker-end="url(#ahb3)"/><text x="648" y="350" class="sm">deriveSession 写 &lt;ns&gt;.json（ephemeral）</text>
+        <path class="awb" d="M640,392 H986" marker-end="url(#ahb3)"/><text x="648" y="386" class="sm">start proc + seed 投影（materializeSession）</text>
+        <text x="648" y="410" class="sm">pi：预 seed 文件→spawn ／ dsh：start→session/seed RPC</text>
+        <path class="awd" d="M640,442 H254"/><text x="330" y="436" class="sm">返回 newNs → 跳转主页 · 激活会话（基线从中立层出）</text>
+
+        <path class="aw" d="M80,482 H246"/><text x="90" y="476" class="sm">粘贴内容 / 多轮对话</text>
+        <path class="aw" d="M250,514 H986"/><text x="450" y="508" class="sm">sendMessage【既有通道 · 经 gateway/session-store】</text>
+        <path class="awd" d="M990,548 H84"/><text x="380" y="542" class="sm">流式事件 → timeline 渲染出 ```json 块【既有】</text>
+        <path class="aw" d="M80,586 H246"/><text x="90" y="580" class="sm">点 json 块「复制」【既有代码块能力】</text>
+
+        <path class="aw" d="M80,626 H246"/><text x="90" y="620" class="sm">设置 → 模型 → 导入 → 粘贴 → 确认导入【既有弹窗】</text>
+        <rect x="256" y="644" width="180" height="26" class="nb"/><text x="346" y="661" text-anchor="middle" class="sm">onChange → dirty（不出进程）</text>
+        <path class="aw" d="M80,702 H246"/><text x="90" y="696" class="sm">点「保存」（浮层）</text>
+        <path class="aw" d="M250,734 H446"/><text x="258" y="728" class="sm">kernelModels.saveConfig(k, cfg)【既有 IPC】</text>
+        <path class="aw" d="M450,766 H986"/><text x="458" y="760" class="sm">适配器翻译落盘：pi → models.json+settings.json ／ dsh → settings.yaml+凭证库</text>
+        <path class="awd" d="M450,812 H254"/><text x="258" y="806" class="sm">广播 configFileSaved(kind=kernelModels) / refreshRequested → 模型清单重探【既有】</text>
+
+        <!-- opt 销毁 -->
+        <rect x="50" y="840" width="990" height="104" class="frame"/>
+        <text x="66" y="862" class="sm">opt［用户点 ✕ 结束导入 ／ 切走 ／ 关应用］</text>
+        <path class="awb" d="M250,892 H636" marker-end="url(#ahb3)"/><text x="330" y="886" class="sm">destroyImportSession(ns)【新】</text>
+        <path class="awb" d="M640,922 H986" marker-end="url(#ahb3)"/><text x="648" y="916" class="sm">stop proc + 内核侧临时投影清理</text>
+        <path class="awb" d="M640,938 H806" marker-end="url(#ahb3)"/><text x="660" y="936" class="sm"></text>
+        <text x="820" y="936" class="sm">删 &lt;ns&gt;.json</text>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<div class="screen">
+  <div class="screenhead"><span class="no">图 4</span><h2>分层落点：每层改什么、不改什么</h2><span class="desc">依赖只向内（左侧箭头）；★ = 本功能唯一新增集中在内容层资产 + application 编排 + 一个 IPC 面</span></div>
+  <div class="svgwrap">
+    <svg viewBox="0 0 980 600" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#4a515a"/></marker>
+      </defs>
+      <path class="awd" d="M34,52 V492" marker-end="url(#ah4)"/>
+      <text x="26" y="300" class="sm" transform="rotate(-90 26 300)" text-anchor="middle">依赖只向内</text>
+
+      <rect x="60" y="40" width="560" height="56" class="nw"/>
+      <text x="80" y="64">内核插件 · 内容层</text>
+      <text x="80" y="82" class="sm">src/plugins/kernels/{pi,dsh}/assistant/model-import.snapshot.json —— 模板快照（教程+开场白 entries）</text>
+      <rect x="650" y="40" width="280" height="56" class="nw"/>
+      <text x="790" y="64" text-anchor="middle">★ 新增资产</text>
+      <text x="790" y="82" text-anchor="middle" class="sm">每内核一份 · 随插件分发 · 只读</text>
+
+      <rect x="60" y="108" width="560" height="56" class="nb"/>
+      <text x="80" y="132">共享 base · 发布面（packages/react）</text>
+      <text x="80" y="150" class="sm">ModelConfigPage —— 「✦ AI 导入」按钮 + getDefault 禁用逻辑</text>
+      <rect x="650" y="108" width="280" height="56" class="nb"/>
+      <text x="790" y="132" text-anchor="middle">小改</text>
+      <text x="790" y="150" text-anchor="middle" class="sm">pi/dsh 两 wrapper 自动获得（同一 base）</text>
+
+      <rect x="60" y="176" width="560" height="56" class="nb"/>
+      <text x="80" y="200">壳前端 · renderer（src/web）</text>
+      <text x="80" y="218" class="sm">settings-page / ui-store / timeline —— 跳转 · 激活 · ephemeral 会话呈现与过滤</text>
+      <rect x="650" y="176" width="280" height="56" class="nb"/>
+      <text x="790" y="200" text-anchor="middle">复用既有 + 小改</text>
+      <text x="790" y="218" text-anchor="middle" class="sm">列表按 header.ephemeral 过滤（一处判据）</text>
+
+      <rect x="60" y="244" width="560" height="56" class="nw"/>
+      <text x="80" y="268">用例编排 · application（session-store）</text>
+      <text x="80" y="286" class="sm">createImportSession + deriveSession 加 ephemeral 标 + 销毁协议（stop/删档/清投影）</text>
+      <rect x="650" y="244" width="280" height="56" class="nw"/>
+      <text x="790" y="268" text-anchor="middle">★ 新增 + ephemeral 标</text>
+      <text x="790" y="286" text-anchor="middle" class="sm">派生/物化通道复用，零第二实现</text>
+
+      <rect x="60" y="312" width="560" height="56" class="nw"/>
+      <text x="80" y="336">网关 · controllers</text>
+      <text x="80" y="354" class="sm">session.importAssist.start / stop —— 新 IPC 面（channel-contract 登记）</text>
+      <rect x="650" y="312" width="280" height="56" class="nw"/>
+      <text x="790" y="336" text-anchor="middle">★ 新增 IPC</text>
+      <text x="790" y="354" text-anchor="middle" class="sm">两个方法，无内核身份参数分支</text>
+
+      <rect x="60" y="380" width="560" height="56" class="nb"/>
+      <text x="80" y="404">内核层 · 适配器（src/server/kernel/{pi,dsh}）</text>
+      <text x="80" y="422" class="sm">seed 投影 · saveConfig 翻译（models.json / settings.yaml+凭证库）—— 本功能视角落盘差异全在这层已有代码里</text>
+      <rect x="650" y="380" width="280" height="56" class="nb"/>
+      <text x="790" y="408" text-anchor="middle">零改动</text>
+
+      <rect x="60" y="448" width="560" height="56" class="nb"/>
+      <text x="80" y="472">圆心 · domain（packages/shared）</text>
+      <text x="80" y="490" class="sm">NeutralEntry · BaseBackend.seed · KernelModelsApi 原样；中立 header 类型加可选 ephemeral?: boolean</text>
+      <rect x="650" y="448" width="280" height="56" class="nb"/>
+      <text x="790" y="472" text-anchor="middle">微改</text>
+      <text x="790" y="490" text-anchor="middle" class="sm">一个可选字段，向后兼容</text>
+
+      <rect x="60" y="530" width="16" height="10" class="nw"/><text x="82" y="539" class="sm">★ 蓝 = 新增</text>
+      <rect x="200" y="530" width="16" height="10" class="nb"/><text x="222" y="539" class="sm">灰 = 既有（标注改动量）</text>
+      <text x="430" y="539" class="sm">加第四个内核 = 只加第一行的一份模板资产，其余层零改动</text>
+    </svg>
+  </div>
+</div>
+
+<div class="screen">
+  <div class="screenhead"><span class="no">图 5</span><h2>ephemeral 会话生命周期（状态机）</h2><span class="desc">模板只读是贯穿不变量；多份实例并存互不影响；失败路径即弃即清</span></div>
+  <div class="svgwrap">
+    <svg viewBox="0 0 980 470" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah5" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#7a828c"/></marker>
+        <marker id="ahb5" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#6c8cff"/></marker>
+      </defs>
+      <g marker-end="url(#ah5)">
+        <!-- 叠影表示多份并存 -->
+        <rect x="544" y="180" width="190" height="80" rx="10" class="nb" style="opacity:.35"/>
+        <rect x="537" y="185" width="190" height="80" rx="10" class="nb" style="opacity:.6"/>
+
+        <rect x="50" y="200" width="150" height="60" rx="10" class="nb"/>
+        <text x="125" y="226" text-anchor="middle">无导入会话</text>
+        <text x="125" y="244" text-anchor="middle" class="sm">模板 = 只读资产</text>
+
+        <rect x="280" y="200" width="160" height="60" rx="10" class="nw"/>
+        <text x="360" y="226" text-anchor="middle">派生中</text>
+        <text x="360" y="244" text-anchor="middle" class="sm">derive + seed + spawn</text>
+
+        <rect x="530" y="190" width="190" height="80" rx="10" class="nb"/>
+        <text x="625" y="218" text-anchor="middle">活跃 · 对话中</text>
+        <text x="625" y="236" text-anchor="middle" class="sm">ephemeral · 不进列表</text>
+        <text x="625" y="252" text-anchor="middle" class="sm">可多份并存（叠影）</text>
+
+        <rect x="800" y="200" width="140" height="60" rx="10" class="nb"/>
+        <text x="870" y="226" text-anchor="middle">已销毁</text>
+        <text x="870" y="244" text-anchor="middle" class="sm">stop + 删档 + 清投影</text>
+
+        <path class="aw" d="M200,230 H276"/><text x="238" y="220" text-anchor="middle" class="sm">点 ✦ AI 导入</text>
+        <path class="aw" d="M440,230 H526"/><text x="483" y="220" text-anchor="middle" class="sm">seed 完成 · 跳转激活</text>
+        <path class="aw" d="M580,190 C560,142 700,142 676,186"/><text x="628" y="140" text-anchor="middle" class="sm">多轮对话 / 复制 json（既有通道）</text>
+        <path class="aw" d="M720,230 H796"/><text x="758" y="220" text-anchor="middle" class="sm">✕ 结束 / 切走 / 关应用</text>
+
+        <path class="awd" d="M360,260 V302 H858 V264"/>
+        <text x="600" y="296" text-anchor="middle" class="sm">派生 / seed 失败 → 即弃即清 + 显式报错（不静默）</text>
+
+        <path class="aw" d="M870,260 V344 H125 V264"/>
+        <text x="490" y="338" text-anchor="middle" class="sm">清理完成 → 可再派生任意多份（模板永不变，每次都是全新副本）</text>
+
+        <rect x="50" y="382" width="880" height="56" class="gy"/>
+        <text x="490" y="404" text-anchor="middle">不变量：模板快照永远只读，状态机任何迁移都不写它；每份活跃实例彼此独立（A 会话结束不影响 B）</text>
+        <text x="490" y="422" text-anchor="middle" class="sm">待拍板：「切走」是即销毁还是保留到显式 ✕（Q2/Q3）—— 图中画的是保留到显式结束</text>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<div class="screen">
+  <div class="screenhead"><span class="no">图 6</span><h2>数据结构对照：模板快照 vs 收藏快照 vs 派生产物</h2><span class="desc">三者共用同一个 NeutralEntry[] 圆心类型 —— 模板只是"预制好 entries 的快照"，形状与收藏快照同族</span></div>
+  <div class="svgwrap">
+    <svg viewBox="0 0 980 480" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah6" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L8,4.5 L0,9 z" fill="#7a828c"/></marker>
+      </defs>
+      <g marker-end="url(#ah6)">
+        <rect x="40" y="40" width="290" height="270" class="nb"/>
+        <text x="185" y="64" text-anchor="middle" class="hd">BookmarkSnapshot（既有）</text>
+        <text x="185" y="82" text-anchor="middle" class="sm">bookmarks/&lt;id&gt;.json · 项目级 · 用户冻的</text>
+        <text x="56" y="110" class="mn">{ sourceNeutralSessionId,</text>
+        <text x="56" y="128" class="mn">  boundaryEntryId,</text>
+        <text x="56" y="146" class="mn">  sourceKernel,</text>
+        <text x="56" y="164" class="mn">  label, preview,</text>
+        <text x="56" y="182" class="mn">  lineage: {</text>
+        <text x="56" y="200" class="mn">    entries: NeutralEntry[]</text>
+        <text x="56" y="218" class="mn">  } }</text>
+        <text x="185" y="252" text-anchor="middle" class="sm">发起 = resume(snapshotId)</text>
+        <text x="185" y="270" text-anchor="middle" class="sm">label/排序另存 ctx.config（项目级）</text>
+
+        <rect x="355" y="40" width="290" height="270" class="nw"/>
+        <text x="500" y="64" text-anchor="middle" class="hd">model-import.snapshot.json（新）</text>
+        <text x="500" y="82" text-anchor="middle" class="sm">kernels/&lt;id&gt;/assistant/ · 分发资产 · 预制</text>
+        <text x="371" y="110" class="mn">{ kernel: "pi",</text>
+        <text x="371" y="128" class="mn">  id: "model-import",</text>
+        <text x="371" y="146" class="mn">  version: 1,</text>
+        <text x="371" y="164" class="mn">  entries: [</text>
+        <text x="371" y="182" class="mn">    {role:"user", …教程},   // [0]</text>
+        <text x="371" y="200" class="mn">    {role:"assistant", …开场白} // [1]</text>
+        <text x="371" y="218" class="mn">  ] }</text>
+        <text x="500" y="252" text-anchor="middle" class="sm">发起 = createImportSession(kernel)</text>
+        <text x="500" y="270" text-anchor="middle" class="sm">只读 · 永不回写 · 教程写本内核落盘差异</text>
+
+        <rect x="670" y="40" width="290" height="270" class="nb"/>
+        <text x="815" y="64" text-anchor="middle" class="hd">NeutralSession（既有 + 标）</text>
+        <text x="815" y="82" text-anchor="middle" class="sm">sessions/&lt;ns&gt;.json · 全局 · deriveSession 产物</text>
+        <text x="686" y="110" class="mn">{ header: {</text>
+        <text x="686" y="128" class="mn">    cwd, kernel,</text>
+        <text x="686" y="146" class="mn">    name: "✦ 模型导入助手",</text>
+        <text x="686" y="164" class="mn" style="fill:#6c8cff">    ephemeral: true,  // ★ 新</text>
+        <text x="686" y="182" class="mn">    custom: { modelPrefs }</text>
+        <text x="686" y="200" class="mn">  },</text>
+        <text x="686" y="218" class="mn">  lineages: [ { entries } ] }</text>
+        <text x="815" y="252" text-anchor="middle" class="sm">列表按 header.ephemeral 过滤</text>
+        <text x="815" y="270" text-anchor="middle" class="sm">销毁 = 删此文件 + 清内核侧投影</text>
+
+        <path class="aw" d="M185,310 V346"/>
+        <path class="aw" d="M500,310 V346"/>
+        <path class="aw" d="M815,310 V346"/>
+
+        <rect x="40" y="350" width="920" height="86" class="gy"/>
+        <text x="500" y="376" text-anchor="middle" class="hd">NeutralEntry —— 三者共用的圆心类型（packages/shared · 零改动）</text>
+        <text x="500" y="398" text-anchor="middle" class="mn">{ neutralEntryId, kernelEntryId?, message: { id, role, content }, display? }</text>
+        <text x="500" y="420" text-anchor="middle" class="sm">seed 投影的素材 · 中立坐标 {lineageId}:{seq} · 跨内核同一份 entries（pi JSONL / dsh RPC 各自翻译）</text>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<!-- ================= 机制注释 ================= -->
+<div class="notes">
+  <h2>机制草图 v3（按收藏插件的思路：模板快照 → 每次派生一份）</h2>
+
+  <h3>v2 → v3 的纠偏</h3>
+  <p><span class="strike">v2 把「收藏」理解成"把 AI 产出存成草稿卡片"</span>——理解错了。
+     v3 对齐收藏插件（session-bookmarks）的<b>机制</b>：收藏 = 自包含快照（<span class="mono">BookmarkSnapshot.lineage.entries = NeutralEntry[]</span>），
+     发起 = <span class="mono">resume(snapshotId)</span> → deriveSession（复制出新会话）→ materializeSession（seed 投影进内核）→ 跳转激活。
+     AI 导入就是<b>同一串动作换内容来源</b>：快照不是用户收藏的，是内核插件预制的分发资产（教程 + 开场白已经躺在 entries 里）。</p>
+
+  <h3>与 bookmark-snapshot-fork-unify.md 的对位</h3>
+  <table>
+    <tr><th></th><th>fork</th><th>收藏发起 (resume)</th><th>AI 导入（本设计）</th></tr>
+    <tr><td>内容来源</td><td>现场沿中立树截前缀</td><td>读项目 bookmarks/&lt;id&gt;.json（用户预存）</td><td>读内核插件分发的模板快照（预制预置）</td></tr>
+    <tr><td>派生通道</td><td colspan="3" style="text-align:center;">同一个 deriveSession → materializeSession → seed（约束 §2.3/§2.4，零新通道）</td></tr>
+    <tr><td>产物</td><td>新会话，进列表</td><td>新会话，进列表</td><td>新会话，<b>ephemeral：不进列表、关走即弃</b></td></tr>
+    <tr><td>模型</td><td>继承源会话偏好</td><td>继承源偏好/三级解析兜底</td><td>本内核 getDefault()（无则按钮禁用）</td></tr>
+    <tr><td>可重复</td><td>—</td><td>同一收藏反复发起</td><td>同一模板反复派生，多份并存互不影响，模板永不被改</td></tr>
+  </table>
+
+  <h3>「预制上下文」为什么用快照 entries 而不是 system prompt 注入</h3>
+  <ul>
+    <li>教程作为快照里的真实 entry（user 角色）随 seed 物化进内核会话——AI 看到的上下文与用户看到的时间线<b>完全一致</b>（开场白就是 entry[1]，不是壳另画的气泡）。</li>
+    <li>不碰内核 spawn 参数、不发明新的提示注入通道；「不入正常上下文」天然成立：模板只被 AI 导入的派生会话读取，任何正常会话的 seed 内容与它无关。</li>
+    <li>教程按内核各一份（pi/dsh 的落盘差异、字段拼写、追问清单都写在自己的模板里）——内容归内核插件（内容层），派生/物化机制归壳（机制层），加第四个内核 = 加一份快照资产。</li>
+  </ul>
+
+  <h3>无联动（已拍板）</h3>
+  <ul>
+    <li>产出 json 块只有「复制」（代码块复制是既有能力，可能零新增）；<span class="strike">应用按钮/自动跳转/自动合并/草稿收藏卡片</span>全部取消。</li>
+    <li>取用路径完全手动且全部走既有功能：复制 → 设置 → 模型 → 导入（既有弹窗、既有合并语义）→ dirty → 保存浮层 → saveConfig。AI 导入功能自身<b>不新增任何落盘通道</b>。</li>
+    <li>apiKey：不做过滤（v2 的过滤决定随草稿卡片一起作废）——JSON 里带 key、贴进导入弹窗、随保存落盘，与手动导入的既有语义完全一致（pi 内联 / dsh 转凭证库）。</li>
+  </ul>
+
+  <h3>ephemeral（"只读模式"）的落点</h3>
+  <ul>
+    <li>需要给 deriveSession/中立 header 加一个 ephemeral 标：列表过滤掉它；「✕ 结束导入」或切走时销毁（stop proc + 删 <span class="mono">~/.my-harness-desktop/sessions/&lt;ns&gt;.json</span> + 内核侧投影按各内核临时会话语义处理——session-store 已有 <span class="mono">test:</span> 前缀 ephemeral 先例可参照）。</li>
+    <li>对话照常（多轮粘贴/追问/修改）；「只读」指不持久、不进历史，与 v1 读法①一致。</li>
+  </ul>
+
+  <h3 class="q">待拍板</h3>
+  <ul>
+    <li class="q">Q1 模板快照里预制几条 entry：教程(user) + 开场白(assistant) 两条（本稿），还是教程合并进开场白一条？两条的好处是教程全文对用户可见可核对；一条更干净但教程要么藏进 display 要么塞进气泡。</li>
+    <li class="q">Q2 ephemeral 会话在侧栏的呈现：激活期间显示为虚线临时项（本稿），还是完全不显示（只有中区在跑）？</li>
+    <li class="q">Q3 「✕ 结束导入」后若用户再点「✦ AI 导入」：总是派生全新一份（本稿，符合"每次复制一份"），还是若存在未关闭的导入会话则直接跳回它？</li>
+    <li class="q">Q4 教程 entry 的 role 用 user（本稿，seed 语义最顺）还是借中立层 system/自定义 role？涉及各内核 seed 对 role 的接受度，需要设计文档阶段核对。</li>
+  </ul>
+</div>
+
+</body>
+</html>

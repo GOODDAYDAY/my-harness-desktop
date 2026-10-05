@@ -472,7 +472,20 @@ export interface ModelSelectEvent {
 }
 
 export interface CompactionStartEvent { type: "compactionStart"; reason?: string }
-/** 压缩收尾。summary / tokensBefore 是**压缩边界条目的素材**,不是可选装饰:
+/** 压缩收尾。
+ *
+ *  ⚠ **这个事件不必然代表压缩成功**。pi 在取消与失败时同样发它(agent-session.ts):
+ *  扩展 cancel / signal aborted → `result: undefined, aborted: true`;生成摘要的那次模型
+ *  调用抛错 → `result: undefined` + `errorMessage: "Auto-compaction failed: …"`;
+ *  溢出恢复第二次仍失败 → 同样只带 errorMessage。所以消费方**必须先判成败**,
+ *  否则会落一条假边界。实测(真实 502 撞上摘要调用):中间层出现 `divider compaction`,
+ *  而底层内核的 compaction 条目数为 0 —— 内核没压缩,壳却记了一条边界。
+ *  假边界的危害不是显示问题:`assembleSeedProjection` 找到最新边界就 break
+ *  (session-neutral.ts:489),一条无摘要的假边界会**遮蔽更早的真摘要**;同时 UI 谎报
+ *  「上下文已压缩」,用户以为上下文变小了、实际仍是满的 → 继续发 → 真溢出。
+ *  违反 §1.5「不静默、不伪造成功」。
+ *
+ * summary / tokensBefore 是**压缩边界条目的素材**,不是可选装饰:
  *  - tokensBefore → 分隔线文案「上下文已压缩(N tokens)」;
  *  - summary → 分隔线 detail,且是 seed 投影「摘要代身」的唯一输入
  *    (`assembleSeedProjection`:有摘要才截断投影,没有就保守全量回灌)。
@@ -482,6 +495,17 @@ export interface CompactionStartEvent { type: "compactionStart"; reason?: string
 export interface CompactionEndEvent {
   type: "compactionEnd";
   reason?: string;
+  /** 这次压缩**是否真的改变了上下文**(内核产出了摘要与保留起点)。
+   *  命名对齐既有先例 `AutoRetryEndEvent.success`。三态语义,判据在**翻译层**不在消费方:
+   *   · true  = 内核明确成功(pi: `result != null`;dsh: 收到了带文本的 compaction/summary);
+   *   · false = 内核明确取消或失败(pi: `result == null`;dsh: end 事件带 error)→ **不落边界**;
+   *   · 缺省  = 内核没表态(如 minimal 这类只透传的测试内核)→ 消费方按原行为落边界,
+   *             不因新字段而回退既有能力(向后兼容,且缺省绝不意味着"失败")。 */
+  compacted?: boolean;
+  /** 被取消(用户中断 / 扩展 cancel)。与失败分开:取消不是错误,不该报错打扰用户。 */
+  aborted?: boolean;
+  /** 失败原因(内核原文)。有它就该显形(timeline toast),不静默。 */
+  errorMessage?: string;
   /** 本次压缩生成的摘要文本;内核未提供则缺省(壳退回全量投影,不伪造摘要)。 */
   summary?: string;
   /** 压缩前的上下文 token 数;内核未提供则缺省(UI 不显示 token 数,不冒充 0)。 */

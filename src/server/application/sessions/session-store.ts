@@ -3070,16 +3070,28 @@ export class SessionStore implements
     } else if (event.type === "compactionStart") {
       this.busyStates.set(key, true);
     } else if (event.type === "compactionEnd") {
+      // busy 清算与成败无关:压缩结束了(不管成没成)就必须解除 busy,否则 restart-coordinator
+      // 永远认为这个会话在忙、不敢重启它(静默挂死的温床)。
       this.busyStates.set(key, false);
       // 压缩边界条目落中立层(session-single-source §4.1 压缩感知):中立层不靠读内核文件
       // 感知压缩点,靠事件。条目形状与文件读路径同一映射(sessionEntryToNeutral,契约单源);
       // 事件带摘要则记(作 seed 投影的截断代身),不带则只记边界。
+      //
+      // ⚠ **失败/取消的压缩不落边界**(§1.5 不伪造成功)。compacted 三态见圆心契约:
+      //   · false = 内核明确说了没压成(pi: result == null;dsh: end 带 error)→ **跳过**;
+      //   · true / 缺省 = 压成了 或 内核没表态(如 minimal 只透传)→ 照落,不因新字段回退既有能力。
+      // 为什么必须跳过而不是「落一条不带摘要的边界」:无摘要的边界在 assembleSeedProjection 里
+      // 会 break 掉搜索(session-neutral.ts:489)→ **遮蔽更早的真摘要** → 派生会话全量回灌;
+      // 同时 UI 会显示「上下文已压缩」,用户以为上下文变小了、实际仍是满的 → 继续发 → 真溢出。
+      // 实测现场(真实 502 撞上摘要生成调用):中间层有 divider compaction、底层内核 compaction
+      // 条目为 0 —— 内核根本没压缩。锚点:e2e compaction-overflow-rewind Phase C(「失败压缩不留假边界」那条断言)。
+      //
       // summary/tokensBefore 是圆心契约 CompactionEndEvent 声明的字段(narrowing 后即类型可见),
       // 由两内核的协议翻译层负责填(pi 从 result.* 平铺、dsh 从 compaction/summary 缓冲合并)——
-      // 此处不再 cast 猜内核形状(此前 `event as { summary?: unknown }` 读的是顶层,而 pi 真实
-      // 事件把摘要嵌在 result 下 → 永远读不到 → 分隔线无 detail → seed 投影的「摘要代身」
-      // 在生产里从未生效,一律保守全量回灌。实测锚点:e2e compaction-rewind ⑰⑱)。
-      if (proc) {
+      // 此处不 cast 猜内核形状(此前 `event as { summary?: unknown }` 读的是顶层,而 pi 真实
+      // 事件把摘要嵌在 result 下 → 永远读不到 → 分隔线无 detail → 「摘要代身」在生产里
+      // 从未生效,一律保守全量回灌。实测锚点:e2e compaction-rewind「分隔线带摘要 detail / 带 tokens」两条断言)。
+      if (proc && event.compacted !== false) {
         const synthetic = sessionEntryToNeutral({
           type: "compaction",
           id: `comp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -3088,6 +3100,11 @@ export class SessionStore implements
           ...(event.tokensBefore !== undefined ? { tokensBefore: event.tokensBefore } : {}),
         });
         if (synthetic) this.appendNeutral(proc, { neutralEntryId: "", message: synthetic });
+      } else if (proc && event.compacted === false) {
+        // 失败要留痕(§5.4 可诊断):事件本身照常下行,UI 的显形在 timeline(与 rewindFailed 同款
+        // toast 通道),这里只记服务端日志——不落中立层、不伪造任何用户可见的"已压缩"。
+        console.warn("[session-store] 内核压缩未生效,不落压缩边界:",
+          event.errorMessage ?? (event.aborted ? "已取消" : "原因未提供"));
       }
     }
     if (proc) {
