@@ -9,13 +9,23 @@
 //   ⑤ "pi" | "dsh" 字面量联合收敛到 domain/kernel.ts 单源
 //   ⑥ 会话意图链路(application)零 kernel === "pi"/"dsh" 身份硬分支
 //   (能力接口探测替代身份分支——§1.5 判别气味;测试文件豁免,注释行豁免)
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 let violations = [];
+
+/** 内核目录清单:从文件系统派生(src/server/kernel/<id>/plugin.ts 存在即内核)。
+ *  为什么派生而不硬编码:硬编码 ["pi","dsh","minimal"] 会在加第四个内核(probe4,
+ *  2026-10 实测已发生)时静默漏守——⑧互引/⑪自包含/⑬字面量键全都不扫新内核,
+ *  "内核可整体卸载"的守卫对它形同虚设(文档审计报告 §3#2 的根因)。派生后加内核
+ *  守卫零改动,与 kernel.ts「KernelId=string、清单注册表运行时驱动」同一哲学。 */
+const kernelIds = () =>
+  readdirSync(join(ROOT, "src/server/kernel"))
+    .filter((d) => d !== "core" && existsSync(join(ROOT, "src/server/kernel", d, "plugin.ts")))
+    .sort();
 const walk = (dir, out = []) => {
   for (const f of readdirSync(dir)) {
     if (f === "node_modules" || f === "out" || f === ".git" || f === "dist") continue;
@@ -180,7 +190,7 @@ for (const f of walk(join(ROOT, "src/server/application"))) {
 //    现已收进 kernel/core/(机制层),本检验守住不让它复发:任一内核的依赖只许指向
 //    `kernel/core/`(机制)或自己的目录,不许指向另一个内核。
 {
-  const KERNEL_DIRS = ["pi", "dsh", "minimal"];
+  const KERNEL_DIRS = kernelIds();
   for (const k of KERNEL_DIRS) {
     const base = join(ROOT, "src/server/kernel", k);
     let files = [];
@@ -286,7 +296,7 @@ for (const f of walk(join(ROOT, "src/server/application"))) {
   // `kernel/pi/backend/pi-backend-extensions.ts` 随之删除。
   // 机制层从此不认识任何内核的专属形状——加内核时 application 一行不改（面是可选的）。
   const KNOWN = [];
-  const KERNEL_IDS = ["pi", "dsh", "minimal"];
+  const KERNEL_IDS = kernelIds(); // 派生(见 kernelIds 注释):加内核守卫零改动
   const roots = ["src/server", "src/web", "packages/shared/src", "packages/react/src"];
   for (const root of roots) {
     let files = [];
@@ -401,7 +411,7 @@ function isInsideComment(file, lineNo, re) {
 //    以及注释行（退役说明里要能提到旧写法）与测试文件。
 {
   const FACES = "kernels|kernelModels|kernelConfig|kernelVersionApis|kernelExtensions|kernelLogos|kernelOneshots";
-  const IDS = "pi|dsh|minimal";
+  const IDS = kernelIds().join("|"); // 派生(见 kernelIds 注释):加内核守卫零改动
   // 点号形式 `kernels.pi` 与下标形式 `kernelConfig["pi"]`（引号用 `.` 代指，理由见上）
   const pattern = `(${FACES})[[:space:]]*(\\.[[:space:]]*(${IDS})\\b|\\[[[:space:]]*.(${IDS}).[[:space:]]*\\])`;
   const out = execSync(
