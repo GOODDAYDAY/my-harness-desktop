@@ -46,26 +46,10 @@ export default tseslint.config(
       ],
     },
   },
-  {
-    // IPC 通道名单源护栏(ipc-channels.ts):禁止 shell 进程桥再回到字符串字面量,
-    // 拼错/双写由 tsc + 本规则双重拦截(依据 CLAUDE.md §1.3 契约单源)
-    files: ["src/shell/electron-main/**/*.{ts,tsx}", "src/shell/ipc-channels.ts"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: "CallExpression[callee.object.name='ipcMain'][callee.property.name='handle'] > Literal:first-child",
-          message: "IPC 通道名单源收敛于 ../ipc-channels.ts,请用 IPC.* 常量,禁写字符串字面量",
-        },
-        {
-          selector: "CallExpression[callee.object.name='ipcRenderer'][callee.property.name=/^(invoke|on|once|removeListener)$/] > Literal:first-child",
-          message: "IPC 通道名单源收敛于 ../ipc-channels.ts,请用 IPC.* 常量,禁写字符串字面量",
-        },
-        {
-          selector: "CallExpression[callee.object.property.name='webContents'][callee.property.name='send'] > Literal:first-child",
-          message: "push 通道名单源收敛于 ../ipc-channels.ts,请用 IPC.* 常量,禁写字符串字面量",
-        },
-      ],
-    },
-  },
+  // ⇐ 此处曾有第三块:files 指 `src/shell/electron-main/**` + `src/shell/ipc-channels.ts` 的
+  // 三条 no-restricted-syntax(IPC 通道字面量拦截)。files 指向的 src/shell/ 目录**不存在**,
+  // 规则从未匹配任何文件——静默失效被文档审计照出(docs/reports/doc-code-gap-audit §3#3,
+  // 2026-10),整块删除而非迁移:前后端分离后 ipcMain/ipcRenderer 调用形态已不存在
+  // (通道注册是 gateway.register),通道名单源由 tsc(IPC 类型)+ ipc-channel-single-source
+  // 测试守,这三条字面量 lint 失去了拦截对象。
 );
