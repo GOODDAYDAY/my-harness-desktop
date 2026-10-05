@@ -131,7 +131,7 @@ composer = 会话流底部的输入框区域（模型/档位下拉在其左下�
 
 - pi 侧一切从简：`PiBackend.setModel` 把 `buildSetModelCommand({provider, modelId})` 写进进程 stdin（`pi-backend.ts:203`），一条同步 JSONL RPC，resolve 即内核处理完。进程不动、会话不动、事件流不动——这是「运行时切模型」的标杆语义，也是 §11 修法要把 dsh 拉到的水位。
 
-- 两个配套面：pi 扩展面另有一对 `cycleModel`/`cycleThinkingLevel` RPC（`pi-backend.ts:233-239`）——「pi 扩展面」= pi 后端在契约之外独有的一包命令，`capabilities.pi` 是它的探测标记，形状 `{ pi?: BackendExtensions, dsh?: { missing, onMissing } }`；这对 RPC 是 main 侧 `ModelApi` 的循环入口（`SessionStore.cycleModel` 直接转发），与 §2.3 的 renderer 快捷键通道是两条独立路径、互不相干。旁路变更（用户在 pi CLI 里 `/model`、扩展自切）由 sync 回写收敛——每次 resync 比对进程实况与头行，不一致以进程为真相补头（`session-store.ts:1106-1116`），壳不假设自己是唯一写入方。
+- 两个配套面：pi 扩展面另有一对 `cycleModel`/`cycleThinkingLevel` RPC（`pi-backend.ts:233-239`）——「pi 扩展面」= pi 后端在契约之外独有的一包命令（⇐ 当时经 `capabilities.pi` 探测，形状 `{ pi?: BackendExtensions, dsh?: { missing, onMissing } }`——旧桶已删、改为圆心逐轴 `BackendCapabilities`，cycleModel/cycleThinkingLevel 现归 `modelCycle` 轴）；这对 RPC 是 main 侧 `ModelApi` 的循环入口（`SessionStore.cycleModel` 直接转发），与 §2.3 的 renderer 快捷键通道是两条独立路径、互不相干。旁路变更（用户在 pi CLI 里 `/model`、扩展自切）由 sync 回写收敛——每次 resync 比对进程实况与头行，不一致以进程为真相补头（`session-store.ts:1106-1116`），壳不假设自己是唯一写入方。
 
 ## 6. dsh 的兑现：握手定模与三个切模型面
 
@@ -211,6 +211,8 @@ dsh 侧的模型语义和 pi 相反：模型是**进程级参数**。这一节�
 - **在飞回合**：onSend 模式下切模型发生在回合间隙（发送前对齐），无打断场景；immediate 模式点选即切、打断在飞生成是用户自选。
 
 ## 10. 问题：三条路径与死代码
+
+> ⚠ **本节是"问题现场"快照（演进注记）**：所引的 `capabilities.pi` 桶探测、`BackendExtensions` opaque 桶等是**当时的形状**；§11 的修法已按**逐轴能力面**落地——`supportsRuntimeSetModel` 轴 + ensureForSend 两轴判据（session-store.ts）现役，旧桶与 `asPi` 已退役（`faceOf` 按轴取面）。本节保留作根因的原始论证，读时请以 §12 之后的现状为准。
 
 §1-§9 是现状的全貌。「三条路径」指：pi 的运行时热切（§5）、dsh 的壳层停旧起新（§6.2，现行默认）、dsh 内核侧已补好的热切面（§6.3，不可达）。现状里有一个真问题，本节把它拆开：根因不是「dsh 不支持热切」，而是壳把两根独立的能力轴焊成了一根。
 

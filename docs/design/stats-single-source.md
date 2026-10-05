@@ -1,5 +1,14 @@
 # 统计单源：中立层是统计的唯一真相源
 
+> ⚠ **写稿时态符号说明**：本文成稿于逐轴能力面落地之前。文中以"病灶"身份引用的
+> `capabilities.extensions` 桶、`BackendExtensions`/`PiBackendExtensions`、`asPi`、
+> pi 的"31 命令"（实为 RpcCommand 联合 29，get_session_stats 在列）都是**当时的形状**，
+> 现行代码已拆为圆心 `BackendCapabilities` 的逐轴面（steering/retry/compaction/snapshot/
+> stats/modelCycle/toolExec/busFrames/questions/thinking + fileBacked + systemPrompt）、
+> `asPi` 已退役为 `faceOf(proc, 轴, 标签)`。这些符号在本文保留作问题现场的原始证据，
+> 勿当现状 API 使用。提案本体的"统计交付物 1"（stats-projector.ts）**尚未开工**，
+> 与现状核对见 docs/reports/doc-code-gap-audit-2026-10.md。
+
 打开右侧「统计」页签，切到一个 dsh 会话，本会话那一栏的输入、输出、缓存读、缓存写全是 0，上下文占用是一条空杠加一个破折号，只有回合数和步数有数字。切回 pi 会话，同样的栏位全都有值。同一个壳、同一个插件、同一套 UI，两个内核给出的数字差了一个数量级——不是差在精度上，是差在有没有上。
 
 这件事在文档里被记成「已拉平」。`docs/design/kernel-parity-audit.md:82` 那行写着「会话统计 | `get_session_stats` | `session/projectStats` + 壳自算 | ✅（壳自算字段已内核无关）」，`docs/plugins/insight/token-stats.md` §6.4 整节的标题是「dsh 缺面留空、context-probe 补面」，把 dsh 统计为空解释成内核没这个能力，然后援引 CLAUDE.md §7.6 的显式降级说这是合规的诚实态。

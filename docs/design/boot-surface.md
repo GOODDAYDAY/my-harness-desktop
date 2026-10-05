@@ -389,10 +389,9 @@ boot/
 
 ```
 src/server/application/context/main-context.ts:7      import type { KernelManager } from "../../kernel/core/kernel-manager"
-src/server/application/sessions/session-store.ts:17   import type { BackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions"
 ```
 
-（两处都是 type-only，因此**不在** `CLAUDE.md` §6.3 检验②的禁令内——该检验禁的是"非 type-only import"，且其豁免表现已清空。第二处指向具体内核 `kernel/pi` 而非机制层 `kernel/core`，是一处值得顺手清理的残留，但不是违规。）
+（⇐ 本文写稿时此处还列第二处：`session-store.ts:17` 的 `import type { BackendExtensions } from "../../kernel/pi/backend/pi-backend-extensions"`——它是当时唯一"application 的 type-only 指向具体内核"的残留。该残留后来被**结构性消除**：opaque 桶 `BackendExtensions` 拆为圆心 `BackendCapabilities` 的逐轴面、`pi-backend-extensions.ts` 文件删除，application 从此不 import 任何内核的专属形状——正文叙述的"值得顺手清理"已随能力面拆轴落地完成，这个例子如今是"清理已毕"的历史注记。）
 
 把启动步骤放进 `application/boot/` 会立刻产生四条新依赖：`application → kernel/core`（值导入）、`application → transport`、`application → controllers`、`application → host`。按 `CLAUDE.md` §6.1 的分区，后三者是外层；`kernel/core` 虽是机制层而非具体内核，但它是 application 的**同层或更外**（`CLAUDE.md` §6.1 把 `kernel/` 与 `application/` 并列为壳后端的两个分区），application 值导入它会与 §6.3 检验②的立法意图（application 不认识内核实现细节）冲突。四条合起来违反 §1.1「依赖只向内」。`CLAUDE.md` §6.3 的检验②字面上只列了 electron / react / `kernel/{pi,dsh}` 三类，但它背后的判据（§6.1 的分区图 + §1.1 的箭头方向）覆盖全部外层——本文按判据而非字面清单论证。
 

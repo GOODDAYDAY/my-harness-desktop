@@ -80,7 +80,7 @@ my-harness-desktop 是一个多内核（pi + dsh 同级）AI agent 桌面壳。�
 
 中立契约是壳和内核之间的接口定义——"壳只认一份中立契约、内核各交一个适配器"这件事不会变，留在圆心。
 
-- 中立契约的完整形状在 `packages/shared/src/domain/backend.ts` 的 `BaseBackend` 接口：`kernel`/`alive`/`sessionId` 三个只读属性 + `start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed` 十四条必实现意图 + `resume?`/`continue?`/`listTools?`/`answerQuestion?` 四个可缺面意图 + `setThinkingLevel`（思考强度设置，dsh 显式降级抛错）+ `capabilities`（内核专属能力探测面，`{ pi?: unknown; dsh?: ThinkingCapabilities }`）。
+- 中立契约的完整形状在 `packages/shared/src/domain/backend.ts` 的 `BaseBackend` 接口（契约 18 必实现 + 5 可选 `?`；基类 `AbstractBackend` = 14 abstract + 3 缺面默认 listTools/answerQuestion/setThinkingLevel + 4 默认成员；含 `supportsRuntimeSetModel`）+ `capabilities`（**逐轴**能力探测面 `BackendCapabilities`：steering/retry/compaction/snapshot/stats/modelCycle/toolExec/busFrames/questions/thinking + fileBacked + systemPrompt）。⇐ 此句曾列 `resume?`/`continue?` 为可缺面意图、capabilities 为 `{ pi?: unknown; dsh?: ... }` 旧桶：resume? r72 已删（无消费方）、continue? 从未存在、旧桶已拆为逐轴面。
 
 - 关键的设计判断是**什么不进契约**：`steer`/`followUp`/`onExtensionUI`/思考档位清单与循环切换，这些 pi 专属能力不进 `BaseBackend`，它们挂在 `capabilities.pi` 扩展面上，壳经能力探测"有则用、无则降级"。`packages/shared/src/domain/sessions.ts` 的 `PiExtensions` 接口（约 18 个方法）就是这块扩展面的形状。
 
@@ -168,9 +168,9 @@ my-harness-desktop 是一个多内核（pi + dsh 同级）AI agent 桌面壳。�
 
 内核的专属能力不进中立契约，挂在内核扩展面上，"有则用、无则降级"。
 
-- pi 的多路并发（`steer`/`followUp`）、自动重试（`abortRetry`）、快捷循环切模型（`cycleModel`）、上下文压缩（`compact`）、HTML 导出（`exportHtml`）——这些是 `PiExtensions` 接口里的 18 个方法，dsh 没有这些面。
+- pi 的多路并发（`steer`/`followUp`）、自动重试（`abortRetry`）、循环切模型（`cycleModel`）、上下文压缩（`compact`）——这些面如今按**语义域**归位在 `MessagingApi`/`ModelApi`/`SessionsApi`（壳侧 API 面），dsh 按各自的语义轴（steering/retry/modelCycle/compaction）逐轴交面。⇐ 曾全部收在 `PiExtensions` 内核名袋子接口里（18 方法）：该袋子已退役，方法按域归位。
 
-- 壳访问这些能力的方式是能力探测，不是内核身份硬分支。`src/server/application/sessions/session-store.ts` 的 `asPi(proc)` 方法：`const pi = proc.backend.capabilities.pi; if (!pi) throw new Error("当前后端不支持 pi 专属命令")`。它在 `backend.capabilities.pi` 上探测，dsh 无此面就抛错降级，代码里没有 `if (kernel === "pi")`。
+- 壳访问这些能力的方式是能力探测，不是内核身份硬分支。`src/server/application/sessions/session-store.ts` 现行的 `faceOf(proc, 轴, 标签)` / `viaFace(轴, 标签, fn)`：按 `backend.capabilities.<轴>` 取面，缺面抛错时点名**轴**（如"多路并发"）不点名内核。⇐ 此前是 `asPi(proc)` 经 `capabilities.pi` 探测——形态是对的（能力探测）但名字与桶形态带内核身份，已随逐轴面退役。
 
 - 思考强度是"专属能力分半"的教科书案例：**设置**（`setThinkingLevel`）进了中立契约（`BaseBackend` 里是必实现方法，dsh 侧继承 `AbstractBackend` 的缺面默认抛"当前内核不支持思考强度切换"）；**档位清单与循环切换**（`getThinkingLevels`/`cycleThinkingLevel`）仍留在 pi 扩展面。要么将来给 dsh 写 cordis 插件补面，要么永久降级——但绝不静默吞掉。
 
@@ -198,9 +198,9 @@ my-harness-desktop 是一个多内核（pi + dsh 同级）AI agent 桌面壳。�
 
 pi 和 dsh 同级，谁也不比谁更"内建"。壳不该有任何"识别 pi 并特殊对待"的代码路径。
 
-- 内核身份单源在 `packages/shared/src/domain/kernel.ts`：`KernelId = "pi" | "dsh"` 一处定义，全仓其他地方的 `"pi" | "dsh"` 字面量都是从圆心 re-export 或窄化，不复刻联合。`sessions.ts` 里的 `isKernelId` 是读回已持久化内核 id 的窄化守卫，不是散落的内核身份。
+- 内核身份单源在 `packages/shared/src/domain/kernel.ts`：`KernelId` 是**不透明 string**，内核 id 由各内核插件自声明、清单由 `KernelRegistry` 运行时驱动。`sessions.ts` 里的 `isKernelId` 是读回已持久化内核 id 的窄化守卫（注册表派生谓词），不是散落的内核身份。⇐ 曾为 `"pi" | "dsh"` 字面量联合单源：插件化后去字面量化，全仓内核名字面量归零（audit:deps 检验⑤守护）。
 
-- 内核身份的**运行时路由**只有一处合法落点：组装根。`assemble.ts` 的 `baseBackendFactory.create` 里 `if (opts.kernel !== "dsh") return createPiBackend(...)`——这是把中立契约和具体实现绑起来的工厂闭包，是"接口与实现相遇"的唯一地点。除此之外，会话意图链路上不允许出现 `if (kernel === "pi")`，理想形态是 `backend.capabilities.pi` 能力探测。
+- 内核身份的**运行时路由**只有一处合法落点：各内核自己的插件（`kernel/<id>/plugin.ts` 经 `KernelPlugin` 契约注册，bootstrap 动态 require `plugin.js`、零静态 import）。除此之外，会话意图链路上不允许出现 `if (kernel === "pi")`，理想形态是 `backend.capabilities.<轴>` 能力探测。⇐ 曾指 `assemble.ts` 的工厂闭包与 `capabilities.pi`：装配已拆为 boot/steps 化、工厂归各内核目录、旧桶已拆轴。
 
 - 内核专属配置不进契约，由工厂闭包捕获：`cliPath`/`cordisConfig`/`apiKey`/`env` 这些内核专属 spawn 参数都在 `assemble.ts` 的 `baseBackendFactory` 和 `sessionCatalogFactory` 闭包里拼装，`BackendCreateOptions` 只收中性字段（`cwd`/`agentDir`/`kernel`/`provider`/`model`/`neutralSessionId`/`systemPromptPaths`/`systemPromptTexts`/`ephemeral`/`maxTokens`）。
 
@@ -236,7 +236,7 @@ pi 和 dsh 同级，谁也不比谁更"内建"。壳不该有任何"识别 pi �
 
 - timeline 插件消费的是 `sessions.onEvent` 投喂的 `SessionEvent` 中性事件流（`packages/shared/src/domain/events/session-state.ts`），不管这事件来自 pi 的 JSONL 还是 dsh 的 JSON-RPC。内核事件由各自的翻译器（`src/server/kernel/pi/protocol/event-translator.ts`、`src/server/kernel/dsh/backend/dsh-event-translator.ts`）投成中性事件，翻译器是喂线，不是第二套语义。
 
-- 三条内核无关不变量（`design-principles.md` 原则 6）是这条纪律的可检验标准：① 壳不读任何内核的存储；② 壳只认中性事件；③ 壳的渲染是纯函数。违反任何一条，壳就偷偷依赖了某个内核。判据：会话意图链路上出现 `if (kernel === "pi")` 或 `asPi()` 类型守卫，就是一处泄漏。
+- 三条内核无关不变量（`design-principles.md` 原则 6）是这条纪律的可检验标准：① 壳不读任何内核的存储；② 壳只认中性事件；③ 壳的渲染是纯函数。违反任何一条，壳就偷偷依赖了某个内核。判据：会话意图链路上出现 `if (kernel === "pi")` 或按内核名取面的旧式 `asPi()` 守卫（已退役，`faceOf` 按**轴**取面），就是一处泄漏。
 
 - 统计是这个原则的正面案例：轮数、step 数、token、上下文占用这些统计量由壳从中性事件**自己算**（`session-store.ts` 的 `dispatch` 里 messageStart 记时、messageEnd 用 output tokens 除以耗时算 TPS），不向内核要统计。内核只负责吐中性事件，壳拿同一份事件流做统计——两种内核下统计逻辑完全一致（原则 32）。
 
@@ -313,7 +313,7 @@ pi 和 dsh 同级，谁也不比谁更"内建"。壳不该有任何"识别 pi �
 
 - `AbstractBackend` 的精确形状（读 `abstract-backend.ts` 原文）：14 条 `abstract` 必实现意图（`kernel`/`alive`/`start`/`stop`/`onEvent`/`sendMessage`/`abort`/`setModel`/`setSessionName`/`getTree`/`getEntries`/`bookmark`/`deleteBookmark`/`seed`）+ 4 条缺面默认（`listTools` 返回 null、`answerQuestion`/`continue`/`setThinkingLevel` 抛错）+ 3 个默认成员（`capabilities={}`/`configDepPaths=[]`/`sessionId` 取 ctx）。`resume?` 不在基类——dsh 覆盖、pi 不实现，属可选意图。
 
-- 三条纪律：**基类只 import 圆心，绝不 import 具体内核**（它是机制，不是内容）；**子类只填差异**（数据 + override 缺面方法，pi 和 dsh 处处相反的会话模型/事件形状/fork 语义保持 abstract，不硬塞基类）；**组装归 bootstrap**（`createPiBackend`/`createDshBackend` 在 `src/server/kernel/factories/kernel-factories.ts`，core 一行不 import 具体实现）。
+- 三条纪律：**基类只 import 圆心，绝不 import 具体内核**（它是机制，不是内容）；**子类只填差异**（数据 + override 缺面方法，pi 和 dsh 处处相反的会话模型/事件形状/fork 语义保持 abstract，不硬塞基类）；**组装归各内核自己的目录**（`createPiBackend`/`createDshBackend` 在 `kernel/<id>/backend/<id>-backend-factory.ts`，注册经 `KernelPlugin`，core 一行不 import 具体实现——assembler 不再持有共享 factories/）。
 
 - **边界（关键）**：基类解决的是**实现复用**（怎么少写重复的缺面抛错），不产生新能力；**能力拉平**（怎么让壳无感）靠内核插件（§5.3）。两者正交——别把"抽了基类"当成"拉平了能力"。抽基类是代码卫生，拉平能力是补内核缺口，一个是壳内部的复用，一个是壳对外部内核的补偿。
 
@@ -331,7 +331,7 @@ pi 和 dsh 同级，谁也不比谁更"内建"。壳不该有任何"识别 pi �
 
 - **气味二：写死的用户可见文案。** 在壳目录里 grep 中文字符（`[\x{4e00}-\x{9fff}]`）或英文句子。`packages/shared/src/domain/` 里命中的几乎全是注释（注释不是用户可见文案，不违规）和 `working-phase.ts`/`file-icons.ts` 里的枚举语义。真正的红线是**渲染路径上的字面量**——如果某个 `src/server/application/` 或 `src/web/components/` 文件里出现一段会显示给用户的中文，就是违规。
 
-- **气味三：针对具体内核/业务类型的 if-else。** 在会话意图链路上 grep `if (kernel === "pi")` 或 `asPi()`。实测：`session-store.ts` 里的 `asPi` 是经 `backend.capabilities.pi` 的能力探测（§3.5），不是内核身份硬分支；`assemble.ts` 的 `if (opts.kernel !== "dsh")` 是组装根的唯一合法分叉点（§4.2）。如果这两处之外再出现内核身份分支，就是泄漏。
+- **气味三：针对具体内核/业务类型的 if-else。** 在会话意图链路上 grep `if (kernel === "pi")`。实测：`session-store.ts` 的能力探测走 `faceOf(proc, 轴, 标签)`（按**语义轴**取面，错误消息点名轴；⇐ 前身是 `asPi()` 经 `capabilities.pi`——形态本身是能力探测但带内核名，已随逐轴面退役），不是内核身份硬分支；`kernel/<id>/plugin.ts` 的工厂注册是"接口与实现相遇"的唯一合法落点。除此之外再出现内核身份分支，就是泄漏。
 
 ### 7.2 lint 强制：三条插件的红线
 

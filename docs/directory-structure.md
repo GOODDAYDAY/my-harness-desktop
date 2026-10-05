@@ -127,10 +127,10 @@ packages/shared/
 
 `domain/` 是圆心。装的东西只有两类：**纯类型**（契约、事件、配置形状）和**纯函数**（无 IO、无环境、无状态）。没有任何一个文件 import 外部包。逐文件过一遍：
 
-- **`kernel.ts`**（内核身份单源，最内层原子）：`KernelId = "pi" | "dsh"` + `KERNEL_IDS` 常量 + `KernelLogo` 接口。全仓唯一一处能出现 `"pi" | "dsh"` 字面量联合的地方。它零依赖——不 import 任何 domain 内外的类型。加第三个内核 = 这里加一个字面量，编译器逼着补全所有 `switch(kernel)` 消费处。
-- **`backend.ts`**（中立契约核心）：`BaseBackend` 接口（14 必实现 + 4 缺面默认 `listTools?`/`answerQuestion?`/`continue?`/`setThinkingLevel` + 接口可选 `resume?` + 能力探测 `capabilities`）、`BackendFactory`、`BackendCreateOptions`、`SessionCatalog`、`SessionCatalogFactory`、`KernelModelSource`、`Lineage`/`LineageTree`/`LineageFork`、`Anchor`（= `NeutralAnchor` re-export）、`SeedOptions`、`ThinkingCapabilities`、纯函数 `projectLineageTree`。这是壳和内核之间的「最小意图」集合——消息/中断/模型/分支/会话标识/流式事件六条核心，之上叠命名、续跑、seed、工具发现、提问、能力探测。
+- **`kernel.ts`**（内核身份单源，最内层原子）：`KernelId = string`（**不透明 id**）+ `KernelLogo` 接口。内核 id 由各内核插件在 plugin.json/工厂自声明，清单由 `KernelRegistry` 运行时驱动。它零依赖——不 import 任何 domain 内外的类型。加内核 = 写插件 + 注册，本文件零改动。⇐ 曾为 `KernelId = "pi" | "dsh"` 字面量联合 + `KERNEL_IDS` 常量：插件化后已去字面量化（历史纪律随 kernel-plugin 化废止）。
+- **`backend.ts`**（中立契约核心）：`BaseBackend` 接口（契约 18 必实现 + 5 可选 `?`：listTools?/setTools?/onProcessExit?/answerQuestion?/configDepPaths?；基类给 3 条缺面默认 listTools/answerQuestion/setThinkingLevel + 4 个默认成员——成员账以代码为准）、`BackendFactory`、`BackendCreateOptions`、`SessionCatalog`、`SessionCatalogFactory`、`KernelModelSource`、`Lineage`/`LineageTree`/`LineageFork`、`Anchor`（= `NeutralAnchor` re-export）、`SeedOptions`、`ThinkingCapabilities`、`BackendCapabilities`（12 轴能力面）、纯函数 `projectLineageTree`。这是壳和内核之间的「最小意图」集合——消息/中断/模型/分支/会话标识/流式事件六条核心，之上叠命名、思考档位设置、seed、工具发现、提问、能力探测。⇐ 曾列 `continue?`/`resume?` 为缺面默认/可选面：continue? 从未存在、resume? r72 已删。
 - **`session-neutral.ts`**（中立会话坐标系）：`NeutralSession` / `NeutralAnchor` / `NeutralEntry` / `NeutralSessionHeader` + 纯函数（`neutralEntryId`、`lineageContent`、拓扑排序 `sortLineagesTopologically`）。这是「中立契约的另一半」：把消息/事件/树形投影都落到内核无关的坐标系。
-- **`sessions.ts`**（会话能力契约）：`SessionsApi` / `MessagingApi` / `ModelApi` / `SessionTreeApi` / `PiExtensions` / `BashApi` 等壳暴露给插件的 API 形状。圆心只定义接口，实现归 `application/sessions/session-store`（依赖倒置）。
+- **`sessions.ts`**（会话能力契约）：`SessionsApi` / `MessagingApi` / `ModelApi` / `SessionTreeApi` / `BashApi` 等壳暴露给插件的 API 形状（按语义域分接口）。圆心只定义接口，实现归 `application/sessions/session-store`（依赖倒置）。⇐ 曾有 `PiExtensions` 内核名袋子接口（18 方法）：已退役，方法按域归位到 Messaging/Model/Sessions。
 - **`kernel-manager.ts`**（内核版本管理契约）：`KernelSpec` 纯数据（包名/路径段/cli.js 位置）+ `RegistryVersions` + `CustomCliResolution`。pi/dsh 共用同一套版本管理机制，差异只是「包名 + 安装路径段 + cli.js 位置」这几条数据。
 - **`contributions.ts`**（槽位贡献项类型契约）：`SlotName` 联合 + 全部槽位贡献项接口（`SettingsContribution`、`ThemeContribution`、`SidePanelContribution`、`MainViewContribution`、`SidebarContribution`、`LanguageContribution`、`TitlebarContribution`、`FileActionContribution`、`FileIconContribution`、`MessageActionContribution`、`BlockRendererContribution`、`CodeBlockRendererContribution`、`SessionGroupingContribution`、`ComposerPolicyContribution`、`ComposerAttachmentContribution`、`ComposerActionContribution`、`ComposerStatsContribution`、`ComposerTopContribution`、`ComposerVoiceContribution`、`SystemPromptContribution`、`FontPresetContribution`、`SettingsGroupContribution` 等）+ `PluginManifest` + `PluginTier`/`PluginState`/`PluginListItem` + 纯函数 `derivePluginTags`/`resolvePluginTags`。这是「槽位是稳定契约」的圆心落点。
 - **`events/session-state.ts`**（中性事件 + 状态投影类型）：`SessionEvent` / `NeutralMessage` / `ModelInfo` / `TreeNode` / `SyncSnapshot` / `SessionStats` / `TurnUsage` 等 + 纯函数 `deduplicateAdjacent`。所有内核的事件都往这里投，壳只认中性域。
@@ -271,12 +271,12 @@ src/server/
 
 **`kernel/pi/`（pi 内核实现）**：
 
-- `backend/pi-backend.ts`：`PiBackend extends AbstractBackend` + `implements BackendExtensions`——BaseBackend 的 pi 实现。
+- `backend/pi-backend.ts`：`PiBackend extends AbstractBackend` + `implements` 九个逐轴能力面接口（Steering/Retry/Compaction/Snapshot/Stats/ModelCycle/ToolExec/BusFrame/QuestionChannel）——BaseBackend 的 pi 实现。
 - `backend/pi-catalog.ts`：`PiSessionCatalog implements SessionCatalog`——pi 的跨会话目录/CRUD。
 - `backend/correlator.ts`：pi 事件相关性处理。
 - `backend/rpc-adapter.ts`：RPC 适配——构造命令对象但不 spawn 进程（构造与执行分离）。
 - `backend/subprocess-handle.ts` + `subprocess-lifecycle.ts`：进程句柄接口 + 进程生命周期。
-- `backend/pi-backend-extensions.ts`：pi 扩展面（steer/followUp/thinkingLevel 等）。
+- ⇐ `backend/pi-backend-extensions.ts`：**文件已删**——它的 opaque 扩展桶形状上移为圆心 `BackendCapabilities` 的各轴接口，pi 按轴在 pi-backend.ts implements。
 - `backend/resync.ts`：pi 基线重同步。
 - `protocol/`：pi 的 31 命令契约——`rpc-types.ts`（pi 消息类型）、`commands.ts`（命令构造纯函数）、`event-translator.ts`（pi 事件 → 中性事件）、`context-binding.ts`（RPC 对象 → domain 类型映射）、`versions.ts`。
 - `manager/pi-kernel.ts`：`PiKernelManager extends KernelManager`（填 `PI_SPEC` + `postInstall`）；`pi-kernel-api.ts`/`pi-kernel-config.ts`/`pi-logo.ts`/`pi-cli.ts`。
@@ -294,11 +294,9 @@ src/server/
 - `manager/dsh-kernel.ts`：`DshKernelManager extends KernelManager`（填 `DSH_SPEC` + `installPlugin`）；`dsh-kernel-api.ts`/`dsh-kernel-config.ts`/`dsh-logo.ts`/`dsh-question-bridge.ts`。
 - `extension/`：`dsh-extension-installer.ts`/`dsh-extension-manager.ts`/`dsh-extension-manifest.ts`/`dsh-extension-contract.ts`/`dsh-skill-provider.ts`。
 
-**`kernel/factories/`（组装）**：
+**⇐ `kernel/factories/`（共享组装目录）——已删除**：
 
-- `kernel-factories.ts`：后端工厂——把「怎么 spawn、怎么翻译」收成一个实现，产出 `BaseBackend`。这是「构造在内、执行在外」的组装点：内核专属 args（cliPath/cordisConfig/apiKey）在这里的工厂闭包里捕获，不进契约。
-- `kernel-managers.ts`：把具体内核的 spec + postInstall 实现绑成 `KernelManager` 实例。
-- `kernel-logos.ts`：内核身份标（logo）注册表——把各内核在自己适配器里声明的 logo 绑成一份按 `KernelId` 键控的映射。
+这个共享装配点曾让「删掉 dsh 会编译不过 pi」（传递依赖），现每个内核的工厂归自己的目录：`kernel/<id>/backend/<id>-backend-factory.ts` 产 `BaseBackend`、`kernel/<id>/manager/` 绑 `KernelManager`、logo 经 `KernelPlugin.logo` 由 `buildKernelSurfaces` 投影。bootstrap 经 `kernel/core/kernel-plugin-loader.ts` 动态 require 各内核 `plugin.js`，零静态内核 import（audit:deps 检验⑪ 守这条）。历史三件套 `kernel-factories.ts`/`kernel-managers.ts`/`kernel-logos.ts` 随之退役。
 
 关键纪律：`core/` 一行不 import 具体实现，`factories/` 是唯一被允许「同时 import 圆心契约和具体实现」的地方，`bootstrap/` 调 factories。这是「接口定义在内层、实现在外层、组装在最外层」的物理形态。
 
@@ -600,7 +598,7 @@ src/plugins/{domain}/{feature}/
 **证据**：
 - `packages/shared/src/domain/backend.ts` 的 `BaseBackend`（接口）→ `src/server/kernel/core/abstract-backend.ts` 的 `AbstractBackend`（骨架 + 缺面默认）→ `src/server/kernel/pi/backend/pi-backend.ts` / `src/server/kernel/dsh/backend/dsh-backend.ts`（override 各自能力）。
 - `packages/shared/src/domain/kernel-manager.ts` 的 `KernelSpec`（纯数据）→ `src/server/kernel/core/kernel-manager.ts` 的 `KernelManager`（基类）→ `src/server/kernel/pi/manager/pi-kernel.ts` / `dsh/manager/dsh-kernel.ts`（填 spec + 行为差异）。
-- 组装全在 `src/server/kernel/factories/`（`kernel-factories.ts`/`kernel-managers.ts`）。
+- 组装归各内核自己：`kernel/<id>/backend/<id>-backend-factory.ts` 与 `kernel/<id>/manager/`（⇐ 曾是 `src/server/kernel/factories/` 共享装配点，已删——检验⑪ 守住「自包含」）。
 
 **风格意义**：基类只 import `packages/shared` 绝不 import 具体内核（机制不是内容）；子类只填差异（数据 + 行为）；组装归最外层。换内核 = 换适配器，`application` 和 `domain` 一行不改。
 
@@ -610,7 +608,7 @@ src/plugins/{domain}/{feature}/
 
 **证据**：
 - `src/server/kernel/pi/backend/rpc-adapter.ts` 构造命令对象但不 spawn 进程，`subprocess-handle.ts` + `subprocess-lifecycle.ts` 管进程生命周期，两者经 `SubprocessHandle` 接口连接。
-- `src/server/kernel/factories/kernel-factories.ts` 把「怎么 spawn、怎么翻译」收成一个实现（构造），产出 `BaseBackend`（执行面）。
+- `kernel/<id>/backend/<id>-backend-factory.ts` 把「怎么 spawn、怎么翻译」收成一个实现（构造），产出 `BaseBackend`（执行面）（⇐ 曾是共享 `kernel-factories.ts`，拆归各内核目录）。
 - `application/sessions/session-store.ts` 传中性 `BackendCreateOptions`（构造），不拼 `--session`/`--append-system-prompt`（那是执行）。
 
 **风格意义**：一个函数既构造又执行是气味。拆成两个后，换 provider 不影响构造逻辑，改构造策略不影响执行流程。

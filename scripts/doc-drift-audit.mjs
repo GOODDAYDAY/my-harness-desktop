@@ -53,9 +53,16 @@ const RETIRED = [
   ["asPi(", "SessionStore.faceOf(proc, 轴, 标签)：按语义轴取能力面，错误消息点名轴不点名内核"],
   ["piSend(", "SessionStore.viaFace(轴, 标签, fn)：同上，并保留 rpcError 上报"],
   // ↓ 发布面命名迁移（Phase B）退役的符号：
-  ["PiExtensions", "12 个方法按语义域归位到 MessagingApi / ModelApi / SessionsApi（getModels 那份重复定义已删）"],
-  ["ctx.pi", "按域归位：ctx.messaging（steer/followUp/两个 mode/abortRetry/setAutoRetry）、ctx.models（cycleModel/getThinkingLevels/cycleThinkingLevel）、ctx.sessions（compact/setAutoCompaction/getLastAssistantText）"],
-  ["sessions.pi", "原始 IPC 面已平铺为 window.kernel.sessions.<method>（每个方法本就有自己的 channel，分组不提供信息）"],
+  // 词边界:RETIRED 的 PiExtensions 指接口名本身。现役函数 syncPluginPiExtension(s)/
+  // reconcilePluginPiExtensions 是 sync+Plugin+Pi+Extension 的合法标识符,前缀是"Pi 路径的插件扩展",
+  // 不是内核名袋子接口——用前后各一词边界避免子串假红(desktop-understanding.md:120 实测)。
+  ["`PiExtensions`", "12 个方法按语义域归位到 MessagingApi / ModelApi / SessionsApi（getModels 那份重复定义已删）"],
+  // 词边界:RETIRED 里 ctx.pi 指已退役的皮袋子 ctx.pi.xxx,撞上现役 ctx.piSettings 是子串假红
+  // (plugin-isolation-principles.md:260 实测)。限定 "ctx.pi." 形态。
+  ["ctx.pi.", "按域归位：ctx.messaging（steer/followUp/两个 mode/abortRetry/setAutoRetry）、ctx.models（cycleModel/getThinkingLevels/cycleThinkingLevel）、ctx.sessions（compact/setAutoCompaction/getLastAssistantText）"],
+  // 行内代码边界:RETIRED 里这条指 IPC 成员访问形态(window.pi.sessions.pinSession 那类场景),
+  // 加反引号前缀,避免把 i18n 键前缀 sessions.pinned/sessions.today 误报(实测两假红)。
+  ["`sessions.pi`", "原始 IPC 面已平铺为 window.kernel.sessions.<method>（每个方法本就有自己的 channel，分组不提供信息）"],
   ["DshConfigApi", "下移到 kernel/dsh/backend/dsh-config-contract.ts（dsh 内部契约）；壳只认中性 KernelConfigApi"],
   ["DshProvider", "同上（dsh 内部契约）；壳侧的 import 经核实是死 import，已删"],
   ["DshModelSpec", "同上"],
@@ -103,7 +110,16 @@ for (const file of walk(join(ROOT, "docs"))) {
       // 只认 ① 会把「整篇都是历史」的文档逐行报红(实测 add-new-kernel.md 的头部横幅够不到第 19 行)。
       // 而"任意位置出现标记"那种更松的判据会**从第一天就恒绿**(见文件头注释),不采用。
       const win = lines.slice(Math.max(0, i - 10), Math.min(lines.length, i + 11)).join("\n");
-      const banner = lines.slice(0, 15).join("\n");
+      // 判据②（r2026-10 加固）：只认**真横幅**——前 15 行里以 ">" 引用块（或 ⚠/📌/历史稿 等
+      // 宣告前缀）开头、且含标记词的行。旧判据是"前 15 行任意位置含 marker 词"，被日常叙述
+      // 误触发成全篇假绿（实测：glossary.md:3 的"不再在每篇重复定义"、directory-structure.md:3
+      // 的"历史文档为准"，各把整篇豁免——118/425 命中即 27.8% 靠它静默通过，见审计报告 §5#1）。
+      // 交叉验证组的复现实验（/tmp/adv-xcheck/anc-fixed.txt）证明本判据不误伤真横幅文档，
+      // 红 0→43 全为假绿揭开。
+      const banner = lines.slice(0, 15).filter((l) => {
+        const s = l.trimStart();
+        return (s.startsWith(">") || /^#{1,3}\s|⚠|📌/.test(s)) && MARKERS.some((m) => l.includes(m));
+      }).join("\n");
       if (!MARKERS.some((m) => win.includes(m)) && !MARKERS.some((m) => banner.includes(m))) {
         fileHits.push([i + 1, symbol, replacement]);
       }

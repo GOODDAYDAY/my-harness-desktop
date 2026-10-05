@@ -145,7 +145,7 @@ legacy 层 **18/36 篇无历史横幅**：blind-review、context-files、git-rev
 3. **P1**：三根大梁重写（desktop-understanding 装配链 + applyEvent 共通段 8+6 处；session-flow continue 意图整节 + 31 命令 + withNeutralEntry；desktop-kernel 可缺面/命令计数/DSH_METHODS/补丁/能力面五段）。
 4. **P1**：legacy 层 18 篇加 L3 横幅（一个下午，模板化）；audit:docs 判据②加固（横幅前缀锚定）。
 5. **P2**：languages 计数 15 篇、行号锚全面去化、design 契约组 M 级（SessionBindingStore 等）加"已被取代"横幅、代码注释 12+ 处 docs/modules 死路径。
-6. **守卫增量（同批）**：audit:symbols 扫描面加 test-plugins、audit:deps KERNEL_IDS 派生化、计数哨兵（数字口径单源 grep）、CI 挂 npm run audit。
+6. **守卫增量（同批）**：audit:symbols 扫描面加 test-plugins、audit:deps 的内核清单（历史名 `KERNEL_IDS`）派生化、计数哨兵（数字口径单源 grep）、CI 挂 npm run audit。（本报告 2026-10 修复轮已落地派生化——历史注记）
 
 ---
 
