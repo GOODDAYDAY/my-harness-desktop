@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# my-harness-desktop 开发环境引导（macOS / Linux）：确保 Node.js >= 18（没有就装），然后 npm install。
+# my-harness-desktop 开发环境引导（macOS / Linux）：确保 Node.js >= 22.12（没有就装；electron@43 的 engines 门槛），然后 npm install。
 # Windows 用同目录的 setup.ps1。
 set -euo pipefail
 
-MIN_NODE_MAJOR=18
+MIN_NODE_MAJOR=22
 NVM_VERSION="v0.40.3"
 
 log()  { printf '\033[1;34m[setup]\033[0m %s\n' "$*"; }

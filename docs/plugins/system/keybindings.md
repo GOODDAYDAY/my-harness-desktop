@@ -1,6 +1,6 @@
 # keybindings：组合键 → 事件总线 channel 的声明式映射
 
-keybindings 提供"组合键 → 事件总线 channel"的声明式映射。按下组合键，插件 `invoke` 目标 channel，目标插件的既有处理逻辑原样执行——快捷键只是给已有事件加了一个新的触发源，不复制任何业务逻辑。它的核心原则（`DESIGN.md` §7）是：**不实现任何动作，只做映射**。默认绑定 11 条（`mod+k` 聚焦输入框、`mod+shift+]`/`[` 切模型、`mod+alt+]`/`[` 切思考深度、`mod+shift+'` 触发 key-hints、`mod+shift+s` 打开设置、`mod+shift+c` 返回对话等），全指向 timeline/shell/key-hints 的既有 channel。设置页提供录制式绑定编辑 + 动态事件列表。
+keybindings 提供"组合键 → 事件总线 channel"的声明式映射。按下组合键，插件 `invoke` 目标 channel，目标插件的既有处理逻辑原样执行——快捷键只是给已有事件加了一个新的触发源，不复制任何业务逻辑。它的核心原则（`DESIGN.md` §7）是：**不实现任何动作，只做映射**。默认绑定 10 条（`mod+k` 聚焦输入框、`mod+shift+]`/`[` 切模型、`mod+alt+]`/`[` 切思考深度、`mod+shift+'` 触发 key-hints、`mod+shift+s` 打开设置、`mod+shift+c` 返回对话等；计数以 `DEFAULT_BINDINGS` 数组实际成员为准——此前文档写"11 条"是计数漂移），全指向 timeline/shell/key-hints 的既有 channel。设置页提供录制式绑定编辑 + 动态事件列表。
 
 ## 职责边界
 
@@ -56,7 +56,7 @@ src/plugins/system/keybindings/
 
 `Binding`（第 10–15 行）是核心数据结构：`{ combo: string; channel: string; payload?: unknown; when?: InputWhen }`。`InputWhen`（第 7 行）是 `"smart" | "always"`。
 
-- **`DEFAULT_BINDINGS`（第 18–32 行）**。11 条默认绑定，全指向既有 channel，避开壳层已占的 `⌘B/⌘J/⌘N/⌘,`（注释第 17 行）。`mod+k` → `timeline:focusComposer`；`mod+shift+up/down` → `timeline:scrollTo`（payload `{position: "top"/"bottom"}`）；`mod+shift+]`/`[` → `timeline:cycleModel`（`[` 带 `{direction: -1}`，Vim `]`/`[` 方向语义）；`mod+alt+]`/`[` → `timeline:cycleThinking`（shift 组管模型、alt 组管思考深度）；`mod+shift+'` → `keyhints:toggle`；`mod+shift+s` → `shell:openSettings`；`mod+shift+c` → `shell:backToChat`。
+- **`DEFAULT_BINDINGS`（第 18–32 行）**。10 条默认绑定（计数以数组实际成员为准），全指向既有 channel，避开壳层已占的 `⌘B/⌘J/⌘N/⌘,`（注释第 17 行）。`mod+k` → `timeline:focusComposer`；`mod+shift+up/down` → `timeline:scrollTo`（payload `{position: "top"/"bottom"}`）；`mod+shift+]`/`[` → `timeline:cycleModel`（`[` 带 `{direction: -1}`，Vim `]`/`[` 方向语义）；`mod+alt+]`/`[` → `timeline:cycleThinking`（shift 组管模型、alt 组管思考深度）；`mod+shift+'` → `keyhints:toggle`；`mod+shift+s` → `shell:openSettings`；`mod+shift+c` → `shell:backToChat`。
 
 - **`parseBinding(raw)`（第 35–47 行）**。形状收紧：`raw` 必须是对象，`combo`/`channel` 必须是非空字符串，`when` 只能是 `"always"`/`"smart"`（否则 undefined），`payload` 有才带上。返回 `Binding | null`。这是配置读入的"防手改脏数据"闸门——用户手改坏 JSON，单条非法返回 null 丢弃。
 

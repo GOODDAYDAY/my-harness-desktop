@@ -10,7 +10,7 @@
   <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
-  <img alt="Node" src="https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js&logoColor=white">
+  <img alt="Node" src="https://img.shields.io/badge/Node-%3E%3D22.12-339933?logo=node.js&logoColor=white">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
 </p>
 
@@ -46,7 +46,7 @@ Here's what it looks like running: the conversation stream, sidebar, and side pa
 | 🎯 Persistent goals | a goal rides on the session: the model works the objective round after round, calls `achieve_goal` when done — kernel-agnostic, works with pi and DSH |
 | ⏯ Crash-safe continue | after an abnormal stop (tool failure / LLM failure / cancel), resume in place with one button — no fork, no resending history |
 | ❓ Ask the human | the model can pause mid-turn and ask you a question with options / free-text; your answer flows back and generation continues |
-| 🌳 Session tree | git-graph-style branch map; fork / bookmark / jump-to-message from any node |
+| 🌳 Session tree | git-graph-style branch map; jump from any node, fork / bookmark on user nodes (where forks are legal) |
 | 📁 File tree & preview | VSCode-style lazy file tree (paths sandboxed to the project root) + file preview (text / image / PDF / Markdown / diagrams) |
 | 🔍 Git Review | three diff views (round / conversation / working tree); select files to commit precisely, push with one click |
 | 🤖 Sub-agent orchestration | dispatch work, parallel fan-out, war-room multi-subagent collaboration, parent-child lifecycle |
@@ -67,7 +67,7 @@ Here's what it looks like running: the conversation stream, sidebar, and side pa
 ## 🚀 60-second quick start
 
 ```bash
-bash scripts/setup.sh   # installs Node (>= 18) if missing, then npm install; Windows: scripts\setup.ps1
+bash scripts/setup.sh   # installs Node (>= 22.12) if missing, then npm install; Windows: scripts\setup.ps1
 npm run dev             # electron-vite dev mode, opens the window
 ```
 
@@ -117,7 +117,7 @@ Full argument: [docs/core-design.md](docs/core-design.md).
 
 ### 2.1 Environment requirements
 
-- Node.js 18 or higher (electron-vite's requirement; the dev machine actually uses Node v25).
+- Node.js **22.12 or higher** (electron-vite requires ^20.19.0 || >=22.12.0, and the bundled Electron itself requires node >= 22.12.0; CI runs on 22. The dev machine actually uses Node v25).
 - macOS is the platform that has been verified in development. `npm install` runs a postinstall script that renames and re-icons the dev-mode Electron.app — that's macOS-only, skipped silently on other platforms. Windows / Linux have no known platform-specific blockers — the dependencies are all cross-platform (Electron / React / Node) — but nobody has fully tested them end to end.
 
 ### 2.2 Two commands
@@ -211,7 +211,7 @@ src/
 packages/
   shared/            # the center: src/domain/ (slot contracts, neutral types, pure functions — zero deps, nothing else)
   react/             # public surface: React components & hooks, the only API entry plugins are allowed
-  my-harness-fit-pi-extension/   # pi adapter extension (toolgate / bus / subagent / skills tools), synced into ~/.pi/agent/extensions/
+  my-harness-fit-pi-extension/   # pi adapter extension (toolgate / context-probe / bus / subagent / skills — five capabilities), synced into ~/.pi/agent/extensions/
 ```
 
 "Neutral" means dependent on no framework and no runtime — pure TypeScript types and structured data, unaffected by swapping Electron or React.
@@ -234,7 +234,7 @@ flowchart LR
 
 ### 3.3 Slot overview
 
-The shell's predefined mounting points; plugins mount content onto slots. The **22 implemented** contribution interfaces:
+The shell's predefined mounting points; plugins mount content onto slots. The **23 implemented** contribution interfaces (`PluginContributes` is the single source; this list is descriptive, count the interface for the authoritative set):
 
 - **`sidebar`** — the left sidebar: session list, project list, sub-agent panel.
 - **`sidePanel`** — the right panel: session tree, Git review, file tree, token stats, war-room monitor.
@@ -255,8 +255,10 @@ The shell's predefined mounting points; plugins mount content onto slots. The **
 - **`composerPolicies`** — conditional input rendering policies (read-only notice bars).
 - **`composerTop`** — banner components above the composer (goal bar, comment basket).
 - **`composerAttachments`** — attachment sources for the composer.
-- **`composerActions`** — buttons at the composer's bottom edge (sticker picker, voice input).
-- **`systemPrompts`** — injecting system prompt files into kernel session spawns.
+- **`composerActions`** — buttons at the composer's bottom edge (sticker picker).
+- **`composerStats`** — status-strip components in the composer's middle band (context usage bar).
+- **`composerVoice`** — voice-input buttons at the composer's bottom-right corner (the voice-input plugin's on-screen entry).
+- **`systemPrompts`** — injecting system prompt files into kernel session spawns (only pi consumes this today; other kernels degrade explicitly).
 
 The center's `SlotName` type also has reserved names — `management` / `cardRenderers` / `viewers` / `commands` — whose contribution interfaces aren't implemented yet; declaring them in `plugin.json` (a plugin's manifest) is ignored.
 
@@ -400,7 +402,7 @@ The left sidebar's recent working-directory list (`sidebar` slot, above the sess
 
 #### 3.4.21 file-tree
 
-The right panel's VSCode-style file tree (`sidePanel` slot, path sandboxing to the project root). Lazy loading: children fetched only when a directory is expanded; folders first, sorted by name. It's also the built-in batch contributor of the `fileIcons` slot: 30 extension/filename → icon + color mappings, exact filename match beats extension, third-party plugins can override a single icon by key.
+The right panel's VSCode-style file tree (`sidePanel` slot, path sandboxing to the project root). Lazy loading: children fetched only when a directory is expanded; folders first, sorted by name. It's also the built-in batch contributor of the `fileIcons` slot: 36 extension/filename → icon + color mappings, exact filename match beats extension, third-party plugins can override a single icon by key.
 
 #### 3.4.22 git-review
 
@@ -450,7 +452,7 @@ The management page for desktop plugins themselves: enable/disable/install/unins
 
 #### 3.4.30 theme-manager
 
-More than picking a theme: theme grid preview (including an independent session-stream theme — a second theme instance on the `mainView` slot, left/right bars unaffected), font stack selection, per-zone font sizes (interface / code / composer as independent sliders), three width sliders for left bar / right panel / session stream. Immediate effect, no save overlay.
+More than picking a theme: theme grid preview (including an independent session-stream theme — a second theme instance on the `mainView` slot, left/right bars unaffected), font stack selection, font size scaling — one global slider in the Fonts tab plus per-zone sliders in the sidebar / sidepanel / stream tabs. Width is drag-resize via the layout engine's handles (no sliders). Immediate effect, no save overlay.
 
 <p align="center">
   <img src="docs/demo/demo-theme-settings-en.gif" width="480">
@@ -482,13 +484,13 @@ theme is the base: built-in dark / light / auto base color schemes, defining the
 - **theme-stone** — light and dark pairs, warm grays, plain low-contrast.
 - **theme-terminal** — terminal style: pure black background, phosphor green primary, global monospace font, zero radii zero shadows, very fast animation rhythm.
 
-**font-presets** — also a themes-domain plugin, but pure data: 17 font options (mono / Latin / CJK stacks) contributed entirely through the `fontPresets` slot, zero code. Font stacks are "content that changes" pushed out of the center — adding a font option is one manifest line plus one i18n key.
+**font-presets** — also a themes-domain plugin, but pure data: 18 font options (mono / Latin / CJK stacks) contributed entirely through the `fontPresets` slot, zero code. Font stacks are "content that changes" pushed out of the center — adding a font option is one manifest line plus one i18n key.
 
 **system/ framework-level content**
 
 #### 3.4.34 i18n
 
-Four-language packs (Simplified/Traditional Chinese, English, German; 12 namespaces × 4 languages = 48 resource files) + the language settings page. Every plugin's `t("key")` consumes these resources; third-party plugins can override any key through the `languages` slot. Protected: cannot be uninstalled — without it, all UI copy degrades to raw keys.
+Four-language packs (Simplified/Traditional Chinese, English, German; the i18n plugin itself ships 5 namespaces × 4 languages = 20 resource files) + the language settings page. Every plugin's `t("key")` consumes these resources; third-party plugins can override any key through the `languages` slot. Protected: cannot be uninstalled — without it, all UI copy degrades to raw keys.
 
 #### 3.4.35 general-config
 
@@ -506,7 +508,7 @@ Title bar debug button (`titlebar` slot), controlled by the debugMode toggle in 
 
 Keyboard accessibility, split into two plugins with one discipline: **neither implements any action, they only add new trigger sources** — the action stays owned by its executor.
 
-- **keybindings** declares keystroke → event-bus channel mappings (11 defaults: focus the composer, switch models, cycle thinking depth, open settings…). Pressing a binding invokes the target plugin's existing channel handler — no copied business logic. The settings page offers record-style binding editing and a live event list.
+- **keybindings** declares keystroke → event-bus channel mappings (10 defaults: focus the composer, switch models, cycle thinking depth, open settings…). Pressing a binding invokes the target plugin's existing channel handler — no copied business logic. The settings page offers record-style binding editing and a live event list.
 - **key-hints** is Vimium-style link hints: press the trigger and every clickable element lights up with a letter tag; type the tag to click it. It covers what keybindings can't — buttons and menu items that never exposed a channel — by scanning and driving the DOM directly. The two meet at a single channel and evolve independently.
 
 #### 3.4.38 notifier
@@ -547,7 +549,7 @@ Third-party plugins go in `~/.my-harness-desktop/plugins/` (user level) or `.my-
 | Can't find the pi kernel / where did it go | After clicking install on the settings page, pi is pulled from npm into `~/.my-harness-desktop/pi/` — not distributed with the repo |
 | Voice input downloads nothing / fails offline | The Whisper model downloads from HuggingFace on first use (cached in browser storage); it's large — first transcription needs network and patience |
 | DSH tab shows no models | DSH reads its model config from `~/.dsh/settings.yaml`; configure the model and API key on the DSH settings tab, and check its Cordis extensions tab for disabled plugins |
-| Node version error | Node 18+ required; `scripts/setup.sh` detects it and installs if missing |
+| Node version error | Node 22.12+ required; `scripts/setup.sh` detects it and installs if missing |
 
 ## ❓ 6 QA
 

@@ -1,9 +1,9 @@
-﻿# my-harness-desktop 开发环境引导（Windows）：确保 Node.js >= 18（没有就装），然后 npm install。
+﻿# my-harness-desktop 开发环境引导（Windows）：确保 Node.js >= 22.12（没有就装；electron@43 的 engines 门槛），然后 npm install。
 # macOS / Linux 用同目录的 setup.sh。
 # 运行方式：powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 
 $ErrorActionPreference = 'Stop'
-$MinNodeMajor = 18
+$MinNodeMajor = 22
 
 function Write-Log([string]$Msg) { Write-Host "[setup] $Msg" -ForegroundColor Cyan }
 function Stop-Setup([string]$Msg) { Write-Host "[setup] $Msg" -ForegroundColor Red; exit 1 }

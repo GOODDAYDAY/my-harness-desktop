@@ -10,7 +10,7 @@
   <img alt="Electron" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
-  <img alt="Node" src="https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js&logoColor=white">
+  <img alt="Node" src="https://img.shields.io/badge/Node-%3E%3D22.12-339933?logo=node.js&logoColor=white">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green">
 </p>
 
@@ -46,7 +46,7 @@
 | 🎯 持久目标 | `/goal` 把目标挂在会话上：模型一轮轮持续推进，自己调 `achieve_goal` 声明完成——内核无关，pi / dsh 都能用 |
 | ⏯ 崩溃安全续跑 | 异常停机（工具失败 / LLM 失败 / 取消）后一键原地续跑，不 fork、不重发旧消息 |
 | ❓ 向人提问 | 模型生成中途暂停，向你提问（选项 / 自由输入），答案回灌后继续生成 |
-| 🌳 会话树 | git-graph 式分支地图，任意节点 fork / 收藏 / 一键定位回消息流 |
+| 🌳 会话树 | git-graph 式分支地图，任意节点一键定位回消息流；用户节点上可 fork / 收藏（fork 只接受用户回合锚点） |
 | 📁 文件树与预览 | VSCode 式懒加载文件树（路径圈禁在项目根）+ 文件预览（文本 / 图片 / PDF / Markdown / 图表） |
 | 🔍 Git Review | 本轮 / 本对话 / 工作区三视角 diff，勾选文件精确 commit、一键 push |
 | 🤖 子 Agent 编排 | 派活、并行 fan-out、作战室多子代理协作，父子生命周期管理 |
@@ -67,7 +67,7 @@
 ## 🚀 60 秒上手
 
 ```bash
-bash scripts/setup.sh   # 自动装好 Node（>= 18）并 npm install；Windows 用 scripts\setup.ps1
+bash scripts/setup.sh   # 自动装好 Node（>= 22.12）并 npm install；Windows 用 scripts\setup.ps1
 npm run dev             # electron-vite 开发模式，起窗口
 ```
 
@@ -117,7 +117,7 @@ my-harness-desktop 把同一条原则原样抓到桌面壳上：
 
 ### 2.1 环境要求
 
-- Node.js 18 或更高（electron-vite 的要求；开发机实际用的是 Node v25）。
+- Node.js **22.12 或更高**（electron-vite 要求 ^20.19.0 || >=22.12.0，且内置 Electron 本体要求 node >= 22.12.0；CI 用 22。开发机实际用的是 Node v25）。
 - macOS 是目前验证过的开发平台。`npm install` 时有个 postinstall 脚本会给 dev 模式的 Electron.app 换名换图标，那是 macOS 专用的，其他平台自动跳过、不报错。Windows / Linux 没有已知的平台特定障碍——依赖全是跨平台的（Electron / React / Node）——但也没有人实测过。
 
 ### 2.2 两条命令
@@ -234,7 +234,7 @@ flowchart LR
 
 ### 3.3 槽位一览
 
-壳预定的挂载点，插件往槽上挂内容。有实现贡献接口的**二十二个**：
+壳预定的挂载点，插件往槽上挂内容。有实现贡献接口的**二十三个**（`PluginContributes` 是唯一权威清单，这里只是描述性列举）：
 
 - **`sidebar`** — 左侧栏：会话列表、项目列表、子代理面板。
 - **`sidePanel`** — 右侧面板：会话树、Git review、文件树、Token 统计、作战室监控。
@@ -255,8 +255,10 @@ flowchart LR
 - **`composerPolicies`** — 输入框条件渲染策略（只读提示条）。
 - **`composerTop`** — 输入框上方的横幅组件（goal 条、评论篮）。
 - **`composerAttachments`** — 输入框附件来源。
-- **`composerActions`** — 输入框底缘按钮（表情包快速入口、语音输入）。
-- **`systemPrompts`** — 往内核会话 spawn 注入 system prompt 文件。
+- **`composerActions`** — 输入框底缘按钮（表情包快速入口）。
+- **`composerStats`** — composer 中段状态指示组件（上下文占用条）。
+- **`composerVoice`** — composer 右下角语音输入按钮（voice-input 插件的界面入口）。
+- **`systemPrompts`** — 往内核会话 spawn 注入 system prompt 文件（当前仅 pi 兑现；其他内核在插件管理页显式降级提示）。
 
 圆心的 `SlotName` 类型里另有 `management` / `cardRenderers` / `viewers` / `commands` 四个预留名，贡献接口未实现，在 `plugin.json`（插件的 manifest）里声明了会被忽略。
 
@@ -400,7 +402,7 @@ Session Bus 的会话关系图实时可视化（`sidePanel` 槽）。房间成�
 
 #### 3.4.21 file-tree（文件树）
 
-右面板的 VSCode 式文件树（`sidePanel` 槽，路径圈禁在项目根）。懒加载：展开目录才拉子层；文件夹在前按名排序。同时是 `fileIcons` 槽的内置批次贡献者：30 条扩展名/文件名 → 图标 + 颜色映射，文件名精确匹配优先于扩展名，第三方插件可按 key 覆盖单个图标。
+右面板的 VSCode 式文件树（`sidePanel` 槽，路径圈禁在项目根）。懒加载：展开目录才拉子层；文件夹在前按名排序。同时是 `fileIcons` 槽的内置批次贡献者：36 条扩展名/文件名 → 图标 + 颜色映射，文件名精确匹配优先于扩展名，第三方插件可按 key 覆盖单个图标。
 
 #### 3.4.22 git-review（Git Review）
 
@@ -448,7 +450,7 @@ DSH 内核的设置入口，与 pi 插件同级同形：**DSH** tab 安装 dsh �
 
 #### 3.4.30 theme-manager（主题管理）
 
-不止选主题：主题网格预览（含会话流独立主题——mainView 槽第二主题实例，左右栏不受影响）、字体栈选择、分区字号（界面/代码/输入框独立 slider）、左栏/右面板/会话流三处宽度 slider。即时生效不走 save 浮层。
+不止选主题：主题网格预览（含会话流独立主题——mainView 槽第二主题实例，左右栏不受影响）、字体栈选择、字号倍率——字体 tab 一个全局 slider，左栏/右面板/会话流三个 tab 各一个分区字号 slider。宽度经布局引擎拖拽手柄调整（不是 slider）。即时生效不走 save 浮层。
 
 <p align="center">
   <img src="docs/demo/demo-theme-settings-zh.gif" width="480">
@@ -480,13 +482,13 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 - **theme-stone** — 明暗两套，暖灰色系，质朴低对比。
 - **theme-terminal** — 终端风：纯黑底、磷光绿主色、全局等宽字体、零圆角零阴影、动画节奏极快。
 
-**font-presets** — 同属外观域，但是纯数据插件：17 项字体选项（等宽 / 西文 / 中文三组字体栈），全部经 `fontPresets` 槽贡献，零代码。字体栈是「会变的内容」从圆心外推的落点——新增字体选项 = manifest 一行 + 一条语言 key。
+**font-presets** — 同属外观域，但是纯数据插件：18 项字体选项（等宽 / 西文 / 中文三组字体栈），全部经 `fontPresets` 槽贡献，零代码。字体栈是「会变的内容」从圆心外推的落点——新增字体选项 = manifest 一行 + 一条语言 key。
 
 **system/ 框架级内容**
 
 #### 3.4.34 i18n（国际化）
 
-四语言文案包（简/繁/英/德，12 个命名空间 × 4 语言共 48 个资源文件）+ 语言设置页。所有插件的 `t("key")` 消费这里的资源，第三方插件可经 languages 槽覆盖任意 key。受保护不可卸载——删了它所有界面文案退化为 key 原文。
+四语言文案包（简/繁/英/德，i18n 插件本体自带 5 个命名空间 × 4 语言共 20 个资源文件）+ 语言设置页。所有插件的 `t("key")` 消费这里的资源，第三方插件可经 languages 槽覆盖任意 key。受保护不可卸载——删了它所有界面文案退化为 key 原文。
 
 #### 3.4.35 general-config（通用配置）
 
@@ -504,7 +506,7 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 
 键盘可达性，拆成两个插件、一条纪律：**都不实现任何动作，只给已有交互加新触发源**——动作永远归执行方。
 
-- **keybindings** 声明组合键 → 事件总线 channel 映射（默认 11 条：聚焦输入框、切模型、切思考深度、打开设置……）。按下命中就 invoke 目标插件的既有 channel 处理逻辑——不复制任何业务逻辑。设置页提供录制式绑定编辑 + 动态事件列表。
+- **keybindings** 声明组合键 → 事件总线 channel 映射（默认 10 条：聚焦输入框、切模型、切思考深度、打开设置……）。按下命中就 invoke 目标插件的既有 channel 处理逻辑——不复制任何业务逻辑。设置页提供录制式绑定编辑 + 动态事件列表。
 - **key-hints** 是 Vimium 式按键导览：按触发键，页面上所有可点击元素高亮并标字母，按字母即触发点击。它补 keybindings 的盲区——没 channel 化的按钮、菜单项——直接扫描驱动 DOM。两者经一个 channel 对接，独立演化。
 
 #### 3.4.38 notifier（系统通知）
@@ -545,7 +547,7 @@ theme 是基座：内置 dark / light / auto 三套基础配色，定义完整 t
 | 找不到 pi 内核 / 不知道装哪去了 | pi 内核在设置页点安装后从 npm 拉到 `~/.my-harness-desktop/pi/`，不随仓库分发 |
 | 语音输入下载不动 / 离线失败 | Whisper 模型首次使用时从 HuggingFace 下载（缓存在浏览器存储），文件较大——第一次转写需要网络和耐心 |
 | DSH 面板看不到模型 | DSH 的模型配置读 `~/.dsh/settings.yaml`；在 DSH 设置 tab 配好模型与 API Key，再看拓展 tab 是否有插件被禁用 |
-| Node 版本报错 | 需要 Node 18+；`scripts/setup.sh` 会自动检测，缺了就帮你装 |
+| Node 版本报错 | 需要 Node 22.12+；`scripts/setup.sh` 会自动检测，缺了就帮你装 |
 
 ## ❓ 6 QA
 
