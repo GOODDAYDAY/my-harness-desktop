@@ -15,7 +15,7 @@ import {
   SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {  usePluginContext, useUiStore, useSessionStore, Section , pickDirectory, fireAndReport, announceTransient,} from "@my-harness-desktop/react";
+import {  usePluginContext, useUiStore, useSessionStore, Section , pickDirectory, announceTransient,} from "@my-harness-desktop/react";
 import { pathBasename } from "@my-harness-desktop/shared";
 
 

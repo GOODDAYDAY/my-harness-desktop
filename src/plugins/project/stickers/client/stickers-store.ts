@@ -153,13 +153,6 @@ export async function loadStickers(ctx: Ctx): Promise<LayeredSticker[]> {
   return merged;
 }
 
-/** 从 banner 逻辑路径推 mime(扩展名映射;导出时还原 mimeType)。 */
-function bannerMimeOf(banner: string): string {
-  const i = banner.lastIndexOf(".");
-  const ext = i === -1 ? "" : banner.slice(i + 1).toLowerCase();
-  return IMAGE_MIME_BY_EXT[ext] ?? "image/png";
-}
-
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
 };

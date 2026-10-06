@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Crosshair, Eye, EyeOff, Pin as PinIcon, Trash2, X, MessageSquare } from "lucide-react";
-import { useUiStore, usePluginContext, useSessionStore, useCurrentScopeKey, currentScopeKey, type PluginContext, type SessionInfo, type MessageActionProps, fireAndReport, announceTransient,} from "@my-harness-desktop/react";
+import { useUiStore, usePluginContext, useSessionStore, useCurrentScopeKey, currentScopeKey, type PluginContext, type SessionInfo, type MessageActionProps, announceTransient,} from "@my-harness-desktop/react";
 import { deriveSessionTitle } from "@my-harness-desktop/shared";
 import { PinSVG } from "./pin-svg";
 import { usePinStore } from "./pin-store";
@@ -48,11 +48,11 @@ function isRowVisible(path: string): boolean {
  *  而且插件只需要"给键与插值、拿回字符串"这一点点能力，本地别名更贴合 §6.3 的最小依赖面）。 */
 type Translate = (key: string, opts?: Record<string, unknown>) => string;
 
-function persistPins(ctx: PluginContext, pins: Record<string, Pin[]>, t: Translate): void {
+function persistPins(ctx: PluginContext, pins: Record<string, Pin[]>, _t: Translate): void {
   void ctx.config.set("pins", pins);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
 }
 
-function persistContentPins(ctx: PluginContext, contentPins: Record<string, ContentPin[]>, t: Translate): void {
+function persistContentPins(ctx: PluginContext, contentPins: Record<string, ContentPin[]>, _t: Translate): void {
   void ctx.config.set("contentPins", contentPins);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
 }
 

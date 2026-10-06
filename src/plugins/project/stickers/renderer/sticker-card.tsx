@@ -280,7 +280,7 @@ export function StickerEditor({ initial, onSave, onCancel }: StickerEditorProps)
   const [uploaded, setUploaded] = useState<{ base64: string; mimeType: string } | null>(null);
   const [removed, setRemoved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const { uri: existingUri, lost: existingLost } = useBannerDataUri(removed ? undefined : initial.existingBanner);
+  const { uri: existingUri } = useBannerDataUri(removed ? undefined : initial.existingBanner);
   const preview = uploaded ? `data:${uploaded.mimeType};base64,${uploaded.base64}` : existingUri;
 
   const pickBanner = async (): Promise<void> => {

@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Plus, Search, FileJson, AppWindow, Pencil, Pin, PinOff, Archive, ArchiveRestore, MessageSquare, X, RotateCw, Check, Trash2, ChevronRight, ChevronDown, TriangleAlert } from "lucide-react";
 import { usePluginContext, useUiStore, useSessionStore, useSessionGroupings, Section, SortableList, PluginIcon, type SessionInfo,
-  announceTransient, fireAndReport,} from "@my-harness-desktop/react";
+  announceTransient,} from "@my-harness-desktop/react";
 import { deriveSessionTitle, applyCustomOrder, advancePhase, scopeKeyFromSessionKey, type WorkingPhase, type SessionRawFilePaths } from "@my-harness-desktop/shared";
 import { filterSessions } from "../core/search";
 import { PhaseIcon } from "./phase-icon";

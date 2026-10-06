@@ -9,7 +9,7 @@ import {
   usePendingToolConfig,
   EmptyState,
   Button,
-  type SettingsComponentProps, announceTransient,} from "@my-harness-desktop/react";
+  type SettingsComponentProps,} from "@my-harness-desktop/react";
 import {
   BUILTIN_TOOLS,
   PRESET_GROUPS,
@@ -86,7 +86,7 @@ function useToolGroups(cwd: string | null): {
 } {
   const ctx = usePluginContext();
   // r215：hook 内取 t（save 的失败播报要用插件语言包；hook 可以直接用 useTranslation）
-  const { t } = useTranslation();
+  const { t: _t } = useTranslation();
   const [groups, setGroups] = useState<ToolGroup[]>([]);
   const [loading, setLoading] = useState(true);
 

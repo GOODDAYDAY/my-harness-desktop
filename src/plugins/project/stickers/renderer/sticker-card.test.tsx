@@ -21,7 +21,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import zhCN from "../locales/zh-CN/stickers.json";
 
 vi.mock("react-i18next", () => {

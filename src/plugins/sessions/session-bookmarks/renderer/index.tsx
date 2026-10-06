@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Trash2, Pencil, Plus, GitBranch, Loader2, Bookmark } from "lucide-react";
-import { usePluginContext, useUiStore, EmptyState, Toast, SortableList, fireAndReport, announceTransient,} from "@my-harness-desktop/react";
+import { usePluginContext, useUiStore, EmptyState, Toast, SortableList, announceTransient,} from "@my-harness-desktop/react";
 import { cwdToBucketName, messageContentText, applyCustomOrder } from "@my-harness-desktop/shared";
 
 // 收藏请求事件(本插件自有 channel):timeline/树行一击收藏经 invoke 分派,本 tab 订阅 + revealOn 揭示。

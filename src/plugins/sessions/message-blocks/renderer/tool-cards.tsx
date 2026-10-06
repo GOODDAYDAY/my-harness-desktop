@@ -1,7 +1,6 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from "react";
 import {
-  Check, X, Terminal, FileEdit, FileSearch, FileText, Wrench,
-  ChevronRight, ChevronDown,
+  Check, Terminal, FileEdit, FileSearch, FileText, Wrench,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CollapsibleCardHeader, ExecutionStatus, fireAndReport, type ExecStatus } from "@my-harness-desktop/react";

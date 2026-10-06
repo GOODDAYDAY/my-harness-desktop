@@ -9,7 +9,6 @@
 // 协议/模型能力，壳只传路径；不可参考的二进制在入口就被拒绝并 toast。
 import { useTranslation } from "react-i18next";
 import { FileText, X } from "lucide-react";
-import type { ReactNode } from "react";
 
 /** 待发送图条(composer 上方,表情包"加入输入框"的中间态):展示图 + 移除按钮。
  *  图以 dataUri 由贡献方(stickers)读文件提供,timeline 只挂载渲染不碰文件读取。 */
