@@ -33,13 +33,17 @@
 // 用法: npm run build && node scripts/demo/config-write-failure.e2e.mjs [--locale zh-CN|en] [--port 9862] [--keep]
 import { mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { launchApp, killApp } from "./lib/app.mjs";
 import { makeRunRoot, setupBaseline } from "./lib/home.mjs";
 import { seedTestPlugins } from "./lib/test-plugins.mjs";
 import { waitForDomIdle } from "./lib/util.mjs";
 import { clickPointUntil } from "./lib/interact.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, "..", "..");
 
 const { values: args } = parseArgs({ options: {
   locale: { type: "string", default: "zh-CN" }, port: { type: "string", default: "9862" }, keep: { type: "boolean", default: false } } });
@@ -58,7 +62,7 @@ seedTestPlugins(ctx.dataRoot);
 const pd = join(home, "project"); mkdirSync(pd, { recursive: true });
 const pf = join(ctx.configDir, "config.json");
 writeFileSync(pf, JSON.stringify({ ...JSON.parse(readFileSync(pf, "utf-8")), lastCwd: pd }, null, 2));
-const app = await launchApp({ appDir: "/Users/dev/work/pi-desktop", port: Number(args.port), env: { HOME: home, MHD_PORT: "18403" }, timeoutMs: 90000 });
+const app = await launchApp({ appDir: ROOT, port: Number(args.port), env: { HOME: home, MHD_PORT: "18403" }, timeoutMs: 90000 });
 const page = app.page;
 const ro = [];
 try {
