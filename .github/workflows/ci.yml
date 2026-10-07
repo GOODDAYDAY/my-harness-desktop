@@ -17,5 +17,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      # ⚠ 顺序有依赖：kernel-registry-n 等测试加载**真实构建产物**
+      #   (out/main/server/kernel/*/plugin.js)，必须在 test 之前 build，
+      #   否则 loadKernelPlugin 抛「工厂产物不存在」而误判失败。
       - run: npm run build
+      - run: npm test
