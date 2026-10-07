@@ -79,7 +79,7 @@ function useStickerTransfer(ctx: PluginContext, reload: () => Promise<void>): {
     } finally {
       setBusy(false);
     }
-  }, [busy, ctx, flash]);
+  }, [busy, ctx, flash, t]);
   const doImport = useCallback(async () => {
     if (busy) return;
     setBusy(true);
@@ -97,7 +97,7 @@ function useStickerTransfer(ctx: PluginContext, reload: () => Promise<void>): {
     } finally {
       setBusy(false);
     }
-  }, [busy, ctx, reload, flash]);
+  }, [busy, ctx, reload, flash, t]);
   return { busy, msg, doExport, doImport };
 }
 

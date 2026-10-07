@@ -104,8 +104,8 @@ export function BookmarksTab(): React.ReactNode {
    *  收敛成一个函数（§3.3：两处调用逻辑相同、差别只在入参），失败时播报可行动信息。 */
   const persistOrder = useCallback((ids: string[]): void => {
     // r185：收敛到框架原语 fireAndReport（此前四个插件各抄一份同构的 .catch+warn+播报）。
-    void ctx.config.set("bookmarkOrder", ids);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
-  }, [ctx, t]);
+    void ctx.config.set("bookmarkOrder", ids).catch(() => { /* 框架已播报(r82)；此处仅避免 unhandled rejection，不二次处置 */ });   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
+  }, [ctx]);
 
   const loadBookmarks = useCallback(async () => {
     if (!currentCwd || !ctx.fs) return;
@@ -200,7 +200,7 @@ export function BookmarksTab(): React.ReactNode {
     } finally {
       pendingCreateRef.current.delete(id);
     }
-  }, [ctx, currentCwd, loadBookmarks]);
+  }, [ctx, currentCwd, loadBookmarks, t]);
 
   // timeline 一击收藏走 invoke:本组件未挂载时请求在总线入队,revealOn 揭示本 tab、
   // 挂载订阅后恰好一次冲刷(旧注释的 keep-alive 前提不成立——tab 关掉组件即卸载)。

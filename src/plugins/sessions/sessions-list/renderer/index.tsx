@@ -66,9 +66,9 @@ export function SessionsSection(): React.ReactNode {
    *  **发射后不管**——已读状态与拖拽排序写失败时静默不落盘、重启后回退且零反馈（§7.6）。
    *  customOrder 尤其是用户动作（拖拽排序，r180 的收藏顺序同族）。收敛成一个助手（§3.3），
    *  失败处置复用框架原语 fireAndReport（r185）。 */
-  const persist = (key: string, value: unknown): void => {
-    void ctx.config.set(key, value);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
-  };
+  const persist = useCallback((key: string, value: unknown): void => {
+    void ctx.config.set(key, value).catch(() => { /* 框架已播报(r82)；此处仅避免 unhandled rejection，不二次处置 */ });   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
+  }, [ctx]);
 
   const {
     currentCwd, currentNeutralSessionId,
@@ -467,7 +467,7 @@ export function SessionsSection(): React.ReactNode {
   }, []);
   const persistOrder = useCallback((): void => {
     persist("customOrder", customOrderRef.current);
-  }, [ctx]);
+  }, [persist]);
 
   return (
     <Section

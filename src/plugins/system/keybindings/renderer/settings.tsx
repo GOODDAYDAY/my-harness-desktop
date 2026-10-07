@@ -3,7 +3,7 @@
 // 核心:事件列表不写死,实时来自 eventBus.listChannels()(当前已加载插件的全部
 // channel),插件装/卸后自动增删。绑定 = 组合键 + 目标事件(+可选 payload)。
 // 配置经 settings 槽框架托管(configFile 统一通道),onChange 报告改动。
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsSection, eventBus, useUiStore, type SettingsComponentProps } from "@my-harness-desktop/react";
 import type { ChannelInfo } from "@my-harness-desktop/shared";
@@ -27,10 +27,10 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
    *  不能因为没声明文案就让列表项空白。
    *  ⚠ 回退用的是 channel 名而**不是键名**：键名（如 `timeline.channel.scrollTo.label`）
    *  对用户毫无意义，而 channel 名至少是他能在别处认出来的标识。 */
-  const chanLabel = (c: { channel: string; meta?: { labelKey?: string } }): string =>
-    c.meta?.labelKey ? t(c.meta.labelKey) : c.channel;
-  const chanDesc = (c: { meta?: { descriptionKey?: string } }): string =>
-    c.meta?.descriptionKey ? t(c.meta.descriptionKey) : "";
+  const chanLabel = useCallback((c: { channel: string; meta?: { labelKey?: string } }): string =>
+    c.meta?.labelKey ? t(c.meta.labelKey) : c.channel, [t]);
+  const chanDesc = useCallback((c: { meta?: { descriptionKey?: string } }): string =>
+    c.meta?.descriptionKey ? t(c.meta.descriptionKey) : "", [t]);
   const bindings = useMemo(
     () => (Array.isArray(config?.bindings) ? (config!.bindings as Binding[]) : DEFAULT_BINDINGS),
     [config],
@@ -55,7 +55,7 @@ export function KeybindingsSettings({ config, onChange }: SettingsComponentProps
       || chanLabel(c).toLowerCase().includes(q)
       || chanDesc(c).toLowerCase().includes(q),
     );
-  }, [channels, query]);
+  }, [channels, query, chanLabel, chanDesc]);
 
   const byPlugin = useMemo(() => {
     const map = new Map<string, ChannelInfo[]>();

@@ -49,11 +49,11 @@ function isRowVisible(path: string): boolean {
 type Translate = (key: string, opts?: Record<string, unknown>) => string;
 
 function persistPins(ctx: PluginContext, pins: Record<string, Pin[]>, _t: Translate): void {
-  void ctx.config.set("pins", pins);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
+  void ctx.config.set("pins", pins).catch(() => { /* 框架已播报(r82)；此处仅避免 unhandled rejection，不二次处置 */ });   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
 }
 
 function persistContentPins(ctx: PluginContext, contentPins: Record<string, ContentPin[]>, _t: Translate): void {
-  void ctx.config.set("contentPins", contentPins);   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
+  void ctx.config.set("contentPins", contentPins).catch(() => { /* 框架已播报(r82)；此处仅避免 unhandled rejection，不二次处置 */ });   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
 }
 
 async function loadPins(ctx: PluginContext): Promise<Record<string, Pin[]>> {
@@ -559,7 +559,7 @@ export function Overlay(): React.ReactNode {
     if (!migrated) return;   // 无需迁移(全是新口径的键)
     setContentPins(migrated);
     persistContentPins(ctx, migrated, t);
-  }, [contentPinsLoaded, sessionInfosForMigrate, contentPins, ctx, setContentPins]);
+  }, [contentPinsLoaded, sessionInfosForMigrate, contentPins, ctx, setContentPins, t]);
 
   useEffect(() => {
     if (loaded) return;
@@ -578,10 +578,10 @@ export function Overlay(): React.ReactNode {
       if (state.contentPins !== prev.contentPins) persistContentPins(ctx, state.contentPins, t);
       if (state.pinsVisible !== prev.pinsVisible) {
         // r198：可见性开关也是用户动作（点眼睛图标），失败要播报（同族）
-        void ctx.config.set("pinsVisible", state.pinsVisible, { scope: "global" });   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
+        void ctx.config.set("pinsVisible", state.pinsVisible, { scope: "global" }).catch(() => { /* 框架已播报(r82)；此处仅避免 unhandled rejection，不二次处置 */ });   // r216 回退：框架层 config.set 已播报（r82）⇒ 插件不再二次处置（r187/r206：处置只应发生一次）
       }
     });
-  }, [ctx]);
+  }, [ctx, t]);
 
   const exitPinMode = useCallback(() => { selectColor(null); }, [selectColor]);
 

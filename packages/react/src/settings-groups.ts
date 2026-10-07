@@ -16,7 +16,7 @@ export function useSettingsGroups(): SettingsGroupItem[] {
     void window.kernel.slots.settingsGroups().then((d) => {
       cache = { nonce: pluginsNonce, data: d };
       if (alive) setData(d);
-    });
+    }).catch(() => { /* 槽查询失败：保持现状，避免 unhandled rejection（框架级故障，非用户可行动） */ });
     return () => { alive = false; };
   }, [pluginsNonce]);
   return data;

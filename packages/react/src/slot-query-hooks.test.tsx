@@ -16,7 +16,7 @@
 // ③ **同 nonce 时后挂载的组件同步拿到缓存**（不闪一次空数组 ⇒ 工具栏不会先空后有）
 // ④ **nonce 变了 ⇒ 缓存失效**（初始回到 `[]`，effect 重拉）——插件启停后必须能看到新贡献
 // ⑤ **在飞时卸载 ⇒ 不再 setState**（`alive` 标志；否则 React 报"更新已卸载组件"并泄漏）
-// ⑥ 槽查询失败（reject）⇒ 不该让组件崩（当前实现无 catch，本条如实记录实际行为）
+// ⑥ 槽查询失败（reject）⇒ 不该让组件崩；hook 内已 .catch，保持空列表且不冒成 unhandled rejection
 
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -148,7 +148,7 @@ for (const c of CASES) {
       errSpy.mockRestore();
     });
 
-    it("⑥ 槽查询 reject ⇒ 组件不崩（当前实现无 catch：如实记录实际行为）", async () => {
+    it("⑥ 槽查询 reject ⇒ 组件不崩，且 hook 内已 catch（不冒成 unhandled rejection）", async () => {
       installSlot(c.slot, async () => { throw new Error("槽查询失败"); });
       const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       let threw = false;
@@ -156,9 +156,9 @@ for (const c of CASES) {
         render(<Probe hook={c.hook as () => unknown[]} onRender={() => {}} />);
         await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
       } catch { threw = true; }
-      // 断言的是"渲染不崩"（组件树仍在），而不是"错误被吞掉"——
-      // 未捕获的 promise rejection 会冒到全局，这属于**已知取舍**：
-      // 槽查询失败是框架级故障（不是用户可行动的），此时保持空工具栏比弹错误更少打扰。
+      // 断言的是"渲染不崩"（组件树仍在）：槽查询失败是框架级故障（不是用户可行动的），
+      // hook 内 .catch(() => {}) 保持空列表即可——**但必须被 catch**，
+      // 否则会冒成全局 unhandled rejection（vitest 据此判失败，CI 变红）。
       expect(threw, "渲染阶段不该抛（reject 发生在 effect 里的 promise 链上）").toBe(false);
       errSpy.mockRestore();
     });

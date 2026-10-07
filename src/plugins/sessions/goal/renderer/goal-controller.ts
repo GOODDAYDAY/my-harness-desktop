@@ -233,7 +233,7 @@ export function useGoalController() {
         }
       }
     })();
-  }, [messaging, notify, markNote, setGoal, setSendError, goalAccess, inflightAccess, deferredAccess]);
+  }, [messaging, notify, markNote, setGoal, setSendError, goalAccess, inflightAccess, deferredAccess, t]);
 
   const sendRound = useCallback((g: GoalState, round: number) => {
     firePrompt(renderContinuationPrompt(g.objective, round, g.maxRounds));
@@ -344,7 +344,7 @@ export function useGoalController() {
     });
     // deps 必须含 markNote/notify:markNote 闭包随 sessionPath 重建,缺依赖=切会话后
     // 旧订阅仍往旧会话写留痕(闭包旧值)。messaging 不被本 effect 使用,移出。
-  }, [sessions, setGoal, setSendError, firePrompt, markNote, notify, goalAccess, inflightAccess, deferredAccess]);
+  }, [sessions, setGoal, setSendError, firePrompt, markNote, notify, goalAccess, inflightAccess, deferredAccess, t]);
 
   // busy 维护 + 后台归账(运维流:带 sessionKey,激活会话全量、后台会话按白名单)。
   // agentStart/agentSettled 都在白名单里(session-store.ts:3026-3039),所以后台会话的
@@ -491,7 +491,7 @@ export function useGoalController() {
         });
         return true;
     }
-  }, [notify, setGoal, setSendError, pause, resume, edit, limit, clear, goalAccess]);
+  }, [notify, setGoal, setSendError, pause, resume, edit, limit, clear, goalAccess, t]);
   handleCommandRef.current = handleCommand;
 
   return { goal: goal ?? null, sendError: sendError ?? null, pause, resume, edit, clear };

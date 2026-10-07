@@ -165,7 +165,7 @@ export function FilePreviewView({ path }: { path: string }): ReactNode {
       alive = false;
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [path, tick, route, ctx.fs]);
+  }, [path, tick, route, ctx.fs, t]);
 
   const handleRefresh = () => {
     setTick((t) => t + 1);

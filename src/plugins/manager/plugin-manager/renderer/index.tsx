@@ -64,12 +64,12 @@ function tierColor(tier: PluginTier): string {
 
 export function PluginManagerPage(): React.ReactNode {
   const { t } = useTranslation();
-  /** UI 态落盘（r183，同 projects 的 persist）：三处此前都是 `void ctx.config.set(...)` 发射后不管。 */
-  const persist = (key: string, value: unknown): void => {
-    void ctx.config.set(key, value, { scope: "global" });   // r216 回退：框架层已播报（r82），不双重处置
-  };
-
   const ctx = usePluginContext();
+  /** UI 态落盘（r183，同 projects 的 persist）：三处此前都是 `void ctx.config.set(...)` 发射后不管。 */
+  const persist = useCallback((key: string, value: unknown): void => {
+    void ctx.config.set(key, value, { scope: "global" }).catch(() => { /* 框架已播报(r82)；此处仅避免 unhandled rejection，不二次处置 */ });   // r216 回退：框架层已播报（r82），不双重处置
+  }, [ctx]);
+
   const [plugins, setPlugins] = useState<PluginListItem[]>([]);
   const [customOrder, setCustomOrder] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<TagFilter>({});
@@ -87,6 +87,16 @@ export function PluginManagerPage(): React.ReactNode {
    *  信息不足时断言"不生效"会误伤真正支持的内核，宁可不说。 */
   const caps = useSessionStore((s) => s.capabilities);
   const systemPromptInert = caps.kernel != null ? caps.faces?.systemPrompt !== true : null;
+
+  const showFeedback = useCallback((r: { ok: boolean; error: string | null; errorArgs?: string[] }) => {
+    // error 是 token key(如 plugin.error.notLoaded)则 t() 翻译;非 token(如 npm 退出码)
+    // 经 i18next parseMissingKeyHandler 原样返回。errorArgs 用于插值(如依赖列表)。
+    if (r.ok) { setFeedback({ ok: true, msg: t("pluginManager.operationSuccess") }); return; }
+    const msg = r.error
+      ? t(r.error, r.errorArgs ? { deps: r.errorArgs.join(", ") } : undefined)
+      : t("pluginManager.operationFailed");
+    setFeedback({ ok: false, msg });
+  }, [t]);
 
   const refresh = useCallback(async () => {
     // ⚠ 三段各自兜底（r83）：此前是裸 await 串起来，任一段抛错就会**静默**中止后面的段——
@@ -106,7 +116,7 @@ export function PluginManagerPage(): React.ReactNode {
     } catch {
       // 偏好读取失败：用默认序/默认筛选即可，不打扰用户（不是"用户以为成功了"的那类静默）
     }
-  }, [ctx]);
+  }, [ctx, showFeedback]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -115,16 +125,6 @@ export function PluginManagerPage(): React.ReactNode {
     const timer = setTimeout(() => setFeedback(null), 3000);
     return () => clearTimeout(timer);
   }, [feedback]);
-
-  const showFeedback = (r: { ok: boolean; error: string | null; errorArgs?: string[] }) => {
-    // error 是 token key(如 plugin.error.notLoaded)则 t() 翻译;非 token(如 npm 退出码)
-    // 经 i18next parseMissingKeyHandler 原样返回。errorArgs 用于插值(如依赖列表)。
-    if (r.ok) { setFeedback({ ok: true, msg: t("pluginManager.operationSuccess") }); return; }
-    const msg = r.error
-      ? t(r.error, r.errorArgs ? { deps: r.errorArgs.join(", ") } : undefined)
-      : t("pluginManager.operationFailed");
-    setFeedback({ ok: false, msg });
-  };
 
   /** 跑一个插件操作，把**两种失败形态**都收敛到 showFeedback（r80）。
    *
@@ -214,7 +214,7 @@ export function PluginManagerPage(): React.ReactNode {
     const newOrder = reordered.map((p) => p.id);
     setCustomOrder(newOrder);
     persist("customOrder", newOrder);
-  }, [sortedPlugins, ctx]);
+  }, [sortedPlugins, persist]);
 
   // Tooltip.Provider 由内核根组件统一提供(index.tsx),此处只保留 Root 局部配置;
   // 相邻按钮 hover 间仍享有加热区交接。

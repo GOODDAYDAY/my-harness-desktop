@@ -34,7 +34,7 @@ export function ProjectsSection(): React.ReactNode {
     //   .catch(announceTransient(shell.configWriteFailed, "error") 后重新抛出)（r82）。
     //   所以插件再包一层 fireAndReport 会**双重播报**（一次失败弹两条），
     //   违反 r187/r206 的"处置只应发生一次"。这里只发不兜，兜与播报归框架单点。
-    void ctx.config.set(key, value, { scope: "global" });
+    void ctx.config.set(key, value, { scope: "global" }).catch(() => { /* 框架已播报(r82)；此处仅避免 unhandled rejection，不二次处置 */ });
   };
 
   const { currentCwd, setCurrentCwd, clearSessionContext } = useUiStore();
